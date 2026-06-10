@@ -3,6 +3,9 @@ import { resolve } from 'path';
 
 export default defineConfig({
   root: '.',
+  // Relative asset paths — the build works both locally and under
+  // a GitHub Pages subpath (https://<user>.github.io/voxel-diorama/).
+  base: './',
   // Keep a single Three.js instance across `three` and `three/addons` deep
   // imports (avoids the "Multiple instances of Three.js" dev warning).
   resolve: {
