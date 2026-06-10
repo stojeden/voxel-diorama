@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Trans City Express — Voxel Diorama</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #000; }
+    canvas { display: block; }
+    #info {
+      position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+      color: #fff; font-family: 'Courier New', monospace; font-size: 12px;
+      background: rgba(0,0,0,0.6); padding: 8px 16px; border-radius: 4px;
+      pointer-events: none; z-index: 10; letter-spacing: 1px;
+    }
+    #time-display {
+      position: fixed; top: 20px; right: 20px;
+      color: #fff; font-family: 'Courier New', monospace; font-size: 14px;
+      background: rgba(0,0,0,0.6); padding: 8px 16px; border-radius: 4px;
+      pointer-events: none; z-index: 10;
+    }
+    #dilation-panel {
+      position: fixed; top: 16px; left: 16px; width: 260px;
+      color: #fff; font-family: 'Courier New', monospace; font-size: 11px;
+      background: rgba(0,0,0,0.66); border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 5px; z-index: 10; overflow: hidden;
+    }
+    #dilation-panel.is-collapsed { width: auto; }
+    #panel-toggle {
+      pointer-events: auto; cursor: pointer; width: 100%;
+      display: flex; align-items: center; justify-content: space-between; gap: 10px;
+      background: transparent; border: 0; color: #ffdd88;
+      font-family: inherit; font-size: 10px; font-weight: 700;
+      letter-spacing: 1.4px; padding: 10px 11px;
+    }
+    #panel-toggle:hover { color: #fff; }
+    #panel-toggle .panel-chevron {
+      color: rgba(255,221,136,0.6); font-size: 10px;
+      transition: transform 220ms ease;
+    }
+    #dilation-panel.is-collapsed #panel-toggle .panel-chevron {
+      transform: rotate(-90deg);
+    }
+    #panel-body {
+      padding: 0 11px 10px;
+      max-height: 600px; overflow: hidden;
+      transition: max-height 280ms ease, opacity 240ms ease, padding 240ms ease;
+      opacity: 1;
+    }
+    #dilation-panel.is-collapsed #panel-body {
+      max-height: 0; opacity: 0; padding-top: 0; padding-bottom: 0;
+      pointer-events: none;
+    }
+    .chapter {
+      margin-top: 8px; padding-top: 6px; border-top: 1px solid rgba(255,255,255,0.10);
+      color: #d7ecff; line-height: 1.3; font-size: 10.5px;
+    }
+    .controls-row {
+      display: flex; align-items: center; gap: 8px; margin-top: 4px;
+    }
+    .controls-row label { color: rgba(255,255,255,0.6); white-space: nowrap; font-size: 9px; letter-spacing: 0.6px; text-transform: uppercase; }
+    #speed-control { flex: 1; accent-color: #ffdd88; pointer-events: auto; }
+    .action-row {
+      display: flex; gap: 6px; margin-top: 8px;
+    }
+    .action-row button {
+      pointer-events: auto; border: 1px solid rgba(255,255,255,0.16);
+      background: rgba(255,255,255,0.06); color: #fff; font-family: inherit; font-size: 10px;
+      padding: 5px 8px; border-radius: 3px; cursor: pointer; letter-spacing: 0.5px;
+    }
+    #tour-button { flex: 1; }
+    #tour-button.is-active { background: rgba(120,180,240,0.22); color: #d7ecff; border-color: rgba(120,180,240,0.45); }
+    #livery-button { width: 30px; padding: 5px; }
+    #livery-panel {
+      margin-top: 6px; padding: 6px; border-radius: 3px;
+      background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.10);
+      display: flex; flex-direction: column; gap: 4px;
+    }
+    #livery-panel[hidden] { display: none; }
+    #theme-button { width: 30px; padding: 5px; }
+    #theme-panel {
+      margin-top: 6px; padding: 6px; border-radius: 3px;
+      background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.10);
+      display: flex; flex-direction: column; gap: 4px;
+    }
+    #theme-panel[hidden] { display: none; }
+    #theme-panel button {
+      pointer-events: auto; border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(255,255,255,0.04); color: rgba(255,255,255,0.8);
+      font-family: inherit; font-size: 10px; padding: 4px 6px;
+      border-radius: 2px; cursor: pointer; text-align: left;
+    }
+    #theme-panel button.is-active { background: rgba(140,120,255,0.18); color: #e2dcff; border-color: rgba(140,120,255,0.4); }
+    #livery-panel button {
+      pointer-events: auto; border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(255,255,255,0.04); color: rgba(255,255,255,0.8);
+      font-family: inherit; font-size: 10px; padding: 4px 6px;
+      border-radius: 2px; cursor: pointer; text-align: left;
+    }
+    #livery-panel button.is-active { background: rgba(255,221,136,0.18); color: #ffedbd; border-color: rgba(255,221,136,0.4); }
+    #time-speed {
+      display: flex; gap: 4px;
+    }
+    #time-speed button {
+      pointer-events: auto; border: 1px solid rgba(255,255,255,0.16);
+      background: rgba(255,255,255,0.06); color: #fff; font-family: inherit; font-size: 10px;
+      padding: 5px 8px; border-radius: 3px; cursor: pointer;
+    }
+    #time-speed button.is-active { background: rgba(255,221,136,0.2); color: #ffedbd; border-color: rgba(255,221,136,0.45); }
+    #time-speed.is-disabled { opacity: 0.35; pointer-events: none; }
+    #realtime-button { flex: 1; }
+    #realtime-button.is-active { background: rgba(120,240,170,0.2); color: #d8ffe9; border-color: rgba(120,240,170,0.5); }
+    #weather-button { flex: 1; }
+    #traincam-button, #buscam-button { flex: 1; }
+    #traincam-button.is-active, #buscam-button.is-active {
+      background: rgba(120,180,240,0.22); color: #d7ecff; border-color: rgba(120,180,240,0.45);
+    }
+    #keyboard-hint {
+      margin-top: 8px; padding-top: 6px; border-top: 1px solid rgba(255,255,255,0.08);
+      color: rgba(255,255,255,0.45); font-size: 9px; line-height: 1.4;
+    }
+    #weather-toast {
+      position: fixed; bottom: 60px; left: 50%; transform: translateX(-50%);
+      color: #d7ecff; font-family: 'Courier New', monospace; font-size: 12px;
+      background: rgba(0,0,0,0.7); padding: 6px 12px; border-radius: 3px;
+      pointer-events: none; z-index: 11; letter-spacing: 1px;
+      transition: opacity 600ms ease;
+    }
+    #weather-toast[hidden] { display: none; }
+    #station-status {
+      margin-top: 7px; padding: 6px 8px; border-radius: 3px;
+      background: rgba(120, 180, 240, 0.12);
+      border-left: 2px solid rgba(120, 180, 240, 0.45);
+      color: #d7ecff; font-size: 10.5px; line-height: 1.3;
+      display: flex; justify-content: space-between; align-items: center; gap: 8px;
+    }
+    #station-status.is-stopped {
+      background: rgba(255, 100, 100, 0.14);
+      border-left-color: rgba(255, 130, 130, 0.6);
+      color: #ffdcdc;
+    }
+    #station-status[hidden] { display: none; }
+    #station-status .station-label { font-weight: 700; }
+    #station-status .station-dwell { color: rgba(255,255,255,0.7); font-size: 9.5px; }
+    .scene-label {
+      color: #f7f1dc; font-family: 'Courier New', monospace; font-size: 11px;
+      background: rgba(0,0,0,0.42); border: 1px solid rgba(255,255,255,0.12);
+      padding: 4px 7px; border-radius: 4px; white-space: nowrap;
+      text-shadow: 0 1px 2px #000; opacity: 0.78;
+    }
+    #loading-screen {
+      position: fixed; inset: 0; z-index: 100; display: grid; place-items: center;
+      color: #fff; background: #050607; font-family: 'Courier New', monospace;
+      transition: opacity 420ms ease, visibility 420ms ease;
+    }
+    #loading-screen.is-hidden { opacity: 0; visibility: hidden; }
+    .loader-box {
+      width: min(360px, calc(100vw - 40px));
+      border: 1px solid rgba(255,255,255,0.18); border-radius: 6px;
+      padding: 18px; background: rgba(255,255,255,0.04);
+    }
+    .loader-title { font-size: 13px; margin-bottom: 12px; letter-spacing: 1px; }
+    .loader-bar {
+      height: 8px; border-radius: 999px; background: rgba(255,255,255,0.14); overflow: hidden;
+    }
+    .loader-bar::before {
+      content: ""; display: block; width: 78%; height: 100%; background: #ffdd88;
+      animation: loadingPulse 1.1s ease-in-out infinite alternate;
+    }
+    #loading-progress { margin-top: 10px; color: #ffdd88; font-size: 12px; }
+    @keyframes loadingPulse {
+      from { transform: translateX(-22%); opacity: 0.55; }
+      to { transform: translateX(28%); opacity: 1; }
+    }
+  </style>
+</head>
+<body>
+  <div id="loading-screen" role="status" aria-live="polite">
+    <div class="loader-box">
+      <div class="loader-title">ŁADOWANIE DIORAMY</div>
+      <div class="loader-bar"></div>
+      <div id="loading-progress">0%</div>
+    </div>
+  </div>
+  <div id="dilation-panel" class="is-collapsed" aria-label="Panel sterowania pociągiem">
+    <button id="panel-toggle" type="button" aria-expanded="false" aria-controls="panel-body">
+      <span class="panel-title">TRANS CITY EXPRESS</span>
+      <span class="panel-chevron" aria-hidden="true">▾</span>
+    </button>
+    <div id="panel-body">
+      <div class="controls-row">
+        <label for="speed-control">prędkość</label>
+        <input
+          id="speed-control"
+          type="range"
+          min="0"
+          max="100"
+          value="58"
+          aria-label="Prędkość pociągu"
+        />
+      </div>
+      <div id="chapter" class="chapter">Stacja Zachodnia</div>
+      <div id="station-status" hidden role="status" aria-live="polite">
+        <span class="station-label" id="station-label"></span>
+        <span class="station-dwell" id="station-dwell"></span>
+      </div>
+      <div class="action-row">
+        <button id="tour-button" type="button">Pokaż dioramę</button>
+        <button id="theme-button" type="button" title="Styl dioramy">🎭</button>
+      </div>
+      <div id="theme-panel" hidden>
+        <button data-theme="classic" class="is-active">Klasyczny</button>
+        <button data-theme="retro">Retro PRL</button>
+        <button data-theme="cyberpunk">Cyberpunk</button>
+        <button data-theme="autumn">Złota jesień</button>
+        <button data-theme="toy">Zabawkowy</button>
+      </div>
+      <div class="action-row">
+        <button id="traincam-button" type="button" title="Kamera w kabinie pociągu (T)">🚆 Jazda pociągiem</button>
+        <button id="buscam-button" type="button" title="Kamera w autobusie (B)">🚌 Autobus</button>
+      </div>
+      <div class="action-row">
+        <div id="time-speed" title="Prędkość zegara">
+          <button data-scale="1" class="is-active">1×</button>
+          <button data-scale="2">2×</button>
+          <button data-scale="3">3×</button>
+        </div>
+        <button id="realtime-button" type="button" title="Pora dnia i pogoda z Twojej lokalizacji">⏱ REAL TIME</button>
+      </div>
+      <div class="action-row">
+        <button id="weather-button" type="button" title="Przełącz pogodę">POGODA: AUTO</button>
+      </div>
+      <div id="keyboard-hint">
+        ←/→ prędkość · spacja pauza · W pogoda · T pociąg · B autobus · 1/2/3 zegar · R na żywo
+      </div>
+    </div>
+  </div>
+  <div id="info">PRZECIĄGNIJ — OBRÓT &bull; PRAWY PRZYCISK — PRZESUŃ &bull; SCROLL — ZOOM</div>
+  <div id="time-display"></div>
+  <div id="weather-toast" hidden></div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
