@@ -424,6 +424,18 @@ Object.assign(window as unknown as Record<string, unknown>, {
       eclipseDoneToday = true;
     },
     setEclipseStrength: (s: number) => dayNight.setEclipse(s),
+    /** Render one frame synchronously and return it as a JPEG data URL
+     * (the WebGL buffer isn't preserved, so render+read must share a tick). */
+    captureFrame: (width = 960, quality = 0.82) => {
+      env.composer.render();
+      const source = env.renderer.domElement;
+      const scale = width / source.width;
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = Math.round(source.height * scale);
+      canvas.getContext('2d')!.drawImage(source, 0, 0, canvas.width, canvas.height);
+      return canvas.toDataURL('image/jpeg', quality);
+    },
   },
 });
 
