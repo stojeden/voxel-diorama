@@ -3,6 +3,7 @@
  */
 
 import type { TrainPublicState } from './world/Train';
+import type { QualityMode, QualitySnapshot } from './performance/QualityManager';
 
 export type CameraMode = 'free' | 'train' | 'bus';
 
@@ -21,6 +22,7 @@ export interface UiHandle {
   setWeatherLabel: (text: string) => void;
   setTimeScale: (scale: number) => void;
   setRealTime: (active: boolean, label?: string) => void;
+  setQuality: (snapshot: QualitySnapshot) => void;
   showToast: (text: string) => void;
   setCameraMode: (mode: CameraMode) => void;
   onCameraMode: (handler: (mode: 'train' | 'bus') => void) => void;
@@ -31,6 +33,8 @@ export interface UiHandle {
   onPauseToggle: (handler: () => void) => void;
   onTimeScale: (handler: (scale: number) => void) => void;
   onRealTimeToggle: (handler: () => void) => void;
+  onQualityCycle: (handler: () => void) => void;
+  onProfilerToggle: (handler: () => void) => void;
   dispose: () => void;
 }
 
@@ -54,6 +58,7 @@ export function mountUi(): UiHandle {
   const weatherToastEl = requireEl<HTMLDivElement>('weather-toast');
   const weatherButtonEl = requireEl<HTMLButtonElement>('weather-button');
   const realtimeButtonEl = requireEl<HTMLButtonElement>('realtime-button');
+  const qualityButtonEl = requireEl<HTMLButtonElement>('quality-button');
   const trainCamButtonEl = requireEl<HTMLButtonElement>('traincam-button');
   const busCamButtonEl = requireEl<HTMLButtonElement>('buscam-button');
   const themeButtonEl = requireEl<HTMLButtonElement>('theme-button');
@@ -131,6 +136,17 @@ export function mountUi(): UiHandle {
       realtimeButtonEl.textContent = active ? `⏱ NA ŻYWO${label ? ` · ${label}` : ''}` : '⏱ REAL TIME';
       timeSpeedEl.classList.toggle('is-disabled', active);
     },
+    setQuality(snapshot) {
+      const modeLabel: Record<QualityMode, string> = {
+        auto: `AUTO · ${snapshot.level.toUpperCase()}`,
+        low: 'LOW',
+        medium: 'MED',
+        high: 'HIGH',
+      };
+      qualityButtonEl.textContent = `JAKOŚĆ: ${modeLabel[snapshot.mode]}`;
+      qualityButtonEl.dataset.mode = snapshot.mode;
+      qualityButtonEl.title = `Profil renderingu: ${snapshot.level}`;
+    },
     showToast(text) {
       weatherToastEl.textContent = text;
       weatherToastEl.hidden = false;
@@ -198,6 +214,13 @@ export function mountUi(): UiHandle {
       keyHandlers.realtime = handler;
       realtimeButtonEl.addEventListener('click', handler);
     },
+    onQualityCycle(handler) {
+      keyHandlers.quality = handler;
+      qualityButtonEl.addEventListener('click', handler);
+    },
+    onProfilerToggle(handler) {
+      keyHandlers.profiler = handler;
+    },
     dispose() {
       speedControlEl.removeEventListener('input', onSpeed);
       window.removeEventListener('keydown', onKey);
@@ -211,6 +234,8 @@ export function mountUi(): UiHandle {
     pause?: () => void;
     timeScale?: (scale: number) => void;
     realtime?: () => void;
+    quality?: () => void;
+    profiler?: () => void;
   } = {};
 
   const onSpeed = () => {
@@ -229,6 +254,10 @@ export function mountUi(): UiHandle {
       keyHandlers.weather?.();
     } else if (e.key === 'r' || e.key === 'R') {
       keyHandlers.realtime?.();
+    } else if (e.key === 'q' || e.key === 'Q') {
+      keyHandlers.quality?.();
+    } else if ((e.key === 'p' || e.key === 'P') && import.meta.env.DEV) {
+      keyHandlers.profiler?.();
     } else if (e.key === '1' || e.key === '2' || e.key === '3') {
       keyHandlers.timeScale?.(Number(e.key));
     } else if (e.key === ' ' || e.code === 'Space') {

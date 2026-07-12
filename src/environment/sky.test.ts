@@ -4,6 +4,8 @@ import {
   goldenFactorAt,
   nightFactorAt,
   realTimeToCycleT,
+  sceneBloomStrength,
+  sceneExposure,
   skyColorAt,
   sunColorAt,
   sunDirectionAt,
@@ -71,6 +73,19 @@ describe('sky colours', () => {
   test('reuses the optional out color so callers can avoid allocations', () => {
     const out = new THREE.Color();
     expect(skyColorAt(0.5, out)).toBe(out);
+  });
+});
+
+describe('render exposure', () => {
+  test('keeps daylight and golden-hour highlights below the old washed-out peak', () => {
+    expect(sceneExposure(0, 0)).toBeCloseTo(0.46, 2);
+    expect(sceneExposure(0, 1)).toBeCloseTo(0.5, 2);
+    expect(sceneExposure(0, 1, 1.07)).toBeLessThan(0.54);
+  });
+
+  test('preserves stronger bloom at night than in daylight', () => {
+    expect(sceneBloomStrength(1, 0)).toBeGreaterThan(sceneBloomStrength(0, 1));
+    expect(sceneBloomStrength(0, 1)).toBeLessThan(0.15);
   });
 });
 

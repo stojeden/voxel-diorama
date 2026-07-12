@@ -7,6 +7,7 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { GlitchTimeDilationShader } from './effects/GlitchTimeDilation';
+import type { QualityProfile } from './performance/QualityManager';
 
 CameraControls.install({ THREE });
 
@@ -20,11 +21,12 @@ export interface RuntimeEnv {
   bloomPass: UnrealBloomPass;
   glitchPass: ShaderPass;
   loadingManager: THREE.LoadingManager;
+  setQuality: (profile: QualityProfile) => void;
   syncSize: () => void;
   dispose: () => void;
 }
 
-export function bootstrap(): RuntimeEnv {
+export function bootstrap(initialQuality: QualityProfile): RuntimeEnv {
   const scene = new THREE.Scene();
   scene.fog = new THREE.FogExp2(0x87ceeb, 0.003);
 
@@ -32,13 +34,16 @@ export function bootstrap(): RuntimeEnv {
   const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 3000);
   camera.position.set(55, 42, 70);
 
-  const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+  const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
   renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  renderer.shadowMap.enabled = true;
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, initialQuality.pixelRatio));
+  renderer.shadowMap.enabled = initialQuality.shadows;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.0;
+  // EffectComposer renders several passes. Manual reset keeps renderer.info
+  // representative of the whole frame instead of only the final OutputPass.
+  renderer.info.autoReset = false;
   document.body.appendChild(renderer.domElement);
 
   const labelRenderer = new CSS2DRenderer();
@@ -63,7 +68,7 @@ export function bootstrap(): RuntimeEnv {
   // voxel edges stop shimmering ("pixelating") in motion.
   const composerTarget = new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight, {
     type: THREE.HalfFloatType,
-    samples: 4,
+    samples: initialQuality.msaaSamples,
   });
   const composer = new EffectComposer(renderer, composerTarget);
   composer.addPass(new RenderPass(scene, camera));
@@ -72,7 +77,7 @@ export function bootstrap(): RuntimeEnv {
     new THREE.Vector2(window.innerWidth, window.innerHeight),
     0.22,
     0.35,
-    0.82
+    1.08
   );
   composer.addPass(bloomPass);
 
@@ -86,18 +91,36 @@ export function bootstrap(): RuntimeEnv {
 
   const loadingManager = new THREE.LoadingManager();
 
+  let quality = initialQuality;
+
   const syncSize = () => {
+    const pixelRatio = Math.min(window.devicePixelRatio, quality.pixelRatio);
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setPixelRatio(pixelRatio);
     renderer.setSize(window.innerWidth, window.innerHeight);
     labelRenderer.setSize(window.innerWidth, window.innerHeight);
+    composer.setPixelRatio(pixelRatio);
     composer.setSize(window.innerWidth, window.innerHeight);
-    bloomPass.setSize(window.innerWidth, window.innerHeight);
-    glitchPass.uniforms.uResolution.value = new Float32Array([window.innerWidth, window.innerHeight]);
+    glitchPass.uniforms.uResolution.value = new Float32Array([
+      Math.round(window.innerWidth * pixelRatio),
+      Math.round(window.innerHeight * pixelRatio),
+    ]);
+  };
+
+  const setQuality = (profile: QualityProfile) => {
+    quality = profile;
+    renderer.shadowMap.enabled = profile.shadows;
+    renderer.shadowMap.needsUpdate = true;
+    composer.renderTarget1.samples = profile.msaaSamples;
+    composer.renderTarget2.samples = profile.msaaSamples;
+    bloomPass.enabled = profile.bloom;
+    labelRenderer.domElement.style.display = profile.labels ? '' : 'none';
+    syncSize();
   };
 
   window.addEventListener('resize', syncSize);
+  setQuality(initialQuality);
 
   const dispose = () => {
     window.removeEventListener('resize', syncSize);
@@ -118,6 +141,7 @@ export function bootstrap(): RuntimeEnv {
     bloomPass,
     glitchPass,
     loadingManager,
+    setQuality,
     syncSize,
     dispose,
   };

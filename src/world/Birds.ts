@@ -137,12 +137,24 @@ export class Birds {
   private gulls: Gull[] = [];
   private readonly scene: THREE.Scene;
   private hidden = false;
+  private activeCount = GULL_COUNT;
 
   /** Cyberpunk: no gulls over the megacity. */
   setHidden(hidden: boolean): void {
     if (hidden === this.hidden) return;
     this.hidden = hidden;
-    for (const gull of this.gulls) gull.group.visible = !hidden;
+    this.syncVisibility();
+  }
+
+  setDensity(density: number): void {
+    this.activeCount = Math.max(3, Math.round(GULL_COUNT * THREE.MathUtils.clamp(density, 0, 1)));
+    this.syncVisibility();
+  }
+
+  private syncVisibility(): void {
+    for (let i = 0; i < this.gulls.length; i++) {
+      this.gulls[i].group.visible = !this.hidden && i < this.activeCount;
+    }
   }
 
   constructor(scene: THREE.Scene) {
@@ -181,7 +193,8 @@ export class Birds {
 
   update(delta: number, elapsed: number, wind: number, night: number): void {
     if (this.hidden) return;
-    for (const gull of this.gulls) {
+    for (let gullIndex = 0; gullIndex < this.activeCount; gullIndex++) {
+      const gull = this.gulls[gullIndex];
       // ── Day/night life cycle: head to a roost after dark, wake at dawn ──
       if (night > 0.62 && gull.lifeMode === 'fly') {
         gull.lifeMode = 'toRoost';

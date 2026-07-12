@@ -104,6 +104,7 @@ export class PassengerCrowd {
   private crowds: StationCrowd[] = [];
   private readonly scene: THREE.Scene;
   private clock = 0;
+  private density = 1;
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
@@ -166,6 +167,16 @@ export class PassengerCrowd {
     }
   }
 
+  setDensity(density: number): void {
+    this.density = THREE.MathUtils.clamp(density, 0, 1);
+    for (const crowd of this.crowds) {
+      const activeCount = Math.max(2, Math.round(crowd.passengers.length * this.density));
+      for (let i = 0; i < crowd.passengers.length; i++) {
+        crowd.passengers[i].group.visible = i < activeCount;
+      }
+    }
+  }
+
   update(delta: number, stationsBoarding: Set<string>): void {
     this.clock += delta;
 
@@ -187,7 +198,9 @@ export class PassengerCrowd {
       }
       crowd.lastDwellSignal = isDwelling;
 
-      for (const p of crowd.passengers) this.updatePassenger(p, delta);
+      for (const p of crowd.passengers) {
+        if (p.group.visible) this.updatePassenger(p, delta);
+      }
     }
   }
 

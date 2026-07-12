@@ -55,6 +55,7 @@
 | Motyw dioramy | 🎭 |
 | Prędkość pociągu | suwak / `←` `→` |
 | Pauza | spacja |
+| Jakość renderingu (Auto → Low → Medium → High) | `Q` lub przycisk jakości |
 
 ## 🚀 Szybki start
 
@@ -64,13 +65,22 @@ npm run dev      # http://localhost:5173
 ```
 
 ```bash
-npm test         # 39 testów (vitest): geometria trasy, skrajnia tunelu,
+npm test         # 45 testów (vitest): geometria trasy, skrajnia tunelu,
                  # testy antykolizyjne wszystkich aktorów, model słońca…
-npx tsc --noEmit # typy
+npm run typecheck # typy
 npm run build    # produkcja → dist/
+npm run validate # typy + unit + build + Chrome/WebGL + budżety wydajności
+BENCH_HEADFUL=1 npm run test:performance # jeden Chrome, 3 scenariusze Metal/High
 ```
 
-Wymagania: Node 18+, przeglądarka z WebGL2. Cel wydajnościowy: **60 FPS na Apple M1** (4× MSAA, pełna rozdzielczość Retina).
+Wymagania: Node 20.19+, przeglądarka z WebGL2. Cel wydajnościowy: **60 FPS na Apple M1 Pro** w profilu High.
+
+### Profile jakości
+
+- **Auto** dobiera profil startowy do liczby rdzeni i pamięci, a następnie reaguje na utrzymujący się czas klatki z cooldownem i histerezą.
+- **Low / Medium / High** kontrolują DPR, MSAA, cienie, bloom, cząstki pogody, liczbę aktorów, etykiety i częstotliwość PMREM.
+- W trybie deweloperskim klawisz `P` włącza ładowany na żądanie panel `stats-gl` z FPS oraz czasem CPU/GPU.
+- `window.__diorama.getMetrics()` udostępnia draw calle, trójkąty, pamięć renderera i aktywny profil dla diagnostyki oraz testów.
 
 ## 🏗️ Architektura
 
@@ -80,6 +90,9 @@ src/
 ├── bootstrap.ts             # renderer, composer (MSAA+HDR), kamera
 ├── ui.ts                    # panel sterowania
 ├── CinematicTour.ts         # filmowy oblot
+├── performance/
+│   ├── QualityManager.ts    # profile jakości i adaptacja Auto
+│   └── DevStats.ts          # ładowany na żądanie profiler CPU/GPU
 ├── experience/
 │   ├── Themes.ts            # motywy (palety + światło + morfing cyber)
 │   └── RouteChapters.ts     # narracyjne etykiety trasy
@@ -108,7 +121,7 @@ Zasada projektu: **cała geometria świata mieszka w `WorldLayout.ts`**, a testy
 
 ## 🛠️ Stack
 
-[Three.js](https://threejs.org/) · TypeScript · Vite · Vitest · [SunCalc](https://github.com/mourner/suncalc) · [Open-Meteo](https://open-meteo.com/) (pogoda na żywo, bez klucza API)
+[Three.js](https://threejs.org/) · TypeScript · Vite · Vitest · Playwright · [stats-gl](https://github.com/RenaudRohlinger/stats-gl) · [SunCalc](https://github.com/mourner/suncalc) · [Open-Meteo](https://open-meteo.com/) (pogoda na żywo, bez klucza API)
 
 ## 📄 Licencja
 

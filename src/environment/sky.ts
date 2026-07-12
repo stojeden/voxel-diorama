@@ -55,6 +55,26 @@ export function goldenFactorAt(t: number): number {
   return clamp01(lowSun * aboveHorizon);
 }
 
+/** Exposure curve with highlight headroom for pale concrete and snow. */
+export function sceneExposure(
+  night: number,
+  golden: number,
+  themeMultiplier = 1,
+  eclipse = 0
+): number {
+  const day = 1 - clamp01(night);
+  return (
+    (0.28 + day * 0.18 + clamp01(golden) * 0.04) *
+    themeMultiplier *
+    (1 - clamp01(eclipse) * 0.68)
+  );
+}
+
+/** Bloom remains atmospheric at night without washing out sunlit facades. */
+export function sceneBloomStrength(night: number, golden: number, themeMultiplier = 1): number {
+  return (0.08 + clamp01(night) * 0.38 + clamp01(golden) * 0.04) * themeMultiplier;
+}
+
 interface ColorStop {
   time: number;
   color: THREE.Color;

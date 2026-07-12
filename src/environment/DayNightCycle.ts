@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type { QualityProfile } from '../performance/QualityManager';
 import { Sky } from 'three/addons/objects/Sky.js';
 import {
   clamp01,
@@ -163,6 +164,10 @@ export class DayNightCycle {
   private envLastElevation = Number.POSITIVE_INFINITY;
   private envLastCloud = -1;
   private envCooldown = 0;
+  private envInterval = 0.7;
+  private shadowsEnabled = true;
+  private streetLightBudget = Number.POSITIVE_INFINITY;
+  private windowLightBudget = Number.POSITIVE_INFINITY;
 
   private readonly sunLight: THREE.DirectionalLight;
   private readonly moonLight: THREE.DirectionalLight;
@@ -351,6 +356,17 @@ export class DayNightCycle {
     this.eclipseStrength = clamp01(strength);
   }
 
+  setQuality(profile: QualityProfile): void {
+    this.envInterval = profile.pmremInterval;
+    this.shadowsEnabled = profile.shadows;
+    this.streetLightBudget = profile.streetLightBudget;
+    this.windowLightBudget = profile.windowLightBudget;
+    this.sunLight.shadow.mapSize.set(profile.shadowMapSize, profile.shadowMapSize);
+    this.sunLight.shadow.map?.dispose();
+    this.sunLight.shadow.map = null;
+    this.sunLight.castShadow = profile.shadows && this.sunLight.intensity > 0.04;
+  }
+
   update(t: number, dtReal: number, cloudCover: number, nightFloor = 0): DayLightState {
     this.elapsed += dtReal;
     const eclipse = this.eclipseStrength;
@@ -380,10 +396,10 @@ export class DayNightCycle {
     this.sunLight.target.position.set(0, 0, 0);
     // nightFloor (eternal-dusk themes) and an eclipse both mute the sun.
     this.sunLight.intensity =
-      sunStrength * 3.4 * (1 - cloudCover * 0.62) * (1 - nightFloor * 0.8) * (1 - eclipse * 0.96);
+      sunStrength * 2.2 * (1 - cloudCover * 0.62) * (1 - nightFloor * 0.8) * (1 - eclipse * 0.96);
     sunColorAt(t, this.tmpSunColor);
     this.sunLight.color.copy(this.tmpSunColor);
-    this.sunLight.castShadow = this.sunLight.intensity > 0.04;
+    this.sunLight.castShadow = this.shadowsEnabled && this.sunLight.intensity > 0.04;
 
     // ── Moon (opposite side of the sky) ──
     const moonDir = sunDirectionAt((t + 0.5) % 1, new THREE.Vector3());
@@ -446,15 +462,19 @@ export class DayNightCycle {
     for (const mesh of this.auroraMeshes) mesh.visible = this.auroraStrength > 0.015;
 
     // ── Street / window lights ──
-    for (const light of this.hooks.streetLights) {
-      light.intensity = night * 9;
+    for (let i = 0; i < this.hooks.streetLights.length; i++) {
+      const light = this.hooks.streetLights[i];
+      light.visible = night > 0.04 && i < this.streetLightBudget;
+      light.intensity = light.visible ? night * 9 : 0;
       light.distance = 28;
     }
     for (let i = 0; i < this.hooks.windowLights.length; i++) {
       const h = Math.sin(i * 127.1 + 311.7) * 43758.5453;
       const isOn = h - Math.floor(h) > 0.3;
-      this.hooks.windowLights[i].intensity = isOn ? night * 5.5 : 0;
-      this.hooks.windowLights[i].distance = 22;
+      const light = this.hooks.windowLights[i];
+      light.visible = night > 0.04 && i < this.windowLightBudget;
+      light.intensity = light.visible && isOn ? night * 5.5 : 0;
+      light.distance = 22;
     }
     for (const mat of this.hooks.windowGlowMaterials) {
       mat.emissiveIntensity = 0.1 + night * 1.15;
@@ -468,7 +488,7 @@ export class DayNightCycle {
       this.regenerateEnvironment(uniforms);
       this.envLastElevation = elevation;
       this.envLastCloud = cloudCover;
-      this.envCooldown = 0.7;
+      this.envCooldown = this.envInterval;
     }
 
     return { night, golden, sunElevation: elevation, eclipse };

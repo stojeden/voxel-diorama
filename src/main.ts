@@ -13,7 +13,7 @@ import { LakesideCow } from './world/LakesideCow';
 import { RailSignals } from './world/RailSignals';
 import { DayNightCycle } from './environment/DayNightCycle';
 import { Weather } from './environment/Weather';
-import { RealTimeSync } from './environment/RealTime';
+import type { RealTimeSync } from './environment/RealTime';
 import { PortalGlow } from './effects/PortalGlow';
 import { Balloon } from './effects/Balloon';
 import { Fisherman } from './world/Fisherman';
@@ -21,8 +21,16 @@ import { Postman } from './world/Postman';
 import { chapterForProgress } from './experience/RouteChapters';
 import { themeById, type DioramaTheme } from './experience/Themes';
 import { DAY_SECONDS, TUNNEL_LENGTH, WORLD_HALF_SIZE } from './world/WorldLayout';
+import { sceneBloomStrength, sceneExposure } from './environment/sky';
+import {
+  QualityManager,
+  type QualityMode,
+  type QualitySnapshot,
+} from './performance/QualityManager';
+import type { DevStatsHandle } from './performance/DevStats';
 
-const env = bootstrap();
+const quality = new QualityManager();
+const env = bootstrap(quality.getProfile());
 const ui = mountUi();
 
 // Shared uniforms: Weather writes wind strength, tree foliage shader reads it.
@@ -48,8 +56,22 @@ const dayNight = new DayNightCycle(env.scene, env.renderer, {
 });
 const portalGlow = new PortalGlow(env.scene);
 dayNight.camera = env.camera;
-const realTime = new RealTimeSync();
+let realTime: RealTimeSync | null = null;
 const tour = new CinematicTour(env.controls);
+
+const unsubscribeQuality = quality.subscribe((profile, snapshot) => {
+  env.setQuality(profile);
+  dayNight.setQuality(profile);
+  weather.setQuality(profile);
+  birds.setDensity(profile.actorDensity);
+  passengerCrowd.setDensity(profile.actorDensity);
+  ui.setQuality(snapshot);
+});
+
+ui.onQualityCycle(() => {
+  const mode = quality.cycleMode();
+  ui.showToast(`JAKOŚĆ: ${mode.toUpperCase()}`);
+});
 
 // ─── Loading manager ───
 env.loadingManager.onProgress = (_url, loaded, total) => {
@@ -137,7 +159,7 @@ ui.onTourButton(() => {
 });
 
 ui.onWeatherCycle(() => {
-  if (realTime.isActive()) {
+  if (realTime?.isActive()) {
     ui.showToast('POGODA STEROWANA TRYBEM NA ŻYWO');
     return;
   }
@@ -151,7 +173,7 @@ ui.onPauseToggle(() => {
 });
 
 ui.onTimeScale((scale) => {
-  if (realTime.isActive()) return;
+  if (realTime?.isActive()) return;
   timeScale = scale;
   ui.setTimeScale(scale);
 });
@@ -159,7 +181,7 @@ ui.onTimeScale((scale) => {
 let realTimePending = false;
 ui.onRealTimeToggle(() => {
   if (realTimePending) return;
-  if (realTime.isActive()) {
+  if (realTime?.isActive()) {
     realTime.disable();
     weather.setExternal(null);
     ui.setRealTime(false);
@@ -168,23 +190,59 @@ ui.onRealTimeToggle(() => {
   }
   realTimePending = true;
   ui.setRealTime(true, '…');
-  void realTime
-    .enable()
+  void import('./environment/RealTime')
+    .then(({ RealTimeSync }) => {
+      realTime ??= new RealTimeSync();
+      return realTime.enable();
+    })
     .then((label) => {
       ui.setRealTime(true, label);
       ui.showToast(`CZAS RZECZYWISTY · ${label}`);
       // Snap the clock to the real sun immediately.
-      renderTime = realTime.getCycleT() * DAY_SECONDS;
+      renderTime = realTime!.getCycleT() * DAY_SECONDS;
+    })
+    .catch((error: unknown) => {
+      console.error('[RealTime] activation failed', error);
+      ui.setRealTime(false);
+      ui.showToast('TRYB NA ŻYWO NIEDOSTĘPNY');
     })
     .finally(() => {
       realTimePending = false;
     });
 });
 
+let devStats: DevStatsHandle | null = null;
+let profilerLoading = false;
+
+async function toggleProfiler(): Promise<boolean> {
+  const diagnosticsEnabled =
+    import.meta.env.DEV || new URLSearchParams(window.location.search).has('profile');
+  if (!diagnosticsEnabled) return false;
+  if (devStats) {
+    devStats.dispose();
+    devStats = null;
+    return false;
+  }
+  if (profilerLoading) return false;
+  profilerLoading = true;
+  try {
+    const { mountDevStats } = await import('./performance/DevStats');
+    devStats = await mountDevStats(env.renderer);
+    return true;
+  } finally {
+    profilerLoading = false;
+  }
+}
+
+ui.onProfilerToggle(() => {
+  void toggleProfiler().then((active) => ui.showToast(active ? 'PROFILER: WŁĄCZONY' : 'PROFILER: WYŁĄCZONY'));
+});
+
 // ─── Animation ───
 const clock = new THREE.Clock();
 let elapsed = 0;
 let loadingHidden = false;
+let optionalActorAccumulator = 0;
 const trainPosition = new THREE.Vector3();
 const boardingStations = new Set<string>();
 
@@ -196,7 +254,9 @@ function formatClock(t01: number): string {
 
 function animate() {
   requestAnimationFrame(animate);
-  const rawDelta = Math.min(clock.getDelta(), 0.1);
+  const measuredDelta = clock.getDelta();
+  const rawDelta = Math.min(measuredDelta, 0.1);
+  if (!document.hidden) quality.sampleFrame(measuredDelta);
   const delta = paused ? 0 : rawDelta;
   elapsed += delta;
 
@@ -204,7 +264,7 @@ function animate() {
   tour.update(rawDelta);
 
   // ── Clock: real time, tour override, or free-running simulation ──
-  if (realTime.isActive()) {
+  if (realTime?.isActive()) {
     const target = realTime.getCycleT() * DAY_SECONDS;
     let diff = target - renderTime;
     if (Math.abs(diff) > DAY_SECONDS / 2) diff -= Math.sign(diff) * DAY_SECONDS;
@@ -231,7 +291,7 @@ function animate() {
   const t01 = ((renderTime / DAY_SECONDS) % 1 + 1) % 1;
 
   // ── Moon & aurora ──
-  if (realTime.isActive()) {
+  if (realTime?.isActive()) {
     const moon = realTime.getMoon();
     dayNight.setMoonPhase(moon.phase, moon.fraction);
   } else {
@@ -257,7 +317,7 @@ function animate() {
   }
 
   // ── Weather (live override or auto machine) ──
-  if (realTime.isActive()) {
+  if (realTime?.isActive()) {
     const live = realTime.getWeather();
     weather.setExternal(live ? live.kind : null, live?.windNorm ?? 0);
   }
@@ -266,10 +326,12 @@ function animate() {
   // ── Lighting ──
   const skyCloud = Math.min(1, weather.getCloudCover() + currentTheme.turbidityAdd * 0.1);
   const light = dayNight.update(t01, rawDelta, skyCloud, currentTheme.nightFloor);
-  env.renderer.toneMappingExposure =
-    (0.36 + (1 - light.night) * 0.42 + light.golden * 0.2) *
-    currentTheme.exposureMul *
-    (1 - light.eclipse * 0.68);
+  env.renderer.toneMappingExposure = sceneExposure(
+    light.night,
+    light.golden,
+    currentTheme.exposureMul,
+    light.eclipse
+  );
 
   // ── Vehicles & life ──
   const speedMultiplier = 0.5 + ui.speedSetting * 1.3;
@@ -298,17 +360,23 @@ function animate() {
     balloon.setCyberMode(cyberOn);
   }
 
-  birds.update(delta, elapsed, weather.getWind(), light.night);
-  lakeLife.update(delta, weather.getSnowCover() > 0.5);
-  lakesideCow.update(delta, elapsed, light.night);
-  fisherman.update(delta, elapsed, light.night, weather.getSnowCover());
-  postman.update(delta, elapsed, t01);
-  balloon.update(delta, elapsed, light.night, weather.getCloudCover(), weather.getWind());
-
-  boardingStations.clear();
+  optionalActorAccumulator += delta;
+  const actorInterval = 1 / quality.getProfile().optionalActorHz;
   const stationState = train.getStationState();
-  if (stationState.kind === 'dwelling') boardingStations.add(stationState.stationLabel);
-  passengerCrowd.update(delta, boardingStations);
+  if (optionalActorAccumulator >= actorInterval) {
+    const actorDelta = optionalActorAccumulator;
+    optionalActorAccumulator = 0;
+    birds.update(actorDelta, elapsed, weather.getWind(), light.night);
+    lakeLife.update(actorDelta, weather.getSnowCover() > 0.5);
+    lakesideCow.update(actorDelta, elapsed, light.night);
+    fisherman.update(actorDelta, elapsed, light.night, weather.getSnowCover());
+    postman.update(actorDelta, elapsed, t01);
+    balloon.update(actorDelta, elapsed, light.night, weather.getCloudCover(), weather.getWind());
+
+    boardingStations.clear();
+    if (stationState.kind === 'dwelling') boardingStations.add(stationState.stationLabel);
+    passengerCrowd.update(actorDelta, boardingStations);
+  }
 
   // ── Onboard cab cameras (train / bus) ──
   if (cameraMode !== 'free' && !tour.isActive()) {
@@ -363,10 +431,10 @@ function animate() {
   env.glitchPass.uniforms.uTime.value = elapsed;
   env.glitchPass.uniforms.uGolden.value = light.golden;
   env.glitchPass.uniforms.uNight.value = light.night;
-  env.bloomPass.strength = (0.18 + light.night * 0.5 + light.golden * 0.12) * currentTheme.bloomMul;
+  env.bloomPass.strength = sceneBloomStrength(light.night, light.golden, currentTheme.bloomMul);
 
   // ── HUD ──
-  if (realTime.isActive()) {
+  if (realTime?.isActive()) {
     const now = new Date();
     ui.setClock(
       `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')} · NA ŻYWO`
@@ -374,74 +442,146 @@ function animate() {
   } else {
     ui.setClock(`${formatClock(t01)}${timeScale > 1 ? ` · ${timeScale}×` : ''}`);
   }
-  if (!realTime.isActive() && weather.getSetting() === 'auto') {
+  if (!realTime?.isActive() && weather.getSetting() === 'auto') {
     ui.setWeatherLabel(`POGODA: AUTO · ${weather.getLabel().replace('AUTO · ', '')}`);
-  } else if (realTime.isActive()) {
+  } else if (realTime?.isActive()) {
     ui.setWeatherLabel(`POGODA: ${weather.getLabel()}`);
   }
   ui.setChapter(chapterForProgress(train.getRouteProgress()));
   ui.setStation(stationState);
 
+  env.renderer.info.reset();
   env.composer.render();
-  env.labelRenderer.render(env.scene, env.camera);
+  if (quality.getProfile().labels) env.labelRenderer.render(env.scene, env.camera);
+  devStats?.update();
 
   if (!loadingHidden) {
     ui.setLoadingProgress(100);
     ui.hideLoadingScreen();
     loadingHidden = true;
+    debugHandle.ready = true;
+    window.dispatchEvent(new CustomEvent('diorama-ready'));
   }
 }
 
-animate();
+interface DioramaMetrics {
+  ready: boolean;
+  quality: QualitySnapshot;
+  renderer: {
+    gpu: string;
+    vendor: string;
+    calls: number;
+    triangles: number;
+    lines: number;
+    points: number;
+    geometries: number;
+    textures: number;
+    programs: number;
+    pixelRatio: number;
+    canvasWidth: number;
+    canvasHeight: number;
+  };
+}
 
-// Debug/verification handle (harmless in production, handy in dev tools).
-Object.assign(window as unknown as Record<string, unknown>, {
-  __diorama: {
-    setTime: (t01: number) => {
-      simTime = t01 * DAY_SECONDS;
-      renderTime = simTime;
-    },
-    getState: () => ({
-      t01: renderTime / DAY_SECONDS,
-      weather: weather.getKind(),
-      cloud: weather.getCloudCover(),
-      wind: weather.getWind(),
-      trainProgress: train.getRouteProgress(),
-    }),
-    setWeather: (kind: 'clear' | 'cloudy' | 'rain' | 'snow' | 'fog') => {
-      weather.setExternal(kind);
-    },
-    clearWeather: () => weather.setExternal(null),
-    scene: env.scene,
-    renderer: env.renderer,
-    controls: env.controls,
-    summonUfo: (event?: 'abduct' | 'return' | 'kioskRaid') => lakesideCow.debugSummonUfo(event),
-    farmerPhase: () => lakesideCow.getFarmerPhase(),
-    cowController: lakesideCow as unknown,
-    applyTheme,
-    startEclipse: () => {
-      eclipseProgress = 0;
-      eclipseDoneToday = true;
-    },
-    setEclipseStrength: (s: number) => dayNight.setEclipse(s),
-    /** Render one frame synchronously and return it as a JPEG data URL
-     * (the WebGL buffer isn't preserved, so render+read must share a tick). */
-    captureFrame: (width = 960, quality = 0.82) => {
-      env.composer.render();
-      const source = env.renderer.domElement;
-      const scale = width / source.width;
-      const canvas = document.createElement('canvas');
-      canvas.width = width;
-      canvas.height = Math.round(source.height * scale);
-      canvas.getContext('2d')!.drawImage(source, 0, 0, canvas.width, canvas.height);
-      return canvas.toDataURL('image/jpeg', quality);
-    },
+interface DioramaDebugHandle {
+  ready: boolean;
+  setTime: (t01: number) => void;
+  getState: () => Record<string, unknown>;
+  getMetrics: () => DioramaMetrics;
+  setQuality: (mode: QualityMode) => void;
+  toggleProfiler: () => Promise<boolean>;
+  setWeather: (kind: 'clear' | 'cloudy' | 'rain' | 'snow' | 'fog') => void;
+  clearWeather: () => void;
+  captureFrame: (width?: number, jpegQuality?: number) => string;
+  [key: string]: unknown;
+}
+
+declare global {
+  interface Window {
+    __diorama: DioramaDebugHandle;
+  }
+}
+
+const debugHandle: DioramaDebugHandle = {
+  ready: false,
+  setTime: (t01: number) => {
+    simTime = t01 * DAY_SECONDS;
+    renderTime = simTime;
   },
-});
+  getState: () => ({
+    t01: renderTime / DAY_SECONDS,
+    weather: weather.getKind(),
+    cloud: weather.getCloudCover(),
+    wind: weather.getWind(),
+    trainProgress: train.getRouteProgress(),
+  }),
+  getMetrics: () => {
+    const info = env.renderer.info;
+    const gl = env.renderer.getContext();
+    const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+    return {
+      ready: debugHandle.ready,
+      quality: quality.getSnapshot(),
+      renderer: {
+        gpu: debugInfo
+          ? String(gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL))
+          : String(gl.getParameter(gl.RENDERER)),
+        vendor: debugInfo
+          ? String(gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL))
+          : String(gl.getParameter(gl.VENDOR)),
+        calls: info.render.calls,
+        triangles: info.render.triangles,
+        lines: info.render.lines,
+        points: info.render.points,
+        geometries: info.memory.geometries,
+        textures: info.memory.textures,
+        programs: info.programs?.length ?? 0,
+        pixelRatio: env.renderer.getPixelRatio(),
+        canvasWidth: env.renderer.domElement.width,
+        canvasHeight: env.renderer.domElement.height,
+      },
+    };
+  },
+  setQuality: (mode: QualityMode) => quality.setMode(mode),
+  toggleProfiler,
+  setWeather: (kind: 'clear' | 'cloudy' | 'rain' | 'snow' | 'fog') => {
+    weather.setExternal(kind);
+  },
+  clearWeather: () => weather.setExternal(null),
+  scene: env.scene,
+  renderer: env.renderer,
+  controls: env.controls,
+  summonUfo: (event?: 'abduct' | 'return' | 'kioskRaid') => lakesideCow.debugSummonUfo(event),
+  farmerPhase: () => lakesideCow.getFarmerPhase(),
+  cowController: lakesideCow as unknown,
+  applyTheme,
+  startEclipse: () => {
+    eclipseProgress = 0;
+    eclipseDoneToday = true;
+  },
+  setEclipseStrength: (s: number) => dayNight.setEclipse(s),
+  /** Render one frame synchronously and return it as a JPEG data URL
+   * (the WebGL buffer isn't preserved, so render+read must share a tick). */
+  captureFrame: (width = 960, jpegQuality = 0.82) => {
+    env.composer.render();
+    const source = env.renderer.domElement;
+    const scale = width / source.width;
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = Math.round(source.height * scale);
+    canvas.getContext('2d')!.drawImage(source, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL('image/jpeg', jpegQuality);
+  },
+};
+
+window.__diorama = debugHandle;
+animate();
 
 // HMR cleanup
 if (import.meta.hot) {
   import.meta.hot.dispose(() => {
+    unsubscribeQuality();
+    devStats?.dispose();
     train.dispose();
     bus.dispose();
     birds.dispose();
@@ -456,8 +596,9 @@ if (import.meta.hot) {
     dayNight.dispose();
     world.dispose();
     weather.dispose();
-    realTime.dispose();
+    realTime?.dispose();
     ui.dispose();
     env.dispose();
+    delete (window as Partial<Window>).__diorama;
   });
 }

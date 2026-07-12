@@ -21,10 +21,16 @@ jobs:
         run: npm ci
 
       - name: Typecheck
-        run: npx tsc --noEmit
+        run: npm run typecheck
 
       - name: Tests
         run: npm test
 
       - name: Build
         run: npm run build
+
+      - name: Install browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Browser smoke and performance budgets
+        run: node scripts/browserSmoke.mjs

@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="data:,">
   <title>Trans City Express — Voxel Diorama</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -112,6 +113,7 @@
     #realtime-button { flex: 1; }
     #realtime-button.is-active { background: rgba(120,240,170,0.2); color: #d8ffe9; border-color: rgba(120,240,170,0.5); }
     #weather-button { flex: 1; }
+    #quality-button { flex: 1; }
     #traincam-button, #buscam-button { flex: 1; }
     #traincam-button.is-active, #buscam-button.is-active {
       background: rgba(120,180,240,0.22); color: #d7ecff; border-color: rgba(120,180,240,0.45);
@@ -173,6 +175,14 @@
       from { transform: translateX(-22%); opacity: 0.55; }
       to { transform: translateX(28%); opacity: 1; }
     }
+    @media (max-width: 600px) {
+      #time-display { top: 8px; right: 8px; }
+      #dilation-panel { top: 52px; left: 8px; max-width: calc(100vw - 16px); }
+      #info {
+        bottom: 8px; width: calc(100vw - 16px); max-width: 420px;
+        padding: 6px 8px; font-size: 9px; line-height: 1.35; text-align: center;
+      }
+    }
   </style>
 </head>
 <body>
@@ -230,9 +240,10 @@
       </div>
       <div class="action-row">
         <button id="weather-button" type="button" title="Przełącz pogodę">POGODA: AUTO</button>
+        <button id="quality-button" type="button" title="Przełącz jakość renderingu">JAKOŚĆ: AUTO</button>
       </div>
       <div id="keyboard-hint">
-        ←/→ prędkość · spacja pauza · W pogoda · T pociąg · B autobus · 1/2/3 zegar · R na żywo
+        ←/→ prędkość · spacja pauza · W pogoda · T pociąg · B autobus · 1/2/3 zegar · R na żywo · Q jakość
       </div>
     </div>
   </div>

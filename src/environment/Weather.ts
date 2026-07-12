@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { WindUniforms } from '../world/WorldGenerator';
+import type { QualityProfile } from '../performance/QualityManager';
 
 export type WeatherKind = 'clear' | 'cloudy' | 'rain' | 'snow' | 'fog';
 export type WeatherSetting = WeatherKind | 'auto';
@@ -107,6 +108,9 @@ export class Weather {
   private readonly cloudMaterial: THREE.MeshStandardMaterial;
   private readonly clouds: CloudDescriptor[] = [];
   private readonly cloudDummy = new THREE.Object3D();
+  private activeRainCount = RAIN_COUNT;
+  private activeSnowCount = SNOW_COUNT;
+  private activeCloudCount = CLOUD_COUNT;
 
   constructor(scene: THREE.Scene, windUniforms: WindUniforms) {
     this.scene = scene;
@@ -214,6 +218,17 @@ export class Weather {
       cursor += data.offsets.length;
     }
     scene.add(this.cloudMesh);
+  }
+
+  setQuality(profile: QualityProfile): void {
+    this.activeRainCount = Math.max(200, Math.round(RAIN_COUNT * profile.particleDensity));
+    this.activeSnowCount = Math.max(150, Math.round(SNOW_COUNT * profile.particleDensity));
+    this.activeCloudCount = Math.max(4, Math.round(CLOUD_COUNT * profile.particleDensity));
+    this.rainGeometry.setDrawRange(0, this.activeRainCount * 2);
+    this.snowGeometry.setDrawRange(0, this.activeSnowCount);
+    const lastCloud = this.clouds[this.activeCloudCount - 1];
+    this.cloudMesh.count = lastCloud.first + lastCloud.count;
+    this.cloudMesh.castShadow = profile.shadows;
   }
 
   /** Manual cycling (W key / UI): auto → clear → cloudy → rain → snow → fog → auto. */
@@ -334,7 +349,7 @@ export class Weather {
     if (this.rainMesh.visible) {
       const dy = RAIN_FALL_SPEED * realDelta;
       const slant = wind * 6 * realDelta;
-      for (let i = 0; i < RAIN_COUNT; i++) {
+      for (let i = 0; i < this.activeRainCount; i++) {
         const idx = i * 6;
         this.rainPositions[idx + 1] -= dy;
         this.rainPositions[idx + 4] -= dy;
@@ -360,7 +375,7 @@ export class Weather {
     this.snowMaterial.opacity = 0.9 * snowAlpha;
     if (this.snowMesh.visible) {
       const dy = SNOW_FALL_SPEED * realDelta;
-      for (let i = 0; i < SNOW_COUNT; i++) {
+      for (let i = 0; i < this.activeSnowCount; i++) {
         const idx = i * 3;
         this.snowPositions[idx + 1] -= dy * (0.7 + 0.3 * Math.sin(this.snowPhases[i]));
         this.snowPositions[idx] +=
@@ -376,8 +391,8 @@ export class Weather {
     }
 
     // ── Clouds drift in with cover, drift out without it ──
-    const visibleClouds = Math.round(this.values.cloud * CLOUD_COUNT);
-    for (let c = 0; c < this.clouds.length; c++) {
+    const visibleClouds = Math.round(this.values.cloud * this.activeCloudCount);
+    for (let c = 0; c < this.activeCloudCount; c++) {
       const cloud = this.clouds[c];
       const wantVisible = c < visibleClouds ? 1 : 0;
       cloud.visibility += (wantVisible - cloud.visibility) * Math.min(1, realDelta * 0.5);

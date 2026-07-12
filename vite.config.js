@@ -16,8 +16,18 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
+    // Three itself is a large, cacheable vendor chunk. Application code has a
+    // separate, much smaller budget enforced by the browser smoke test.
+    chunkSizeWarningLimit: 800,
     rollupOptions: {
       input: resolve(__dirname, 'index.html'),
+      output: {
+        manualChunks(id) {
+          if (id.includes('/node_modules/three/')) return 'three';
+          if (id.includes('/node_modules/camera-controls/')) return 'camera-controls';
+          return undefined;
+        },
+      },
     },
   },
   server: {
