@@ -3,6 +3,7 @@ import { STATION_STOPS, TRAIN_ROUTE_CURVE, type StationStop } from './WorldLayou
 
 const JACKET_COLORS = [0x9c3838, 0x2b5f9a, 0x355d2a, 0xc4a35a, 0x6c4a8a, 0x444444, 0xb87333];
 const SKIN_COLORS = [0xe8c39a, 0xd4a173, 0xa57448, 0xfcd7b6];
+export const PASSENGER_SCALE = 0.78;
 
 type Activity = 'idle' | 'boarding' | 'disembarking';
 
@@ -61,6 +62,7 @@ export interface PassengerBuild {
 /** Voxel-person builder — shared with the bus stop crowds. */
 export function buildPassenger(): PassengerBuild {
   const group = new THREE.Group();
+  group.scale.setScalar(PASSENGER_SCALE);
   const jacket = JACKET_COLORS[Math.floor(Math.random() * JACKET_COLORS.length)];
   const skin = SKIN_COLORS[Math.floor(Math.random() * SKIN_COLORS.length)];
 
@@ -70,27 +72,27 @@ export function buildPassenger(): PassengerBuild {
 
   const legs = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.9, 0.5), legsMat);
   legs.position.y = 0.45;
-  legs.castShadow = true;
+  legs.castShadow = false;
   group.add(legs);
 
   const body = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.95, 0.5), jacketMat);
   body.position.y = 1.4;
-  body.castShadow = true;
+  body.castShadow = false;
   group.add(body);
 
   const head = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.55, 0.55), skinMat);
   head.position.y = 2.18;
-  head.castShadow = true;
+  head.castShadow = false;
   group.add(head);
 
   const leftArm = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.85, 0.32), jacketMat);
   leftArm.position.set(-0.45, 1.45, 0);
-  leftArm.castShadow = true;
+  leftArm.castShadow = false;
   group.add(leftArm);
 
   const rightArm = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.85, 0.32), jacketMat);
   rightArm.position.set(0.45, 1.45, 0);
-  rightArm.castShadow = true;
+  rightArm.castShadow = false;
   group.add(rightArm);
 
   return { group, body, head, legs, leftArm, rightArm, materials: [jacketMat, skinMat, legsMat] };

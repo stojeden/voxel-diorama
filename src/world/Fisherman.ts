@@ -65,7 +65,7 @@ export class Fisherman {
     this.disposables.push(stoolMat, stoolGeo);
     const stool = new THREE.Mesh(stoolGeo, stoolMat);
     stool.position.y = 0.3;
-    stool.castShadow = true;
+    stool.castShadow = false;
     this.spotGroup.add(stool);
 
     const boxMat = new THREE.MeshStandardMaterial({ color: 0x2e6b3a, roughness: 0.7 });
@@ -76,7 +76,7 @@ export class Fisherman {
     this.disposables.push(boxMat, boxLidMat, boxGeo, lidGeo, handleGeo);
     const tackleBox = new THREE.Mesh(boxGeo, boxMat);
     tackleBox.position.set(1.1, 0.23, 0.2);
-    tackleBox.castShadow = true;
+    tackleBox.castShadow = false;
     this.spotGroup.add(tackleBox);
     const lid = new THREE.Mesh(lidGeo, boxLidMat);
     lid.position.set(1.1, 0.5, 0.2);
@@ -104,7 +104,7 @@ export class Fisherman {
     const rodGeo = new THREE.BoxGeometry(0.1, 0.1, 3.8);
     this.disposables.push(rodMat, rodGeo);
     this.rod = new THREE.Mesh(rodGeo, rodMat);
-    this.rod.castShadow = true;
+    this.rod.castShadow = false;
     this.rod.visible = false;
     scene.add(this.rod);
 
@@ -173,7 +173,9 @@ export class Fisherman {
   update(delta: number, elapsed: number, night: number, snowCover: number): void {
     // Deep winter: the lake freezes and he fishes through an ice hole
     // in the MIDDLE of the lake instead of from the shore.
-    const frozen = snowCover > 0.5;
+    // Leave the ice while it is still visibly solid and enter only after a
+    // sustained freeze. The hysteresis avoids a thaw transition through water.
+    const frozen = this.seatKind === 'ice' ? snowCover > 0.7 : snowCover > 0.8;
     const wantSeat: SeatKind = frozen ? 'ice' : 'shore';
 
     // ── Daily routine transitions ──

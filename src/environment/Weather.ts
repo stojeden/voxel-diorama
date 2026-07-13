@@ -111,6 +111,7 @@ export class Weather {
   private activeRainCount = RAIN_COUNT;
   private activeSnowCount = SNOW_COUNT;
   private activeCloudCount = CLOUD_COUNT;
+  private cloudUpdateAccumulator = 0;
 
   constructor(scene: THREE.Scene, windUniforms: WindUniforms) {
     this.scene = scene;
@@ -198,7 +199,9 @@ export class Weather {
 
     this.cloudMesh = new THREE.InstancedMesh(this.cloudGeometry, this.cloudMaterial, totalInstances);
     this.cloudMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    this.cloudMesh.castShadow = true;
+    // Broad cloud shadows are both visually unstable and disproportionately
+    // expensive. Cloud cover already attenuates the directional sun light.
+    this.cloudMesh.castShadow = false;
     this.cloudMesh.frustumCulled = false;
 
     let cursor = 0;
@@ -228,7 +231,12 @@ export class Weather {
     this.snowGeometry.setDrawRange(0, this.activeSnowCount);
     const lastCloud = this.clouds[this.activeCloudCount - 1];
     this.cloudMesh.count = lastCloud.first + lastCloud.count;
-    this.cloudMesh.castShadow = profile.shadows;
+    this.cloudMesh.castShadow = false;
+  }
+
+  /** Transparent atmosphere must not contribute opaque normals to SSAO. */
+  getOcclusionExclusions(): THREE.Object3D[] {
+    return [this.rainMesh, this.snowMesh, this.cloudMesh];
   }
 
   /** Manual cycling (W key / UI): auto → clear → cloudy → rain → snow → fog → auto. */
@@ -391,29 +399,37 @@ export class Weather {
     }
 
     // ── Clouds drift in with cover, drift out without it ──
-    const visibleClouds = Math.round(this.values.cloud * this.activeCloudCount);
-    for (let c = 0; c < this.activeCloudCount; c++) {
-      const cloud = this.clouds[c];
-      const wantVisible = c < visibleClouds ? 1 : 0;
-      cloud.visibility += (wantVisible - cloud.visibility) * Math.min(1, realDelta * 0.5);
-      cloud.x += (cloud.speed + wind * 5) * realDelta;
-      if (cloud.x > RAIN_AREA) {
-        cloud.x = -RAIN_AREA;
-        cloud.z = (Math.random() - 0.5) * 2 * (RAIN_AREA - 30);
-      }
+    // Their slow, distant motion does not benefit from 60 matrix uploads per
+    // second. Updating at 24 Hz saves CPU and GPU traffic while rain, snow,
+    // actors and the train remain full-rate.
+    this.cloudUpdateAccumulator += realDelta;
+    if (this.cloudUpdateAccumulator >= 1 / 24) {
+      const cloudDelta = Math.min(this.cloudUpdateAccumulator, 0.15);
+      this.cloudUpdateAccumulator = 0;
+      const visibleClouds = Math.round(this.values.cloud * this.activeCloudCount);
+      for (let c = 0; c < this.activeCloudCount; c++) {
+        const cloud = this.clouds[c];
+        const wantVisible = c < visibleClouds ? 1 : 0;
+        cloud.visibility += (wantVisible - cloud.visibility) * Math.min(1, cloudDelta * 0.5);
+        cloud.x += (cloud.speed + wind * 5) * cloudDelta;
+        if (cloud.x > RAIN_AREA) {
+          cloud.x = -RAIN_AREA;
+          cloud.z = (Math.random() - 0.5) * 2 * (RAIN_AREA - 30);
+        }
 
-      const s = cloud.visibility;
-      for (let p = 0; p < cloud.count; p++) {
-        const offset = cloud.offsets[p];
-        this.cloudDummy.position.set(cloud.x + offset.x, cloud.y + offset.y, cloud.z + offset.z);
-        const scale = cloud.scales[p] * s;
-        this.cloudDummy.scale.setScalar(Math.max(scale, 0.0001));
-        this.cloudDummy.rotation.set(0, 0, 0);
-        this.cloudDummy.updateMatrix();
-        this.cloudMesh.setMatrixAt(cloud.first + p, this.cloudDummy.matrix);
+        const s = cloud.visibility;
+        for (let p = 0; p < cloud.count; p++) {
+          const offset = cloud.offsets[p];
+          this.cloudDummy.position.set(cloud.x + offset.x, cloud.y + offset.y, cloud.z + offset.z);
+          const scale = cloud.scales[p] * s;
+          this.cloudDummy.scale.setScalar(Math.max(scale, 0.0001));
+          this.cloudDummy.rotation.set(0, 0, 0);
+          this.cloudDummy.updateMatrix();
+          this.cloudMesh.setMatrixAt(cloud.first + p, this.cloudDummy.matrix);
+        }
       }
+      this.cloudMesh.instanceMatrix.needsUpdate = true;
     }
-    this.cloudMesh.instanceMatrix.needsUpdate = true;
   }
 
   dispose(): void {

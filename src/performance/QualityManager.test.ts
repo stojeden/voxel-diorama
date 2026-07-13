@@ -19,6 +19,24 @@ describe('recommendedLevel', () => {
 });
 
 describe('QualityManager', () => {
+  it('reserves expensive P1 rendering features for capable profiles', () => {
+    const high = new QualityManager({}, 'high').getProfile();
+    const low = new QualityManager({}, 'low').getProfile();
+    expect(high).toMatchObject({
+      ambientOcclusion: true,
+      aoResolutionScale: 0.5,
+      cinematicDepthOfField: true,
+      smaa: 'high',
+      pixelRatio: 1.25,
+    });
+    expect(low).toMatchObject({
+      ambientOcclusion: false,
+      cinematicDepthOfField: false,
+      smaa: 'low',
+      pixelRatio: 1,
+    });
+  });
+
   it('keeps manual modes stable regardless of frame time', () => {
     const manager = new QualityManager({}, 'high');
     sample(manager, 20, 40);

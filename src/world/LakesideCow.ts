@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { COW_MEADOW, KIOSK_MAIN, LAKE } from './WorldLayout';
+import { COW_MEADOW, GROUND_SURFACE_Y, KIOSK_MAIN, LAKE } from './WorldLayout';
 import { buildPassenger, easeInOut, type PassengerBuild } from './PassengerCrowd';
 
 /**
@@ -232,7 +232,7 @@ export class LakesideCow {
   private cowMode: CowMode = 'graze';
   private cowPresent = true;
   private heading = Math.PI * 0.3;
-  private readonly cowPos = new THREE.Vector3(MEADOW.x, 0.5, MEADOW.z);
+  private readonly cowPos = new THREE.Vector3(MEADOW.x, GROUND_SURFACE_Y, MEADOW.z);
   private readonly walkTarget = new THREE.Vector3();
   private grazeTimer = 5;
 
@@ -266,6 +266,7 @@ export class LakesideCow {
 
     const cowBuild = buildCow();
     this.cow = cowBuild.parts;
+    this.cow.group.name = 'lakeside-cow';
     this.disposables.push(...cowBuild.disposables);
     this.cow.group.position.copy(this.cowPos);
     this.cow.group.rotation.y = this.heading + Math.PI;
@@ -357,6 +358,23 @@ export class LakesideCow {
     this.pendingEvent = event ?? (this.cowPresent ? 'abduct' : 'return');
     this.eventDelay = 0.01;
     this.nightArmed = true;
+  }
+
+  /** Dev helper: deterministic cow placement for lighting and camera tests. */
+  debugPlaceCowAtMeadow(): void {
+    this.cowPresent = true;
+    this.cowMode = 'sleep';
+    this.cowPos.set(MEADOW.x, GROUND_SURFACE_Y, MEADOW.z);
+    this.cow.group.position.copy(this.cowPos);
+    this.cow.group.visible = true;
+    this.pendingEvent = null;
+    this.eventDelay = 0;
+    this.nightArmed = true;
+    this.ufoMode = 'hidden';
+    this.ufo.group.visible = false;
+    this.ufo.beamMaterial.opacity = 0;
+    this.ufo.glow.intensity = 0;
+    this.liftProgress = 0;
   }
 
   // ── Night event scheduling: one UFO visit per night. The cow alternates
@@ -543,7 +561,7 @@ export class LakesideCow {
       for (const leg of g.legs) leg.scale.y = 0.25;
       const breathe = 1 + Math.sin(elapsed * 1.4) * 0.015;
       g.group.scale.set(1, breathe, 1);
-      g.group.position.set(this.cowPos.x, 0.12, this.cowPos.z);
+      g.group.position.set(this.cowPos.x, GROUND_SURFACE_Y + 0.12, this.cowPos.z);
       g.headGroup.rotation.x = 0.35;
       g.tail.rotation.x = 0;
       return;
@@ -554,7 +572,7 @@ export class LakesideCow {
     g.tail.rotation.x = Math.sin(elapsed * 1.8) * 0.35;
 
     if (this.cowMode === 'graze') {
-      g.group.position.set(this.cowPos.x, 0.5, this.cowPos.z);
+      g.group.position.set(this.cowPos.x, GROUND_SURFACE_Y, this.cowPos.z);
       g.group.rotation.y = this.heading + Math.PI;
       // Head down, nibbling.
       g.headGroup.rotation.x = 0.85 + Math.sin(elapsed * 5.2) * 0.08;
@@ -579,7 +597,11 @@ export class LakesideCow {
         const step = Math.min(dist, 0.75 * delta);
         this.cowPos.x += (dx / dist) * step;
         this.cowPos.z += (dz / dist) * step;
-        g.group.position.set(this.cowPos.x, 0.5 + Math.abs(Math.sin(elapsed * 4)) * 0.03, this.cowPos.z);
+        g.group.position.set(
+          this.cowPos.x,
+          GROUND_SURFACE_Y + Math.abs(Math.sin(elapsed * 4)) * 0.03,
+          this.cowPos.z
+        );
         g.group.rotation.y = this.heading + Math.PI;
         g.headGroup.rotation.x = 0.15;
         // Leg shuffle

@@ -38,7 +38,7 @@ function buildFish(): { group: THREE.Group; material: THREE.MeshStandardMaterial
   });
   // Body: stretched box
   const body = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.28, 0.22), bodyMat);
-  body.castShadow = true;
+  body.castShadow = false;
   group.add(body);
   // Tail
   const tail = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.32, 0.06), bodyMat);

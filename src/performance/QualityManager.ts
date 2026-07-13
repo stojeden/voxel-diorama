@@ -8,12 +8,18 @@ export interface QualityProfile {
   shadows: boolean;
   shadowMapSize: number;
   bloom: boolean;
+  smaa: 'low' | 'medium' | 'high';
+  ambientOcclusion: boolean;
+  aoResolutionScale: number;
+  cinematicDepthOfField: boolean;
+  waterDetail: number;
   particleDensity: number;
   actorDensity: number;
   labels: boolean;
   pmremInterval: number;
   optionalActorHz: number;
   streetLightBudget: number;
+  busStopLightBudget: number;
   windowLightBudget: number;
 }
 
@@ -38,12 +44,18 @@ export const QUALITY_PROFILES: Record<QualityLevel, QualityProfile> = {
     shadows: false,
     shadowMapSize: 512,
     bloom: false,
+    smaa: 'low',
+    ambientOcclusion: false,
+    aoResolutionScale: 0.35,
+    cinematicDepthOfField: false,
+    waterDetail: 0.35,
     particleDensity: 0.35,
     actorDensity: 0.45,
     labels: false,
-    pmremInterval: 2.4,
+    pmremInterval: 15,
     optionalActorHz: 20,
     streetLightBudget: 4,
+    busStopLightBudget: 1,
     windowLightBudget: 1,
   },
   medium: {
@@ -53,28 +65,40 @@ export const QUALITY_PROFILES: Record<QualityLevel, QualityProfile> = {
     shadows: true,
     shadowMapSize: 1024,
     bloom: true,
+    smaa: 'medium',
+    ambientOcclusion: true,
+    aoResolutionScale: 0.4,
+    cinematicDepthOfField: false,
+    waterDetail: 0.65,
     particleDensity: 0.65,
     actorDensity: 0.72,
     labels: true,
-    pmremInterval: 5,
+    pmremInterval: 12,
     optionalActorHz: 20,
     streetLightBudget: 8,
+    busStopLightBudget: 2,
     windowLightBudget: 2,
   },
   high: {
     level: 'high',
-    pixelRatio: 1.5,
+    pixelRatio: 1.25,
     msaaSamples: 0,
     shadows: true,
     shadowMapSize: 1024,
     bloom: true,
+    smaa: 'high',
+    ambientOcclusion: true,
+    aoResolutionScale: 0.5,
+    cinematicDepthOfField: true,
+    waterDetail: 1,
     particleDensity: 0.85,
     actorDensity: 0.9,
     labels: true,
-    pmremInterval: 3,
+    pmremInterval: 8,
     optionalActorHz: 24,
-    streetLightBudget: 10,
-    windowLightBudget: 3,
+    streetLightBudget: 6,
+    busStopLightBudget: 2,
+    windowLightBudget: 2,
   },
 };
 

@@ -12,7 +12,7 @@ export default defineConfig({
     dedupe: ['three'],
   },
   optimizeDeps: {
-    include: ['three', 'camera-controls', 'suncalc'],
+    include: ['three', 'postprocessing', 'camera-controls', 'suncalc'],
   },
   build: {
     outDir: 'dist',

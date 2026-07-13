@@ -1,28 +1,39 @@
 import { describe, expect, test } from 'vitest';
 import * as THREE from 'three';
+import { PASSENGER_SCALE } from './PassengerCrowd';
 import {
+  BENCH_DIMENSIONS,
   BLOCK_CONFIGS,
+  BUILDING_ACCESS_CELLS,
+  BUILDING_ENTRANCES,
   BUS_ROUTE_CURVE,
   BUS_STOPS,
   COLORS,
   COW_MEADOW,
   DOG_HOME,
   FISHERMAN_SPOT,
+  GROUND_SURFACE_Y,
+  STATIC_PROP_FOOTPRINTS,
   KIOSK_MAIN,
   LAKE,
   LAMP_POSITIONS,
   POSTMAN_ROUTE_CURVE,
   RAIL_SIGNAL_POSITIONS,
   STATION_STOPS,
+  TRACK_HALF_GAUGE,
   TRAIN_ROUTE_CURVE,
   TREE_POSITIONS,
   TUNNEL_WIDTH,
+  VIADUCT_RANGE,
   WORLD_HALF_SIZE,
+  busShelterCenter,
   distancePointToBlock,
+  distancePointToFootprint,
   distanceToGroundRail,
   getTunnelBounds,
   isOnRoad,
   isOnSidewalk,
+  stationPlatformCells,
   threeColorFromHex,
   wrapT,
 } from './WorldLayout';
@@ -55,7 +66,7 @@ describe('train route geometry', () => {
       const dy = Math.abs(samples[i].y - samples[i - 1].y);
       const run = Math.hypot(samples[i].x - samples[i - 1].x, samples[i].z - samples[i - 1].z);
       if (run > 1e-4) {
-        expect(dy / run).toBeLessThan(0.35);
+        expect(dy / run).toBeLessThan(0.13);
       }
     }
   });
@@ -76,7 +87,7 @@ describe('train route geometry', () => {
   });
 
   test('contains an elevated viaduct stretch', () => {
-    const elevated = routeSamples(300).filter((p) => p.y >= 5);
+    const elevated = routeSamples(300).filter((p) => p.y >= VIADUCT_RANGE.deckY - 0.25);
     expect(elevated.length).toBeGreaterThan(10);
   });
 
@@ -148,7 +159,65 @@ describe('world layout collisions', () => {
     for (const [lampX, lampZ] of LAMP_POSITIONS) {
       const nearest = Math.min(...groundSamples.map((p) => Math.hypot(p.x - lampX, p.z - lampZ)));
       expect(nearest).toBeGreaterThanOrEqual(5);
+      expect(isOnRoad(lampX, lampZ)).toBe(false);
+      for (const [treeX, treeZ] of TREE_POSITIONS) {
+        expect(Math.hypot(treeX - lampX, treeZ - lampZ)).toBeGreaterThanOrEqual(5);
+      }
     }
+  });
+
+  test('keeps trees out of kiosks, benches, fences and the playground', () => {
+    for (const [treeX, treeZ] of TREE_POSITIONS) {
+      for (const footprint of STATIC_PROP_FOOTPRINTS) {
+        expect(distancePointToFootprint(treeX, treeZ, footprint)).toBeGreaterThanOrEqual(3.5);
+      }
+    }
+  });
+
+  test('keeps static prop footprints off roads, buildings and each other', () => {
+    for (let i = 0; i < STATIC_PROP_FOOTPRINTS.length; i++) {
+      const footprint = STATIC_PROP_FOOTPRINTS[i];
+      for (let x = footprint.minX; x <= footprint.maxX; x++) {
+        for (let z = footprint.minZ; z <= footprint.maxZ; z++) {
+          expect(isOnRoad(x, z)).toBe(false);
+          for (const block of BLOCK_CONFIGS) {
+            expect(distancePointToBlock(x, z, block)).toBeGreaterThan(0);
+          }
+        }
+      }
+      for (let j = i + 1; j < STATIC_PROP_FOOTPRINTS.length; j++) {
+        const other = STATIC_PROP_FOOTPRINTS[j];
+        const separated =
+          footprint.maxX < other.minX ||
+          footprint.minX > other.maxX ||
+          footprint.maxZ < other.minZ ||
+          footprint.minZ > other.maxZ;
+        expect(separated).toBe(true);
+      }
+    }
+  });
+
+  test('gives every building a door and a collision-free pedestrian access path', () => {
+    const access = new Set(BUILDING_ACCESS_CELLS.map(([x, z]) => `${x},${z}`));
+    expect(BUILDING_ENTRANCES).toHaveLength(BLOCK_CONFIGS.length);
+    for (const entrance of BUILDING_ENTRANCES) {
+      expect(access.has(`${entrance.outsideX},${entrance.outsideZ}`)).toBe(true);
+    }
+    for (const [x, z] of BUILDING_ACCESS_CELLS) {
+      if (!isOnRoad(x, z)) {
+        for (const block of BLOCK_CONFIGS) {
+          expect(distancePointToBlock(x, z, block)).toBeGreaterThan(0);
+        }
+      }
+      const nx = (x - LAKE.x) / LAKE.radiusX;
+      const nz = (z - LAKE.z) / LAKE.radiusZ;
+      expect(nx * nx + nz * nz).toBeGreaterThan(1);
+    }
+  });
+
+  test('uses the same realistic half-gauge for rail and wheel placement', () => {
+    expect(TRACK_HALF_GAUGE).toBeGreaterThan(0.45);
+    expect(TRACK_HALF_GAUGE).toBeLessThan(0.8);
   });
 
   test('keeps rail signals next to the track rather than on the rails', () => {
@@ -203,6 +272,21 @@ describe('bus loop', () => {
       expect(shelterDist).toBeLessThan(8);
     }
   });
+
+  test('leaves a human-width corridor between every shelter bench and the bus', () => {
+    const busHalfWidth = 2.3 / 2;
+    const passengerDiameter = PASSENGER_SCALE * 0.55;
+    for (const stop of BUS_STOPS) {
+      const lane = BUS_ROUTE_CURVE.getPointAt(stop.atT);
+      const center = busShelterCenter(stop);
+      const outwardDistance = stop.axis === 'x'
+        ? Math.abs(lane.z - center.z)
+        : Math.abs(lane.x - center.x);
+      const benchRoadEdge = 1 + BENCH_DIMENSIONS.depth / 2;
+      const clearCorridor = outwardDistance - busHalfWidth - benchRoadEdge;
+      expect(clearCorridor, stop.label).toBeGreaterThan(passengerDiameter);
+    }
+  });
 });
 
 describe('stations', () => {
@@ -210,7 +294,7 @@ describe('stations', () => {
     for (const station of STATION_STOPS) {
       const p = TRAIN_ROUTE_CURVE.getPointAt(station.centerT);
       const onGround = p.y < 1;
-      const onDeck = p.y > 5.5 && p.y < 8;
+      const onDeck = p.y > VIADUCT_RANGE.deckY - 0.6 && p.y < VIADUCT_RANGE.deckY + 0.6;
       expect(onGround || onDeck).toBe(true);
     }
   });
@@ -221,6 +305,15 @@ describe('stations', () => {
       const d = wrapT(station.centerT - station.atT) * length;
       expect(d).toBeGreaterThan(10);
       expect(d).toBeLessThan(18);
+    }
+  });
+
+  test('keeps ground-level platform slabs out of road lanes and crossings', () => {
+    for (const station of STATION_STOPS) {
+      if (TRAIN_ROUTE_CURVE.getPointAt(station.centerT).y >= 2.5) continue;
+      for (const cell of stationPlatformCells(station)) {
+        expect(isOnRoad(cell.x, cell.z)).toBe(false);
+      }
     }
   });
 });
@@ -311,6 +404,28 @@ describe('story actors placement (no overlaps)', () => {
 });
 
 describe('palette', () => {
+  test('uses human-scale benches and a shared walking surface', () => {
+    expect(BENCH_DIMENSIONS.seatHeight).toBeGreaterThanOrEqual(0.42);
+    expect(BENCH_DIMENSIONS.seatHeight).toBeLessThanOrEqual(0.52);
+    expect(BENCH_DIMENSIONS.length).toBeGreaterThanOrEqual(2.4);
+    expect(BENCH_DIMENSIONS.length).toBeLessThanOrEqual(3.2);
+    expect(BENCH_DIMENSIONS.seatThickness).toBeLessThan(0.22);
+    expect(GROUND_SURFACE_Y).toBe(-0.5);
+  });
+
+  test('places a physical street lamp close enough to light the cow meadow', () => {
+    const nearestLamp = Math.min(
+      ...LAMP_POSITIONS.map(([x, z]) => Math.hypot(x - COW_MEADOW.x, z - COW_MEADOW.z))
+    );
+    expect(nearestLamp).toBeLessThan(8);
+  });
+
+  test('keeps passenger height within a believable human scale', () => {
+    const modeledHeight = 2.455 * PASSENGER_SCALE;
+    expect(modeledHeight).toBeGreaterThan(1.75);
+    expect(modeledHeight).toBeLessThan(2.05);
+  });
+
   test('uses colors that Three can construct without string warnings', () => {
     for (const color of Object.values(COLORS)) {
       const threeColor = threeColorFromHex(color);

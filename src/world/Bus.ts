@@ -3,12 +3,24 @@ import {
   BUS_ROUTE_CURVE,
   BUS_STOPS,
   COLORS,
+  GROUND_SURFACE_Y,
   LEVEL_CROSSING,
   busShelterCenter,
   nearestCurveT,
   type BusStop,
 } from './WorldLayout';
 import { buildPassenger, easeInOut, type PassengerBuild } from './PassengerCrowd';
+import { mergeStaticMeshes } from '../performance/mergeStaticMeshes';
+import {
+  busShelterColliders,
+  BUS_DOOR_APPROACH_DISTANCE,
+  busStopWaitingPositions,
+  busStopWalkingPath,
+  isPointClear,
+  polylineLengths,
+  samplePolyline,
+  type CollisionRect,
+} from './BusStopNavigation';
 
 /**
  * City bus circling the avenue loop, with two stops where voxel passengers
@@ -173,6 +185,8 @@ function buildBusMesh(): {
     }
   }
 
+  mergeStaticMeshes(group, new Set([...wheels, ...doors]));
+
   return {
     group, wheels, doors, materials, windowMaterial: windowMat, headLights, beamMaterials,
     bodyMaterial: bodyMat, roofMaterial: roofMat,
@@ -187,11 +201,15 @@ interface BusPassenger {
   build: PassengerBuild;
   waitPos: THREE.Vector3;
   doorPos: THREE.Vector3;
+  path: THREE.Vector3[];
+  pathLengths: number[];
+  pathLength: number;
   facing: number;
   activity: Activity;
   progress: number;
   duration: number;
   phase: number;
+  delay: number;
   currentOpacity: number;
   targetOpacity: number;
 }
@@ -201,33 +219,30 @@ interface StopCrowd {
   passengers: BusPassenger[];
   wasDwelling: boolean;
   visitCount: number;
+  colliders: CollisionRect[];
 }
 
 function buildStopCrowd(scene: THREE.Scene, stop: BusStop): StopCrowd {
   const lanePoint = BUS_ROUTE_CURVE.getPointAt(stop.atT);
   const tangent = BUS_ROUTE_CURVE.getTangentAt(stop.atT).normalize();
-  const right = new THREE.Vector3().crossVectors(tangent, new THREE.Vector3(0, 1, 0)).normalize();
-
-  const doorBase = lanePoint.clone().addScaledVector(right, 1.9);
-  doorBase.y = 0.5;
   const c = busShelterCenter(stop);
-  const shelterCenter = new THREE.Vector3(c.x, 0.5, c.z);
-  // People queue in a neat line 1.6 m IN FRONT of the shelter (toward the
-  // road) — never inside its posts or bench.
-  const towardRoad = new THREE.Vector3(lanePoint.x - c.x, 0, lanePoint.z - c.z).normalize();
+  const shelterCenter = new THREE.Vector3(c.x, GROUND_SURFACE_Y, c.z);
+  const towardShelter = shelterCenter.clone().sub(lanePoint).setY(0).normalize();
+  const doorBase = lanePoint.clone().addScaledVector(towardShelter, BUS_DOOR_APPROACH_DISTANCE);
+  doorBase.y = 0.5;
+  const waitPositions = busStopWaitingPositions(stop);
+  const colliders = busShelterColliders(stop);
 
   const passengers: BusPassenger[] = [];
   for (let i = 0; i < 4; i++) {
-    const along = -2.4 + i * 1.6;
-    const waitPos = shelterCenter
-      .clone()
-      .addScaledVector(towardRoad, 1.6)
-      .addScaledVector(tangent, along);
-    waitPos.y = 0.5;
+    const waitPos = waitPositions[i];
     const doorPos = doorBase.clone().addScaledVector(tangent, (i % 2 === 0 ? -1.6 : 1.6));
     doorPos.y = 0.5;
+    const path = busStopWalkingPath(stop, waitPos, doorPos);
+    const pathMetrics = polylineLengths(path);
 
     const build = buildPassenger();
+    build.group.name = `bus-passenger-${stop.label}-${i}`;
     build.group.position.copy(waitPos);
     const facing = Math.atan2(doorPos.x - waitPos.x, doorPos.z - waitPos.z);
     build.group.rotation.y = facing;
@@ -237,24 +252,35 @@ function buildStopCrowd(scene: THREE.Scene, stop: BusStop): StopCrowd {
       build,
       waitPos,
       doorPos,
+      path,
+      pathLengths: pathMetrics.segments,
+      pathLength: pathMetrics.total,
       facing,
       activity: 'idle',
       progress: 0,
       duration: 2.2 + Math.random() * 0.8,
       phase: Math.random() * Math.PI * 2,
+      delay: 0,
       currentOpacity: 0,
       targetOpacity: 0.92,
     });
   }
 
-  return { stop, passengers, wasDwelling: false, visitCount: 0 };
+  return { stop, passengers, wasDwelling: false, visitCount: 0, colliders };
 }
 
 export interface BusHandle {
-  update: (delta: number, nightFactor: number, trainPosition: THREE.Vector3) => void;
-  getPosition: () => THREE.Vector3;
-  getDirection: () => THREE.Vector3;
+  update: (delta: number, nightFactor: number, crossingBlocked: boolean) => void;
+  getPosition: (target?: THREE.Vector3) => THREE.Vector3;
+  getDirection: (target?: THREE.Vector3) => THREE.Vector3;
   getStopState: () => { dwelling: boolean; label: string };
+  debugStartDwell: (label: string) => boolean;
+  getPassengerDebugState: () => Array<{
+    stop: string;
+    activity: Activity;
+    colliding: boolean;
+    position: [number, number, number];
+  }>;
   /** 0..1 — cyberpunk look morph (dark hull, neon glow). */
   setCyberLook: (factor: number) => void;
   dispose: () => void;
@@ -311,11 +337,13 @@ export function createBus(scene: THREE.Scene): BusHandle {
       p.duration = 2.0 + Math.random() * 0.8;
       if (boards) {
         p.activity = 'boarding';
+        p.delay = 0.9 + i * 0.16;
         p.currentOpacity = 0.92;
         p.targetOpacity = 0.92;
         p.build.group.position.copy(p.waitPos);
       } else {
         p.activity = 'disembarking';
+        p.delay = (i % 2) * 0.22;
         p.currentOpacity = 0;
         p.targetOpacity = 0.92;
         p.build.group.position.copy(p.doorPos);
@@ -323,24 +351,33 @@ export function createBus(scene: THREE.Scene): BusHandle {
     }
   }
 
-  function updatePassenger(p: BusPassenger, delta: number): void {
+  function updatePassenger(p: BusPassenger, colliders: readonly CollisionRect[], delta: number): void {
     if (p.activity === 'idle') {
       p.build.group.position.copy(p.waitPos);
       p.build.body.position.y = 1.4 + Math.sin(clock * 1.3 + p.phase) * 0.015;
       p.build.head.rotation.y = Math.sin(clock * 0.4 + p.phase * 2) * 0.4;
       p.targetOpacity = 0.92;
     } else {
+      if (p.delay > 0) {
+        p.delay = Math.max(0, p.delay - delta);
+        return;
+      }
       p.progress = Math.min(1, p.progress + delta / p.duration);
       const eased = easeInOut(p.progress);
-      const from = p.activity === 'boarding' ? p.waitPos : p.doorPos;
-      const to = p.activity === 'boarding' ? p.doorPos : p.waitPos;
-      p.build.group.position.lerpVectors(from, to, eased);
-      p.build.group.position.y = 0.5 + Math.abs(Math.sin(p.progress * Math.PI * 3)) * 0.06;
+      const pathProgress = p.activity === 'boarding' ? eased : 1 - eased;
+      const previousX = p.build.group.position.x;
+      const previousZ = p.build.group.position.z;
+      samplePolyline(p.path, p.pathLengths, p.pathLength, pathProgress, p.build.group.position);
+      if (!isPointClear(p.build.group.position, colliders)) {
+        p.build.group.position.x = previousX;
+        p.build.group.position.z = previousZ;
+      }
+      p.build.group.position.y += Math.abs(Math.sin(p.progress * Math.PI * 3)) * 0.06;
       p.build.legs.rotation.x = Math.sin(p.progress * Math.PI * 3) * 0.25;
       p.build.leftArm.rotation.x = Math.sin(p.progress * Math.PI * 3) * 0.55;
       p.build.rightArm.rotation.x = -Math.sin(p.progress * Math.PI * 3) * 0.55;
-      const dirX = to.x - from.x;
-      const dirZ = to.z - from.z;
+      const dirX = p.build.group.position.x - previousX;
+      const dirZ = p.build.group.position.z - previousZ;
       if (dirX !== 0 || dirZ !== 0) p.build.group.rotation.y = Math.atan2(dirX, dirZ);
 
       if (p.activity === 'boarding') {
@@ -367,7 +404,7 @@ export function createBus(scene: THREE.Scene): BusHandle {
   }
 
   return {
-    update(delta, nightFactor, trainPosition) {
+    update(delta, nightFactor, crossingBlocked) {
       clock += delta;
 
       // ── Speed by state ──
@@ -376,10 +413,7 @@ export function createBus(scene: THREE.Scene): BusHandle {
 
       // ── Level crossing: yield to the train ──
       const toCrossing = forwardDelta(leadT, CROSSING_T) * ROUTE_LENGTH;
-      const trainNear =
-        Math.hypot(trainPosition.x - LEVEL_CROSSING.x, trainPosition.z - LEVEL_CROSSING.z) < 30 &&
-        trainPosition.y < 2.5;
-      const holdForTrain = trainNear && toCrossing < 14 && toCrossing > 2;
+      const holdForTrain = crossingBlocked && toCrossing < 18 && toCrossing > 0.5;
 
       if (state.kind === 'cruising') {
         const stop = nextStop(leadT);
@@ -457,18 +491,34 @@ export function createBus(scene: THREE.Scene): BusHandle {
         const dwellHere = state.kind === 'dwelling' && state.stop.label === crowd.stop.label;
         if (dwellHere && !crowd.wasDwelling) startDwell(crowd);
         crowd.wasDwelling = dwellHere;
-        for (const p of crowd.passengers) updatePassenger(p, delta);
+        for (const p of crowd.passengers) updatePassenger(p, crowd.colliders, delta);
       }
     },
-    getPosition() {
-      return group.position.clone();
+    getPosition(target = new THREE.Vector3()) {
+      return target.copy(group.position);
     },
-    getDirection() {
-      return forward.clone();
+    getDirection(target = new THREE.Vector3()) {
+      return target.copy(forward);
     },
     getStopState() {
       if (state.kind === 'dwelling') return { dwelling: true, label: state.stop.label };
       return { dwelling: false, label: '' };
+    },
+    debugStartDwell(label) {
+      const crowd = crowds.find((entry) => entry.stop.label === label);
+      if (!crowd) return false;
+      startDwell(crowd);
+      return true;
+    },
+    getPassengerDebugState() {
+      return crowds.flatMap((crowd) =>
+        crowd.passengers.map((passenger) => ({
+          stop: crowd.stop.label,
+          activity: passenger.activity,
+          colliding: !isPointClear(passenger.build.group.position, crowd.colliders),
+          position: passenger.build.group.position.toArray() as [number, number, number],
+        }))
+      );
     },
     setCyberLook(factor) {
       bodyMaterial.color.lerpColors(BUS_BODY_NORMAL, BUS_BODY_CYBER, factor);

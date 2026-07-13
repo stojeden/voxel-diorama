@@ -3,10 +3,12 @@ import {
   COLORS,
   ROUTE_LENGTH,
   STATION_STOPS,
+  TRACK_HALF_GAUGE,
   TRAIN_ROUTE_CURVE,
   wrapT,
   type StationStop,
 } from './WorldLayout';
+import { mergeStaticMeshes } from '../performance/mergeStaticMeshes';
 
 /**
  * Train composition with realistic bogie-based track following.
@@ -26,7 +28,7 @@ import {
 
 const BASE_SPEED_METERS_PER_S = 10;
 const WHEEL_RADIUS = 0.42;
-const RAIL_GAUGE = 1.0;
+const RAIL_GAUGE = TRACK_HALF_GAUGE;
 const AXLE_SPACING = 1.2;
 const SPEED_LERP_RATE = 1.6; // 1/s — how fast actual speed chases target
 /** Distance (meters of arc-length) before a station at which braking begins. */
@@ -225,6 +227,7 @@ function buildBogie(mats: SharedMats): BogieRef {
     }
   }
 
+  mergeStaticMeshes(group, new Set(wheelMeshes));
   return { group, wheelMeshes, offset: 0 };
 }
 
@@ -358,6 +361,7 @@ function buildLocomotive(mats: SharedMats, length: number): LocomotiveBuild {
   rearCoupler.position.set(0, floorY - 0.05, halfL + 0.05);
   group.add(rearCoupler);
 
+  mergeStaticMeshes(group);
   return { group, headLights, beamMaterials };
 }
 
@@ -430,6 +434,7 @@ function buildPassengerCar(mats: SharedMats, length: number, accent: THREE.Mater
     group.add(coupler);
   }
 
+  mergeStaticMeshes(group, new Set(doors.map((door) => door.mesh)));
   return { group, doors };
 }
 
@@ -536,8 +541,9 @@ function placeCar(car: CarRef, centerT: number, elapsed: number, totalLength: nu
 
 export interface TrainHandle {
   update: (delta: number, elapsed: number, nightFactor: number, speedMultiplier: number) => void;
-  getPosition: () => THREE.Vector3;
-  getDirection: () => THREE.Vector3;
+  getPosition: (target?: THREE.Vector3) => THREE.Vector3;
+  getDirection: (target?: THREE.Vector3) => THREE.Vector3;
+  isGroundPointOccupied: (x: number, z: number, clearance?: number) => boolean;
   getSpeedFactor: () => number;
   getRouteProgress: () => number;
   getStationState: () => TrainPublicState;
@@ -728,11 +734,19 @@ export function createTrain(scene: THREE.Scene): TrainHandle {
         beamMat.opacity = beamStrength * 0.16;
       }
     },
-    getPosition() {
-      return sampleAt(leadT).clone();
+    getPosition(target = new THREE.Vector3()) {
+      return target.copy(sampleAt(leadT));
     },
-    getDirection() {
-      return TRAIN_ROUTE_CURVE.getTangentAt(wrapT(leadT)).clone().normalize();
+    getDirection(target = new THREE.Vector3()) {
+      return target.copy(TRAIN_ROUTE_CURVE.getTangentAt(wrapT(leadT))).normalize();
+    },
+    isGroundPointOccupied(x, z, clearance = 4) {
+      return carRefs.some(
+        (car) =>
+          car.group.visible &&
+          car.group.position.y < 2.5 &&
+          Math.hypot(car.group.position.x - x, car.group.position.z - z) < car.length / 2 + clearance
+      );
     },
     getSpeedFactor() {
       return currentSpeed / BASE_SPEED_METERS_PER_S;

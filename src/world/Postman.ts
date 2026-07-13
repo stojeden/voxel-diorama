@@ -31,10 +31,11 @@ const STOP_TS = MAIL_STOPS.map(([x, z]) => {
 
 function buildBike(): { group: THREE.Group; wheels: THREE.Mesh[]; rider: PassengerBuild; mats: THREE.Material[] } {
   const group = new THREE.Group();
+  group.name = 'postman-bike';
   const mats: THREE.Material[] = [];
-  const frameMat = new THREE.MeshStandardMaterial({ color: 0xb33a2e, metalness: 0.5, roughness: 0.4, transparent: true });
-  const wheelMat = new THREE.MeshStandardMaterial({ color: 0x202020, roughness: 0.7, transparent: true });
-  const bagMat = new THREE.MeshStandardMaterial({ color: 0xc9a14e, roughness: 0.85, transparent: true });
+  const frameMat = new THREE.MeshStandardMaterial({ color: 0xb33a2e, metalness: 0.5, roughness: 0.4 });
+  const wheelMat = new THREE.MeshStandardMaterial({ color: 0x202020, roughness: 0.7 });
+  const bagMat = new THREE.MeshStandardMaterial({ color: 0xc9a14e, roughness: 0.85 });
   mats.push(frameMat, wheelMat, bagMat);
 
   const wheels: THREE.Mesh[] = [];
@@ -64,9 +65,16 @@ function buildBike(): { group: THREE.Group; wheels: THREE.Mesh[]; rider: Passeng
   group.add(bag);
 
   const rider = buildPassenger();
+  rider.group.name = 'postman-rider';
   rider.group.position.set(0, 0.85, 0.3);
   rider.group.scale.setScalar(0.85);
   rider.legs.rotation.x = -0.9;
+  for (const material of rider.materials) {
+    material.transparent = false;
+    material.opacity = 1;
+    material.depthWrite = true;
+    material.needsUpdate = true;
+  }
   group.add(rider.group);
 
   return { group, wheels, rider, mats };
@@ -74,6 +82,7 @@ function buildBike(): { group: THREE.Group; wheels: THREE.Mesh[]; rider: Passeng
 
 function buildDog(): { group: THREE.Group; tail: THREE.Mesh; mats: THREE.Material[] } {
   const group = new THREE.Group();
+  group.name = 'postman-dog';
   const mats: THREE.Material[] = [];
   const furMat = new THREE.MeshStandardMaterial({ color: 0x8a6a42, roughness: 0.9 });
   const darkMat = new THREE.MeshStandardMaterial({ color: 0x5a4226, roughness: 0.9 });
@@ -102,28 +111,35 @@ function buildDog(): { group: THREE.Group; tail: THREE.Mesh; mats: THREE.Materia
   group.add(tail);
 
   group.traverse((o) => {
-    if (o instanceof THREE.Mesh) o.castShadow = true;
+    if (o instanceof THREE.Mesh) o.castShadow = false;
   });
   return { group, tail, mats };
 }
 
 type DogMode = 'home' | 'chase' | 'returnHome';
 
+export interface PostmanDebugState {
+  active: boolean;
+  dogMode: DogMode;
+  riderVisible: boolean;
+  riderOpacity: number;
+  chaseReaction: number;
+}
+
 export class Postman {
   private readonly scene: THREE.Scene;
   private readonly bike: ReturnType<typeof buildBike>;
   private readonly dog: ReturnType<typeof buildDog>;
-  private readonly dogPos = new THREE.Vector3(DOG_HOME.x, 0, DOG_HOME.z);
+  private readonly dogHome = new THREE.Vector3(DOG_HOME.x, 0, DOG_HOME.z);
   private dogMode: DogMode = 'home';
   private dogChaseTime = 0;
+  private chaseReaction = 0;
 
   private active = false;
   private doneToday = false;
   private t = 0;
   private stopTimer = 0;
   private nextStopIndex = 0;
-  private opacity = 0;
-
   private readonly pos = new THREE.Vector3();
   private readonly ahead = new THREE.Vector3();
 
@@ -134,7 +150,7 @@ export class Postman {
     scene.add(this.bike.group);
 
     this.dog = buildDog();
-    this.dog.group.position.copy(this.dogPos);
+    this.dog.group.position.copy(this.dogHome);
     scene.add(this.dog.group);
   }
 
@@ -152,14 +168,10 @@ export class Postman {
     }
 
     if (this.active) {
-      this.opacity += (0.95 - this.opacity) * Math.min(1, delta * 2);
       this.updateRide(delta, elapsed);
-    } else {
-      this.opacity += (0 - this.opacity) * Math.min(1, delta * 2);
-      if (this.opacity < 0.03) this.bike.group.visible = false;
     }
-    for (const mat of this.bike.rider.materials) mat.opacity = this.opacity;
-    for (const mat of this.bike.mats) (mat as THREE.MeshStandardMaterial).opacity = this.opacity;
+    this.bike.group.visible = this.active;
+    this.bike.rider.group.visible = true;
 
     this.updateDog(delta, elapsed);
   }
@@ -168,6 +180,10 @@ export class Postman {
     if (this.stopTimer > 0) {
       // Delivering — bike stands, rider waves an arm toward the door.
       this.stopTimer -= delta;
+      this.chaseReaction += (0 - this.chaseReaction) * Math.min(1, delta * 8);
+      this.bike.group.rotation.z = 0;
+      this.bike.rider.group.rotation.z = 0;
+      this.bike.rider.head.rotation.z = 0;
       this.bike.rider.rightArm.rotation.x = -1.6 + Math.sin(elapsed * 6) * 0.3;
       return;
     }
@@ -175,6 +191,7 @@ export class Postman {
     // Sprint a little when the dog is on his heels.
     const dogClose = this.dogMode === 'chase' &&
       this.dog.group.position.distanceTo(this.bike.group.position) < 4.5;
+    this.chaseReaction += ((dogClose ? 1 : 0) - this.chaseReaction) * Math.min(1, delta * 7);
     this.t += ((dogClose ? RIDE_SPEED * 1.45 : RIDE_SPEED) * delta) / ROUTE_LENGTH;
     if (this.t >= 1) {
       // Round finished — go home.
@@ -199,15 +216,17 @@ export class Postman {
     const wheelSpin = (RIDE_SPEED * delta) / 0.42;
     for (const wheel of this.bike.wheels) wheel.rotation.x += wheelSpin;
 
-    // Pedalling legs + gentle lean
+    // Pedalling legs + a controlled wobble when the dog reaches the bicycle.
+    const dogWobble = Math.sin(elapsed * 9.5) * 0.075 * this.chaseReaction;
     this.bike.rider.legs.rotation.x = -0.9 + Math.sin(elapsed * 9) * 0.35;
-    this.bike.group.rotation.z = Math.sin(elapsed * 1.3) * 0.02;
+    this.bike.group.rotation.z = Math.sin(elapsed * 1.3) * 0.02 + dogWobble;
+    this.bike.rider.group.rotation.z = -dogWobble * 0.7;
+    this.bike.rider.head.rotation.z = dogWobble * 0.45;
     this.bike.rider.rightArm.rotation.x = -0.4;
     this.bike.rider.leftArm.rotation.x = -0.4;
   }
 
   private updateDog(delta: number, elapsed: number): void {
-    const dogHome = new THREE.Vector3(DOG_HOME.x, 0, DOG_HOME.z);
     const postmanNear =
       this.active &&
       this.stopTimer <= 0 &&
@@ -216,9 +235,9 @@ export class Postman {
     if (this.dogMode === 'home') {
       // Naps / sniffs around its yard.
       this.dog.group.position.set(
-        dogHome.x + Math.sin(elapsed * 0.4) * 0.4,
+        this.dogHome.x + Math.sin(elapsed * 0.4) * 0.4,
         0,
-        dogHome.z + Math.cos(elapsed * 0.3) * 0.4
+        this.dogHome.z + Math.cos(elapsed * 0.3) * 0.4
       );
       this.dog.tail.rotation.y = Math.sin(elapsed * 3) * 0.3;
       if (postmanNear) {
@@ -247,8 +266,8 @@ export class Postman {
       }
     } else {
       // Trot back to the yard.
-      const dx = dogHome.x - this.dog.group.position.x;
-      const dz = dogHome.z - this.dog.group.position.z;
+      const dx = this.dogHome.x - this.dog.group.position.x;
+      const dz = this.dogHome.z - this.dog.group.position.z;
       const dist = Math.hypot(dx, dz);
       if (dist < 0.4) {
         this.dogMode = 'home';
@@ -260,6 +279,16 @@ export class Postman {
         this.dog.group.position.y = Math.abs(Math.sin(elapsed * 7)) * 0.08;
       }
     }
+  }
+
+  getDebugState(): PostmanDebugState {
+    return {
+      active: this.active,
+      dogMode: this.dogMode,
+      riderVisible: this.bike.group.visible && this.bike.rider.group.visible,
+      riderOpacity: Math.min(...this.bike.rider.materials.map((material) => material.opacity)),
+      chaseReaction: this.chaseReaction,
+    };
   }
 
   dispose(): void {

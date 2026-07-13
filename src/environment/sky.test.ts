@@ -83,6 +83,11 @@ describe('render exposure', () => {
     expect(sceneExposure(0, 1, 1.07)).toBeLessThan(0.54);
   });
 
+  test('keeps the night legible while preserving a daylight exposure step', () => {
+    expect(sceneExposure(1, 0)).toBeGreaterThanOrEqual(0.34);
+    expect(sceneExposure(1, 0)).toBeLessThan(sceneExposure(0, 0));
+  });
+
   test('preserves stronger bloom at night than in daylight', () => {
     expect(sceneBloomStrength(1, 0)).toBeGreaterThan(sceneBloomStrength(0, 1));
     expect(sceneBloomStrength(0, 1)).toBeLessThan(0.15);

@@ -20,7 +20,7 @@ import { Fisherman } from './world/Fisherman';
 import { Postman } from './world/Postman';
 import { chapterForProgress } from './experience/RouteChapters';
 import { themeById, type DioramaTheme } from './experience/Themes';
-import { DAY_SECONDS, TUNNEL_LENGTH, WORLD_HALF_SIZE } from './world/WorldLayout';
+import { DAY_SECONDS, LEVEL_CROSSING, TUNNEL_LENGTH, WORLD_HALF_SIZE } from './world/WorldLayout';
 import { sceneBloomStrength, sceneExposure } from './environment/sky';
 import {
   QualityManager,
@@ -49,8 +49,13 @@ const postman = new Postman(env.scene);
 const balloon = new Balloon(env.scene);
 const railSignals = new RailSignals(env.scene);
 const weather = new Weather(env.scene, windUniforms);
+env.setOcclusionExclusions(weather.getOcclusionExclusions());
 const dayNight = new DayNightCycle(env.scene, env.renderer, {
   streetLights: world.streetLights,
+  streetGlowMesh: world.streetGlowMesh,
+  streetGlowMaterial: world.streetGlowMaterial,
+  busStopLights: world.busStopLights,
+  busStopGlowMaterials: world.busStopGlowMaterials,
   windowLights: world.windowLights,
   windowGlowMaterials: world.windowGlowMaterials,
 });
@@ -59,10 +64,27 @@ dayNight.camera = env.camera;
 let realTime: RealTimeSync | null = null;
 const tour = new CinematicTour(env.controls);
 
+const bloomTargets: THREE.Object3D[] = [];
+env.scene.traverse((object) => {
+  if (!(object instanceof THREE.Mesh || object instanceof THREE.Points || object instanceof THREE.Line)) return;
+  const materials = Array.isArray(object.material) ? object.material : [object.material];
+  const glows = materials.some((material) => {
+    if (material.blending === THREE.AdditiveBlending) return true;
+    if (!(material instanceof THREE.MeshStandardMaterial || material instanceof THREE.MeshPhysicalMaterial)) {
+      return false;
+    }
+    return material.emissiveIntensity > 0 &&
+      material.emissive.r + material.emissive.g + material.emissive.b > 0.08;
+  });
+  if (glows) bloomTargets.push(object);
+});
+env.setBloomSelection(bloomTargets);
+
 const unsubscribeQuality = quality.subscribe((profile, snapshot) => {
   env.setQuality(profile);
   dayNight.setQuality(profile);
   weather.setQuality(profile);
+  world.setQuality(profile);
   birds.setDensity(profile.actorDensity);
   passengerCrowd.setDensity(profile.actorDensity);
   ui.setQuality(snapshot);
@@ -139,8 +161,7 @@ function applyTheme(id: string): void {
   currentTheme = themeById(id);
   world.setTheme(currentTheme.palette, currentTheme.foliage);
   train.setLivery(currentTheme.livery ?? 'modern');
-  env.glitchPass.uniforms.uSepia.value = currentTheme.sepia;
-  env.glitchPass.uniforms.uSatMul.value = currentTheme.saturation;
+  env.setThemeGrade(currentTheme.id, currentTheme.sepia, currentTheme.saturation);
   ui.setThemeActive(id);
   ui.showToast(`STYL: ${currentTheme.label.toUpperCase()}`);
 }
@@ -243,7 +264,13 @@ const clock = new THREE.Clock();
 let elapsed = 0;
 let loadingHidden = false;
 let optionalActorAccumulator = 0;
+let hudAccumulator = 0;
+let shadowFocusAccumulator = 0;
 const trainPosition = new THREE.Vector3();
+const trainDirection = new THREE.Vector3();
+const busPosition = new THREE.Vector3();
+const busDirection = new THREE.Vector3();
+const postFocusTarget = new THREE.Vector3();
 const boardingStations = new Set<string>();
 
 function formatClock(t01: number): string {
@@ -262,6 +289,13 @@ function animate() {
 
   env.controls.update(rawDelta);
   tour.update(rawDelta);
+  shadowFocusAccumulator += rawDelta;
+  if (shadowFocusAccumulator >= 0.2) {
+    env.controls.getTarget(postFocusTarget);
+    const shadowRadius = env.camera.position.distanceTo(postFocusTarget) * 0.72;
+    dayNight.setShadowFocus(postFocusTarget, shadowRadius);
+    shadowFocusAccumulator = 0;
+  }
 
   // ── Clock: real time, tour override, or free-running simulation ──
   if (realTime?.isActive()) {
@@ -336,10 +370,21 @@ function animate() {
   // ── Vehicles & life ──
   const speedMultiplier = 0.5 + ui.speedSetting * 1.3;
   train.update(delta, elapsed, light.night, speedMultiplier);
-  trainPosition.copy(train.getPosition());
-  bus.update(delta, light.night, trainPosition);
+  train.getPosition(trainPosition);
+  bus.update(
+    delta,
+    light.night,
+    train.isGroundPointOccupied(LEVEL_CROSSING.x, LEVEL_CROSSING.z, 5)
+  );
   world.setSnowCover(weather.getSnowCover());
   world.setWetness(weather.getWetness());
+  world.updateEnvironment(
+    elapsed,
+    weather.getWind(),
+    weather.getKind() === 'rain' ? 1 : 0,
+    THREE.MathUtils.smoothstep(weather.getSnowCover(), 0.42, 0.82),
+    Math.max(weather.getKind() === 'fog' ? 1 : 0, light.golden * (1 - skyCloud) * 0.38)
+  );
 
   railSignals.update(trainPosition);
   portalGlow.update(elapsed, rawDelta, trainPosition);
@@ -381,8 +426,8 @@ function animate() {
   // ── Onboard cab cameras (train / bus) ──
   if (cameraMode !== 'free' && !tour.isActive()) {
     env.controls.enabled = false;
-    const pos = cameraMode === 'train' ? trainPosition : bus.getPosition();
-    const dir = cameraMode === 'train' ? train.getDirection() : bus.getDirection();
+    const pos = cameraMode === 'train' ? trainPosition : bus.getPosition(busPosition);
+    const dir = cameraMode === 'train' ? train.getDirection(trainDirection) : bus.getDirection(busDirection);
     // Third-person game camera: behind and above the vehicle, looking ahead.
     const behind = cameraMode === 'train' ? 13 : 10.5;
     let height = cameraMode === 'train' ? 7 : 5.5;
@@ -428,30 +473,37 @@ function animate() {
   }
 
   // ── Post FX ──
-  env.glitchPass.uniforms.uTime.value = elapsed;
-  env.glitchPass.uniforms.uGolden.value = light.golden;
-  env.glitchPass.uniforms.uNight.value = light.night;
-  env.bloomPass.strength = sceneBloomStrength(light.night, light.golden, currentTheme.bloomMul);
+  env.gradeEffect.parameters.time.value = elapsed;
+  env.gradeEffect.parameters.golden.value = light.golden;
+  env.gradeEffect.parameters.night.value = light.night;
+  env.setEnvironmentGrade(light.golden, light.night);
+  env.setBloomStrength(sceneBloomStrength(light.night, light.golden, currentTheme.bloomMul));
+  env.controls.getTarget(postFocusTarget);
+  env.setCinematicFocus(tour.isActive(), postFocusTarget);
 
-  // ── HUD ──
-  if (realTime?.isActive()) {
-    const now = new Date();
-    ui.setClock(
-      `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')} · NA ŻYWO`
-    );
-  } else {
-    ui.setClock(`${formatClock(t01)}${timeScale > 1 ? ` · ${timeScale}×` : ''}`);
+  // ── HUD: DOM does not need a 60 Hz update cadence. ──
+  hudAccumulator += rawDelta;
+  if (hudAccumulator >= 0.1) {
+    hudAccumulator = 0;
+    if (realTime?.isActive()) {
+      const now = new Date();
+      ui.setClock(
+        `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')} · NA ŻYWO`
+      );
+    } else {
+      ui.setClock(`${formatClock(t01)}${timeScale > 1 ? ` · ${timeScale}×` : ''}`);
+    }
+    if (!realTime?.isActive() && weather.getSetting() === 'auto') {
+      ui.setWeatherLabel(`POGODA: AUTO · ${weather.getLabel().replace('AUTO · ', '')}`);
+    } else if (realTime?.isActive()) {
+      ui.setWeatherLabel(`POGODA: ${weather.getLabel()}`);
+    }
+    ui.setChapter(chapterForProgress(train.getRouteProgress()));
+    ui.setStation(stationState);
   }
-  if (!realTime?.isActive() && weather.getSetting() === 'auto') {
-    ui.setWeatherLabel(`POGODA: AUTO · ${weather.getLabel().replace('AUTO · ', '')}`);
-  } else if (realTime?.isActive()) {
-    ui.setWeatherLabel(`POGODA: ${weather.getLabel()}`);
-  }
-  ui.setChapter(chapterForProgress(train.getRouteProgress()));
-  ui.setStation(stationState);
 
   env.renderer.info.reset();
-  env.composer.render();
+  env.composer.render(rawDelta);
   if (quality.getProfile().labels) env.labelRenderer.render(env.scene, env.camera);
   devStats?.update();
 
@@ -552,8 +604,11 @@ const debugHandle: DioramaDebugHandle = {
   renderer: env.renderer,
   controls: env.controls,
   summonUfo: (event?: 'abduct' | 'return' | 'kioskRaid') => lakesideCow.debugSummonUfo(event),
+  placeCowAtMeadow: () => lakesideCow.debugPlaceCowAtMeadow(),
   farmerPhase: () => lakesideCow.getFarmerPhase(),
   cowController: lakesideCow as unknown,
+  debugBusStop: (label: string) => bus.debugStartDwell(label),
+  busPassengers: () => bus.getPassengerDebugState(),
   applyTheme,
   startEclipse: () => {
     eclipseProgress = 0;
@@ -563,7 +618,7 @@ const debugHandle: DioramaDebugHandle = {
   /** Render one frame synchronously and return it as a JPEG data URL
    * (the WebGL buffer isn't preserved, so render+read must share a tick). */
   captureFrame: (width = 960, jpegQuality = 0.82) => {
-    env.composer.render();
+    env.composer.render(0);
     const source = env.renderer.domElement;
     const scale = width / source.width;
     const canvas = document.createElement('canvas');

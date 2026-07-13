@@ -8,12 +8,17 @@ import * as THREE from 'three';
  */
 
 export const WORLD_HALF_SIZE = 80;
+/** Top of the voxel ground layer (ground cubes are centred at y=-1). */
+export const GROUND_SURFACE_Y = -0.5;
 export const TUNNEL_LENGTH = 11; // tunnels occupy x ∈ [±(80-10), ±80]
 export const TUNNEL_WIDTH = 4;
+/** Distance from track centre to each rail and wheel tread centre. */
+export const TRACK_HALF_GAUGE = 0.52;
 // Tall enough that the locomotive pantograph (~4.8 m) clears the arch (5.5 m).
 export const TUNNEL_HEIGHT = 8;
-// Deck raised to y=7 so the bus clears the underpass on the east cross street.
-export const VIADUCT_RANGE = { minX: -4, maxX: 56, deckY: 7 } as const;
+// Route centre height on the flat viaduct span. The one-metre deck below it
+// still leaves the bus a safe clearance on the east cross street.
+export const VIADUCT_RANGE = { minX: -4, maxX: 56, deckY: 5.2 } as const;
 
 /** Real seconds for one full simulated day at 1× clock speed. */
 export const DAY_SECONDS = 240;
@@ -50,12 +55,15 @@ export const COLORS = {
   carBlue: 0x2d5f9a,
   carRed: 0xa33a35,
   carYellow: 0xc8a536,
-  kiosk: 0x346d73,
+  kiosk: 0x246b3b,
+  shopLime: 0x74b84a,
+  shopCream: 0xf1edcf,
   steel: 0x5d6872,
   water: 0x2380a8,
   waterDeep: 0x14506e,
   reeds: 0x6f7d33,
   bird: 0xe8e2cf,
+  door: 0x49382f,
 } as const;
 
 export type ColorHex = (typeof COLORS)[keyof typeof COLORS] | number;
@@ -81,22 +89,22 @@ export interface BlockConfig {
 
 export const TRAIN_ROUTE_POINTS: THREE.Vector3[] = [
   new THREE.Vector3(-79, 0, 0),
-  new THREE.Vector3(-71.5, 0, -0.6),
-  new THREE.Vector3(-65, 0, -2.5),
-  new THREE.Vector3(-57, 0, -5.2),
-  new THREE.Vector3(-44, 0, -9.5),
-  new THREE.Vector3(-28, 0, -13),
-  new THREE.Vector3(-10, 1.6, -11.5),
-  new THREE.Vector3(5, 4.6, -5.5),
-  new THREE.Vector3(18, 7, 3),
-  new THREE.Vector3(32, 7, 9),
-  new THREE.Vector3(39, 6.4, 10.8),
-  new THREE.Vector3(46, 4.8, 11.1),
-  new THREE.Vector3(52.5, 3, 9.5),
-  new THREE.Vector3(59, 1.4, 6.7),
-  new THREE.Vector3(65, 0.35, 3.3),
-  new THREE.Vector3(70.5, 0, 1.3),
-  new THREE.Vector3(75, 0, 0.35),
+  new THREE.Vector3(-71.5, 0, -0.2),
+  new THREE.Vector3(-65, 0, -0.8),
+  new THREE.Vector3(-57, 0, -2),
+  new THREE.Vector3(-44, 0, -4.5),
+  new THREE.Vector3(-28, 1.2, -7.5),
+  new THREE.Vector3(-10, 2.8, -8),
+  new THREE.Vector3(5, 4.2, -5),
+  new THREE.Vector3(18, VIADUCT_RANGE.deckY, 0),
+  new THREE.Vector3(32, VIADUCT_RANGE.deckY, 5),
+  new THREE.Vector3(39, 4.45, 6.4),
+  new THREE.Vector3(46, 3.7, 6.5),
+  new THREE.Vector3(52.5, 2.95, 5.9),
+  new THREE.Vector3(59, 2.2, 4.8),
+  new THREE.Vector3(65, 1.45, 2.8),
+  new THREE.Vector3(70.5, 0.8, 1.2),
+  new THREE.Vector3(75, 0.3, 0.3),
   new THREE.Vector3(79, 0, 0),
 ];
 
@@ -163,10 +171,37 @@ function makeStation(x: number, z: number, label: string, dwellSeconds: number, 
 }
 
 export const STATION_STOPS: StationStop[] = [
-  makeStation(-44, -10, 'Stacja Zachodnia', 5, 34),
+  makeStation(-55, -2.5, 'Stacja Zachodnia', 5, 18),
   // Short elevated platform — only the flat stretch of the viaduct deck.
-  makeStation(25, 6, 'Przystanek Wiadukt', 4, 18),
+  makeStation(25, 3, 'Przystanek Wiadukt', 4, 18),
 ];
+
+export interface StationPlatformCell {
+  x: number;
+  z: number;
+  depth: number;
+  along: number;
+}
+
+export function stationPlatformCells(station: StationStop): StationPlatformCell[] {
+  const center = TRAIN_ROUTE_CURVE.getPointAt(station.centerT);
+  const tangent = TRAIN_ROUTE_CURVE.getTangentAt(station.centerT).normalize();
+  const normal = new THREE.Vector3(-tangent.z, 0, tangent.x).normalize();
+  const cells: StationPlatformCell[] = [];
+  const seen = new Set<string>();
+  const half = station.platformLength / 2;
+  for (let along = -half; along <= half; along += 1) {
+    for (let depth = 0; depth < 3; depth++) {
+      const x = Math.round(center.x + tangent.x * along + normal.x * (2.5 + depth));
+      const z = Math.round(center.z + tangent.z * along + normal.z * (2.5 + depth));
+      const key = `${x},${z}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      cells.push({ x, z, depth, along });
+    }
+  }
+  return cells;
+}
 
 // ─────────────────────────────────────────────────────────────────────────
 // Road network
@@ -208,6 +243,7 @@ export function isOnRoad(x: number, z: number): boolean {
 
 export function isOnSidewalk(x: number, z: number): boolean {
   if (isOnRoad(x, z)) return false;
+  if (BUILDING_ACCESS_CELL_KEYS.has(`${Math.round(x)},${Math.round(z)}`)) return true;
   for (const r of ROAD_RECTS) {
     if (x >= r.minX - 1 && x <= r.maxX + 1 && z >= r.minZ - 1 && z <= r.maxZ + 1) return true;
   }
@@ -302,7 +338,7 @@ export const BUS_STOPS: BusStop[] = [
     atT: nearestCurveT(BUS_ROUTE_CURVE, 35, -18),
     label: 'Pod Wiaduktem',
     dwellSeconds: 4,
-    shelterX: 38,
+    shelterX: 39,
     shelterZ: -20,
     axis: 'z',
     benchSign: -1,
@@ -379,6 +415,151 @@ export const BLOCK_CONFIGS: BlockConfig[] = [
   { x: 30, z: 56, w: 8, d: 5, h: 11, accent: COLORS.accentBlue },
   { x: 48, z: 60, w: 9, d: 6, h: 13, accent: COLORS.accent },
   { x: 64, z: 56, w: 8, d: 5, h: 12, accent: COLORS.accentPink },
+];
+
+export interface BuildingEntrance {
+  block: BlockConfig;
+  doorX: number;
+  doorZ: number;
+  outsideX: number;
+  outsideZ: number;
+}
+
+function nearestRoadPoint(x: number, z: number): { x: number; z: number } {
+  let best = { x: 0, z: 0 };
+  let bestDistance = Number.POSITIVE_INFINITY;
+  for (const road of ROAD_RECTS) {
+    const px = THREE.MathUtils.clamp(x, road.minX, road.maxX);
+    const pz = THREE.MathUtils.clamp(z, road.minZ, road.maxZ);
+    const distance = Math.hypot(px - x, pz - z);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      best = { x: Math.round(px), z: Math.round(pz) };
+    }
+  }
+  return best;
+}
+
+export const BUILDING_ENTRANCES: BuildingEntrance[] = BLOCK_CONFIGS.map((block) => {
+  const centerX = block.x + Math.floor(block.w / 2);
+  const centerZ = block.z + Math.floor(block.d / 2);
+  const road = nearestRoadPoint(centerX, centerZ);
+  const dx = road.x - centerX;
+  const dz = road.z - centerZ;
+  if (Math.abs(dx) > Math.abs(dz)) {
+    const side = Math.sign(dx) || 1;
+    const doorX = side > 0 ? block.x + block.w - 1 : block.x;
+    return { block, doorX, doorZ: centerZ, outsideX: doorX + side, outsideZ: centerZ };
+  }
+  const side = Math.sign(dz) || 1;
+  const doorZ = side > 0 ? block.z + block.d - 1 : block.z;
+  return { block, doorX: centerX, doorZ, outsideX: centerX, outsideZ: doorZ + side };
+});
+
+export const BUILDING_ACCESS_CELLS: Array<[number, number]> = (() => {
+  const cells = new Map<string, [number, number]>();
+  for (const entrance of BUILDING_ENTRANCES) {
+    const road = nearestRoadPoint(entrance.outsideX, entrance.outsideZ);
+    let x = entrance.outsideX;
+    let z = entrance.outsideZ;
+    cells.set(`${x},${z}`, [x, z]);
+    while (x !== road.x) {
+      x += Math.sign(road.x - x);
+      cells.set(`${x},${z}`, [x, z]);
+    }
+    while (z !== road.z) {
+      z += Math.sign(road.z - z);
+      cells.set(`${x},${z}`, [x, z]);
+    }
+  }
+  return [...cells.values()];
+})();
+
+const BUILDING_ACCESS_CELL_KEYS = new Set(
+  BUILDING_ACCESS_CELLS.map(([x, z]) => `${x},${z}`)
+);
+
+export interface FenceSpec {
+  x: number;
+  z: number;
+  length: number;
+  alongX: boolean;
+}
+
+export interface BenchSpec {
+  x: number;
+  z: number;
+  rotate: boolean;
+}
+
+/** Human-scale street bench dimensions in world metres. */
+export const BENCH_DIMENSIONS = {
+  length: 2.8,
+  depth: 0.58,
+  seatHeight: 0.48,
+  seatThickness: 0.16,
+  backHeight: 0.72,
+} as const;
+
+export interface PropFootprint {
+  id: string;
+  minX: number;
+  maxX: number;
+  minZ: number;
+  maxZ: number;
+}
+
+export const KIOSK_SPECS = [
+  { x: -30, z: 16 },
+  { x: 20, z: 53 },
+] as const;
+
+export const PLAYGROUND = { x: -12, z: 68 } as const;
+
+export const FENCE_SPECS: FenceSpec[] = [
+  { x: -62, z: 4, length: 14, alongX: true },
+  { x: -50, z: -22, length: 12, alongX: true },
+  { x: 40, z: 19, length: 8, alongX: true },
+];
+
+export const BENCH_SPECS: BenchSpec[] = [
+  { x: -52, z: 72, rotate: false },
+  { x: -28, z: 74, rotate: true },
+  { x: 4, z: 53, rotate: false },
+  { x: -20, z: -40, rotate: false },
+  { x: 30, z: -40, rotate: true },
+  { x: 50, z: 20, rotate: false },
+];
+
+export const STATIC_PROP_FOOTPRINTS: PropFootprint[] = [
+  ...KIOSK_SPECS.map((kiosk, index) => ({
+    id: `kiosk-${index}`,
+    minX: kiosk.x - 1,
+    maxX: kiosk.x + 4,
+    minZ: kiosk.z - 1,
+    maxZ: kiosk.z + 3,
+  })),
+  {
+    id: 'playground',
+    minX: PLAYGROUND.x - 4,
+    maxX: PLAYGROUND.x + 2,
+    minZ: PLAYGROUND.z - 2,
+    maxZ: PLAYGROUND.z + 2,
+  },
+  ...FENCE_SPECS.map((fence, index) => ({
+    id: `fence-${index}`,
+    minX: fence.x,
+    maxX: fence.x + (fence.alongX ? fence.length - 1 : 0),
+    minZ: fence.z,
+    maxZ: fence.z + (fence.alongX ? 0 : fence.length - 1),
+  })),
+  ...BENCH_SPECS.map((bench, index) => ({
+    id: `bench-${index}`,
+    minX: bench.x - 1,
+    maxX: bench.x + (bench.rotate ? 0 : 1),
+    minZ: bench.z - 1,
+    maxZ: bench.z + (bench.rotate ? 1 : 0),
+  })),
 ];
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -460,6 +641,34 @@ function insideLake(x: number, z: number, margin: number): boolean {
   return nx * nx + nz * nz <= 1;
 }
 
+export function distancePointToFootprint(px: number, pz: number, footprint: PropFootprint): number {
+  const dx = Math.max(footprint.minX - px, 0, px - footprint.maxX);
+  const dz = Math.max(footprint.minZ - pz, 0, pz - footprint.maxZ);
+  return Math.hypot(dx, dz);
+}
+
+export interface LampSpec {
+  x: number;
+  z: number;
+  /** Direction the lamp arm points (toward the road). */
+  dz: number;
+}
+
+const SAFE_LAMP_SPECS: LampSpec[] = (() => {
+  const specs: LampSpec[] = [];
+  for (let x = -56; x <= 60; x += 20) specs.push({ x, z: 20, dz: 1 });
+  for (let x = -46; x <= 50; x += 20) specs.push({ x, z: 52, dz: -1 });
+  for (let x = -60; x <= 60; x += 24) specs.push({ x, z: -52, dz: 1 });
+  specs.push({ x: -58, z: 66, dz: 1 }, { x: -22, z: 72, dz: -1 });
+  specs.push({ x: -50, z: -1, dz: -1 }, { x: -40, z: -1, dz: -1 });
+  return specs.filter(
+    (spec) =>
+      !isOnRoad(spec.x, spec.z) &&
+      distanceToGroundRail(spec.x, spec.z) >= 5 &&
+      !insideLake(spec.x, spec.z, 2)
+  );
+})();
+
 function isPlaceableProp(x: number, z: number, railClearance: number): boolean {
   if (Math.abs(x) > WORLD_HALF_SIZE - 3 || Math.abs(z) > WORLD_HALF_SIZE - 3) return false;
   // Tunnel approach corridor (incl. grassy embankment skirts)
@@ -474,6 +683,12 @@ function isPlaceableProp(x: number, z: number, railClearance: number): boolean {
   for (const stop of BUS_STOPS) {
     const c = busShelterCenter(stop);
     if (Math.hypot(x - c.x, z - c.z) < 8) return false;
+  }
+  for (const footprint of STATIC_PROP_FOOTPRINTS) {
+    if (distancePointToFootprint(x, z, footprint) < 3.5) return false;
+  }
+  for (const lamp of SAFE_LAMP_SPECS) {
+    if (Math.hypot(x - lamp.x, z - lamp.z) < 5) return false;
   }
   return true;
 }
@@ -493,28 +708,7 @@ export const TREE_POSITIONS: Array<[number, number]> = (() => {
   return out;
 })();
 
-export interface LampSpec {
-  x: number;
-  z: number;
-  /** Direction the lamp arm points (toward the road). */
-  dz: number;
-}
-
-export const LAMP_SPECS: LampSpec[] = (() => {
-  const specs: LampSpec[] = [];
-  // Aleja Południowa — lamps on the north sidewalk, arms pointing south (+z)
-  for (let x = -56; x <= 60; x += 20) specs.push({ x, z: 20, dz: 1 });
-  // Aleja Parkowa — lamps on the north sidewalk, arms pointing south... no:
-  // south side, arms pointing north (-z) toward the road.
-  for (let x = -46; x <= 50; x += 20) specs.push({ x, z: 52, dz: -1 });
-  // South road
-  for (let x = -60; x <= 60; x += 24) specs.push({ x, z: -52, dz: 1 });
-  // Park / lake promenade
-  specs.push({ x: -58, z: 66, dz: 1 }, { x: -22, z: 72, dz: -1 });
-  // Station forecourts
-  specs.push({ x: -50, z: -3, dz: -1 }, { x: -36, z: -1, dz: -1 });
-  return specs.filter((s) => distanceToGroundRail(s.x, s.z) >= 5 && !insideLake(s.x, s.z, 2));
-})();
+export const LAMP_SPECS: LampSpec[] = SAFE_LAMP_SPECS;
 
 export const LAMP_POSITIONS: Array<[number, number]> = LAMP_SPECS.map((s) => [s.x, s.z]);
 

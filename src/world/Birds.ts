@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { BLOCK_CONFIGS, COLORS, LAKE, WORLD_HALF_SIZE } from './WorldLayout';
+import { mergeStaticMeshes } from '../performance/mergeStaticMeshes';
 
 /**
  * Seagulls with believable flight: they steer smoothly toward wandering
@@ -17,6 +18,20 @@ const CLIMB_RATE = 2.2; // m/s
 
 type WingMode = 'flap' | 'glide';
 type LifeMode = 'fly' | 'toRoost' | 'roost';
+
+const GULL_GEOMETRIES = {
+  body: new THREE.SphereGeometry(0.34, 8, 6),
+  belly: new THREE.SphereGeometry(0.24, 8, 6),
+  beak: new THREE.ConeGeometry(0.08, 0.24, 4),
+  wing: new THREE.BoxGeometry(0.62, 0.08, 0.2),
+};
+
+const GULL_MATERIALS = {
+  body: new THREE.MeshStandardMaterial({ color: 0xf2ead5, roughness: 0.68 }),
+  belly: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.72 }),
+  wing: new THREE.MeshStandardMaterial({ color: 0xd9d0bb, roughness: 0.76 }),
+  beak: new THREE.MeshStandardMaterial({ color: COLORS.carYellow, roughness: 0.65 }),
+};
 
 interface Gull {
   group: THREE.Group;
@@ -50,50 +65,47 @@ function maxBuildingHeightNear(x: number, z: number, radius: number): number {
   return maxH;
 }
 
-function createWing(side: -1 | 1, material: THREE.Material): THREE.Group {
+function createWing(side: -1 | 1): THREE.Group {
   const wing = new THREE.Group();
-  const segmentGeometry = new THREE.BoxGeometry(0.62, 0.08, 0.2);
   for (let i = 0; i < 3; i++) {
-    const segment = new THREE.Mesh(segmentGeometry, material);
+    const segment = new THREE.Mesh(GULL_GEOMETRIES.wing, GULL_MATERIALS.wing);
     segment.position.set(side * (0.38 + i * 0.46), 0, 0.06 + i * 0.08);
     segment.rotation.z = side * (0.08 + i * 0.1);
     segment.rotation.y = side * 0.14;
     segment.scale.set(1 - i * 0.12, 1, 1);
     wing.add(segment);
   }
+  mergeStaticMeshes(wing);
   return wing;
 }
 
 function createGullMesh(): { group: THREE.Group; leftWing: THREE.Group; rightWing: THREE.Group } {
   const group = new THREE.Group();
-  const bodyMaterial = new THREE.MeshStandardMaterial({ color: 0xf2ead5, roughness: 0.68 });
-  const bellyMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.72 });
-  const wingMaterial = new THREE.MeshStandardMaterial({ color: 0xd9d0bb, roughness: 0.76 });
-  const beakMaterial = new THREE.MeshStandardMaterial({ color: COLORS.carYellow, roughness: 0.65 });
-
-  const body = new THREE.Mesh(new THREE.SphereGeometry(0.34, 8, 6), bodyMaterial);
+  const body = new THREE.Mesh(GULL_GEOMETRIES.body, GULL_MATERIALS.body);
   body.scale.set(0.95, 0.78, 1.08);
   group.add(body);
 
-  const belly = new THREE.Mesh(new THREE.SphereGeometry(0.24, 8, 6), bellyMaterial);
+  const belly = new THREE.Mesh(GULL_GEOMETRIES.belly, GULL_MATERIALS.belly);
   belly.position.set(0, -0.08, -0.05);
   belly.scale.set(0.9, 0.55, 0.72);
   group.add(belly);
 
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.18, 8, 6), bodyMaterial);
+  const head = new THREE.Mesh(GULL_GEOMETRIES.body, GULL_MATERIALS.body);
   head.position.set(0, 0.08, -0.42);
+  head.scale.setScalar(0.53);
   group.add(head);
 
-  const beak = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.24, 4), beakMaterial);
+  const beak = new THREE.Mesh(GULL_GEOMETRIES.beak, GULL_MATERIALS.beak);
   beak.position.set(0, 0.08, -0.62);
   beak.rotation.x = -Math.PI / 2;
   group.add(beak);
 
-  const leftWing = createWing(-1, wingMaterial);
-  const rightWing = createWing(1, wingMaterial);
+  const leftWing = createWing(-1);
+  const rightWing = createWing(1);
   leftWing.position.set(-0.18, 0.02, -0.03);
   rightWing.position.set(0.18, 0.02, -0.03);
   group.add(leftWing, rightWing);
+  mergeStaticMeshes(group);
 
   return { group, leftWing, rightWing };
 }
@@ -298,20 +310,17 @@ export class Birds {
   }
 
   dispose(): void {
+    const geometries = new Set<THREE.BufferGeometry>(Object.values(GULL_GEOMETRIES));
     for (const gull of this.gulls) {
       this.scene.remove(gull.group);
       gull.group.traverse((child) => {
         if (child instanceof THREE.Mesh) {
-          child.geometry.dispose();
-          const material = child.material;
-          if (Array.isArray(material)) {
-            for (const mat of material) mat.dispose();
-          } else {
-            material.dispose();
-          }
+          geometries.add(child.geometry);
         }
       });
     }
+    for (const geometry of geometries) geometry.dispose();
+    for (const material of Object.values(GULL_MATERIALS)) material.dispose();
     this.gulls.length = 0;
   }
 }

@@ -32,6 +32,10 @@ export interface DayLightState {
 
 export interface DayNightHooks {
   streetLights: THREE.PointLight[];
+  streetGlowMesh: THREE.InstancedMesh;
+  streetGlowMaterial: THREE.ShaderMaterial;
+  busStopLights: THREE.PointLight[];
+  busStopGlowMaterials: THREE.MeshStandardMaterial[];
   windowLights: THREE.PointLight[];
   /** Materials whose emissive should glow at night (lit building windows). */
   windowGlowMaterials: THREE.MeshStandardMaterial[];
@@ -167,6 +171,7 @@ export class DayNightCycle {
   private envInterval = 0.7;
   private shadowsEnabled = true;
   private streetLightBudget = Number.POSITIVE_INFINITY;
+  private busStopLightBudget = Number.POSITIVE_INFINITY;
   private windowLightBudget = Number.POSITIVE_INFINITY;
 
   private readonly sunLight: THREE.DirectionalLight;
@@ -194,8 +199,14 @@ export class DayNightCycle {
   private readonly eclipseCoronaMaterial: THREE.MeshBasicMaterial;
 
   private readonly tmpSunDir = new THREE.Vector3();
+  private readonly tmpMoonDir = new THREE.Vector3();
   private readonly tmpColor = new THREE.Color();
   private readonly tmpSunColor = new THREE.Color();
+  private readonly tmpWhite = new THREE.Color(0xffffff);
+  private readonly tmpZero = new THREE.Vector3();
+  private readonly shadowFocus = new THREE.Vector3();
+  private shadowRadius = 95;
+  private lightSelectionCooldown = 0;
 
   /** Set by main — the eclipse disc is positioned relative to the camera
    * so it stays optically aligned with the (infinitely far) shader sun. */
@@ -356,10 +367,25 @@ export class DayNightCycle {
     this.eclipseStrength = clamp01(strength);
   }
 
+  /** Focuses the directional shadow budget around the currently viewed area. */
+  setShadowFocus(target: THREE.Vector3, radius: number): void {
+    this.shadowFocus.copy(target);
+    const nextRadius = THREE.MathUtils.clamp(radius, 42, 95);
+    if (Math.abs(nextRadius - this.shadowRadius) < 1) return;
+    this.shadowRadius = nextRadius;
+    const shadowCamera = this.sunLight.shadow.camera;
+    shadowCamera.left = -nextRadius;
+    shadowCamera.right = nextRadius;
+    shadowCamera.top = nextRadius;
+    shadowCamera.bottom = -nextRadius;
+    shadowCamera.updateProjectionMatrix();
+  }
+
   setQuality(profile: QualityProfile): void {
     this.envInterval = profile.pmremInterval;
     this.shadowsEnabled = profile.shadows;
     this.streetLightBudget = profile.streetLightBudget;
+    this.busStopLightBudget = profile.busStopLightBudget;
     this.windowLightBudget = profile.windowLightBudget;
     this.sunLight.shadow.mapSize.set(profile.shadowMapSize, profile.shadowMapSize);
     this.sunLight.shadow.map?.dispose();
@@ -392,8 +418,8 @@ export class DayNightCycle {
 
     // ── Sun light ──
     const sunStrength = Math.pow(clamp01(Math.sin(elevation) * 1.5), 0.85);
-    this.sunLight.position.copy(sunDir).multiplyScalar(140);
-    this.sunLight.target.position.set(0, 0, 0);
+    this.sunLight.position.copy(sunDir).multiplyScalar(140).add(this.shadowFocus);
+    this.sunLight.target.position.copy(this.shadowFocus);
     // nightFloor (eternal-dusk themes) and an eclipse both mute the sun.
     this.sunLight.intensity =
       sunStrength * 2.2 * (1 - cloudCover * 0.62) * (1 - nightFloor * 0.8) * (1 - eclipse * 0.96);
@@ -402,7 +428,7 @@ export class DayNightCycle {
     this.sunLight.castShadow = this.shadowsEnabled && this.sunLight.intensity > 0.04;
 
     // ── Moon (opposite side of the sky) ──
-    const moonDir = sunDirectionAt((t + 0.5) % 1, new THREE.Vector3());
+    const moonDir = sunDirectionAt((t + 0.5) % 1, this.tmpMoonDir);
     this.moonMesh.position.copy(moonDir).multiplyScalar(540);
     this.moonMesh.visible = moonDir.y > -0.08;
     this.moonLight.position.copy(moonDir).multiplyScalar(120);
@@ -419,9 +445,9 @@ export class DayNightCycle {
       this.eclipseDisc.position.copy(sunDir).multiplyScalar(490);
       if (eye) this.eclipseDisc.position.add(eye);
       this.eclipseDisc.position.x -= slide;
-      this.eclipseDisc.lookAt(eye ?? new THREE.Vector3());
+      this.eclipseDisc.lookAt(eye ?? this.tmpZero);
       this.eclipseCorona.position.copy(this.eclipseDisc.position);
-      this.eclipseCorona.lookAt(eye ?? new THREE.Vector3());
+      this.eclipseCorona.lookAt(eye ?? this.tmpZero);
       this.eclipseCoronaMaterial.opacity = Math.pow(eclipse, 2) * 0.85;
     } else {
       this.eclipseDisc.visible = false;
@@ -431,7 +457,7 @@ export class DayNightCycle {
     // ── Fill lights ──
     this.ambientLight.intensity = (0.16 + day * 0.5 + golden * 0.1) * (1 - eclipse * 0.55);
     skyColorAt(t, this.tmpColor);
-    this.ambientLight.color.copy(this.tmpColor).lerp(new THREE.Color(0xffffff), 0.35);
+    this.ambientLight.color.copy(this.tmpColor).lerp(this.tmpWhite, 0.35);
     this.hemisphereLight.intensity = (0.22 + day * 0.5) * (1 - eclipse * 0.6);
     this.hemisphereLight.color.copy(this.tmpColor);
 
@@ -462,19 +488,46 @@ export class DayNightCycle {
     for (const mesh of this.auroraMeshes) mesh.visible = this.auroraStrength > 0.015;
 
     // ── Street / window lights ──
+    this.lightSelectionCooldown -= dtReal;
+    if (this.camera && this.lightSelectionCooldown <= 0) {
+      const eye = this.camera.position;
+      this.hooks.streetLights.sort(
+        (a, b) => a.position.distanceToSquared(eye) - b.position.distanceToSquared(eye)
+      );
+      this.hooks.busStopLights.sort(
+        (a, b) => a.position.distanceToSquared(eye) - b.position.distanceToSquared(eye)
+      );
+      this.hooks.windowLights.sort(
+        (a, b) => a.position.distanceToSquared(eye) - b.position.distanceToSquared(eye)
+      );
+      this.lightSelectionCooldown = 0.5;
+    }
     for (let i = 0; i < this.hooks.streetLights.length; i++) {
       const light = this.hooks.streetLights[i];
       light.visible = night > 0.04 && i < this.streetLightBudget;
-      light.intensity = light.visible ? night * 9 : 0;
-      light.distance = 28;
+      // A small urban LED luminaire is several thousand lumens. The point-light
+      // approximation needs enough candela to reach pavement and nearby walls.
+      light.intensity = light.visible ? night * 135 : 0;
+      light.distance = 30;
+    }
+    const streetGlow = clamp01((night - 0.04) / 0.72);
+    this.hooks.streetGlowMesh.visible = streetGlow > 0.01;
+    this.hooks.streetGlowMaterial.uniforms.uNight.value = streetGlow;
+    for (let i = 0; i < this.hooks.busStopLights.length; i++) {
+      const light = this.hooks.busStopLights[i];
+      light.visible = night > 0.04 && i < this.busStopLightBudget;
+      light.intensity = light.visible ? night * 48 : 0;
+    }
+    for (const material of this.hooks.busStopGlowMaterials) {
+      material.emissiveIntensity = 0.08 + night * 1.05;
     }
     for (let i = 0; i < this.hooks.windowLights.length; i++) {
       const h = Math.sin(i * 127.1 + 311.7) * 43758.5453;
       const isOn = h - Math.floor(h) > 0.3;
       const light = this.hooks.windowLights[i];
       light.visible = night > 0.04 && i < this.windowLightBudget;
-      light.intensity = light.visible && isOn ? night * 5.5 : 0;
-      light.distance = 22;
+      light.intensity = light.visible && isOn ? night * 32 : 0;
+      light.distance = 20;
     }
     for (const mat of this.hooks.windowGlowMaterials) {
       mat.emissiveIntensity = 0.1 + night * 1.15;

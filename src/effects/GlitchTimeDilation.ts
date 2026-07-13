@@ -1,83 +1,84 @@
+import * as THREE from 'three';
+import { BlendFunction, Effect } from 'postprocessing';
+
 /**
- * Cinematic grading pass: golden-hour warmth, cool night cast, film grain
- * and a gentle vignette. No geometric distortion — the diorama stays crisp.
- * (File keeps its historical name so imports stay stable.)
+ * Lightweight cinematic grade. Tone mapping and LUTs are handled by the
+ * shared postprocessing EffectPass; this effect adds only film response,
+ * grain and vignette so it can be fused into the same fullscreen shader.
  */
+export class CinematicGradeEffect extends Effect {
+  readonly parameters: {
+    time: THREE.Uniform<number>;
+    golden: THREE.Uniform<number>;
+    night: THREE.Uniform<number>;
+    sepia: THREE.Uniform<number>;
+    saturation: THREE.Uniform<number>;
+    resolution: THREE.Uniform<THREE.Vector2>;
+  };
 
-export const GlitchTimeDilationShader = {
-  uniforms: {
-    tDiffuse: { value: null },
-    uTime: { value: 0 },
-    uGolden: { value: 0 },
-    uNight: { value: 0 },
-    uSepia: { value: 0 },
-    uSatMul: { value: 1 },
-    uResolution: { value: new Float32Array([1920, 1080]) },
-  },
+  constructor() {
+    const parameters = {
+      time: new THREE.Uniform(0),
+      golden: new THREE.Uniform(0),
+      night: new THREE.Uniform(0),
+      sepia: new THREE.Uniform(0),
+      saturation: new THREE.Uniform(1),
+      resolution: new THREE.Uniform(new THREE.Vector2(1920, 1080)),
+    };
+    super(
+      'CinematicGradeEffect',
+      /* glsl */ `
+        uniform float uTime;
+        uniform float uGolden;
+        uniform float uNight;
+        uniform float uSepia;
+        uniform float uSatMul;
+        uniform vec2 uResolution;
 
-  vertexShader: /* glsl */ `
-    varying vec2 vUv;
-    void main() {
-      vUv = uv;
-      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-    }
-  `,
+        float gradeHash(vec2 p) {
+          return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+        }
 
-  fragmentShader: /* glsl */ `
-    precision highp float;
+        void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor) {
+          vec3 color = inputColor.rgb;
+          float luma = dot(color, vec3(0.299, 0.587, 0.114));
 
-    uniform sampler2D tDiffuse;
-    uniform float uTime;
-    uniform float uGolden;
-    uniform float uNight;
-    uniform float uSepia;
-    uniform float uSatMul;
-    uniform vec2 uResolution;
+          float sat = (1.0 + 0.12 * (1.0 - uNight * 0.5)) * uSatMul;
+          color = mix(vec3(luma), color, sat);
 
-    varying vec2 vUv;
+          vec3 sepia = vec3(
+            dot(color, vec3(0.393, 0.769, 0.189)),
+            dot(color, vec3(0.349, 0.686, 0.168)),
+            dot(color, vec3(0.272, 0.534, 0.131))
+          );
+          color = mix(color, sepia, uSepia);
 
-    float hash(vec2 p) {
-      return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
-    }
+          float grain = (gradeHash(uv * uResolution * 0.5 + fract(uTime) * 43.7) - 0.5) * 0.014;
+          color += grain * (0.45 + uNight * 0.55);
 
-    void main() {
-      vec2 uv = vUv;
-      vec3 color = texture2D(tDiffuse, uv).rgb;
+          float vignette = 1.0 - length(uv - 0.5) * (0.25 + uNight * 0.1);
+          color *= smoothstep(0.0, 1.0, vignette);
+          color = (color - 0.5) * (1.025 + uGolden * 0.015) + 0.5;
 
-      // ── Golden hour: warm highlights, slightly lifted shadows ──
-      float luma = dot(color, vec3(0.299, 0.587, 0.114));
-      vec3 warm = color * vec3(1.10, 1.0, 0.86) + vec3(0.035, 0.012, 0.0);
-      color = mix(color, warm, uGolden * smoothstep(0.15, 0.85, luma + 0.25));
+          outputColor = vec4(color, inputColor.a);
+        }
+      `,
+      {
+        blendFunction: BlendFunction.NORMAL,
+        uniforms: new Map<string, THREE.Uniform<unknown>>([
+          ['uTime', parameters.time],
+          ['uGolden', parameters.golden],
+          ['uNight', parameters.night],
+          ['uSepia', parameters.sepia],
+          ['uSatMul', parameters.saturation],
+          ['uResolution', parameters.resolution],
+        ]),
+      }
+    );
+    this.parameters = parameters;
+  }
 
-      // ── Night: cool cast + mild desaturation ──
-      vec3 cool = mix(vec3(luma), color, 0.78) * vec3(0.86, 0.92, 1.10);
-      color = mix(color, cool, uNight * 0.55);
-
-      // ── Vibrance (scaled per theme) ──
-      float sat = (1.0 + 0.22 * (1.0 - uNight * 0.5)) * uSatMul;
-      color = mix(vec3(dot(color, vec3(0.299, 0.587, 0.114))), color, sat);
-
-      // ── Theme sepia grade ──
-      vec3 sepia = vec3(
-        dot(color, vec3(0.393, 0.769, 0.189)),
-        dot(color, vec3(0.349, 0.686, 0.168)),
-        dot(color, vec3(0.272, 0.534, 0.131))
-      );
-      color = mix(color, sepia, uSepia);
-
-      // ── Film grain (fixed spatial scale, time-jittered) ──
-      float grain = (hash(uv * uResolution * 0.5 + fract(uTime) * 43.7) - 0.5) * 0.022;
-      color += grain * (0.6 + uNight * 0.8);
-
-      // ── Vignette ──
-      float vignette = 1.0 - length(uv - 0.5) * (0.34 + uNight * 0.12);
-      vignette = smoothstep(0.0, 1.0, vignette);
-      color *= vignette;
-
-      // ── Gentle contrast ──
-      color = (color - 0.5) * 1.06 + 0.5;
-
-      gl_FragColor = vec4(color, 1.0);
-    }
-  `,
-};
+  setSize(width: number, height: number): void {
+    this.parameters.resolution.value.set(width, height);
+  }
+}

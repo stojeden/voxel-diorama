@@ -1,21 +1,34 @@
 import * as THREE from 'three';
+import { LakeSurface } from '../environment/LakeSurface';
+import type { QualityProfile } from '../performance/QualityManager';
 import {
   BLOCK_CONFIGS,
+  BENCH_DIMENSIONS,
+  BENCH_SPECS,
+  BUILDING_ENTRANCES,
   BUS_STOPS,
   COLORS,
+  FENCE_SPECS,
+  GROUND_SURFACE_Y,
   LAKE,
   LAMP_SPECS,
+  KIOSK_SPECS,
+  PLAYGROUND,
   STATION_STOPS,
+  TRACK_HALF_GAUGE,
   TUNNEL_HEIGHT,
   TUNNEL_LENGTH,
   TUNNEL_WIDTH,
   TRAIN_ROUTE_CURVE,
   TREE_POSITIONS,
   WORLD_HALF_SIZE,
+  busShelterCenter,
   isOnRoad,
   isOnSidewalk,
+  stationPlatformCells,
   threeColorFromHex,
   type BlockConfig,
+  type BusStop,
   type ColorHex,
   type StationStop,
 } from './WorldLayout';
@@ -30,6 +43,8 @@ export interface WindUniforms {
 interface VoxelData {
   position: THREE.Vector3;
   color: ColorHex;
+  castShadow?: boolean;
+  scale?: THREE.Vector3;
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -38,6 +53,7 @@ interface VoxelData {
 
 function generateBlockBuilding(block: BlockConfig): VoxelData[] {
   const voxels: VoxelData[] = [];
+  const entrance = BUILDING_ENTRANCES.find((candidate) => candidate.block === block);
 
   for (let y = 0; y < block.h; y++) {
     for (let bx = 0; bx < block.w; bx++) {
@@ -49,13 +65,19 @@ function generateBlockBuilding(block: BlockConfig): VoxelData[] {
         const isWindowRow = y > 1 && y < block.h - 1 && y % 2 === 0;
         const isWindowColumn = (bx % 3 === 1 || bz % 3 === 1) && isOuterFace;
         const isBalcony = bz === 0 && bx % 3 === 2 && y > 1 && y < block.h - 2;
+        const isDoor =
+          entrance !== undefined &&
+          block.x + bx === entrance.doorX &&
+          block.z + bz === entrance.doorZ &&
+          y <= 1;
 
         let color: ColorHex = COLORS.concrete;
         if (y === 0) color = COLORS.concreteDark;
         if (y === block.h - 1) color = COLORS.roof;
         if (y % 5 === 0 && y > 0 && y < block.h - 1) color = block.accent;
         if (isBalcony) color = COLORS.balcony;
-        if (isWindowRow && isWindowColumn) {
+        if (isDoor) color = COLORS.door;
+        if (!isDoor && isWindowRow && isWindowColumn) {
           const hash = Math.sin((block.x + bx) * 31.7 + (block.z + bz) * 17.3 + y * 11.1) * 43758.5453;
           color = hash - Math.floor(hash) > 0.38 ? COLORS.windowLit : COLORS.window;
         }
@@ -95,7 +117,7 @@ function generateGround(size: number): VoxelData[] {
       } else {
         color = (x + z) % 5 === 0 ? COLORS.grassDark : COLORS.grass;
       }
-      voxels.push({ position: new THREE.Vector3(x, -1, z), color });
+      voxels.push({ position: new THREE.Vector3(x, -1, z), color, castShadow: false });
     }
   }
 
@@ -123,8 +145,8 @@ function buildTrackwork(group: THREE.Group, disposables: Array<{ dispose: () => 
     const p = TRAIN_ROUTE_CURVE.getPointAt(t);
     const tangent = TRAIN_ROUTE_CURVE.getTangentAt(t).normalize();
     normal.set(-tangent.z, 0, tangent.x).normalize();
-    leftPts.push(new THREE.Vector3(p.x + normal.x * 0.52, p.y - 0.07, p.z + normal.z * 0.52));
-    rightPts.push(new THREE.Vector3(p.x - normal.x * 0.52, p.y - 0.07, p.z - normal.z * 0.52));
+    leftPts.push(new THREE.Vector3(p.x + normal.x * TRACK_HALF_GAUGE, p.y - 0.07, p.z + normal.z * TRACK_HALF_GAUGE));
+    rightPts.push(new THREE.Vector3(p.x - normal.x * TRACK_HALF_GAUGE, p.y - 0.07, p.z - normal.z * TRACK_HALF_GAUGE));
   }
 
   const railMaterial = new THREE.MeshStandardMaterial({
@@ -183,6 +205,74 @@ function buildTrackwork(group: THREE.Group, disposables: Array<{ dispose: () => 
   placeAlong(ballast, ballastCount, -0.4);
 }
 
+/** Contact wire and sparse masts make the pantograph physically legible. */
+function buildCatenary(group: THREE.Group, disposables: Array<{ dispose: () => void }>): void {
+  const wirePoints: THREE.Vector3[] = [];
+  for (let i = 0; i <= 420; i++) {
+    const point = TRAIN_ROUTE_CURVE.getPointAt(i / 420);
+    wirePoints.push(new THREE.Vector3(point.x, point.y + 5.18, point.z));
+  }
+
+  const wireCurve = new THREE.CatmullRomCurve3(wirePoints, false, 'centripetal', 0.5);
+  const wireGeometry = new THREE.TubeGeometry(wireCurve, 560, 0.035, 5, false);
+  const metalMaterial = new THREE.MeshStandardMaterial({
+    color: 0x69737a,
+    metalness: 0.88,
+    roughness: 0.34,
+  });
+  const wire = new THREE.Mesh(wireGeometry, metalMaterial);
+  wire.castShadow = false;
+  group.add(wire);
+  disposables.push(wireGeometry, metalMaterial);
+
+  const routeLength = TRAIN_ROUTE_CURVE.getLength();
+  const candidateCount = Math.floor(routeLength / 16);
+  const mastTransforms: Array<{ point: THREE.Vector3; tangent: THREE.Vector3; normal: THREE.Vector3 }> = [];
+  for (let i = 1; i < candidateCount; i++) {
+    const t = i / candidateCount;
+    const point = TRAIN_ROUTE_CURVE.getPointAt(t);
+    if (Math.abs(point.x) > WORLD_HALF_SIZE - TUNNEL_LENGTH - 2) continue;
+    const tangent = TRAIN_ROUTE_CURVE.getTangentAt(t).normalize();
+    const normal = new THREE.Vector3(-tangent.z, 0, tangent.x).normalize();
+    const firstX = point.x + normal.x * 2.35;
+    const firstZ = point.z + normal.z * 2.35;
+    if (isOnRoad(Math.round(firstX), Math.round(firstZ))) normal.multiplyScalar(-1);
+    const mastX = point.x + normal.x * 2.35;
+    const mastZ = point.z + normal.z * 2.35;
+    if (isOnRoad(Math.round(mastX), Math.round(mastZ))) continue;
+    mastTransforms.push({ point, tangent, normal });
+  }
+
+  const unitBox = new THREE.BoxGeometry(1, 1, 1);
+  const supports = new THREE.InstancedMesh(unitBox, metalMaterial, mastTransforms.length * 2);
+  const dummy = new THREE.Object3D();
+  const ahead = new THREE.Vector3();
+  for (let i = 0; i < mastTransforms.length; i++) {
+    const { point, tangent, normal } = mastTransforms[i];
+    dummy.position.set(
+      point.x + normal.x * 2.35,
+      point.y + 2.35,
+      point.z + normal.z * 2.35
+    );
+    dummy.scale.set(0.14, 5.1, 0.14);
+    ahead.copy(dummy.position).add(tangent);
+    dummy.lookAt(ahead);
+    dummy.updateMatrix();
+    supports.setMatrixAt(i * 2, dummy.matrix);
+
+    dummy.position.set(point.x, point.y + 5.08, point.z);
+    dummy.scale.set(4.9, 0.12, 0.12);
+    ahead.copy(dummy.position).add(tangent);
+    dummy.lookAt(ahead);
+    dummy.updateMatrix();
+    supports.setMatrixAt(i * 2 + 1, dummy.matrix);
+  }
+  supports.castShadow = false;
+  supports.receiveShadow = true;
+  group.add(supports);
+  disposables.push(unitBox);
+}
+
 function generateViaduct(): VoxelData[] {
   const voxels: VoxelData[] = [];
   const seen = new Set<string>();
@@ -221,6 +311,15 @@ function generateViaduct(): VoxelData[] {
           push(base.clone().setY(y), COLORS.concreteDark);
         }
       }
+    } else if (deckY < 2.2) {
+      // Low approach sections sit on a compact embankment instead of floating.
+      for (let offset = -1; offset <= 1; offset++) {
+        const base = point.clone().add(normal.clone().multiplyScalar(offset));
+        if (isOnRoad(Math.round(base.x), Math.round(base.z))) continue;
+        for (let y = 0; y < Math.max(1, Math.ceil(deckY)); y++) {
+          push(base.clone().setY(y), COLORS.concreteDark);
+        }
+      }
     }
   }
 
@@ -228,9 +327,9 @@ function generateViaduct(): VoxelData[] {
 }
 
 /**
- * Portal tunnel at one end of the world. The arched opening faces the city
- * (inner end); the outer end is sealed. A grassy embankment is mounded over
- * the structure so it reads as a hill the track dives into.
+ * Portal tunnel at one end of the world. The arched opening faces the city;
+ * the hidden outer boundary stays open so the portal wrap cannot intersect a
+ * wall. A grassy embankment makes the track read as diving into a hill.
  */
 function generateTunnel(side: -1 | 1): VoxelData[] {
   const voxels: VoxelData[] = [];
@@ -239,7 +338,6 @@ function generateTunnel(side: -1 | 1): VoxelData[] {
   for (let step = 0; step < TUNNEL_LENGTH; step++) {
     const x = outerX - side * step;
     const isInnerFace = step === TUNNEL_LENGTH - 1;
-    const isOuterFace = step === 0;
 
     for (let y = 0; y < TUNNEL_HEIGHT; y++) {
       for (let z = -TUNNEL_WIDTH; z <= TUNNEL_WIDTH; z++) {
@@ -250,7 +348,7 @@ function generateTunnel(side: -1 | 1): VoxelData[] {
         const isOpening = Math.abs(z) <= 3 && y <= 5;
 
         if (
-          (isSideWall || isCeiling || isOuterFace || (isInnerFace && !isOpening)) &&
+          (isSideWall || isCeiling || (isInnerFace && !isOpening)) &&
           !(isInnerFace && isOpening)
         ) {
           voxels.push({
@@ -303,13 +401,26 @@ function generateTunnel(side: -1 | 1): VoxelData[] {
 // ─────────────────────────────────────────────────────────────────────────
 
 function generateStreetLamp(x: number, z: number, dz: number, height = 4): VoxelData[] {
-  const voxels: VoxelData[] = [];
-  for (let y = 0; y < height; y++) {
-    voxels.push({ position: new THREE.Vector3(x, y, z), color: COLORS.concreteDark });
-  }
-  voxels.push({ position: new THREE.Vector3(x, height, z + dz), color: COLORS.concreteDark });
-  voxels.push({ position: new THREE.Vector3(x, height, z + dz * 2), color: COLORS.windowLit });
-  return voxels;
+  const poleCenterY = GROUND_SURFACE_Y + height / 2;
+  const topY = GROUND_SURFACE_Y + height;
+  return [
+    {
+      position: new THREE.Vector3(x, poleCenterY, z),
+      color: COLORS.concreteDark,
+      scale: new THREE.Vector3(0.18, height, 0.18),
+    },
+    {
+      position: new THREE.Vector3(x, topY - 0.12, z + dz * 0.65),
+      color: COLORS.concreteDark,
+      scale: new THREE.Vector3(0.18, 0.18, 1.3),
+    },
+    {
+      position: new THREE.Vector3(x, topY - 0.22, z + dz * 1.3),
+      color: COLORS.windowLit,
+      scale: new THREE.Vector3(0.58, 0.22, 0.62),
+      castShadow: false,
+    },
+  ];
 }
 
 function generatePlayground(x: number, z: number): VoxelData[] {
@@ -326,22 +437,46 @@ function generatePlayground(x: number, z: number): VoxelData[] {
   return voxels;
 }
 
-function generateBench(x: number, z: number, rotate = false): VoxelData[] {
-  const voxels: VoxelData[] = [];
-  for (const offset of [-1, 0, 1]) {
-    voxels.push({
-      position: new THREE.Vector3(x + (rotate ? 0 : offset), 1, z + (rotate ? offset : 0)),
+function generateBench(x: number, z: number, rotate = false, backSign: 1 | -1 = -1): VoxelData[] {
+  const { length, depth, seatHeight, seatThickness, backHeight } = BENCH_DIMENSIONS;
+  const alongScale = rotate
+    ? new THREE.Vector3(depth, seatThickness, length)
+    : new THREE.Vector3(length, seatThickness, depth);
+  const backScale = rotate
+    ? new THREE.Vector3(0.14, backHeight, length)
+    : new THREE.Vector3(length, backHeight, 0.14);
+  const seatY = GROUND_SURFACE_Y + seatHeight - seatThickness / 2;
+  const backY = GROUND_SURFACE_Y + seatHeight + backHeight / 2 - 0.03;
+  const backOffset = backSign * depth * 0.42;
+  const voxels: VoxelData[] = [
+    {
+      position: new THREE.Vector3(x, seatY, z),
       color: COLORS.sleeper,
-    });
-    voxels.push({
-      position: new THREE.Vector3(x + (rotate ? -1 : offset), 2, z + (rotate ? offset : -1)),
+      scale: alongScale,
+    },
+    {
+      position: new THREE.Vector3(
+        x + (rotate ? backOffset : 0),
+        backY,
+        z + (rotate ? 0 : backOffset)
+      ),
       color: COLORS.sleeper,
-    });
-  }
-  for (const leg of [-1, 1]) {
+      scale: backScale,
+    },
+  ];
+
+  const legHeight = seatHeight - seatThickness;
+  for (const along of [-length * 0.36, length * 0.36]) {
     voxels.push({
-      position: new THREE.Vector3(x + (rotate ? 0 : leg), 0, z + (rotate ? leg : 0)),
+      position: new THREE.Vector3(
+        x + (rotate ? 0 : along),
+        GROUND_SURFACE_Y + legHeight / 2,
+        z + (rotate ? along : 0)
+      ),
       color: COLORS.steel,
+      scale: rotate
+        ? new THREE.Vector3(depth * 0.72, legHeight, 0.14)
+        : new THREE.Vector3(0.14, legHeight, depth * 0.72),
     });
   }
   return voxels;
@@ -352,19 +487,221 @@ function generateKiosk(x: number, z: number): VoxelData[] {
   for (let bx = 0; bx < 4; bx++) {
     for (let bz = 0; bz < 3; bz++) {
       for (let y = 0; y < 3; y++) {
-        const isWindow = y === 1 && bz === 0 && bx > 0 && bx < 3;
+        const isShell = y === 0 || bx === 0 || bx === 3 || bz === 0 || bz === 2;
+        if (!isShell) continue;
+        const isFront = bz === 0;
+        const isWindow = isFront && y === 1 && bx < 3;
+        const isDoor = isFront && bx === 3 && y <= 1;
+        const isGreenBand = y === 2 && (isFront || bx === 0 || bx === 3);
         voxels.push({
           position: new THREE.Vector3(x + bx, y, z + bz),
-          color: isWindow ? COLORS.windowLit : COLORS.kiosk,
+          color: isDoor
+            ? COLORS.door
+            : isWindow
+              ? COLORS.windowLit
+              : isGreenBand
+                ? COLORS.shopLime
+                : COLORS.kiosk,
         });
       }
     }
   }
-  for (let bx = -1; bx <= 4; bx++) {
-    voxels.push({ position: new THREE.Vector3(x + bx, 3, z - 1), color: COLORS.roof });
-    voxels.push({ position: new THREE.Vector3(x + bx, 3, z + 3), color: COLORS.roof });
-  }
+  voxels.push({
+    position: new THREE.Vector3(x + 1.5, 3, z + 1),
+    color: COLORS.roof,
+    scale: new THREE.Vector3(4.5, 0.28, 3.4),
+  });
+  voxels.push({
+    position: new THREE.Vector3(x + 1.5, 1.72, z - 0.48),
+    color: COLORS.shopCream,
+    scale: new THREE.Vector3(4.35, 0.16, 1.05),
+    castShadow: false,
+  });
   return voxels;
+}
+
+function buildKioskSigns(group: THREE.Group): Array<{ dispose: () => void }> {
+  if (typeof document === 'undefined') return [];
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 128;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return [];
+
+  ctx.fillStyle = '#176332';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = '#7fc64d';
+  ctx.fillRect(0, 0, 34, canvas.height);
+  ctx.fillStyle = '#f7f4df';
+  ctx.font = '700 52px system-ui, sans-serif';
+  ctx.fillText('SKLEP', 62, 61);
+  ctx.font = '600 25px system-ui, sans-serif';
+  ctx.fillText('SPOZYWCZY', 64, 101);
+  ctx.fillStyle = '#f0d45c';
+  ctx.beginPath();
+  ctx.arc(448, 64, 22, 0, Math.PI * 2);
+  ctx.fill();
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = 4;
+  const geometry = new THREE.PlaneGeometry(3.5, 0.78);
+  const material = new THREE.MeshStandardMaterial({
+    map: texture,
+    emissive: 0xffffff,
+    emissiveMap: texture,
+    emissiveIntensity: 0.58,
+    roughness: 0.7,
+    metalness: 0.02,
+    side: THREE.DoubleSide,
+  });
+  for (let i = 0; i < KIOSK_SPECS.length; i++) {
+    const kiosk = KIOSK_SPECS[i];
+    const sign = new THREE.Mesh(geometry, material);
+    sign.name = `neighborhood-grocery-sign-${i}`;
+    sign.position.set(kiosk.x + 1.5, 2.25, kiosk.z - 0.515);
+    sign.rotation.y = Math.PI;
+    sign.castShadow = false;
+    group.add(sign);
+  }
+  return [texture, geometry, material];
+}
+
+const BUS_POSTERS = [
+  { background: '#175f54', accent: '#f3d85a', title: 'ZIELONY', subtitle: 'WEEKEND' },
+  { background: '#244f88', accent: '#f0a868', title: 'KINO', subtitle: 'POD CHMURA' },
+  { background: '#9b3f4a', accent: '#f2dfb5', title: 'MUZYKA', subtitle: 'NAD JEZIOREM' },
+  { background: '#56458c', accent: '#8fd3c7', title: 'CZYTAJ', subtitle: 'CODZIENNIE' },
+  { background: '#327a3d', accent: '#f1c65b', title: 'BLIZEJ', subtitle: 'MIASTA' },
+] as const;
+
+function shelterPoint(stop: BusStop, along: number, outward: number, y: number): THREE.Vector3 {
+  const center = busShelterCenter(stop);
+  return stop.axis === 'x'
+    ? new THREE.Vector3(center.x + along, y, center.z + outward * stop.benchSign)
+    : new THREE.Vector3(center.x + outward * stop.benchSign, y, center.z + along);
+}
+
+function createBusPosterTexture(index: number): THREE.CanvasTexture | null {
+  if (typeof document === 'undefined') return null;
+  const canvas = document.createElement('canvas');
+  canvas.width = 384;
+  canvas.height = 512;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+
+  const style = BUS_POSTERS[(index * 3 + 1) % BUS_POSTERS.length];
+  ctx.fillStyle = style.background;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = style.accent;
+  ctx.fillRect(0, 0, 34, canvas.height);
+  ctx.fillRect(42, 42, 300, 12);
+  ctx.beginPath();
+  ctx.arc(278, 172, 76, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.22)';
+  ctx.fillRect(66, 92, 124, 188);
+  ctx.fillStyle = '#ffffff';
+  ctx.font = '800 48px system-ui, sans-serif';
+  ctx.fillText(style.title, 62, 354);
+  ctx.font = '700 27px system-ui, sans-serif';
+  ctx.fillText(style.subtitle, 64, 398);
+  ctx.font = '600 18px system-ui, sans-serif';
+  ctx.fillText('TWOJE MIASTO  •  TEN TYDZIEN', 64, 462);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = 4;
+  return texture;
+}
+
+function buildBusShelterDetails(group: THREE.Group): {
+  lights: THREE.PointLight[];
+  glowMaterials: THREE.MeshStandardMaterial[];
+  disposables: Array<{ dispose: () => void }>;
+} {
+  const lights: THREE.PointLight[] = [];
+  const glowMaterials: THREE.MeshStandardMaterial[] = [];
+  const disposables: Array<{ dispose: () => void }> = [];
+  const boxGeometry = new THREE.BoxGeometry(1, 1, 1);
+  const posterGeometry = new THREE.PlaneGeometry(1.12, 1.75);
+  const glassMaterial = new THREE.MeshStandardMaterial({
+    color: 0xa8c7cf,
+    roughness: 0.18,
+    metalness: 0.04,
+    transparent: true,
+    opacity: 0.22,
+    depthWrite: false,
+  });
+  const fixtureMaterial = new THREE.MeshStandardMaterial({
+    color: 0xf4ead4,
+    emissive: 0xffe8b8,
+    emissiveIntensity: 0.08,
+    roughness: 0.48,
+  });
+  glowMaterials.push(fixtureMaterial);
+  disposables.push(boxGeometry, posterGeometry, glassMaterial, fixtureMaterial);
+
+  for (let index = 0; index < BUS_STOPS.length; index++) {
+    const stop = BUS_STOPS[index];
+    const glass = new THREE.Mesh(boxGeometry, glassMaterial);
+    glass.name = `bus-stop-glass-${index}`;
+    glass.position.copy(shelterPoint(stop, -2, 0.5, 1.1));
+    glass.scale.set(
+      stop.axis === 'x' ? 0.08 : 1.75,
+      2.5,
+      stop.axis === 'x' ? 1.75 : 0.08
+    );
+    glass.castShadow = false;
+    glass.receiveShadow = true;
+    group.add(glass);
+
+    const posterTexture = createBusPosterTexture(index);
+    if (posterTexture) {
+      const posterMaterial = new THREE.MeshStandardMaterial({
+        map: posterTexture,
+        emissive: 0xffffff,
+        emissiveMap: posterTexture,
+        emissiveIntensity: 0.1,
+        roughness: 0.52,
+        metalness: 0.02,
+        side: THREE.FrontSide,
+      });
+      glowMaterials.push(posterMaterial);
+      disposables.push(posterTexture, posterMaterial);
+
+      const interior = new THREE.Mesh(posterGeometry, posterMaterial);
+      interior.name = `bus-stop-poster-${index}-interior`;
+      interior.position.copy(shelterPoint(stop, -1.945, 0.5, 1.14));
+      interior.rotation.y = stop.axis === 'x' ? Math.PI / 2 : 0;
+      interior.castShadow = false;
+      group.add(interior);
+
+      const exterior = new THREE.Mesh(posterGeometry, posterMaterial);
+      exterior.name = `bus-stop-poster-${index}-exterior`;
+      exterior.position.copy(shelterPoint(stop, -2.055, 0.5, 1.14));
+      exterior.rotation.y = stop.axis === 'x' ? -Math.PI / 2 : Math.PI;
+      exterior.castShadow = false;
+      group.add(exterior);
+    }
+
+    const fixture = new THREE.Mesh(boxGeometry, fixtureMaterial);
+    fixture.name = `bus-stop-ceiling-light-${index}`;
+    fixture.position.copy(shelterPoint(stop, 0, 0.45, 2.42));
+    fixture.scale.set(stop.axis === 'x' ? 1.6 : 0.28, 0.1, stop.axis === 'x' ? 0.28 : 1.6);
+    fixture.castShadow = false;
+    group.add(fixture);
+
+    const light = new THREE.PointLight(0xffe5b8, 0, 8, 2);
+    light.name = `bus-stop-safety-light-${index}`;
+    light.position.copy(shelterPoint(stop, 0, 0.45, 2.24));
+    light.castShadow = false;
+    light.visible = false;
+    group.add(light);
+    lights.push(light);
+  }
+
+  return { lights, glowMaterials, disposables };
 }
 
 /**
@@ -380,7 +717,6 @@ function generateBusShelter(x: number, z: number, axis: 'x' | 'z', benchSign: 1 
   const lift = (v: THREE.Vector3, y: number) => new THREE.Vector3(v.x, y, v.z);
 
   for (let a = 0; a < 5; a++) {
-    voxels.push({ position: at(a, 0), color: COLORS.sidewalk });
     voxels.push({ position: lift(at(a, 0), 3), color: COLORS.steel });
     voxels.push({ position: lift(at(a, benchSign), 3), color: COLORS.kiosk });
   }
@@ -392,7 +728,7 @@ function generateBusShelter(x: number, z: number, axis: 'x' | 'z', benchSign: 1 
   // Lit stop sign
   voxels.push({ position: lift(at(-1, benchSign), 3), color: COLORS.signalGreen });
   const benchPos = at(2, benchSign);
-  voxels.push(...generateBench(benchPos.x, benchPos.z, axis === 'z'));
+  voxels.push(...generateBench(benchPos.x, benchPos.z, axis === 'z', -benchSign as 1 | -1));
   return voxels;
 }
 
@@ -420,20 +756,21 @@ function generateStationPlatform(station: StationStop): VoxelData[] {
     voxels.push({ position: new THREE.Vector3(x, y, z), color });
   }
 
-  for (let along = -half; along <= half; along += 1) {
-    for (let d = 0; d < depth; d++) {
-      const px = Math.round(center.x + tangent.x * along + normal.x * (gauge + d));
-      const pz = Math.round(center.z + tangent.z * along + normal.z * (gauge + d));
-      // Warning strip along the platform edge, otherwise paving.
-      pushOnce(px, platformY, pz, d === 0 ? COLORS.roadMarking : COLORS.sidewalk);
+  for (const cell of stationPlatformCells(station)) {
+    pushOnce(
+      cell.x,
+      platformY,
+      cell.z,
+      cell.depth === 0 ? COLORS.roadMarking : COLORS.sidewalk
+    );
 
-      // Elevated platforms: support columns + outer railing.
-      if (platformY > 0) {
-        if (d === depth - 1 && Math.round(along) % 2 === 0) {
-          pushOnce(px, platformY + 1, pz, COLORS.steel);
-        }
-        if (d === 1 && Math.round(along) % 6 === 0) {
-          for (let y = platformY - 1; y >= 0; y--) pushOnce(px, y, pz, COLORS.concreteDark);
+    if (platformY > 0) {
+      if (cell.depth === depth - 1 && Math.round(cell.along) % 2 === 0) {
+        pushOnce(cell.x, platformY + 1, cell.z, COLORS.steel);
+      }
+      if (cell.depth === 1 && Math.round(cell.along) % 6 === 0) {
+        for (let y = platformY - 1; y >= 0; y--) {
+          pushOnce(cell.x, y, cell.z, COLORS.concreteDark);
         }
       }
     }
@@ -479,25 +816,6 @@ function generateLake(): VoxelData[] {
   const voxels: VoxelData[] = [];
   const { x: centerX, z: centerZ, radiusX, radiusZ } = LAKE;
 
-  for (let x = -radiusX; x <= radiusX; x++) {
-    for (let z = -radiusZ; z <= radiusZ; z++) {
-      const normalized = (x * x) / (radiusX * radiusX) + (z * z) / (radiusZ * radiusZ);
-      if (normalized <= 1) {
-        const edge = normalized > 0.72;
-        voxels.push({
-          position: new THREE.Vector3(centerX + x, -0.82, centerZ + z),
-          color: edge ? COLORS.water : COLORS.waterDeep,
-        });
-        if (edge && (x + z) % 4 === 0) {
-          voxels.push({
-            position: new THREE.Vector3(centerX + x, 0, centerZ + z),
-            color: COLORS.reeds,
-          });
-        }
-      }
-    }
-  }
-
   for (let i = 0; i < 20; i++) {
     const angle = (i / 20) * Math.PI * 2;
     const px = Math.round(centerX + Math.cos(angle) * (radiusX + 2));
@@ -519,19 +837,12 @@ function generateCityProps(): VoxelData[] {
     voxels.push(...generateBusShelter(stop.shelterX, stop.shelterZ, stop.axis, stop.benchSign));
   }
 
-  voxels.push(...generateKiosk(-30, 16));
-  voxels.push(...generateKiosk(20, 53));
-  voxels.push(...generateFenceLine(-62, 4, 20));
-  voxels.push(...generateFenceLine(-50, -22, 26));
-  voxels.push(...generateFenceLine(40, 20, 14));
-
-  // NOTE: keep benches away from the bus loop roads, the cow meadow and the lake.
-  const benches: Array<[number, number, boolean]> = [
-    [-52, 72, false], [-28, 74, true], [4, 53, false],
-    [-20, -40, false], [30, -40, true], [50, 20, false],
-  ];
-  for (const [x, z, rotate] of benches) {
-    voxels.push(...generateBench(x, z, rotate));
+  for (const kiosk of KIOSK_SPECS) voxels.push(...generateKiosk(kiosk.x, kiosk.z));
+  for (const fence of FENCE_SPECS) {
+    voxels.push(...generateFenceLine(fence.x, fence.z, fence.length, fence.alongX));
+  }
+  for (const bench of BENCH_SPECS) {
+    voxels.push(...generateBench(bench.x, bench.z, bench.rotate));
   }
 
   return voxels;
@@ -632,6 +943,10 @@ export interface WorldHandle {
   scene: THREE.Scene;
   voxelMeshes: THREE.Group;
   streetLights: THREE.PointLight[];
+  streetGlowMesh: THREE.InstancedMesh;
+  streetGlowMaterial: THREE.ShaderMaterial;
+  busStopLights: THREE.PointLight[];
+  busStopGlowMaterials: THREE.MeshStandardMaterial[];
   windowLights: THREE.PointLight[];
   /** Materials whose emissive should brighten at night. */
   windowGlowMaterials: THREE.MeshStandardMaterial[];
@@ -643,7 +958,68 @@ export interface WorldHandle {
   setTheme: (palette: Record<number, number>, foliage?: { tree: number; treeLight: number }) => void;
   /** 0..1 — cyberpunk morph: megatowers rise out of the blocks. */
   setCyberRise: (factor: number) => void;
+  setQuality: (profile: QualityProfile) => void;
+  updateEnvironment: (
+    elapsed: number,
+    wind: number,
+    rain: number,
+    freeze: number,
+    mist: number
+  ) => void;
   dispose: () => void;
+}
+
+function buildStreetLightPools(): {
+  mesh: THREE.InstancedMesh;
+  geometry: THREE.PlaneGeometry;
+  material: THREE.ShaderMaterial;
+} {
+  const geometry = new THREE.PlaneGeometry(1, 1);
+  const material = new THREE.ShaderMaterial({
+    uniforms: { uNight: { value: 0 } },
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    vertexShader: /* glsl */ `
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        vec4 localPosition = vec4(position, 1.0);
+        #ifdef USE_INSTANCING
+          localPosition = instanceMatrix * localPosition;
+        #endif
+        gl_Position = projectionMatrix * modelViewMatrix * localPosition;
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      uniform float uNight;
+      varying vec2 vUv;
+      void main() {
+        float distanceFromLamp = distance(vUv, vec2(0.5));
+        float radial = 1.0 - smoothstep(0.08, 0.5, distanceFromLamp);
+        float alpha = radial * radial * uNight * 0.16;
+        if (alpha < 0.001) discard;
+        gl_FragColor = vec4(vec3(1.0, 0.58, 0.24) * radial, alpha);
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+      }
+    `,
+  });
+  const mesh = new THREE.InstancedMesh(geometry, material, LAMP_SPECS.length);
+  const dummy = new THREE.Object3D();
+  for (let i = 0; i < LAMP_SPECS.length; i++) {
+    const lamp = LAMP_SPECS[i];
+    dummy.position.set(lamp.x, GROUND_SURFACE_Y + 0.025, lamp.z + lamp.dz * 1.3);
+    dummy.rotation.set(-Math.PI / 2, 0, 0);
+    dummy.scale.set(8, 11, 1);
+    dummy.updateMatrix();
+    mesh.setMatrixAt(i, dummy.matrix);
+  }
+  mesh.name = 'street-light-pools';
+  mesh.visible = false;
+  mesh.castShadow = false;
+  mesh.receiveShadow = false;
+  return { mesh, geometry, material };
 }
 
 /** Sleek megatowers that grow OVER the apartment blocks in cyberpunk mode. */
@@ -661,51 +1037,85 @@ function buildCyberTowers(): { group: THREE.Group; disposables: Array<{ dispose:
   const bandMat = new THREE.MeshStandardMaterial({ color: 0x05070b, emissive: 0x9fd9ff, emissiveIntensity: 1.1 });
   disposables.push(bodyMat, neonA, neonB, bandMat);
 
+  const unitBox = new THREE.BoxGeometry(1, 1, 1);
+  disposables.push(unitBox);
+  const bodyInstances = new THREE.InstancedMesh(unitBox, bodyMat, BLOCK_CONFIGS.length * 2);
+  const cyanCount = BLOCK_CONFIGS.filter((_, i) => i % 2 === 0).length * 5;
+  const magentaCount = BLOCK_CONFIGS.filter((_, i) => i % 2 === 1).length * 5;
+  const cyanInstances = new THREE.InstancedMesh(unitBox, neonA, cyanCount);
+  const magentaInstances = new THREE.InstancedMesh(unitBox, neonB, magentaCount);
+  const bandInstances = new THREE.InstancedMesh(unitBox, bandMat, BLOCK_CONFIGS.length * 3);
+  const dummy = new THREE.Object3D();
+  let bodyIndex = 0;
+  let cyanIndex = 0;
+  let magentaIndex = 0;
+  let bandIndex = 0;
+
+  const setInstance = (
+    mesh: THREE.InstancedMesh,
+    index: number,
+    x: number,
+    y: number,
+    z: number,
+    sx: number,
+    sy: number,
+    sz: number
+  ) => {
+    dummy.position.set(x, y, z);
+    dummy.scale.set(sx, sy, sz);
+    dummy.rotation.set(0, 0, 0);
+    dummy.updateMatrix();
+    mesh.setMatrixAt(index, dummy.matrix);
+  };
+
   for (let i = 0; i < BLOCK_CONFIGS.length; i++) {
     const block = BLOCK_CONFIGS[i];
-    const H = Math.min(46, Math.max(26, block.h * 2.5));
-    const w = block.w + 1.6;
-    const d = block.d + 1.6;
+    const height = Math.min(46, Math.max(26, block.h * 2.5));
+    const width = block.w + 1.6;
+    const depth = block.d + 1.6;
     const cx = block.x + block.w / 2 - 0.5;
     const cz = block.z + block.d / 2 - 0.5;
 
-    const bodyGeo = new THREE.BoxGeometry(w, H, d);
-    disposables.push(bodyGeo);
-    const body = new THREE.Mesh(bodyGeo, bodyMat);
-    body.position.set(cx, H / 2, cz);
-    body.castShadow = true;
-    group.add(body);
+    setInstance(bodyInstances, bodyIndex++, cx, height / 2, cz, width, height, depth);
+    setInstance(bodyInstances, bodyIndex++, cx, height + 3, cz, 0.3, 6, 0.3);
 
-    // Corner neon strips (alternating cyan / magenta)
-    const stripGeo = new THREE.BoxGeometry(0.28, H, 0.28);
-    disposables.push(stripGeo);
-    const stripMat = i % 2 === 0 ? neonA : neonB;
+    const neonMesh = i % 2 === 0 ? cyanInstances : magentaInstances;
+    let neonIndex = i % 2 === 0 ? cyanIndex : magentaIndex;
     for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]] as const) {
-      const strip = new THREE.Mesh(stripGeo, stripMat);
-      strip.position.set(cx + (sx * w) / 2, H / 2, cz + (sz * d) / 2);
-      group.add(strip);
+      setInstance(
+        neonMesh,
+        neonIndex++,
+        cx + (sx * width) / 2,
+        height / 2,
+        cz + (sz * depth) / 2,
+        0.28,
+        height,
+        0.28
+      );
     }
+    setInstance(neonMesh, neonIndex++, cx, height + 6.2, cz, 0.5, 0.5, 0.5);
+    if (i % 2 === 0) cyanIndex = neonIndex;
+    else magentaIndex = neonIndex;
 
-    // Glowing window bands
-    const bandGeo = new THREE.BoxGeometry(w + 0.12, 0.55, d + 0.12);
-    disposables.push(bandGeo);
-    for (const f of [0.3, 0.55, 0.8]) {
-      const band = new THREE.Mesh(bandGeo, bandMat);
-      band.position.set(cx, H * f, cz);
-      group.add(band);
+    for (const factor of [0.3, 0.55, 0.8]) {
+      setInstance(
+        bandInstances,
+        bandIndex++,
+        cx,
+        height * factor,
+        cz,
+        width + 0.12,
+        0.55,
+        depth + 0.12
+      );
     }
+  }
 
-    // Rooftop antenna with a beacon
-    const antGeo = new THREE.BoxGeometry(0.3, 6, 0.3);
-    disposables.push(antGeo);
-    const antenna = new THREE.Mesh(antGeo, bodyMat);
-    antenna.position.set(cx, H + 3, cz);
-    group.add(antenna);
-    const tipGeo = new THREE.BoxGeometry(0.5, 0.5, 0.5);
-    disposables.push(tipGeo);
-    const tip = new THREE.Mesh(tipGeo, stripMat);
-    tip.position.set(cx, H + 6.2, cz);
-    group.add(tip);
+  bodyInstances.castShadow = true;
+  bodyInstances.receiveShadow = true;
+  for (const mesh of [bodyInstances, cyanInstances, magentaInstances, bandInstances]) {
+    mesh.instanceMatrix.setUsage(THREE.StaticDrawUsage);
+    group.add(mesh);
   }
 
   return { group, disposables };
@@ -776,6 +1186,7 @@ function materialParamsFor(color: ColorHex): Partial<THREE.MeshStandardMaterialP
 
 export function createWorld(scene: THREE.Scene, windUniforms: WindUniforms): WorldHandle {
   const allVoxels: VoxelData[] = [];
+  const lakeSurface = new LakeSurface(scene);
 
   allVoxels.push(...generateGround(WORLD_HALF_SIZE));
   allVoxels.push(...generateViaduct());
@@ -793,41 +1204,47 @@ export function createWorld(scene: THREE.Scene, windUniforms: WindUniforms): Wor
     allVoxels.push(...generateStreetLamp(lamp.x, lamp.z, lamp.dz));
   }
 
-  allVoxels.push(...generatePlayground(-12, 68));
+  allVoxels.push(...generatePlayground(PLAYGROUND.x, PLAYGROUND.z));
   allVoxels.push(...generateCityProps());
   allVoxels.push(...generateLake());
 
-  // ── Dynamic point lights (kept few for laptop GPUs) ──
+  // Keep a candidate at every physical lamp. DayNightCycle activates only the
+  // nearest profile-budgeted subset, so camera-local streets are illuminated
+  // without increasing the simultaneous light count.
   const streetLights: THREE.PointLight[] = [];
-  const activeLamps = LAMP_SPECS.filter((_, index) => index % 3 === 0);
-  for (const lamp of activeLamps) {
-    const light = new THREE.PointLight(COLORS.windowLit, 0, 18, 2);
-    light.position.set(lamp.x, 5, lamp.z + lamp.dz * 2);
+  for (const lamp of LAMP_SPECS) {
+    const light = new THREE.PointLight(0xffd58a, 0, 26, 2);
+    light.position.set(lamp.x, 3.08, lamp.z + lamp.dz * 1.3);
     light.castShadow = false;
+    light.visible = false;
     scene.add(light);
     streetLights.push(light);
   }
 
   const windowLights: THREE.PointLight[] = [];
-  const activeWindowBlocks = BLOCK_CONFIGS.filter((_, index) => index % 5 === 0);
-  for (const block of activeWindowBlocks) {
-    const light = new THREE.PointLight(COLORS.windowLit, 0, 14, 2);
+  for (const block of BLOCK_CONFIGS) {
+    const light = new THREE.PointLight(0xffcf86, 0, 18, 2);
     light.position.set(block.x + block.w / 2, Math.min(block.h - 2, 6), block.z + block.d / 2);
     light.castShadow = false;
+    light.visible = false;
     scene.add(light);
     windowLights.push(light);
   }
 
   // ── Instanced voxel meshes, one per colour ──
   const geometry = new THREE.BoxGeometry(VOXEL_SIZE, VOXEL_SIZE, VOXEL_SIZE);
-  const colorMap = new Map<ColorHex, VoxelData[]>();
+  const colorMap = new Map<string, { color: ColorHex; castShadow: boolean; voxels: VoxelData[] }>();
   for (const voxel of allVoxels) {
-    if (!colorMap.has(voxel.color)) colorMap.set(voxel.color, []);
-    colorMap.get(voxel.color)!.push(voxel);
+    const castShadow = voxel.castShadow !== false;
+    const key = `${voxel.color}:${castShadow ? 1 : 0}`;
+    const batch = colorMap.get(key);
+    if (batch) batch.voxels.push(voxel);
+    else colorMap.set(key, { color: voxel.color, castShadow, voxels: [voxel] });
   }
 
   const group = new THREE.Group();
   const dummy = new THREE.Object3D();
+  const unitScale = new THREE.Vector3(1, 1, 1);
   const materials: THREE.MeshStandardMaterial[] = [];
   const windowGlowMaterials: THREE.MeshStandardMaterial[] = [];
   interface LookEntry {
@@ -843,7 +1260,7 @@ export function createWorld(scene: THREE.Scene, windUniforms: WindUniforms): Wor
   }
   const lookEntries: LookEntry[] = [];
 
-  for (const [color, voxels] of colorMap) {
+  for (const { color, castShadow, voxels } of colorMap.values()) {
     const params = materialParamsFor(color);
     const material = new THREE.MeshStandardMaterial({
       color: threeColorFromHex(color),
@@ -870,10 +1287,12 @@ export function createWorld(scene: THREE.Scene, windUniforms: WindUniforms): Wor
     const instancedMesh = new THREE.InstancedMesh(geometry, material, voxels.length);
     for (let i = 0; i < voxels.length; i++) {
       dummy.position.copy(voxels[i].position);
+      dummy.scale.copy(voxels[i].scale ?? unitScale);
       dummy.updateMatrix();
       instancedMesh.setMatrixAt(i, dummy.matrix);
     }
-    instancedMesh.castShadow = true;
+    dummy.scale.copy(unitScale);
+    instancedMesh.castShadow = castShadow;
     instancedMesh.receiveShadow = true;
     group.add(instancedMesh);
   }
@@ -886,6 +1305,13 @@ export function createWorld(scene: THREE.Scene, windUniforms: WindUniforms): Wor
   // ── Continuous rails + sleepers + ballast ──
   const trackDisposables: Array<{ dispose: () => void }> = [];
   buildTrackwork(group, trackDisposables);
+  buildCatenary(group, trackDisposables);
+  trackDisposables.push(...buildKioskSigns(group));
+  const busStopDetails = buildBusShelterDetails(group);
+  trackDisposables.push(...busStopDetails.disposables);
+  const streetGlow = buildStreetLightPools();
+  group.add(streetGlow.mesh);
+  trackDisposables.push(streetGlow.geometry, streetGlow.material);
 
   // ── Cyberpunk megatowers (hidden until the theme morph) ──
   const cyberBuild = buildCyberTowers();
@@ -992,14 +1418,28 @@ export function createWorld(scene: THREE.Scene, windUniforms: WindUniforms): Wor
     scene,
     voxelMeshes: group,
     streetLights,
+    streetGlowMesh: streetGlow.mesh,
+    streetGlowMaterial: streetGlow.material,
+    busStopLights: busStopDetails.lights,
+    busStopGlowMaterials: busStopDetails.glowMaterials,
     windowLights,
     windowGlowMaterials,
     setSnowCover,
     setWetness,
     setTheme,
     setCyberRise,
+    setQuality(profile) {
+      lakeSurface.setQuality(profile.waterDetail);
+    },
+    updateEnvironment(elapsed, wind, rain, freeze, mist) {
+      lakeSurface.update(elapsed, wind, rain, freeze, mist);
+    },
     dispose() {
+      lakeSurface.dispose();
       scene.remove(cyberBuild.group);
+      cyberBuild.group.traverse((child) => {
+        if (child instanceof THREE.InstancedMesh) child.dispose();
+      });
       for (const item of cyberBuild.disposables) item.dispose();
       scene.remove(group);
       group.traverse((child) => {
