@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import * as THREE from 'three';
 import {
+  directSunFactorAt,
   goldenFactorAt,
   nightFactorAt,
   realTimeToCycleT,
@@ -34,6 +35,52 @@ describe('solar model', () => {
     const twilight = nightFactorAt(0.25);
     expect(twilight).toBeGreaterThan(0.05);
     expect(twilight).toBeLessThan(0.95);
+  });
+
+  test('keeps dawn in twilight long enough to avoid an abrupt daylight switch', () => {
+    expect(nightFactorAt(0.25)).toBeGreaterThan(0.5);
+    expect(nightFactorAt(0.28)).toBeGreaterThan(0.05);
+    expect(nightFactorAt(0.31)).toBeLessThan(0.05);
+
+    let previousNight = nightFactorAt(0.22);
+    for (let t = 0.222; t <= 0.34; t += 0.002) {
+      const night = nightFactorAt(t);
+      expect(night).toBeLessThanOrEqual(previousNight);
+      expect(previousNight - night).toBeLessThan(0.04);
+      previousNight = night;
+    }
+  });
+
+  test('fades direct sunlight in after sunrise instead of enabling it at full contrast', () => {
+    expect(directSunFactorAt(0.25)).toBe(0);
+    expect(directSunFactorAt(0.252)).toBeLessThan(0.01);
+    expect(directSunFactorAt(0.28)).toBeGreaterThan(0.1);
+    expect(directSunFactorAt(0.5)).toBeCloseTo(1, 3);
+
+    let previous = directSunFactorAt(0.25);
+    for (let t = 0.252; t <= 0.5; t += 0.002) {
+      const strength = directSunFactorAt(t);
+      expect(strength).toBeGreaterThanOrEqual(previous);
+      previous = strength;
+    }
+  });
+
+  test('uses the same continuous curve for sunset in reverse', () => {
+    for (let offset = 0; offset <= 0.2; offset += 0.01) {
+      expect(nightFactorAt(0.25 + offset)).toBeCloseTo(nightFactorAt(0.75 - offset), 10);
+      expect(directSunFactorAt(0.25 + offset)).toBeCloseTo(
+        directSunFactorAt(0.75 - offset),
+        10
+      );
+    }
+
+    let previousNight = nightFactorAt(0.66);
+    for (let t = 0.662; t <= 0.78; t += 0.002) {
+      const night = nightFactorAt(t);
+      expect(night).toBeGreaterThanOrEqual(previousNight);
+      expect(night - previousNight).toBeLessThan(0.04);
+      previousNight = night;
+    }
   });
 
   test('golden hour peaks near sunrise/sunset and vanishes at noon & midnight', () => {

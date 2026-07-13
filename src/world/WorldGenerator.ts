@@ -1,4 +1,8 @@
 import * as THREE from 'three';
+import {
+  WINDOW_COHORT_COUNT,
+  type ScheduledWindowMaterial,
+} from '../environment/CityRhythm';
 import { LakeSurface } from '../environment/LakeSurface';
 import type { QualityProfile } from '../performance/QualityManager';
 import {
@@ -45,6 +49,7 @@ interface VoxelData {
   color: ColorHex;
   castShadow?: boolean;
   scale?: THREE.Vector3;
+  windowCohort?: number;
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -72,6 +77,7 @@ function generateBlockBuilding(block: BlockConfig): VoxelData[] {
           y <= 1;
 
         let color: ColorHex = COLORS.concrete;
+        let windowCohort: number | undefined;
         if (y === 0) color = COLORS.concreteDark;
         if (y === block.h - 1) color = COLORS.roof;
         if (y % 5 === 0 && y > 0 && y < block.h - 1) color = block.accent;
@@ -79,10 +85,22 @@ function generateBlockBuilding(block: BlockConfig): VoxelData[] {
         if (isDoor) color = COLORS.door;
         if (!isDoor && isWindowRow && isWindowColumn) {
           const hash = Math.sin((block.x + bx) * 31.7 + (block.z + bz) * 17.3 + y * 11.1) * 43758.5453;
-          color = hash - Math.floor(hash) > 0.38 ? COLORS.windowLit : COLORS.window;
+          const litChance = hash - Math.floor(hash);
+          color = litChance > 0.38 ? COLORS.windowLit : COLORS.window;
+          if (color === COLORS.windowLit) {
+            const cohortHash = Math.sin(hash * 0.0137 + bx * 19.1 + bz * 7.9) * 43758.5453;
+            windowCohort = Math.min(
+              WINDOW_COHORT_COUNT - 1,
+              Math.floor((cohortHash - Math.floor(cohortHash)) * WINDOW_COHORT_COUNT)
+            );
+          }
         }
 
-        voxels.push({ position: new THREE.Vector3(block.x + bx, y, block.z + bz), color });
+        voxels.push({
+          position: new THREE.Vector3(block.x + bx, y, block.z + bz),
+          color,
+          windowCohort,
+        });
       }
     }
   }
@@ -575,6 +593,10 @@ const BUS_POSTERS = [
   { background: '#327a3d', accent: '#f1c65b', title: 'BLIZEJ', subtitle: 'MIASTA' },
 ] as const;
 
+const BUS_SHELTER_END_WALL_ALONG = -2;
+const BUS_SHELTER_END_WALL_HALF_DEPTH = 0.5;
+const BUS_POSTER_SURFACE_GAP = 0.015;
+
 function shelterPoint(stop: BusStop, along: number, outward: number, y: number): THREE.Vector3 {
   const center = busShelterCenter(stop);
   return stop.axis === 'x'
@@ -646,7 +668,7 @@ function buildBusShelterDetails(group: THREE.Group): {
     const stop = BUS_STOPS[index];
     const glass = new THREE.Mesh(boxGeometry, glassMaterial);
     glass.name = `bus-stop-glass-${index}`;
-    glass.position.copy(shelterPoint(stop, -2, 0.5, 1.1));
+    glass.position.copy(shelterPoint(stop, BUS_SHELTER_END_WALL_ALONG, 0.5, 1.1));
     glass.scale.set(
       stop.axis === 'x' ? 0.08 : 1.75,
       2.5,
@@ -672,14 +694,24 @@ function buildBusShelterDetails(group: THREE.Group): {
 
       const interior = new THREE.Mesh(posterGeometry, posterMaterial);
       interior.name = `bus-stop-poster-${index}-interior`;
-      interior.position.copy(shelterPoint(stop, -1.945, 0.5, 1.14));
+      interior.position.copy(shelterPoint(
+        stop,
+        BUS_SHELTER_END_WALL_ALONG + BUS_SHELTER_END_WALL_HALF_DEPTH + BUS_POSTER_SURFACE_GAP,
+        0.5,
+        1.14
+      ));
       interior.rotation.y = stop.axis === 'x' ? Math.PI / 2 : 0;
       interior.castShadow = false;
       group.add(interior);
 
       const exterior = new THREE.Mesh(posterGeometry, posterMaterial);
       exterior.name = `bus-stop-poster-${index}-exterior`;
-      exterior.position.copy(shelterPoint(stop, -2.055, 0.5, 1.14));
+      exterior.position.copy(shelterPoint(
+        stop,
+        BUS_SHELTER_END_WALL_ALONG - BUS_SHELTER_END_WALL_HALF_DEPTH - BUS_POSTER_SURFACE_GAP,
+        0.5,
+        1.14
+      ));
       exterior.rotation.y = stop.axis === 'x' ? -Math.PI / 2 : Math.PI;
       exterior.castShadow = false;
       group.add(exterior);
@@ -702,6 +734,129 @@ function buildBusShelterDetails(group: THREE.Group): {
   }
 
   return { lights, glowMaterials, disposables };
+}
+
+function buildStationLighting(group: THREE.Group): {
+  lights: THREE.PointLight[];
+  glowMaterials: THREE.MeshStandardMaterial[];
+  glowMesh: THREE.InstancedMesh;
+  glowMaterial: THREE.ShaderMaterial;
+  disposables: Array<{ dispose: () => void }>;
+} {
+  const lights: THREE.PointLight[] = [];
+  const disposables: Array<{ dispose: () => void }> = [];
+  const fixtureGeometry = new THREE.BoxGeometry(1, 1, 1);
+  const fixtureMaterial = new THREE.MeshStandardMaterial({
+    color: 0xfff3d2,
+    emissive: 0xffdca0,
+    emissiveIntensity: 0.1,
+    roughness: 0.38,
+  });
+  const poleMaterial = new THREE.MeshStandardMaterial({
+    color: 0x48515a,
+    metalness: 0.52,
+    roughness: 0.48,
+  });
+  const glowGeometry = new THREE.PlaneGeometry(1, 1);
+  const glowMaterial = new THREE.ShaderMaterial({
+    uniforms: { uNight: { value: 0 } },
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    vertexShader: /* glsl */ `
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        vec4 localPosition = vec4(position, 1.0);
+        #ifdef USE_INSTANCING
+          localPosition = instanceMatrix * localPosition;
+        #endif
+        gl_Position = projectionMatrix * modelViewMatrix * localPosition;
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      uniform float uNight;
+      varying vec2 vUv;
+      void main() {
+        vec2 centered = (vUv - 0.5) * vec2(1.0, 1.65);
+        float radial = 1.0 - smoothstep(0.08, 0.52, length(centered));
+        float alpha = radial * radial * uNight * 0.28;
+        if (alpha < 0.001) discard;
+        gl_FragColor = vec4(vec3(1.0, 0.72, 0.36) * radial, alpha);
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+      }
+    `,
+  });
+  const glowMesh = new THREE.InstancedMesh(glowGeometry, glowMaterial, STATION_STOPS.length);
+  const dummy = new THREE.Object3D();
+
+  for (let index = 0; index < STATION_STOPS.length; index++) {
+    const station = STATION_STOPS[index];
+    const center = TRAIN_ROUTE_CURVE.getPointAt(station.centerT);
+    const tangent = TRAIN_ROUTE_CURVE.getTangentAt(station.centerT).setY(0).normalize();
+    const normal = new THREE.Vector3(-tangent.z, 0, tangent.x);
+    const platformY = Math.round(center.y);
+    const shelterCenter = center.clone().addScaledVector(normal, 6);
+    const fixtureRotation = Math.atan2(-tangent.z, tangent.x);
+
+    for (const [fixtureIndex, along] of [-1.45, 1.45].entries()) {
+      const fixture = new THREE.Mesh(fixtureGeometry, fixtureMaterial);
+      fixture.name = `station-platform-fixture-${index}-${fixtureIndex}`;
+      fixture.position.copy(shelterCenter).addScaledVector(tangent, along);
+      fixture.position.y = platformY + 2.43;
+      fixture.rotation.y = fixtureRotation;
+      fixture.scale.set(1.9, 0.1, 0.3);
+      fixture.castShadow = false;
+      group.add(fixture);
+    }
+
+    // Emissive platform masts keep both ends readable without adding more
+    // dynamic lights to the GPU budget.
+    for (const [mastIndex, along] of [-6.5, 6.5].entries()) {
+      const mastCenter = center.clone().addScaledVector(normal, 4.7).addScaledVector(tangent, along);
+      const pole = new THREE.Mesh(fixtureGeometry, poleMaterial);
+      pole.name = `station-platform-pole-${index}-${mastIndex}`;
+      pole.position.copy(mastCenter);
+      pole.position.y = platformY + 2.15;
+      pole.scale.set(0.14, 3.3, 0.14);
+      pole.castShadow = false;
+      group.add(pole);
+
+      const fixture = new THREE.Mesh(fixtureGeometry, fixtureMaterial);
+      fixture.name = `station-platform-fixture-${index}-mast-${mastIndex}`;
+      fixture.position.copy(mastCenter);
+      fixture.position.y = platformY + 3.82;
+      fixture.rotation.y = fixtureRotation;
+      fixture.scale.set(1.2, 0.18, 0.38);
+      fixture.castShadow = false;
+      group.add(fixture);
+    }
+
+    const light = new THREE.PointLight(0xffdfaa, 0, 28, 1.75);
+    light.name = `station-platform-light-${index}`;
+    light.position.copy(shelterCenter);
+    light.position.y = platformY + 2.18;
+    light.castShadow = false;
+    light.visible = false;
+    group.add(light);
+    lights.push(light);
+
+    dummy.position.copy(center).addScaledVector(normal, 4.6);
+    dummy.position.y = platformY + 0.515;
+    dummy.rotation.set(-Math.PI / 2, 0, fixtureRotation);
+    dummy.scale.set(17, 10, 1);
+    dummy.updateMatrix();
+    glowMesh.setMatrixAt(index, dummy.matrix);
+  }
+
+  glowMesh.name = 'station-platform-light-pools';
+  glowMesh.visible = false;
+  glowMesh.castShadow = false;
+  glowMesh.receiveShadow = false;
+  group.add(glowMesh);
+  disposables.push(fixtureGeometry, fixtureMaterial, poleMaterial, glowGeometry, glowMaterial);
+  return { lights, glowMaterials: [fixtureMaterial], glowMesh, glowMaterial, disposables };
 }
 
 /**
@@ -947,9 +1102,13 @@ export interface WorldHandle {
   streetGlowMaterial: THREE.ShaderMaterial;
   busStopLights: THREE.PointLight[];
   busStopGlowMaterials: THREE.MeshStandardMaterial[];
+  stationLights: THREE.PointLight[];
+  stationGlowMaterials: THREE.MeshStandardMaterial[];
+  stationGlowMesh: THREE.InstancedMesh;
+  stationGlowMaterial: THREE.ShaderMaterial;
   windowLights: THREE.PointLight[];
-  /** Materials whose emissive should brighten at night. */
-  windowGlowMaterials: THREE.MeshStandardMaterial[];
+  /** Deterministic residential groups controlled by the city clock. */
+  windowGlowMaterials: ScheduledWindowMaterial[];
   /** 0..1 lying snow: whitens grass/roofs and grows snow caps on buildings & trees. */
   setSnowCover: (cover: number) => void;
   /** 0..1 rain wetness: roads darken and turn mirror-like. */
@@ -1233,20 +1392,30 @@ export function createWorld(scene: THREE.Scene, windUniforms: WindUniforms): Wor
 
   // ── Instanced voxel meshes, one per colour ──
   const geometry = new THREE.BoxGeometry(VOXEL_SIZE, VOXEL_SIZE, VOXEL_SIZE);
-  const colorMap = new Map<string, { color: ColorHex; castShadow: boolean; voxels: VoxelData[] }>();
+  const colorMap = new Map<
+    string,
+    { color: ColorHex; castShadow: boolean; windowCohort?: number; voxels: VoxelData[] }
+  >();
   for (const voxel of allVoxels) {
     const castShadow = voxel.castShadow !== false;
-    const key = `${voxel.color}:${castShadow ? 1 : 0}`;
+    const key = `${voxel.color}:${castShadow ? 1 : 0}:${voxel.windowCohort ?? -1}`;
     const batch = colorMap.get(key);
     if (batch) batch.voxels.push(voxel);
-    else colorMap.set(key, { color: voxel.color, castShadow, voxels: [voxel] });
+    else {
+      colorMap.set(key, {
+        color: voxel.color,
+        castShadow,
+        windowCohort: voxel.windowCohort,
+        voxels: [voxel],
+      });
+    }
   }
 
   const group = new THREE.Group();
   const dummy = new THREE.Object3D();
   const unitScale = new THREE.Vector3(1, 1, 1);
   const materials: THREE.MeshStandardMaterial[] = [];
-  const windowGlowMaterials: THREE.MeshStandardMaterial[] = [];
+  const windowGlowMaterials: ScheduledWindowMaterial[] = [];
   interface LookEntry {
     material: THREE.MeshStandardMaterial;
     colorKey: number;
@@ -1257,10 +1426,11 @@ export function createWorld(scene: THREE.Scene, windUniforms: WindUniforms): Wor
     baseRoughness: number;
     baseMetalness: number;
     baseEnv: number;
+    windowSchedule?: ScheduledWindowMaterial;
   }
   const lookEntries: LookEntry[] = [];
 
-  for (const { color, castShadow, voxels } of colorMap.values()) {
+  for (const { color, castShadow, windowCohort, voxels } of colorMap.values()) {
     const params = materialParamsFor(color);
     const material = new THREE.MeshStandardMaterial({
       color: threeColorFromHex(color),
@@ -1271,7 +1441,17 @@ export function createWorld(scene: THREE.Scene, windUniforms: WindUniforms): Wor
     });
     material.envMapIntensity = params.envIntensity;
     materials.push(material);
-    if (color === COLORS.windowLit) windowGlowMaterials.push(material);
+    const windowSchedule =
+      color === COLORS.windowLit && windowCohort !== undefined
+        ? {
+            material,
+            cohort: windowCohort,
+            litColor: material.color.clone(),
+            darkColor: new THREE.Color(COLORS.window),
+            activity: 1,
+          }
+        : undefined;
+    if (windowSchedule) windowGlowMaterials.push(windowSchedule);
     const snowTint = SNOW_TINTS[color as number];
     lookEntries.push({
       material,
@@ -1282,6 +1462,7 @@ export function createWorld(scene: THREE.Scene, windUniforms: WindUniforms): Wor
       baseRoughness: params.roughness ?? 0.85,
       baseMetalness: params.metalness ?? 0.05,
       baseEnv: params.envIntensity,
+      windowSchedule,
     });
 
     const instancedMesh = new THREE.InstancedMesh(geometry, material, voxels.length);
@@ -1309,6 +1490,8 @@ export function createWorld(scene: THREE.Scene, windUniforms: WindUniforms): Wor
   trackDisposables.push(...buildKioskSigns(group));
   const busStopDetails = buildBusShelterDetails(group);
   trackDisposables.push(...busStopDetails.disposables);
+  const stationLighting = buildStationLighting(group);
+  trackDisposables.push(...stationLighting.disposables);
   const streetGlow = buildStreetLightPools();
   group.add(streetGlow.mesh);
   trackDisposables.push(streetGlow.geometry, streetGlow.material);
@@ -1357,7 +1540,14 @@ export function createWorld(scene: THREE.Scene, windUniforms: WindUniforms): Wor
         entry.material.metalness = entry.baseMetalness;
         entry.material.envMapIntensity = entry.baseEnv;
       }
-      entry.material.color.copy(tmpColor);
+      if (entry.windowSchedule) {
+        entry.windowSchedule.litColor.copy(tmpColor);
+        entry.material.color
+          .copy(entry.windowSchedule.darkColor)
+          .lerp(entry.windowSchedule.litColor, entry.windowSchedule.activity);
+      } else {
+        entry.material.color.copy(tmpColor);
+      }
     }
 
     // Frost the wind-blown foliage via emissive (its colours are per-instance).
@@ -1397,6 +1587,8 @@ export function createWorld(scene: THREE.Scene, windUniforms: WindUniforms): Wor
     palette: Record<number, number>,
     foliageTheme?: { tree: number; treeLight: number }
   ) => {
+    const darkWindowColor = palette[COLORS.window] ?? COLORS.window;
+    for (const schedule of windowGlowMaterials) schedule.darkColor.setHex(darkWindowColor);
     for (const entry of lookEntries) {
       const override = palette[entry.colorKey];
       entry.themed.copy(entry.original);
@@ -1422,6 +1614,10 @@ export function createWorld(scene: THREE.Scene, windUniforms: WindUniforms): Wor
     streetGlowMaterial: streetGlow.material,
     busStopLights: busStopDetails.lights,
     busStopGlowMaterials: busStopDetails.glowMaterials,
+    stationLights: stationLighting.lights,
+    stationGlowMaterials: stationLighting.glowMaterials,
+    stationGlowMesh: stationLighting.glowMesh,
+    stationGlowMaterial: stationLighting.glowMaterial,
     windowLights,
     windowGlowMaterials,
     setSnowCover,
