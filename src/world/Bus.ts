@@ -12,6 +12,11 @@ import {
 import { buildPassenger, easeInOut, type PassengerBuild } from './PassengerCrowd';
 import { mergeStaticMeshes } from '../performance/mergeStaticMeshes';
 import {
+  MINUTES_PER_DAY,
+  busServiceWindowAt,
+  type BusServiceWindow,
+} from '../environment/CityRhythm';
+import {
   busShelterColliders,
   BUS_DOOR_APPROACH_DISTANCE,
   busStopWaitingPositions,
@@ -34,6 +39,8 @@ const BUS_WIDTH = 2.3;
 const BUS_HEIGHT = 2.6;
 const AXLE_OFFSET_METERS = 2.6;
 const BASE_SPEED = 6.5;
+const FINAL_LOOP_SPEED = 15;
+const MORNING_RELEASE_SPEED = 8.5;
 const BRAKING_DISTANCE = 10;
 const STOP_SPEED_THRESHOLD = 0.2;
 const REARM_DISTANCE = 6;
@@ -48,6 +55,9 @@ type BusState =
   | { kind: 'braking'; stop: BusStop }
   | { kind: 'dwelling'; stop: BusStop; timeLeft: number }
   | { kind: 'leaving'; stop: BusStop; entryT: number };
+
+type BusServiceMode = 'normal' | 'final-loop' | 'off' | 'morning-release';
+type DwellPurpose = 'normal' | 'final-loop' | 'morning-release';
 
 function wrap01(t: number): number {
   return ((t % 1) + 1) % 1;
@@ -212,6 +222,7 @@ interface BusPassenger {
   delay: number;
   currentOpacity: number;
   targetOpacity: number;
+  atStop: boolean;
 }
 
 interface StopCrowd {
@@ -263,6 +274,7 @@ function buildStopCrowd(scene: THREE.Scene, stop: BusStop): StopCrowd {
       delay: 0,
       currentOpacity: 0,
       targetOpacity: 0.92,
+      atStop: true,
     });
   }
 
@@ -270,7 +282,7 @@ function buildStopCrowd(scene: THREE.Scene, stop: BusStop): StopCrowd {
 }
 
 export interface BusHandle {
-  update: (delta: number, nightFactor: number, crossingBlocked: boolean) => void;
+  update: (delta: number, nightFactor: number, crossingBlocked: boolean, t01: number) => void;
   getPosition: (target?: THREE.Vector3) => THREE.Vector3;
   getDirection: (target?: THREE.Vector3) => THREE.Vector3;
   getStopState: () => { dwelling: boolean; label: string };
@@ -278,9 +290,16 @@ export interface BusHandle {
   getPassengerDebugState: () => Array<{
     stop: string;
     activity: Activity;
+    atStop: boolean;
     colliding: boolean;
     position: [number, number, number];
   }>;
+  getServiceDebugState: () => {
+    mode: BusServiceMode;
+    visible: boolean;
+    waitingPassengers: number;
+    remainingStops: number;
+  };
   /** 0..1 — cyberpunk look morph (dark hull, neon glow). */
   setCyberLook: (factor: number) => void;
   dispose: () => void;
@@ -307,6 +326,12 @@ export function createBus(scene: THREE.Scene): BusHandle {
   let doorOpen = 0;
   let clock = 0;
   let state: BusState = { kind: 'cruising' };
+  let serviceMode: BusServiceMode = 'normal';
+  let serviceInitialized = false;
+  let previousT01 = 0;
+  let previousServiceWindow: BusServiceWindow = 'day';
+  const finalStopsRemaining = new Set<string>();
+  const morningStopsRemaining = new Set<string>();
 
   const frontPos = new THREE.Vector3();
   const rearPos = new THREE.Vector3();
@@ -327,36 +352,132 @@ export function createBus(scene: THREE.Scene): BusHandle {
     return best;
   }
 
-  function startDwell(crowd: StopCrowd): void {
+  function setAllPassengersAtStop(atStop: boolean): void {
+    for (const crowd of crowds) {
+      crowd.wasDwelling = false;
+      for (const p of crowd.passengers) {
+        p.atStop = atStop;
+        p.activity = 'idle';
+        p.progress = 0;
+        p.delay = 0;
+        p.currentOpacity = atStop ? 0.92 : 0;
+        p.targetOpacity = p.currentOpacity;
+        p.build.group.position.copy(atStop ? p.waitPos : p.doorPos);
+        for (const material of p.build.materials) material.opacity = p.currentOpacity;
+      }
+    }
+  }
+
+  function enterOffService(): void {
+    serviceMode = 'off';
+    group.visible = false;
+    currentSpeed = 0;
+    doorOpen = 0;
+    state = { kind: 'cruising' };
+    finalStopsRemaining.clear();
+    morningStopsRemaining.clear();
+    setAllPassengersAtStop(false);
+  }
+
+  function beginFinalLoop(): void {
+    serviceMode = 'final-loop';
+    group.visible = true;
+    finalStopsRemaining.clear();
+    for (const stop of BUS_STOPS) finalStopsRemaining.add(stop.label);
+    morningStopsRemaining.clear();
+  }
+
+  function beginMorningRelease(): void {
+    serviceMode = 'morning-release';
+    group.visible = true;
+    leadT = wrap01(BUS_STOPS[0].atT - 0.075);
+    currentSpeed = BASE_SPEED * 0.55;
+    state = { kind: 'cruising' };
+    finalStopsRemaining.clear();
+    morningStopsRemaining.clear();
+    for (const stop of BUS_STOPS) morningStopsRemaining.add(stop.label);
+    setAllPassengersAtStop(false);
+  }
+
+  function enterNormalService(restorePassengers = false): void {
+    serviceMode = 'normal';
+    group.visible = true;
+    finalStopsRemaining.clear();
+    morningStopsRemaining.clear();
+    if (restorePassengers) setAllPassengersAtStop(true);
+  }
+
+  function syncServiceSchedule(t01: number): void {
+    const serviceWindow = busServiceWindowAt(t01);
+    if (!serviceInitialized) {
+      if (serviceWindow === 'off') enterOffService();
+      else if (serviceWindow === 'final-loop') beginFinalLoop();
+      else enterNormalService(true);
+      serviceInitialized = true;
+      previousT01 = t01;
+      previousServiceWindow = serviceWindow;
+      return;
+    }
+
+    const forwardMinutes = forwardDelta(previousT01, t01) * MINUTES_PER_DAY;
+    const timeJumped = forwardMinutes > 30;
+    if (timeJumped) {
+      if (serviceWindow === 'off') enterOffService();
+      else if (serviceWindow === 'final-loop') beginFinalLoop();
+      else if (previousServiceWindow === 'off') beginMorningRelease();
+      else enterNormalService(true);
+    } else if (previousServiceWindow !== serviceWindow) {
+      if (serviceWindow === 'final-loop') beginFinalLoop();
+      else if (serviceWindow === 'day' && previousServiceWindow === 'off') beginMorningRelease();
+      else if (serviceWindow === 'off' && serviceMode !== 'final-loop') enterOffService();
+    }
+
+    previousT01 = t01;
+    previousServiceWindow = serviceWindow;
+  }
+
+  function startDwell(crowd: StopCrowd, purpose: DwellPurpose = 'normal'): void {
     crowd.visitCount += 1;
     const flip = crowd.visitCount % 2 === 0;
     for (let i = 0; i < crowd.passengers.length; i++) {
       const p = crowd.passengers[i];
-      const boards = (i % 2 === 0) === flip;
+      const boards = purpose === 'final-loop' ||
+        (purpose === 'normal' && p.atStop && (i % 2 === 0) === flip);
+      const disembarks = purpose === 'morning-release' ||
+        (purpose === 'normal' && !p.atStop);
       p.progress = 0;
       p.duration = 2.0 + Math.random() * 0.8;
-      if (boards) {
+      if (boards && p.atStop) {
         p.activity = 'boarding';
         p.delay = 0.9 + i * 0.16;
         p.currentOpacity = 0.92;
         p.targetOpacity = 0.92;
         p.build.group.position.copy(p.waitPos);
-      } else {
+      } else if (disembarks && !p.atStop) {
         p.activity = 'disembarking';
         p.delay = (i % 2) * 0.22;
         p.currentOpacity = 0;
         p.targetOpacity = 0.92;
         p.build.group.position.copy(p.doorPos);
+      } else {
+        p.activity = 'idle';
+        p.delay = 0;
+        p.targetOpacity = p.atStop ? 0.92 : 0;
       }
     }
+
+    if (purpose === 'final-loop') finalStopsRemaining.delete(crowd.stop.label);
+    if (purpose === 'morning-release') morningStopsRemaining.delete(crowd.stop.label);
   }
 
   function updatePassenger(p: BusPassenger, colliders: readonly CollisionRect[], delta: number): void {
     if (p.activity === 'idle') {
-      p.build.group.position.copy(p.waitPos);
-      p.build.body.position.y = 1.4 + Math.sin(clock * 1.3 + p.phase) * 0.015;
-      p.build.head.rotation.y = Math.sin(clock * 0.4 + p.phase * 2) * 0.4;
-      p.targetOpacity = 0.92;
+      p.build.group.position.copy(p.atStop ? p.waitPos : p.doorPos);
+      if (p.atStop) {
+        p.build.body.position.y = 1.4 + Math.sin(clock * 1.3 + p.phase) * 0.015;
+        p.build.head.rotation.y = Math.sin(clock * 0.4 + p.phase * 2) * 0.4;
+      }
+      p.targetOpacity = p.atStop ? 0.92 : 0;
     } else {
       if (p.delay > 0) {
         p.delay = Math.max(0, p.delay - delta);
@@ -388,9 +509,12 @@ export function createBus(scene: THREE.Scene): BusHandle {
 
       if (p.progress >= 1) {
         if (p.activity === 'boarding') {
+          p.activity = 'idle';
+          p.atStop = false;
           p.targetOpacity = 0;
         } else {
           p.activity = 'idle';
+          p.atStop = true;
           p.progress = 0;
           p.build.group.position.copy(p.waitPos);
           p.build.group.rotation.y = p.facing;
@@ -404,11 +528,21 @@ export function createBus(scene: THREE.Scene): BusHandle {
   }
 
   return {
-    update(delta, nightFactor, crossingBlocked) {
+    update(delta, nightFactor, crossingBlocked, t01) {
       clock += delta;
+      syncServiceSchedule(t01);
+
+      if (serviceMode === 'off') return;
 
       // ── Speed by state ──
-      let targetSpeed = BASE_SPEED;
+      const cruiseSpeed =
+        serviceMode === 'final-loop'
+          ? FINAL_LOOP_SPEED
+          : serviceMode === 'morning-release'
+            ? MORNING_RELEASE_SPEED
+            : BASE_SPEED;
+      const brakingDistance = serviceMode === 'final-loop' ? 7 : BRAKING_DISTANCE;
+      let targetSpeed = cruiseSpeed;
       let distanceToStop = Number.POSITIVE_INFINITY;
 
       // ── Level crossing: yield to the train ──
@@ -422,8 +556,8 @@ export function createBus(scene: THREE.Scene): BusHandle {
       } else if (state.kind === 'braking') {
         const remaining = forwardDelta(leadT, state.stop.atT) * ROUTE_LENGTH;
         distanceToStop = remaining;
-        const fraction = Math.min(1, Math.max(0, remaining / BRAKING_DISTANCE));
-        targetSpeed = BASE_SPEED * fraction * fraction;
+        const fraction = Math.min(1, Math.max(0, remaining / brakingDistance));
+        targetSpeed = cruiseSpeed * fraction * fraction;
       } else if (state.kind === 'dwelling') {
         targetSpeed = 0;
       }
@@ -433,16 +567,27 @@ export function createBus(scene: THREE.Scene): BusHandle {
       currentSpeed += (targetSpeed - currentSpeed) * k;
       if (state.kind === 'dwelling') currentSpeed = 0;
 
+      const previousLeadT = leadT;
       leadT = wrap01(leadT + (currentSpeed * delta) / ROUTE_LENGTH);
 
       // ── Transitions ──
-      if (state.kind === 'cruising' && distanceToStop < BRAKING_DISTANCE) {
+      if (state.kind === 'cruising' && distanceToStop < brakingDistance) {
         state = { kind: 'braking', stop: nextStop(leadT) };
       } else if (
         state.kind === 'braking' &&
-        currentSpeed < STOP_SPEED_THRESHOLD &&
-        forwardDelta(leadT, state.stop.atT) * ROUTE_LENGTH < 2
+        (
+          (
+            forwardDelta(previousLeadT, state.stop.atT) > 0 &&
+            forwardDelta(previousLeadT, state.stop.atT) <= forwardDelta(previousLeadT, leadT) + 1e-6
+          ) ||
+          (
+            currentSpeed < STOP_SPEED_THRESHOLD &&
+            forwardDelta(leadT, state.stop.atT) * ROUTE_LENGTH < 2
+          )
+        )
       ) {
+        leadT = state.stop.atT;
+        currentSpeed = 0;
         state = { kind: 'dwelling', stop: state.stop, timeLeft: state.stop.dwellSeconds };
       } else if (state.kind === 'dwelling') {
         state.timeLeft -= delta;
@@ -451,6 +596,23 @@ export function createBus(scene: THREE.Scene): BusHandle {
         if (forwardDelta(state.entryT, leadT) * ROUTE_LENGTH > REARM_DISTANCE) {
           state = { kind: 'cruising' };
         }
+      }
+
+      if (
+        serviceMode === 'final-loop' &&
+        finalStopsRemaining.size === 0 &&
+        state.kind === 'leaving' &&
+        forwardDelta(state.entryT, leadT) * ROUTE_LENGTH > 3
+      ) {
+        enterOffService();
+        return;
+      }
+      if (
+        serviceMode === 'morning-release' &&
+        morningStopsRemaining.size === 0 &&
+        state.kind === 'leaving'
+      ) {
+        enterNormalService();
       }
 
       // ── Place the body on two virtual axles ──
@@ -489,7 +651,9 @@ export function createBus(scene: THREE.Scene): BusHandle {
       // ── Crowds ──
       for (const crowd of crowds) {
         const dwellHere = state.kind === 'dwelling' && state.stop.label === crowd.stop.label;
-        if (dwellHere && !crowd.wasDwelling) startDwell(crowd);
+        if (dwellHere && !crowd.wasDwelling) {
+          startDwell(crowd, serviceMode === 'normal' ? 'normal' : serviceMode);
+        }
         crowd.wasDwelling = dwellHere;
         for (const p of crowd.passengers) updatePassenger(p, crowd.colliders, delta);
       }
@@ -515,10 +679,27 @@ export function createBus(scene: THREE.Scene): BusHandle {
         crowd.passengers.map((passenger) => ({
           stop: crowd.stop.label,
           activity: passenger.activity,
+          atStop: passenger.atStop,
           colliding: !isPointClear(passenger.build.group.position, crowd.colliders),
           position: passenger.build.group.position.toArray() as [number, number, number],
         }))
       );
+    },
+    getServiceDebugState() {
+      return {
+        mode: serviceMode,
+        visible: group.visible,
+        waitingPassengers: crowds.reduce(
+          (sum, crowd) => sum + crowd.passengers.filter((passenger) => passenger.atStop).length,
+          0
+        ),
+        remainingStops:
+          serviceMode === 'final-loop'
+            ? finalStopsRemaining.size
+            : serviceMode === 'morning-release'
+              ? morningStopsRemaining.size
+              : 0,
+      };
     },
     setCyberLook(factor) {
       bodyMaterial.color.lerpColors(BUS_BODY_NORMAL, BUS_BODY_CYBER, factor);

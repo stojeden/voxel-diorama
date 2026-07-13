@@ -9,6 +9,9 @@ import * as THREE from 'three';
  */
 
 const MAX_SUN_ELEVATION = THREE.MathUtils.degToRad(58);
+const FULL_NIGHT_ELEVATION_DEG = -10;
+const FULL_DAY_ELEVATION_DEG = 18;
+const DIRECT_SUN_FADE_ELEVATION_DEG = 14;
 
 export function clamp01(value: number): number {
   if (value < 0) return 0;
@@ -40,7 +43,22 @@ export function sunDirectionAt(t: number, out: THREE.Vector3 = new THREE.Vector3
 /** 1 deep at night, 0 in full daylight, smooth twilight band in between. */
 export function nightFactorAt(t: number): number {
   const elevationDeg = THREE.MathUtils.radToDeg(sunElevationAt(t));
-  return 1 - smooth((elevationDeg + 9) / 13); // -9° → full night, +4° → full day
+  return 1 - smooth(
+    (elevationDeg - FULL_NIGHT_ELEVATION_DEG) /
+      (FULL_DAY_ELEVATION_DEG - FULL_NIGHT_ELEVATION_DEG)
+  );
+}
+
+/**
+ * Direct sunlight ramps in more slowly than the solar disc crosses the horizon.
+ * This keeps the first shadowed frame from reading as an abrupt light switch.
+ */
+export function directSunFactorAt(t: number): number {
+  const elevation = sunElevationAt(t);
+  const elevationDeg = THREE.MathUtils.radToDeg(elevation);
+  const altitudeStrength = Math.pow(clamp01(Math.sin(elevation) * 1.5), 0.85);
+  const horizonFade = smooth(elevationDeg / DIRECT_SUN_FADE_ELEVATION_DEG);
+  return altitudeStrength * horizonFade;
 }
 
 /**

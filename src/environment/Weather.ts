@@ -278,6 +278,10 @@ export class Weather {
     return this.snowCover;
   }
 
+  debugSetSnowCover(cover: number): void {
+    this.snowCover = THREE.MathUtils.clamp(cover, 0, 1);
+  }
+
   /** 0..1 road wetness — mirror-like asphalt right after rain. */
   getWetness(): number {
     return this.wetness;

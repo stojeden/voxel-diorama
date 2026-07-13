@@ -56,6 +56,10 @@ const dayNight = new DayNightCycle(env.scene, env.renderer, {
   streetGlowMaterial: world.streetGlowMaterial,
   busStopLights: world.busStopLights,
   busStopGlowMaterials: world.busStopGlowMaterials,
+  stationLights: world.stationLights,
+  stationGlowMaterials: world.stationGlowMaterials,
+  stationGlowMesh: world.stationGlowMesh,
+  stationGlowMaterial: world.stationGlowMaterial,
   windowLights: world.windowLights,
   windowGlowMaterials: world.windowGlowMaterials,
 });
@@ -266,6 +270,7 @@ let loadingHidden = false;
 let optionalActorAccumulator = 0;
 let hudAccumulator = 0;
 let shadowFocusAccumulator = 0;
+let rendererWarm = false;
 const trainPosition = new THREE.Vector3();
 const trainDirection = new THREE.Vector3();
 const busPosition = new THREE.Vector3();
@@ -277,6 +282,35 @@ function formatClock(t01: number): string {
   const hours = Math.floor(t01 * 24);
   const minutes = Math.floor((t01 * 24 * 60) % 60);
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+}
+
+async function warmRenderer(): Promise<void> {
+  const visibility = new Map<THREE.Object3D, boolean>();
+  env.scene.traverse((object) => {
+    if (object instanceof THREE.Light) return;
+    visibility.set(object, object.visible);
+    object.visible = true;
+  });
+
+  try {
+    ui.setLoadingProgress(25);
+    dayNight.update(0.5, 1, 0, currentTheme.nightFloor);
+    await env.renderer.compileAsync(env.scene, env.camera);
+    env.composer.render(0);
+    ui.setLoadingProgress(62);
+    dayNight.update(0.86, 1, 0, currentTheme.nightFloor);
+    await env.renderer.compileAsync(env.scene, env.camera);
+    env.composer.render(0);
+    env.renderer.getContext().finish();
+  } catch (error) {
+    // Parallel shader compilation is an optimisation. The first render remains
+    // a valid fallback on browsers without a compatible implementation.
+    console.warn('[Preloader] shader warm-up fell back to first-frame compilation', error);
+  } finally {
+    for (const [object, visible] of visibility) object.visible = visible;
+    dayNight.update(renderTime / DAY_SECONDS, 1, weather.getCloudCover(), currentTheme.nightFloor);
+    rendererWarm = true;
+  }
 }
 
 function animate() {
@@ -374,7 +408,8 @@ function animate() {
   bus.update(
     delta,
     light.night,
-    train.isGroundPointOccupied(LEVEL_CROSSING.x, LEVEL_CROSSING.z, 5)
+    train.isGroundPointOccupied(LEVEL_CROSSING.x, LEVEL_CROSSING.z, 5),
+    t01
   );
   world.setSnowCover(weather.getSnowCover());
   world.setWetness(weather.getWetness());
@@ -507,7 +542,7 @@ function animate() {
   if (quality.getProfile().labels) env.labelRenderer.render(env.scene, env.camera);
   devStats?.update();
 
-  if (!loadingHidden) {
+  if (!loadingHidden && rendererWarm) {
     ui.setLoadingProgress(100);
     ui.hideLoadingScreen();
     loadingHidden = true;
@@ -607,8 +642,25 @@ const debugHandle: DioramaDebugHandle = {
   placeCowAtMeadow: () => lakesideCow.debugPlaceCowAtMeadow(),
   farmerPhase: () => lakesideCow.getFarmerPhase(),
   cowController: lakesideCow as unknown,
+  debugWinterFisherman: () => {
+    weather.setExternal('snow');
+    weather.debugSetSnowCover(1);
+    fisherman.debugSetWinterFishing();
+  },
+  debugShoreFisherman: () => fisherman.debugSetShoreFishing(),
+  debugSetSnowCover: (cover: number) => weather.debugSetSnowCover(cover),
+  fishermanState: () => fisherman.getDebugState(),
   debugBusStop: (label: string) => bus.debugStartDwell(label),
   busPassengers: () => bus.getPassengerDebugState(),
+  busService: () => bus.getServiceDebugState(),
+  windowRhythm: () =>
+    world.windowGlowMaterials.map((entry) => ({
+      cohort: entry.cohort,
+      activity: entry.activity,
+      emissiveIntensity: entry.material.emissiveIntensity,
+    })),
+  debugTrainStation: (label: string) => passengerCrowd.debugStartDwell(label),
+  stationPassengers: () => passengerCrowd.getPassengerDebugState(),
   applyTheme,
   startEclipse: () => {
     eclipseProgress = 0;
@@ -630,7 +682,7 @@ const debugHandle: DioramaDebugHandle = {
 };
 
 window.__diorama = debugHandle;
-animate();
+void warmRenderer().finally(animate);
 
 // HMR cleanup
 if (import.meta.hot) {

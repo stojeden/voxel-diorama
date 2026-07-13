@@ -20,6 +20,7 @@ export interface QualityProfile {
   optionalActorHz: number;
   streetLightBudget: number;
   busStopLightBudget: number;
+  stationLightBudget: number;
   windowLightBudget: number;
 }
 
@@ -56,6 +57,7 @@ export const QUALITY_PROFILES: Record<QualityLevel, QualityProfile> = {
     optionalActorHz: 20,
     streetLightBudget: 4,
     busStopLightBudget: 1,
+    stationLightBudget: 2,
     windowLightBudget: 1,
   },
   medium: {
@@ -77,6 +79,7 @@ export const QUALITY_PROFILES: Record<QualityLevel, QualityProfile> = {
     optionalActorHz: 20,
     streetLightBudget: 8,
     busStopLightBudget: 2,
+    stationLightBudget: 2,
     windowLightBudget: 2,
   },
   high: {
@@ -98,6 +101,7 @@ export const QUALITY_PROFILES: Record<QualityLevel, QualityProfile> = {
     optionalActorHz: 24,
     streetLightBudget: 6,
     busStopLightBudget: 2,
+    stationLightBudget: 2,
     windowLightBudget: 2,
   },
 };

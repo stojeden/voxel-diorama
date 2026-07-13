@@ -1,5 +1,12 @@
 import * as THREE from 'three';
 import { STATION_STOPS, TRAIN_ROUTE_CURVE, type StationStop } from './WorldLayout';
+import {
+  isPointClear,
+  polylineLengths,
+  samplePolyline,
+  type CollisionRect,
+} from './BusStopNavigation';
+import { stationColliders, stationPassengerRoutes } from './StationNavigation';
 
 const JACKET_COLORS = [0x9c3838, 0x2b5f9a, 0x355d2a, 0xc4a35a, 0x6c4a8a, 0x444444, 0xb87333];
 const SKIN_COLORS = [0xe8c39a, 0xd4a173, 0xa57448, 0xfcd7b6];
@@ -20,6 +27,9 @@ interface Passenger {
   platformPos: THREE.Vector3;
   /** Door-side spot (next to the train) — where boarding ends / disembarking begins. */
   boardingPos: THREE.Vector3;
+  path: THREE.Vector3[];
+  pathLengths: number[];
+  pathLength: number;
   /** Walking-surface height for this passenger. */
   baseY: number;
   facingTrack: number;
@@ -37,6 +47,7 @@ interface StationCrowd {
   passengers: Passenger[];
   lastDwellSignal: boolean;
   visitCount: number;
+  colliders: CollisionRect[];
 }
 
 function makeMat(color: number, opts: Partial<THREE.MeshStandardMaterialParameters> = {}) {
@@ -119,27 +130,18 @@ export class PassengerCrowd {
 
       const count = 6;
       const passengers: Passenger[] = [];
-      const halfLen = station.platformLength / 2 - 3;
-      const spacing = (2 * halfLen) / (count + 1);
+      const routes = stationPassengerRoutes(station, count);
+      const colliders = stationColliders(station);
       const facingTrack = Math.atan2(-normal.x, -normal.z);
 
       for (let i = 0; i < count; i++) {
-        const along = -halfLen + spacing * (i + 1) + (Math.random() - 0.5) * 0.5;
-        const platformLateral = 4 + Math.random() * 1.2;
-        const boardingLateral = 1.5;
-
-        const platformPos = platformCenter
-          .clone()
-          .addScaledVector(tangent, along)
-          .addScaledVector(normal, platformLateral);
-        platformPos.y = baseY;
-        const boardingPos = platformCenter
-          .clone()
-          .addScaledVector(tangent, along)
-          .addScaledVector(normal, boardingLateral);
-        boardingPos.y = baseY;
+        const route = routes[i];
+        const platformPos = route.waitPosition;
+        const boardingPos = route.boardingPosition;
+        const pathMetrics = polylineLengths(route.path);
 
         const built = buildPassenger();
+        built.group.name = `station-passenger-${station.label}-${i}`;
         built.group.position.copy(platformPos);
         built.group.rotation.y = facingTrack;
         scene.add(built.group);
@@ -154,6 +156,9 @@ export class PassengerCrowd {
           materials: built.materials,
           platformPos,
           boardingPos,
+          path: route.path,
+          pathLengths: pathMetrics.segments,
+          pathLength: pathMetrics.total,
           baseY,
           facingTrack,
           activity: 'idle',
@@ -165,7 +170,7 @@ export class PassengerCrowd {
         });
       }
 
-      this.crowds.push({ station, passengers, lastDwellSignal: false, visitCount: 0 });
+      this.crowds.push({ station, passengers, lastDwellSignal: false, visitCount: 0, colliders });
     }
   }
 
@@ -201,7 +206,7 @@ export class PassengerCrowd {
       crowd.lastDwellSignal = isDwelling;
 
       for (const p of crowd.passengers) {
-        if (p.group.visible) this.updatePassenger(p, delta);
+        if (p.group.visible) this.updatePassenger(p, crowd.colliders, delta);
       }
     }
   }
@@ -229,12 +234,13 @@ export class PassengerCrowd {
     }
   }
 
-  private updatePassenger(p: Passenger, delta: number): void {
+  private updatePassenger(p: Passenger, colliders: readonly CollisionRect[], delta: number): void {
     if (p.activity === 'idle') {
       p.group.position.copy(p.platformPos);
       const sway = Math.sin(this.clock * 1.6 + p.phase) * 0.04;
       p.group.position.x += Math.cos(p.facingTrack) * sway * 0.4;
       p.group.position.z += Math.sin(p.facingTrack) * sway * 0.4;
+      if (!isPointClear(p.group.position, colliders)) p.group.position.copy(p.platformPos);
       p.body.position.y = 1.4 + Math.sin(this.clock * 1.3 + p.phase) * 0.015;
       p.head.position.y = 2.18 + Math.sin(this.clock * 1.3 + p.phase) * 0.015;
       p.head.rotation.y = Math.sin(this.clock * 0.4 + p.phase * 2) * 0.4;
@@ -246,9 +252,14 @@ export class PassengerCrowd {
     } else {
       p.progress = Math.min(1, p.progress + delta / p.activityDuration);
       const eased = easeInOut(p.progress);
-      const from = p.activity === 'boarding' ? p.platformPos : p.boardingPos;
-      const to = p.activity === 'boarding' ? p.boardingPos : p.platformPos;
-      p.group.position.lerpVectors(from, to, eased);
+      const pathProgress = p.activity === 'boarding' ? eased : 1 - eased;
+      const previousX = p.group.position.x;
+      const previousZ = p.group.position.z;
+      samplePolyline(p.path, p.pathLengths, p.pathLength, pathProgress, p.group.position);
+      if (!isPointClear(p.group.position, colliders)) {
+        p.group.position.x = previousX;
+        p.group.position.z = previousZ;
+      }
 
       const stepBob = Math.abs(Math.sin(p.progress * Math.PI * 4)) * 0.06;
       p.group.position.y = p.baseY + stepBob;
@@ -259,8 +270,8 @@ export class PassengerCrowd {
       p.head.position.y = 2.18;
       p.head.rotation.y = 0;
 
-      const dirX = to.x - from.x;
-      const dirZ = to.z - from.z;
+      const dirX = p.group.position.x - previousX;
+      const dirZ = p.group.position.z - previousZ;
       if (dirX !== 0 || dirZ !== 0) {
         p.group.rotation.y = Math.atan2(dirX, dirZ);
       }
@@ -285,6 +296,31 @@ export class PassengerCrowd {
     const lerp = 1 - Math.exp(-6 * Math.max(delta, 0.0001));
     p.currentOpacity += (p.targetOpacity - p.currentOpacity) * lerp;
     for (const mat of p.materials) mat.opacity = p.currentOpacity;
+  }
+
+  debugStartDwell(stationLabel: string): boolean {
+    const crowd = this.crowds.find((candidate) => candidate.station.label === stationLabel);
+    if (!crowd) return false;
+    crowd.visitCount += 1;
+    crowd.lastDwellSignal = false;
+    this.startDwellActivity(crowd);
+    return true;
+  }
+
+  getPassengerDebugState(): Array<{
+    station: string;
+    activity: Activity;
+    colliding: boolean;
+    position: [number, number, number];
+  }> {
+    return this.crowds.flatMap((crowd) =>
+      crowd.passengers.map((passenger) => ({
+        station: crowd.station.label,
+        activity: passenger.activity,
+        colliding: !isPointClear(passenger.group.position, crowd.colliders),
+        position: passenger.group.position.toArray() as [number, number, number],
+      }))
+    );
   }
 
   dispose(): void {

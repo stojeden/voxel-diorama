@@ -2,7 +2,13 @@ import * as THREE from 'three';
 import type { QualityProfile } from '../performance/QualityManager';
 import { Sky } from 'three/addons/objects/Sky.js';
 import {
+  residentialWindowActivityAt,
+  residentialWindowAverageAt,
+  type ScheduledWindowMaterial,
+} from './CityRhythm';
+import {
   clamp01,
+  directSunFactorAt,
   goldenFactorAt,
   nightFactorAt,
   skyColorAt,
@@ -36,13 +42,81 @@ export interface DayNightHooks {
   streetGlowMaterial: THREE.ShaderMaterial;
   busStopLights: THREE.PointLight[];
   busStopGlowMaterials: THREE.MeshStandardMaterial[];
+  stationLights: THREE.PointLight[];
+  stationGlowMaterials: THREE.MeshStandardMaterial[];
+  stationGlowMesh: THREE.InstancedMesh;
+  stationGlowMaterial: THREE.ShaderMaterial;
   windowLights: THREE.PointLight[];
-  /** Materials whose emissive should glow at night (lit building windows). */
-  windowGlowMaterials: THREE.MeshStandardMaterial[];
+  /** Residential window groups controlled by the simulated city clock. */
+  windowGlowMaterials: ScheduledWindowMaterial[];
 }
 
 const STAR_COUNT = 700;
 const SHOOTING_STAR_POOL = 3;
+const ENVIRONMENT_INTENSITY = 0.42;
+const ENVIRONMENT_TRANSITION_SECONDS = 1.8;
+const ENVIRONMENT_BLEND_CACHE_KEY = 'pmrem-crossfade-v1';
+
+const ENVIRONMENT_BLEND_UNIFORMS = /* glsl */ `
+  #if defined( USE_ENVMAP ) && defined( ENVMAP_TYPE_CUBE_UV )
+    uniform sampler2D environmentMapNext;
+    uniform float environmentMapBlend;
+  #endif
+`;
+
+function blendedEnvironmentShaderChunk(): string {
+  const irradianceSample =
+    'vec4 envMapColor = textureCubeUV( envMap, envMapRotation * worldNormal, 1.0 );';
+  const radianceSample =
+    'vec4 envMapColor = textureCubeUV( envMap, envMapRotation * reflectVec, roughness );';
+  let chunk = THREE.ShaderChunk.envmap_physical_pars_fragment;
+
+  if (!chunk.includes(irradianceSample) || !chunk.includes(radianceSample)) {
+    throw new Error('Three.js environment shader changed; PMREM crossfade needs updating');
+  }
+
+  chunk = chunk.replace(
+    irradianceSample,
+    /* glsl */ `
+      vec4 envMapColor = textureCubeUV( envMap, envMapRotation * worldNormal, 1.0 );
+      if ( environmentMapBlend > 0.0001 ) {
+        vec4 nextEnvironmentColor = textureCubeUV(
+          environmentMapNext,
+          envMapRotation * worldNormal,
+          1.0
+        );
+        envMapColor = mix( envMapColor, nextEnvironmentColor, environmentMapBlend );
+      }
+    `
+  );
+  return chunk.replace(
+    radianceSample,
+    /* glsl */ `
+      vec4 envMapColor = textureCubeUV( envMap, envMapRotation * reflectVec, roughness );
+      if ( environmentMapBlend > 0.0001 ) {
+        vec4 nextEnvironmentColor = textureCubeUV(
+          environmentMapNext,
+          envMapRotation * reflectVec,
+          roughness
+        );
+        envMapColor = mix( envMapColor, nextEnvironmentColor, environmentMapBlend );
+      }
+    `
+  );
+}
+
+const BLENDED_ENVIRONMENT_SHADER_CHUNK = blendedEnvironmentShaderChunk();
+
+export function environmentTransitionAt(progress: number): {
+  blend: number;
+  intensity: number;
+} {
+  const clamped = clamp01(progress);
+  return {
+    blend: clamped * clamped * (3 - 2 * clamped),
+    intensity: ENVIRONMENT_INTENSITY,
+  };
+}
 
 interface ShootingStar {
   line: THREE.Line;
@@ -56,6 +130,7 @@ function buildMoonMaterial(): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
     uniforms: {
       uPhaseAngle: { value: Math.PI }, // π = full moon
+      uOpacity: { value: 0 },
     },
     vertexShader: /* glsl */ `
       varying vec3 vNormal;
@@ -67,6 +142,7 @@ function buildMoonMaterial(): THREE.ShaderMaterial {
     fragmentShader: /* glsl */ `
       varying vec3 vNormal;
       uniform float uPhaseAngle;
+      uniform float uOpacity;
       void main() {
         // Phase light direction in VIEW space, so the crescent always faces
         // the camera the right way round.
@@ -74,9 +150,11 @@ function buildMoonMaterial(): THREE.ShaderMaterial {
         float lit = smoothstep(-0.08, 0.18, dot(vNormal, lightDir));
         vec3 bright = vec3(0.92, 0.93, 0.88);
         vec3 dark = vec3(0.055, 0.06, 0.085);
-        gl_FragColor = vec4(mix(dark, bright, lit), 1.0);
+        gl_FragColor = vec4(mix(dark, bright, lit), uOpacity);
       }
     `,
+    transparent: true,
+    depthWrite: false,
     fog: false,
   });
 }
@@ -165,6 +243,11 @@ export class DayNightCycle {
   private readonly envScene: THREE.Scene;
   private readonly pmrem: THREE.PMREMGenerator;
   private envTarget: THREE.WebGLRenderTarget | null = null;
+  private envPendingTarget: THREE.WebGLRenderTarget | null = null;
+  private envTransitionProgress = 1;
+  private envTransitionActive = false;
+  private readonly envNextMapUniform: THREE.IUniform<THREE.Texture | null> = { value: null };
+  private readonly envBlendUniform: THREE.IUniform<number> = { value: 0 };
   private envLastElevation = Number.POSITIVE_INFINITY;
   private envLastCloud = -1;
   private envCooldown = 0;
@@ -172,6 +255,7 @@ export class DayNightCycle {
   private shadowsEnabled = true;
   private streetLightBudget = Number.POSITIVE_INFINITY;
   private busStopLightBudget = Number.POSITIVE_INFINITY;
+  private stationLightBudget = Number.POSITIVE_INFINITY;
   private windowLightBudget = Number.POSITIVE_INFINITY;
 
   private readonly sunLight: THREE.DirectionalLight;
@@ -193,6 +277,10 @@ export class DayNightCycle {
 
   // ── Solar eclipse ──
   private eclipseStrength = 0;
+  private lightingInitialized = false;
+  private smoothedNight = 1;
+  private smoothedGolden = 0;
+  private smoothedSunStrength = 0;
   private readonly eclipseDisc: THREE.Mesh;
   private readonly eclipseDiscMaterial: THREE.MeshBasicMaterial;
   private readonly eclipseCorona: THREE.Mesh;
@@ -349,6 +437,42 @@ export class DayNightCycle {
       this.auroraMeshes.push(mesh);
       this.disposables.push(geo);
     }
+
+    this.installEnvironmentBlending();
+  }
+
+  private installEnvironmentBlending(): void {
+    const patched = new Set<THREE.MeshStandardMaterial>();
+    this.scene.traverse((object) => {
+      if (!(object instanceof THREE.Mesh || object instanceof THREE.InstancedMesh)) return;
+      const materials = Array.isArray(object.material) ? object.material : [object.material];
+      for (const candidate of materials) {
+        if (!(candidate instanceof THREE.MeshStandardMaterial) || patched.has(candidate)) continue;
+        patched.add(candidate);
+
+        const previousCompile = candidate.onBeforeCompile.bind(candidate);
+        const previousCacheKey = candidate.customProgramCacheKey.bind(candidate);
+        candidate.onBeforeCompile = (shader, renderer) => {
+          previousCompile(shader, renderer);
+          if (!shader.fragmentShader.includes('#include <envmap_physical_pars_fragment>')) return;
+
+          shader.uniforms.environmentMapNext = this.envNextMapUniform;
+          shader.uniforms.environmentMapBlend = this.envBlendUniform;
+          shader.fragmentShader = shader.fragmentShader
+            .replace(
+              '#include <envmap_common_pars_fragment>',
+              `#include <envmap_common_pars_fragment>\n${ENVIRONMENT_BLEND_UNIFORMS}`
+            )
+            .replace(
+              '#include <envmap_physical_pars_fragment>',
+              BLENDED_ENVIRONMENT_SHADER_CHUNK
+            );
+        };
+        candidate.customProgramCacheKey = () =>
+          `${previousCacheKey()}|${ENVIRONMENT_BLEND_CACHE_KEY}`;
+        candidate.needsUpdate = true;
+      }
+    });
   }
 
   setMoonPhase(phase01: number, illuminationFraction: number): void {
@@ -386,11 +510,12 @@ export class DayNightCycle {
     this.shadowsEnabled = profile.shadows;
     this.streetLightBudget = profile.streetLightBudget;
     this.busStopLightBudget = profile.busStopLightBudget;
+    this.stationLightBudget = profile.stationLightBudget;
     this.windowLightBudget = profile.windowLightBudget;
     this.sunLight.shadow.mapSize.set(profile.shadowMapSize, profile.shadowMapSize);
     this.sunLight.shadow.map?.dispose();
     this.sunLight.shadow.map = null;
-    this.sunLight.castShadow = profile.shadows && this.sunLight.intensity > 0.04;
+    this.sunLight.castShadow = profile.shadows && this.smoothedSunStrength > 0.002;
   }
 
   update(t: number, dtReal: number, cloudCover: number, nightFloor = 0): DayLightState {
@@ -399,8 +524,16 @@ export class DayNightCycle {
     const elevation = sunElevationAt(t);
     // Themes like Neon Noir keep the city in eternal dusk via nightFloor;
     // a solar eclipse pushes the world toward night for half a minute.
-    const night = Math.max(nightFactorAt(t), nightFloor, eclipse * 0.72);
-    const golden = goldenFactorAt(t);
+    const targetNight = Math.max(nightFactorAt(t), nightFloor, eclipse * 0.72);
+    const targetGolden = goldenFactorAt(t);
+    const targetSunStrength = directSunFactorAt(t);
+    const lightingBlend = this.lightingInitialized ? 1 - Math.exp(-Math.max(0, dtReal) * 3.2) : 1;
+    this.smoothedNight += (targetNight - this.smoothedNight) * lightingBlend;
+    this.smoothedGolden += (targetGolden - this.smoothedGolden) * lightingBlend;
+    this.smoothedSunStrength += (targetSunStrength - this.smoothedSunStrength) * lightingBlend;
+    this.lightingInitialized = true;
+    const night = this.smoothedNight;
+    const golden = this.smoothedGolden;
     const day = 1 - night;
     const sunDir = sunDirectionAt(t, this.tmpSunDir);
 
@@ -417,7 +550,7 @@ export class DayNightCycle {
     uniforms.sunPosition.value.copy(sunDir);
 
     // ── Sun light ──
-    const sunStrength = Math.pow(clamp01(Math.sin(elevation) * 1.5), 0.85);
+    const sunStrength = this.smoothedSunStrength;
     this.sunLight.position.copy(sunDir).multiplyScalar(140).add(this.shadowFocus);
     this.sunLight.target.position.copy(this.shadowFocus);
     // nightFloor (eternal-dusk themes) and an eclipse both mute the sun.
@@ -425,12 +558,14 @@ export class DayNightCycle {
       sunStrength * 2.2 * (1 - cloudCover * 0.62) * (1 - nightFloor * 0.8) * (1 - eclipse * 0.96);
     sunColorAt(t, this.tmpSunColor);
     this.sunLight.color.copy(this.tmpSunColor);
-    this.sunLight.castShadow = this.shadowsEnabled && this.sunLight.intensity > 0.04;
+    this.sunLight.castShadow = this.shadowsEnabled && sunStrength > 0.002;
 
     // ── Moon (opposite side of the sky) ──
     const moonDir = sunDirectionAt((t + 0.5) % 1, this.tmpMoonDir);
     this.moonMesh.position.copy(moonDir).multiplyScalar(540);
-    this.moonMesh.visible = moonDir.y > -0.08;
+    const moonOpacity = THREE.MathUtils.smoothstep(moonDir.y, -0.08, 0.08);
+    this.moonMaterial.uniforms.uOpacity.value = moonOpacity;
+    this.moonMesh.visible = moonOpacity > 0.001;
     this.moonLight.position.copy(moonDir).multiplyScalar(120);
     this.moonLight.intensity =
       night * (0.06 + this.moonIllumination * 0.5) * (1 - cloudCover * 0.8) * clamp01(moonDir.y * 4);
@@ -497,6 +632,9 @@ export class DayNightCycle {
       this.hooks.busStopLights.sort(
         (a, b) => a.position.distanceToSquared(eye) - b.position.distanceToSquared(eye)
       );
+      this.hooks.stationLights.sort(
+        (a, b) => a.position.distanceToSquared(eye) - b.position.distanceToSquared(eye)
+      );
       this.hooks.windowLights.sort(
         (a, b) => a.position.distanceToSquared(eye) - b.position.distanceToSquared(eye)
       );
@@ -504,7 +642,7 @@ export class DayNightCycle {
     }
     for (let i = 0; i < this.hooks.streetLights.length; i++) {
       const light = this.hooks.streetLights[i];
-      light.visible = night > 0.04 && i < this.streetLightBudget;
+      light.visible = night > 0.001 && i < this.streetLightBudget;
       // A small urban LED luminaire is several thousand lumens. The point-light
       // approximation needs enough candela to reach pavement and nearby walls.
       light.intensity = light.visible ? night * 135 : 0;
@@ -515,29 +653,51 @@ export class DayNightCycle {
     this.hooks.streetGlowMaterial.uniforms.uNight.value = streetGlow;
     for (let i = 0; i < this.hooks.busStopLights.length; i++) {
       const light = this.hooks.busStopLights[i];
-      light.visible = night > 0.04 && i < this.busStopLightBudget;
+      light.visible = night > 0.001 && i < this.busStopLightBudget;
       light.intensity = light.visible ? night * 48 : 0;
     }
     for (const material of this.hooks.busStopGlowMaterials) {
       material.emissiveIntensity = 0.08 + night * 1.05;
     }
+    for (let i = 0; i < this.hooks.stationLights.length; i++) {
+      const light = this.hooks.stationLights[i];
+      light.visible = night > 0.001 && i < this.stationLightBudget;
+      // Railway platforms stay brighter than bus shelters for visibility and safety.
+      light.intensity = light.visible ? night * 145 : 0;
+      light.distance = 28;
+    }
+    for (const material of this.hooks.stationGlowMaterials) {
+      material.emissiveIntensity = 0.1 + night * 1.8;
+    }
+    const stationGlow = clamp01((night - 0.015) / 0.72);
+    this.hooks.stationGlowMesh.visible = stationGlow > 0.01;
+    this.hooks.stationGlowMaterial.uniforms.uNight.value = stationGlow;
+    const residentialActivity = residentialWindowAverageAt(t);
     for (let i = 0; i < this.hooks.windowLights.length; i++) {
-      const h = Math.sin(i * 127.1 + 311.7) * 43758.5453;
-      const isOn = h - Math.floor(h) > 0.3;
       const light = this.hooks.windowLights[i];
-      light.visible = night > 0.04 && i < this.windowLightBudget;
-      light.intensity = light.visible && isOn ? night * 32 : 0;
+      light.visible =
+        night > 0.001 && residentialActivity > 0.001 && i < this.windowLightBudget;
+      light.intensity = light.visible ? night * residentialActivity * 32 : 0;
       light.distance = 20;
     }
-    for (const mat of this.hooks.windowGlowMaterials) {
-      mat.emissiveIntensity = 0.1 + night * 1.15;
+    for (const schedule of this.hooks.windowGlowMaterials) {
+      const activity = residentialWindowActivityAt(t, schedule.cohort);
+      schedule.activity = activity;
+      schedule.material.color.copy(schedule.darkColor).lerp(schedule.litColor, activity);
+      schedule.material.emissive.copy(schedule.litColor);
+      schedule.material.emissiveIntensity = activity * (0.02 + night * 1.23);
     }
 
     // ── Environment map (reflections in glass) — throttled regeneration ──
+    this.updateEnvironmentTransition(dtReal);
     this.envCooldown -= dtReal;
     const elevationDelta = Math.abs(elevation - this.envLastElevation);
     const cloudDelta = Math.abs(cloudCover - this.envLastCloud);
-    if (this.envCooldown <= 0 && (elevationDelta > 0.012 || cloudDelta > 0.08)) {
+    if (
+      !this.envTransitionActive &&
+      this.envCooldown <= 0 &&
+      (elevationDelta > 0.012 || cloudDelta > 0.08)
+    ) {
       this.regenerateEnvironment(uniforms);
       this.envLastElevation = elevation;
       this.envLastCloud = cloudCover;
@@ -555,10 +715,45 @@ export class DayNightCycle {
     envUniforms.mieDirectionalG.value = skyUniforms.mieDirectionalG.value;
     envUniforms.sunPosition.value.copy(skyUniforms.sunPosition.value);
 
-    const old = this.envTarget;
-    this.envTarget = this.pmrem.fromScene(this.envScene, 0.03);
-    this.scene.environment = this.envTarget.texture;
-    old?.dispose();
+    const next = this.pmrem.fromScene(this.envScene, 0.03);
+    if (!this.envTarget) {
+      this.envTarget = next;
+      this.scene.environment = next.texture;
+      this.scene.environmentIntensity = ENVIRONMENT_INTENSITY;
+      this.envNextMapUniform.value = next.texture;
+      this.envBlendUniform.value = 0;
+      return;
+    }
+
+    this.envPendingTarget?.dispose();
+    this.envPendingTarget = next;
+    this.envNextMapUniform.value = next.texture;
+    this.envTransitionProgress = 0;
+    this.envTransitionActive = true;
+  }
+
+  private updateEnvironmentTransition(dtReal: number): void {
+    if (!this.envTransitionActive) return;
+
+    this.envTransitionProgress = clamp01(
+      this.envTransitionProgress + Math.max(0, dtReal) / ENVIRONMENT_TRANSITION_SECONDS
+    );
+    const transition = environmentTransitionAt(this.envTransitionProgress);
+    this.scene.environmentIntensity = transition.intensity;
+    this.envBlendUniform.value = transition.blend;
+    if (this.envTransitionProgress >= 1) {
+      const old = this.envTarget;
+      this.envTarget = this.envPendingTarget;
+      this.envPendingTarget = null;
+      if (this.envTarget) {
+        this.scene.environment = this.envTarget.texture;
+        this.envNextMapUniform.value = this.envTarget.texture;
+      }
+      this.envBlendUniform.value = 0;
+      this.scene.environmentIntensity = ENVIRONMENT_INTENSITY;
+      this.envTransitionActive = false;
+      old?.dispose();
+    }
   }
 
   private updateShootingStars(dt: number, starAlpha: number): void {
@@ -586,6 +781,7 @@ export class DayNightCycle {
   dispose(): void {
     for (const item of this.disposables) item.dispose();
     this.envTarget?.dispose();
+    this.envPendingTarget?.dispose();
     this.pmrem.dispose();
     this.scene.environment = null;
     this.scene.remove(this.sky, this.starField, this.moonMesh, this.sunLight, this.moonLight);

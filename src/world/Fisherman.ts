@@ -1,13 +1,13 @@
 import * as THREE from 'three';
-import { FISHERMAN_HOME, FISHERMAN_SPOT, LAKE } from './WorldLayout';
-import { buildPassenger, type PassengerBuild } from './PassengerCrowd';
+import { FISHERMAN_HOME, FISHERMAN_SPOT, GROUND_SURFACE_Y, LAKE } from './WorldLayout';
+import { buildPassenger, PASSENGER_SCALE, type PassengerBuild } from './PassengerCrowd';
 
 /**
  * The fisherman. Lives in the block just west of the lake: he walks out of
  * his door early in the morning, sits down on his stool right at the water
  * line (cap on, tackle box beside him) and casts. Every few bites he hooks
  * THE fish — as big as himself — which thrashes over his head and escapes.
- * In the evening he walks back home. In winter he stays in.
+ * In the evening he walks back home. In winter he moves onto the frozen lake.
  */
 
 type LifeMode = 'home' | 'walkOut' | 'fishing' | 'walkHome';
@@ -16,12 +16,31 @@ type SeatKind = 'shore' | 'ice';
 
 const WATER_Y = -0.45;
 const ICE_Y = -0.28;
+export const ICE_SURFACE_Y = -0.39;
+const SHORE_STOOL_SEAT_CENTER_Y = 0.62;
+const SHORE_STOOL_SEAT_HEIGHT = 0.12;
+const ICE_STOOL_SEAT_CENTER_Y = 0.68;
+const ICE_STOOL_SEAT_HEIGHT = 0.12;
+const SHORE_STOOL_TOP_Y =
+  GROUND_SURFACE_Y + SHORE_STOOL_SEAT_CENTER_Y + SHORE_STOOL_SEAT_HEIGHT / 2;
+const ICE_STOOL_TOP_Y =
+  ICE_SURFACE_Y + ICE_STOOL_SEAT_CENTER_Y + ICE_STOOL_SEAT_HEIGHT / 2;
+const SEATED_BODY_CLEARANCE = 0.035;
+export const FISHERMAN_SEATED_BODY_BOTTOM_OFFSET = (1.4 - 0.95 / 2) * PASSENGER_SCALE;
+const SHORE_SEATED_Y =
+  SHORE_STOOL_TOP_Y + SEATED_BODY_CLEARANCE - FISHERMAN_SEATED_BODY_BOTTOM_OFFSET;
+export const ICE_SEATED_Y =
+  ICE_STOOL_TOP_Y + SEATED_BODY_CLEARANCE - FISHERMAN_SEATED_BODY_BOTTOM_OFFSET;
 const WALK_SPEED = 1.7;
 
 export class Fisherman {
   private readonly scene: THREE.Scene;
   private readonly figure: PassengerBuild;
-  private readonly spotGroup = new THREE.Group(); // stool + tackle box (always there)
+  private readonly seatedLegGroup = new THREE.Group();
+  private readonly seatedShins: THREE.Mesh[] = [];
+  private readonly seatedShoes: THREE.Mesh[] = [];
+  private readonly spotGroup = new THREE.Group(); // shore stool + tackle box
+  private readonly iceGearGroup = new THREE.Group();
   private readonly rod: THREE.Mesh;
   private readonly line: THREE.Line;
   private readonly linePositions: Float32Array;
@@ -57,16 +76,31 @@ export class Fisherman {
 
     // ── Permanent props at the spot: stool + tackle box ──
     this.spotGroup.position.copy(this.seatPos);
+    this.spotGroup.position.y = GROUND_SURFACE_Y;
     this.spotGroup.rotation.y = this.heading;
+    this.spotGroup.name = 'fisherman-shore-gear';
     scene.add(this.spotGroup);
 
     const stoolMat = new THREE.MeshStandardMaterial({ color: 0x5a3a1a, roughness: 0.9 });
-    const stoolGeo = new THREE.BoxGeometry(0.8, 0.55, 0.8);
-    this.disposables.push(stoolMat, stoolGeo);
-    const stool = new THREE.Mesh(stoolGeo, stoolMat);
-    stool.position.y = 0.3;
-    stool.castShadow = false;
-    this.spotGroup.add(stool);
+    const stoolLegMat = new THREE.MeshStandardMaterial({ color: 0x3e2a18, roughness: 0.82 });
+    const stoolSeatGeo = new THREE.BoxGeometry(0.84, SHORE_STOOL_SEAT_HEIGHT, 0.72);
+    const stoolLegGeo = new THREE.BoxGeometry(0.1, 0.58, 0.1);
+    this.disposables.push(stoolMat, stoolLegMat, stoolSeatGeo, stoolLegGeo);
+    const stoolSeat = new THREE.Mesh(stoolSeatGeo, stoolMat);
+    stoolSeat.name = 'fisherman-shore-stool-seat';
+    stoolSeat.position.y = SHORE_STOOL_SEAT_CENTER_Y;
+    stoolSeat.castShadow = false;
+    this.spotGroup.add(stoolSeat);
+    for (const x of [-0.3, 0.3]) {
+      for (const z of [-0.23, 0.23]) {
+        const leg = new THREE.Mesh(stoolLegGeo, stoolLegMat);
+        leg.position.set(x, 0.29, z);
+        leg.rotation.z = Math.sign(x) * 0.12;
+        leg.rotation.x = -Math.sign(z) * 0.08;
+        leg.castShadow = false;
+        this.spotGroup.add(leg);
+      }
+    }
 
     const boxMat = new THREE.MeshStandardMaterial({ color: 0x2e6b3a, roughness: 0.7 });
     const boxLidMat = new THREE.MeshStandardMaterial({ color: 0x9ecf6a, roughness: 0.6 });
@@ -85,8 +119,98 @@ export class Fisherman {
     handle.position.set(1.1, 0.62, 0.2);
     this.spotGroup.add(handle);
 
+    // ── Winter gear: a folding stool and insulated tackle box on the ice ──
+    this.iceGearGroup.name = 'fisherman-ice-gear';
+    this.iceGearGroup.position.set(this.iceSeat.x, ICE_SURFACE_Y, this.iceSeat.z);
+    this.iceGearGroup.rotation.y = this.heading;
+    this.iceGearGroup.visible = false;
+    scene.add(this.iceGearGroup);
+
+    const iceSeatMat = new THREE.MeshStandardMaterial({ color: 0x315979, roughness: 0.72 });
+    const iceLegMat = new THREE.MeshStandardMaterial({ color: 0x5d6872, metalness: 0.55, roughness: 0.42 });
+    const iceBoxMat = new THREE.MeshStandardMaterial({ color: 0xd5d9d6, roughness: 0.62 });
+    const iceBoxLidMat = new THREE.MeshStandardMaterial({ color: 0x315979, roughness: 0.55 });
+    const iceSeatGeo = new THREE.BoxGeometry(0.9, ICE_STOOL_SEAT_HEIGHT, 0.76);
+    const iceLegGeo = new THREE.BoxGeometry(0.09, 0.72, 0.09);
+    const iceBoxGeo = new THREE.BoxGeometry(0.62, 0.52, 0.62);
+    const iceBoxLidGeo = new THREE.BoxGeometry(0.66, 0.1, 0.66);
+    this.disposables.push(
+      iceSeatMat,
+      iceLegMat,
+      iceBoxMat,
+      iceBoxLidMat,
+      iceSeatGeo,
+      iceLegGeo,
+      iceBoxGeo,
+      iceBoxLidGeo
+    );
+
+    const iceStoolSeat = new THREE.Mesh(iceSeatGeo, iceSeatMat);
+    iceStoolSeat.name = 'fisherman-ice-stool-seat';
+    iceStoolSeat.position.y = ICE_STOOL_SEAT_CENTER_Y;
+    iceStoolSeat.castShadow = false;
+    this.iceGearGroup.add(iceStoolSeat);
+
+    for (const x of [-0.31, 0.31]) {
+      for (const z of [-0.24, 0.24]) {
+        const leg = new THREE.Mesh(iceLegGeo, iceLegMat);
+        leg.position.set(x, 0.32, z);
+        leg.rotation.z = Math.sign(x) * 0.23;
+        leg.rotation.x = -Math.sign(z) * 0.14;
+        leg.castShadow = false;
+        this.iceGearGroup.add(leg);
+      }
+    }
+
+    const iceBox = new THREE.Mesh(iceBoxGeo, iceBoxMat);
+    iceBox.name = 'fisherman-ice-tackle-box';
+    iceBox.position.set(1.05, 0.27, 0.15);
+    iceBox.castShadow = false;
+    this.iceGearGroup.add(iceBox);
+    const iceBoxLid = new THREE.Mesh(iceBoxLidGeo, iceBoxLidMat);
+    iceBoxLid.position.set(1.05, 0.57, 0.15);
+    iceBoxLid.castShadow = false;
+    this.iceGearGroup.add(iceBoxLid);
+
     // ── The fisherman himself, with a cap ──
     this.figure = buildPassenger();
+    this.figure.group.name = 'fisherman';
+    this.seatedLegGroup.name = 'fisherman-seated-legs';
+    this.seatedLegGroup.visible = false;
+    this.figure.group.add(this.seatedLegGroup);
+    const seatedLegMaterial = new THREE.MeshStandardMaterial({
+      color: 0x26384a,
+      roughness: 0.85,
+      transparent: true,
+      opacity: 0,
+    });
+    this.figure.materials.push(seatedLegMaterial);
+    const thighGeometry = new THREE.BoxGeometry(0.24, 0.22, 0.74);
+    const shinGeometry = new THREE.BoxGeometry(0.21, 1, 0.21);
+    const shoeGeometry = new THREE.BoxGeometry(0.25, 0.14, 0.42);
+    for (const [index, x] of [-0.19, 0.19].entries()) {
+      const thigh = new THREE.Mesh(thighGeometry, seatedLegMaterial);
+      thigh.name = `fisherman-seated-thigh-${index}`;
+      thigh.position.set(x, 1.01, 0.34);
+      thigh.castShadow = false;
+      this.seatedLegGroup.add(thigh);
+
+      const shin = new THREE.Mesh(shinGeometry, seatedLegMaterial);
+      shin.name = `fisherman-seated-shin-${index}`;
+      shin.position.x = x;
+      shin.position.z = 0.71;
+      shin.castShadow = false;
+      this.seatedLegGroup.add(shin);
+      this.seatedShins.push(shin);
+
+      const shoe = new THREE.Mesh(shoeGeometry, seatedLegMaterial);
+      shoe.name = `fisherman-seated-shoe-${index}`;
+      shoe.position.x = x;
+      shoe.position.z = 0.83;
+      shoe.castShadow = false;
+      this.seatedLegGroup.add(shoe);
+      this.seatedShoes.push(shoe);
+    }
     const capMat = new THREE.MeshStandardMaterial({ color: 0x2b5f9a, roughness: 0.7, transparent: true });
     this.disposables.push(capMat);
     const capTop = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.16, 0.62), capMat);
@@ -225,7 +349,11 @@ export class Fisherman {
       const step = Math.min(dist, WALK_SPEED * delta);
       this.walkPos.x += (dx / dist) * step;
       this.walkPos.z += (dz / dist) * step;
-      f.group.position.set(this.walkPos.x, 0.5 + Math.abs(Math.sin(elapsed * 7)) * 0.05, this.walkPos.z);
+      f.group.position.set(
+        this.walkPos.x,
+        this.walkingSurfaceY(this.walkPos.x, this.walkPos.z) + Math.abs(Math.sin(elapsed * 7)) * 0.05,
+        this.walkPos.z
+      );
       f.group.rotation.y = Math.atan2(dx, dz);
       f.legs.rotation.x = Math.sin(elapsed * 7) * 0.3;
       f.leftArm.rotation.x = Math.sin(elapsed * 7) * 0.5;
@@ -234,9 +362,10 @@ export class Fisherman {
     }
 
     // ── Fishing (seated) ──
-    f.group.position.set(this.seatPos.x, 0.85, this.seatPos.z);
+    const seatedY = this.seatKind === 'ice' ? ICE_SEATED_Y : SHORE_SEATED_Y;
+    f.group.position.set(this.seatPos.x, seatedY, this.seatPos.z);
     f.group.rotation.y = this.heading;
-    f.legs.rotation.x = -1.5;
+    this.updateSeatedLegPose(seatedY);
     f.leftArm.rotation.x = -0.6;
     f.rightArm.rotation.x = -0.9; // holds the rod
     f.head.rotation.y = Math.sin(elapsed * 0.5) * 0.2;
@@ -246,7 +375,7 @@ export class Fisherman {
     // lake — that's the TIP end; negative pitch raises it over the water.
     this.rod.position.set(
       this.seatPos.x + Math.sin(this.heading) * 1.1,
-      1.7,
+      seatedY + 0.85,
       this.seatPos.z + Math.cos(this.heading) * 1.1
     );
     this.rod.rotation.set(0, this.heading, 0);
@@ -340,7 +469,69 @@ export class Fisherman {
     this.splash.position.set(this.floatHome.x, this.floatHome.y + 0.03, this.floatHome.z);
     this.iceHole.position.set(this.floatHome.x, ICE_Y + 0.01, this.floatHome.z);
     this.iceHole.visible = onIce;
-    this.spotGroup.visible = !onIce; // stool & tackle box stay at the shore
+    this.spotGroup.visible = !onIce;
+    this.iceGearGroup.visible = onIce;
+  }
+
+  private walkingSurfaceY(x: number, z: number): number {
+    if (this.seatKind !== 'ice') return GROUND_SURFACE_Y;
+    const nx = (x - LAKE.x) / LAKE.radiusX;
+    const nz = (z - LAKE.z) / LAKE.radiusZ;
+    const radial = Math.hypot(nx, nz);
+    const shoreBlend = THREE.MathUtils.smoothstep(radial, 0.82, 1.02);
+    return THREE.MathUtils.lerp(ICE_SURFACE_Y + 0.02, GROUND_SURFACE_Y, shoreBlend);
+  }
+
+  private updateSeatedLegPose(seatedY: number): void {
+    const surfaceY = this.seatKind === 'ice' ? ICE_SURFACE_Y : GROUND_SURFACE_Y;
+    const localSurfaceY = (surfaceY - seatedY) / PASSENGER_SCALE;
+    const shoeCenterY = localSurfaceY + 0.07;
+    const shinBottomY = localSurfaceY + 0.14;
+    const shinTopY = 0.95;
+    const shinLength = Math.max(0.2, shinTopY - shinBottomY);
+    for (const shin of this.seatedShins) {
+      shin.position.y = (shinTopY + shinBottomY) / 2;
+      shin.scale.y = shinLength;
+    }
+    for (const shoe of this.seatedShoes) shoe.position.y = shoeCenterY;
+  }
+
+  debugSetWinterFishing(): void {
+    this.seatKind = 'ice';
+    this.applySeat();
+    this.mode = 'fishing';
+    this.figure.group.visible = true;
+    for (const material of this.figure.materials) material.opacity = 0.95;
+    this.setFishingGear(true);
+  }
+
+  debugSetShoreFishing(): void {
+    this.seatKind = 'shore';
+    this.applySeat();
+    this.mode = 'fishing';
+    this.figure.group.visible = true;
+    for (const material of this.figure.materials) material.opacity = 0.95;
+    this.setFishingGear(true);
+  }
+
+  getDebugState(): {
+    mode: LifeMode;
+    seatKind: SeatKind;
+    figureY: number;
+    iceGearVisible: boolean;
+    shoreGearVisible: boolean;
+    seatedLegsVisible: boolean;
+    standingLegsVisible: boolean;
+  } {
+    return {
+      mode: this.mode,
+      seatKind: this.seatKind,
+      figureY: this.figure.group.position.y,
+      iceGearVisible: this.iceGearGroup.visible,
+      shoreGearVisible: this.spotGroup.visible,
+      seatedLegsVisible: this.seatedLegGroup.visible,
+      standingLegsVisible: this.figure.legs.visible,
+    };
   }
 
   /** Cyberpunk: the fisherman becomes a flickering cyan hologram. */
@@ -375,6 +566,8 @@ export class Fisherman {
     this.rod.visible = on;
     this.line.visible = on;
     this.float.visible = on;
+    this.figure.legs.visible = !on;
+    this.seatedLegGroup.visible = on;
     if (!on) {
       this.bigFish.visible = false;
       this.splashMaterial.opacity = 0;
@@ -387,7 +580,7 @@ export class Fisherman {
 
   dispose(): void {
     this.scene.remove(
-      this.spotGroup, this.figure.group, this.rod, this.line, this.float,
+      this.spotGroup, this.iceGearGroup, this.figure.group, this.rod, this.line, this.float,
       this.bigFish, this.splash, this.iceHole
     );
     this.figure.group.traverse((o) => {
