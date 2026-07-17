@@ -62,7 +62,7 @@ export const QUALITY_PROFILES: Record<QualityLevel, QualityProfile> = {
   },
   medium: {
     level: 'medium',
-    pixelRatio: 1.25,
+    pixelRatio: 1.1,
     msaaSamples: 0,
     shadows: true,
     shadowMapSize: 1024,
@@ -84,7 +84,7 @@ export const QUALITY_PROFILES: Record<QualityLevel, QualityProfile> = {
   },
   high: {
     level: 'high',
-    pixelRatio: 1.25,
+    pixelRatio: 1.15,
     msaaSamples: 0,
     shadows: true,
     shadowMapSize: 1024,

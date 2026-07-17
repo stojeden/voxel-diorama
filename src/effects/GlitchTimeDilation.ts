@@ -43,6 +43,13 @@ export class CinematicGradeEffect extends Effect {
           vec3 color = inputColor.rgb;
           float luma = dot(color, vec3(0.299, 0.587, 0.114));
 
+          vec3 goldenColor = color * vec3(1.055, 1.005, 0.9) + vec3(0.012, 0.0, 0.0);
+          color = mix(color, goldenColor, clamp(uGolden * 0.46, 0.0, 0.46));
+          float nightLuma = dot(color, vec3(0.299, 0.587, 0.114));
+          vec3 nightColor = mix(vec3(nightLuma), color, 0.88);
+          nightColor = nightColor * vec3(0.86, 0.94, 1.075) + vec3(0.0, 0.0, 0.008);
+          color = mix(color, nightColor, clamp(uNight * 0.42, 0.0, 0.42));
+
           float sat = (1.0 + 0.12 * (1.0 - uNight * 0.5)) * uSatMul;
           color = mix(vec3(luma), color, sat);
 

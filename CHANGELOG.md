@@ -20,6 +20,10 @@ a wersjonowanie projektu docelowo stosuje [Semantic Versioning](https://semver.o
   z fazą, pokryciem, paskiem postępu i komunikatem bezpieczeństwa.
 - Reakcje mew na zaćmienie: od 85% pokrycia dolatują do najbliższych dachów,
   pozostają tam przez totalność i startują po spadku pokrycia do 65%.
+- Proceduralne protuberancje, projekcje sierpów pod drzewami, High-only shadow
+  bands przy kontakcie oraz odbicie korony na jeziorze.
+- Reakcje mieszkańców i psa na pokrycie Słońca: spowolnienie miasta, patrzenie
+  w górę, okulary zaćmieniowe i karty do bezpiecznej projekcji obrazu Słońca.
 - Testowalny `CityRhythm` sterujący ostatnią pętlą autobusu, nocną przerwą,
   porannym rozwożeniem pasażerów i sekwencjami świateł mieszkań.
 - Pięć deterministycznych grup okien mieszkalnych, które gasną etapami od
@@ -42,9 +46,12 @@ a wersjonowanie projektu docelowo stosuje [Semantic Versioning](https://semver.o
   na scenie nie pojawiały się dwa Słońca.
 - Wszystkie fazy dnia i nocy przechodzą płynnie; bezpośrednie słońce, ambient,
   księżyc i ekspozycja nie zmieniają się już skokowo.
-- PMREM korzysta z GPU crossfade przy stałej intensywności środowiska.
-- Preloader kompiluje dzienne i nocne warianty materiałów, rozgrzewa composer
-  ukrytymi klatkami i synchronizuje kolejkę GPU przed sygnałem gotowości.
+- Neutralna mapa PMREM jest generowana raz podczas preloadu; ciągłe zmiany
+  nieba, świateł, pogody i mokrości nie wywołują kosztownych regeneracji GPU.
+- Preloader ma deterministyczny, monotoniczny pasek `0–100%` zamiast animacji
+  udającej ładowanie. Raportuje rzeczywiste etapy budowy świata, aktorów,
+  pogody, kompilacji wariantów dnia, golden hour, nocy i totalności, ukrytych
+  klatek composera oraz synchronizacji kolejki GPU przed sygnałem gotowości.
 - Autobus wykonuje o 23:30 ostatnią pętlę zbierając pasażerów, znika po kursie
   i wraca o 04:50, kolejno wysadzając ludzi na przystankach.
 - Nocny kurs autobusu porusza się szybciej na pustych ulicach, aby pełna pętla
@@ -52,6 +59,8 @@ a wersjonowanie projektu docelowo stosuje [Semantic Versioning](https://semver.o
 - Wędkarz korzysta z osobnej pozy siedzącej, dopasowanego stołka i skrzynki;
   zgięte nogi nie przecinają siedziska ani podłoża.
 - Profile jakości otrzymały osobny budżet dynamicznych świateł dworcowych.
+- Listonosz ma dedykowany, nieprzezroczysty model w niebieskim uniformie z
+  czapką, odznaką i torbą na ramieniu zamiast losowego stroju pasażera.
 
 ### Fixed
 
@@ -65,6 +74,13 @@ a wersjonowanie projektu docelowo stosuje [Semantic Versioning](https://semver.o
 - Wędkarz nie lewituje nad lodem i nie przenika nogami przez stołek.
 - PMREM oraz przejścia oświetlenia nie powodują krótkiego, nienaturalnego
   przyciemniania i rozjaśniania sceny.
+- Okulary zaćmieniowe dziedziczą macierz głowy, nie stoją w miejscu ani nie
+  przecinają twarzy; mieszkańcy patrzą ku Słońcu zamiast w podłoże.
+- Rower listonosza nie odwraca już postaci pod jezdnię podczas pościgu psa ani
+  na zakrętach. Kierunek i przechył korzystają ze stabilnej rotacji `YXZ`
+  zamiast połączenia `lookAt()` z podatnym na gimbal lock obrotem Eulera.
+- Punkty doręczeń listonosza są odwiedzane w kolejności trasy, jego kurs nie
+  restartuje się po cofnięciu zegara, a zaćmienie nie wznawia starego pościgu psa.
 
 ### Performance
 
@@ -75,16 +91,20 @@ a wersjonowanie projektu docelowo stosuje [Semantic Versioning](https://semver.o
   dynamiczne ładowanie profilera oraz metryki `renderer.info` (`cad8325`).
 - Rendering P1 wykorzystuje profilowane SMAA/SSAO, selektywny bloom, LUT-y,
   PBR jeziora i ograniczone aktualizacje opcjonalnych aktorów (`f30c922`).
-- Twardy benchmark zachowuje próg 58 FPS. Po rozszerzeniu sceny kamera pociągu
-  przekraczała 60 FPS, ale szeroki overview pozostaje niestabilny i wymaga
-  dalszego profilowania na chłodnym M1 Pro.
+- Instancjonowane płaszczyzny gruntu redukują liczbę trójkątów powierzchni
+  sześciokrotnie bez zmiany układu dróg, chodników i trawy.
+- Odległościowy LOD ogranicza w panoramie SSAO, bloom, lampy punktowe, DPR i
+  rozdzielczość cieni; bliskie ujęcia zachowują pełny detal.
+- Twardy benchmark na M1 Pro przechodzi próg 58 FPS i p95 20,5 ms: 95,7 FPS
+  w nocnym TPP ze śniegiem, 117,3 FPS podczas totalności i około 120 FPS w panoramach.
 
 ### Validation
 
-- 97 testów w 14 plikach testowych.
+- 114 testów w 18 plikach testowych.
 - Przechodzą `npm run typecheck`, `npm test` i `npm run build`.
-- Smoke test sprawdza desktop/mobile, totalność i warstwy zaćmienia, canvas,
-  luminancję, kolizje, oświetlenie, rytm miasta, aktorów i budżety renderera.
+- Smoke test sprawdza desktop/mobile, monotoniczny preloader kończący na 100%,
+  totalność i warstwy zaćmienia, canvas, luminancję, kolizje, oświetlenie, rytm
+  miasta, aktorów i budżety renderera.
 
 ### Commits
 

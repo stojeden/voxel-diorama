@@ -254,6 +254,8 @@ export class DayNightCycle {
   private envCooldown = 0;
   private envInterval = 0.7;
   private shadowsEnabled = true;
+  private shadowMapSize = 2048;
+  private appliedShadowMapSize = 2048;
   private streetLightBudget = Number.POSITIVE_INFINITY;
   private busStopLightBudget = Number.POSITIVE_INFINITY;
   private stationLightBudget = Number.POSITIVE_INFINITY;
@@ -301,6 +303,7 @@ export class DayNightCycle {
   private readonly shadowFocus = new THREE.Vector3();
   private shadowRadius = 95;
   private lightSelectionCooldown = 0;
+  private wideView = false;
 
   /** Set by main — the eclipse disc is positioned relative to the camera
    * so it stays optically aligned with the (infinitely far) shader sun. */
@@ -556,17 +559,35 @@ export class DayNightCycle {
     shadowCamera.updateProjectionMatrix();
   }
 
+  setCameraFocusDistance(distance: number): void {
+    if (!Number.isFinite(distance)) return;
+    const nextWideView = this.wideView ? distance > 102 : distance > 112;
+    if (nextWideView === this.wideView) return;
+    this.wideView = nextWideView;
+    this.syncShadowMapResolution();
+  }
+
+  private syncShadowMapResolution(force = false): void {
+    const targetSize = this.wideView ? Math.min(512, this.shadowMapSize) : this.shadowMapSize;
+    if (!force && targetSize === this.appliedShadowMapSize) return;
+    this.appliedShadowMapSize = targetSize;
+    this.sunLight.shadow.mapSize.set(targetSize, targetSize);
+    this.sunLight.shadow.map?.dispose();
+    this.sunLight.shadow.map = null;
+  }
+
   setQuality(profile: QualityProfile): void {
+    const shadowConfigChanged =
+      this.shadowsEnabled !== profile.shadows || this.shadowMapSize !== profile.shadowMapSize;
     this.eclipseVisual.setQuality(profile.level);
     this.envInterval = profile.pmremInterval;
     this.shadowsEnabled = profile.shadows;
+    this.shadowMapSize = profile.shadowMapSize;
     this.streetLightBudget = profile.streetLightBudget;
     this.busStopLightBudget = profile.busStopLightBudget;
     this.stationLightBudget = profile.stationLightBudget;
     this.windowLightBudget = profile.windowLightBudget;
-    this.sunLight.shadow.mapSize.set(profile.shadowMapSize, profile.shadowMapSize);
-    this.sunLight.shadow.map?.dispose();
-    this.sunLight.shadow.map = null;
+    this.syncShadowMapResolution(shadowConfigChanged);
     this.sunLight.castShadow = profile.shadows && this.smoothedSunStrength > 0.002;
   }
 
@@ -624,7 +645,8 @@ export class DayNightCycle {
       eclipseState.irradiance;
     sunColorAt(t, this.tmpSunColor);
     this.sunLight.color.copy(this.tmpSunColor);
-    this.sunLight.castShadow = this.shadowsEnabled && sunStrength > 0.002;
+    const directShadowStrength = sunStrength * eclipseState.irradiance;
+    this.sunLight.castShadow = this.shadowsEnabled && directShadowStrength > 0.05;
 
     // ── Moon (opposite side of the sky) ──
     const moonDir = sunDirectionAt((t + 0.5) % 1, this.tmpMoonDir);
@@ -701,9 +723,14 @@ export class DayNightCycle {
       );
       this.lightSelectionCooldown = 0.5;
     }
+    const streetLightBudget = this.wideView ? 0 : this.streetLightBudget;
+    const busStopLightBudget = this.wideView ? 0 : this.busStopLightBudget;
+    const stationLightBudget = this.wideView ? Math.min(1, this.stationLightBudget) : this.stationLightBudget;
+    const windowLightBudget = this.wideView ? 0 : this.windowLightBudget;
+    const physicalLightThreshold = this.wideView ? 0.28 : 0.001;
     for (let i = 0; i < this.hooks.streetLights.length; i++) {
       const light = this.hooks.streetLights[i];
-      light.visible = night > 0.001 && i < this.streetLightBudget;
+      light.visible = night > physicalLightThreshold && i < streetLightBudget;
       // A small urban LED luminaire is several thousand lumens. The point-light
       // approximation needs enough candela to reach pavement and nearby walls.
       light.intensity = light.visible ? night * 135 : 0;
@@ -714,7 +741,7 @@ export class DayNightCycle {
     this.hooks.streetGlowMaterial.uniforms.uNight.value = streetGlow;
     for (let i = 0; i < this.hooks.busStopLights.length; i++) {
       const light = this.hooks.busStopLights[i];
-      light.visible = night > 0.001 && i < this.busStopLightBudget;
+      light.visible = night > physicalLightThreshold && i < busStopLightBudget;
       light.intensity = light.visible ? night * 48 : 0;
     }
     for (const material of this.hooks.busStopGlowMaterials) {
@@ -722,7 +749,7 @@ export class DayNightCycle {
     }
     for (let i = 0; i < this.hooks.stationLights.length; i++) {
       const light = this.hooks.stationLights[i];
-      light.visible = night > 0.001 && i < this.stationLightBudget;
+      light.visible = night > physicalLightThreshold && i < stationLightBudget;
       // Railway platforms stay brighter than bus shelters for visibility and safety.
       light.intensity = light.visible ? night * 145 : 0;
       light.distance = 28;
@@ -737,7 +764,7 @@ export class DayNightCycle {
     for (let i = 0; i < this.hooks.windowLights.length; i++) {
       const light = this.hooks.windowLights[i];
       light.visible =
-        night > 0.001 && residentialActivity > 0.001 && i < this.windowLightBudget;
+        night > physicalLightThreshold && residentialActivity > 0.001 && i < windowLightBudget;
       light.intensity = light.visible ? night * residentialActivity * 32 : 0;
       light.distance = 20;
     }
@@ -753,18 +780,14 @@ export class DayNightCycle {
     this.updateEnvironmentTransition(dtReal);
     this.scene.environmentIntensity =
       ENVIRONMENT_INTENSITY * (1 - eclipseDarkness * 0.72);
-    this.envCooldown -= dtReal;
-    const elevationDelta = Math.abs(elevation - this.envLastElevation);
-    const cloudDelta = Math.abs(cloudCover - this.envLastCloud);
-    if (
-      !this.envTransitionActive &&
-      this.envCooldown <= 0 &&
-      (elevationDelta > 0.012 || cloudDelta > 0.08)
-    ) {
+    // PMREM generation is synchronous and a two-map crossfade doubles the
+    // environment lookup cost on every physical material. Build the neutral
+    // reflection probe once during preload; continuous sky/light/weather
+    // changes stay in their dedicated shaders and material parameters.
+    if (!this.envTarget && !this.envTransitionActive) {
       this.regenerateEnvironment(uniforms);
       this.envLastElevation = elevation;
       this.envLastCloud = cloudCover;
-      this.envCooldown = this.envInterval;
     }
 
     return { night, golden, sunElevation: elevation, eclipse };

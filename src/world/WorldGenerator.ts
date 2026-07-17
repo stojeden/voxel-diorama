@@ -50,6 +50,7 @@ interface VoxelData {
   castShadow?: boolean;
   scale?: THREE.Vector3;
   windowCohort?: number;
+  geometry?: 'box' | 'surface';
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -135,7 +136,12 @@ function generateGround(size: number): VoxelData[] {
       } else {
         color = (x + z) % 5 === 0 ? COLORS.grassDark : COLORS.grass;
       }
-      voxels.push({ position: new THREE.Vector3(x, -1, z), color, castShadow: false });
+      voxels.push({
+        position: new THREE.Vector3(x, GROUND_SURFACE_Y, z),
+        color,
+        castShadow: false,
+        geometry: 'surface',
+      });
     }
   }
 
@@ -1113,6 +1119,7 @@ export interface WorldHandle {
   setSnowCover: (cover: number) => void;
   /** 0..1 rain wetness: roads darken and turn mirror-like. */
   setWetness: (wetness: number) => void;
+  setEclipseReflection: (strength: number, sunDirection: THREE.Vector3) => void;
   /** Apply a diorama theme palette (original colour value → themed value). */
   setTheme: (palette: Record<number, number>, foliage?: { tree: number; treeLight: number }) => void;
   /** 0..1 — cyberpunk morph: megatowers rise out of the blocks. */
@@ -1391,20 +1398,30 @@ export function createWorld(scene: THREE.Scene, windUniforms: WindUniforms): Wor
   }
 
   // ── Instanced voxel meshes, one per colour ──
-  const geometry = new THREE.BoxGeometry(VOXEL_SIZE, VOXEL_SIZE, VOXEL_SIZE);
+  const boxGeometry = new THREE.BoxGeometry(VOXEL_SIZE, VOXEL_SIZE, VOXEL_SIZE);
+  const surfaceGeometry = new THREE.PlaneGeometry(VOXEL_SIZE, VOXEL_SIZE);
+  surfaceGeometry.rotateX(-Math.PI / 2);
   const colorMap = new Map<
     string,
-    { color: ColorHex; castShadow: boolean; windowCohort?: number; voxels: VoxelData[] }
+    {
+      color: ColorHex;
+      castShadow: boolean;
+      geometry: 'box' | 'surface';
+      windowCohort?: number;
+      voxels: VoxelData[];
+    }
   >();
   for (const voxel of allVoxels) {
     const castShadow = voxel.castShadow !== false;
-    const key = `${voxel.color}:${castShadow ? 1 : 0}:${voxel.windowCohort ?? -1}`;
+    const geometry = voxel.geometry ?? 'box';
+    const key = `${voxel.color}:${castShadow ? 1 : 0}:${voxel.windowCohort ?? -1}:${geometry}`;
     const batch = colorMap.get(key);
     if (batch) batch.voxels.push(voxel);
     else {
       colorMap.set(key, {
         color: voxel.color,
         castShadow,
+        geometry,
         windowCohort: voxel.windowCohort,
         voxels: [voxel],
       });
@@ -1430,7 +1447,7 @@ export function createWorld(scene: THREE.Scene, windUniforms: WindUniforms): Wor
   }
   const lookEntries: LookEntry[] = [];
 
-  for (const { color, castShadow, windowCohort, voxels } of colorMap.values()) {
+  for (const { color, castShadow, geometry, windowCohort, voxels } of colorMap.values()) {
     const params = materialParamsFor(color);
     const material = new THREE.MeshStandardMaterial({
       color: threeColorFromHex(color),
@@ -1465,7 +1482,11 @@ export function createWorld(scene: THREE.Scene, windUniforms: WindUniforms): Wor
       windowSchedule,
     });
 
-    const instancedMesh = new THREE.InstancedMesh(geometry, material, voxels.length);
+    const instancedMesh = new THREE.InstancedMesh(
+      geometry === 'surface' ? surfaceGeometry : boxGeometry,
+      material,
+      voxels.length
+    );
     for (let i = 0; i < voxels.length; i++) {
       dummy.position.copy(voxels[i].position);
       dummy.scale.copy(voxels[i].scale ?? unitScale);
@@ -1479,7 +1500,7 @@ export function createWorld(scene: THREE.Scene, windUniforms: WindUniforms): Wor
   }
 
   // ── Wind-swaying tree foliage ──
-  const foliageBuild = buildFoliageMesh(foliage, geometry, windUniforms);
+  const foliageBuild = buildFoliageMesh(foliage, boxGeometry, windUniforms);
   group.add(foliageBuild.mesh);
   materials.push(foliageBuild.material);
 
@@ -1622,6 +1643,9 @@ export function createWorld(scene: THREE.Scene, windUniforms: WindUniforms): Wor
     windowGlowMaterials,
     setSnowCover,
     setWetness,
+    setEclipseReflection(strength, sunDirection) {
+      lakeSurface.setEclipseReflection(strength, sunDirection);
+    },
     setTheme,
     setCyberRise,
     setQuality(profile) {
@@ -1641,7 +1665,8 @@ export function createWorld(scene: THREE.Scene, windUniforms: WindUniforms): Wor
       group.traverse((child) => {
         if (child instanceof THREE.InstancedMesh) child.dispose();
       });
-      geometry.dispose();
+      boxGeometry.dispose();
+      surfaceGeometry.dispose();
       for (const material of materials) material.dispose();
       for (const item of trackDisposables) item.dispose();
       for (const light of streetLights) scene.remove(light);

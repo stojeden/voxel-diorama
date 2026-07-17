@@ -126,6 +126,21 @@ try {
     if (message.type() === 'error') consoleErrors.push(message.text());
   });
   page.on('pageerror', (error) => consoleErrors.push(error.message));
+  await page.addInitScript(() => {
+    window.__loadingSamples = [];
+    const collectLoadingProgress = () => {
+      const value = Number.parseInt(document.querySelector('#loading-progress')?.textContent ?? '', 10);
+      if (!Number.isFinite(value)) return;
+      const samples = window.__loadingSamples;
+      if (samples.at(-1) !== value) samples.push(value);
+    };
+    new MutationObserver(collectLoadingProgress).observe(document, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    });
+    document.addEventListener('DOMContentLoaded', collectLoadingProgress, { once: true });
+  });
 
   await page.goto(`${URL}/?profile=1`, { waitUntil: 'networkidle' });
   await page.waitForFunction(() => window.__diorama?.ready === true, null, { timeout: 20_000 });
@@ -135,7 +150,20 @@ try {
     state: window.__diorama.getState(),
     metrics: window.__diorama.getMetrics(),
     frameLength: window.__diorama.captureFrame(640, 0.75).length,
+    loadingSamples: window.__loadingSamples,
+    loadingAriaValue: document.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow'),
+    loadingBarTransform: document.querySelector('#loading-progress-bar')?.style.transform,
   }));
+  assert.ok(initial.loadingSamples.length >= 5, `preloader exposed too few real stages: ${initial.loadingSamples}`);
+  assert.equal(initial.loadingSamples.at(-1), 100, 'preloader must finish at 100%');
+  assert.equal(initial.loadingAriaValue, '100', 'preloader accessibility value must finish at 100');
+  assert.equal(initial.loadingBarTransform, 'scaleX(1)', 'determinate preloader bar must fill completely');
+  for (let index = 1; index < initial.loadingSamples.length; index++) {
+    assert.ok(
+      initial.loadingSamples[index] >= initial.loadingSamples[index - 1],
+      `preloader progress moved backwards: ${initial.loadingSamples}`
+    );
+  }
   assert.equal(initial.metrics.ready, true);
   assert.ok(initial.metrics.renderer.calls > 0, 'renderer must issue draw calls');
   assert.ok(initial.metrics.renderer.calls <= 1_400, `high-quality draw-call budget exceeded: ${initial.metrics.renderer.calls}`);
@@ -151,6 +179,55 @@ try {
   );
   await page.screenshot({ path: '/tmp/voxel-diorama-desktop.png' });
 
+  await page.evaluate(() => window.__diorama.setTime(0.32));
+  await page.waitForTimeout(350);
+  const postmanRenderState = await page.evaluate(() => {
+    const state = window.__diorama.postmanState();
+    const uniform = window.__diorama.scene.getObjectByName('postman-uniform');
+    const rider = window.__diorama.scene.getObjectByName('postman-rider');
+    const bike = window.__diorama.scene.getObjectByName('postman-bike');
+    return {
+      state,
+      uniformColor: uniform?.material?.color?.getHex?.() ?? null,
+      hasCap: Boolean(window.__diorama.scene.getObjectByName('postman-cap')),
+      hasSatchel: Boolean(window.__diorama.scene.getObjectByName('postman-satchel')),
+      riderAttachedToBike: rider?.parent === bike,
+    };
+  });
+  assert.equal(postmanRenderState.state.active, true, 'postman must start his morning route');
+  assert.equal(postmanRenderState.state.bikeVisible, true, 'active postman bicycle must be visible');
+  assert.equal(postmanRenderState.state.riderGroupVisible, true, 'active postman rider must be visible');
+  assert.equal(postmanRenderState.state.riderHiddenParts, 0, 'postman rider cannot lose individual meshes');
+  assert.equal(postmanRenderState.state.riderOpacity, 1, 'postman rider must remain fully opaque');
+  assert.ok(postmanRenderState.state.riderWorldY > 2, 'postman rider cannot flip below the road');
+  assert.equal(postmanRenderState.uniformColor, 0x2368a2, 'postman uniform must use postal blue');
+  assert.equal(postmanRenderState.hasCap, true, 'postman cap is missing');
+  assert.equal(postmanRenderState.hasSatchel, true, 'postman satchel is missing');
+  assert.equal(postmanRenderState.riderAttachedToBike, true, 'postman rider must remain attached to the bicycle');
+  await page.evaluate(async () => {
+    const bike = window.__diorama.scene.getObjectByName('postman-bike');
+    const position = bike.position.clone();
+    bike.getWorldPosition(position);
+    const quaternion = bike.quaternion.clone();
+    bike.getWorldQuaternion(quaternion);
+    const back = position.clone().set(0, 0, 1).applyQuaternion(quaternion);
+    const side = position.clone().set(1, 0, 0).applyQuaternion(quaternion);
+    const camera = position.clone().addScaledVector(back, 5).addScaledVector(side, 3.8);
+    camera.y += 2.8;
+    const target = position.clone();
+    target.y += 1.45;
+    await window.__diorama.controls.setLookAt(
+      camera.x, camera.y, camera.z,
+      target.x, target.y, target.z,
+      false
+    );
+  });
+  await page.waitForTimeout(40);
+  await page.screenshot({ path: '/tmp/voxel-diorama-postman.png' });
+  await page.evaluate(async () => {
+    await window.__diorama.controls.setLookAt(70, 48, 80, 0, 6, 0, false);
+  });
+
   const exposureSamples = {};
   for (const [label, time] of [['sunrise', 0.28], ['noon', 0.5], ['sunset', 0.72], ['night', 0.86]]) {
     await page.evaluate((t) => window.__diorama.setTime(t), time);
@@ -165,7 +242,57 @@ try {
     );
   }
 
-  await page.evaluate(() => window.__diorama.setEclipseProgress(0.5));
+  await page.evaluate(() => {
+    window.__diorama.setQuality('high');
+    window.__diorama.setEclipseProgress(0.31);
+  });
+  await page.waitForTimeout(500);
+  const partialEclipse = await page.evaluate(() => {
+    const state = window.__diorama.getState();
+    const crescents = window.__diorama.scene.getObjectByName('eclipse-tree-crescents');
+    return {
+      eclipse: state.eclipse,
+      reaction: state.eclipseReaction,
+      crescentsVisible: crescents?.visible ?? false,
+      crescentCount: crescents?.count ?? 0,
+      props: window.__diorama.eclipseCrowdProps(),
+      stationPassengers: window.__diorama.stationPassengers(),
+      postman: window.__diorama.postmanState(),
+    };
+  });
+  assert.ok(
+    partialEclipse.eclipse.coverage > 0.65 && partialEclipse.eclipse.coverage < 0.96,
+    'the partial-eclipse checkpoint must expose a readable solar crescent'
+  );
+  assert.ok(partialEclipse.crescentsVisible, 'tree pinhole crescents must appear in deep partial eclipse');
+  assert.equal(partialEclipse.crescentCount, 46, 'High quality must use the full crescent instance budget');
+  assert.ok(partialEclipse.props.glasses > 0, 'residents must use eclipse glasses');
+  assert.ok(partialEclipse.props.projectionCards > 0, 'residents must use projection cards');
+  assert.ok(
+    partialEclipse.stationPassengers.some((passenger) => passenger.observingEclipse),
+    'station passengers must react to the eclipse'
+  );
+  assert.ok(partialEclipse.postman.eclipseAlert > 0, 'the dog must react to the changing light');
+  await page.screenshot({ path: '/tmp/voxel-diorama-eclipse-partial.png' });
+
+  await page.evaluate(() => window.__diorama.setEclipseProgress(0.35));
+  await page.waitForTimeout(350);
+  const highBands = await page.evaluate(
+    () => window.__diorama.scene.getObjectByName('eclipse-shadow-bands')?.visible ?? false
+  );
+  assert.equal(highBands, true, 'shadow bands must appear near contact in High quality');
+  await page.evaluate(() => window.__diorama.setQuality('medium'));
+  await page.waitForTimeout(200);
+  const mediumBands = await page.evaluate(
+    () => window.__diorama.scene.getObjectByName('eclipse-shadow-bands')?.visible ?? false
+  );
+  assert.equal(mediumBands, false, 'shadow bands must remain High-only');
+
+  await page.evaluate(() => {
+    window.__diorama.setQuality('high');
+    window.__diorama.setEclipseProgress(0.5);
+  });
+  await page.waitForTimeout(350);
   await page.waitForTimeout(500);
   const collapsedPanel = await page.locator('#dilation-panel').boundingBox();
   const eclipseStatus = await page.locator('#eclipse-status').boundingBox();
@@ -201,6 +328,16 @@ try {
     eclipse.anchorVisible && eclipse.solarVisible && eclipse.moonVisible,
     'the camera-relative eclipse layers must remain visible'
   );
+  const totalityReactions = await page.evaluate(() => ({
+    props: window.__diorama.eclipseCrowdProps(),
+    reaction: window.__diorama.getState().eclipseReaction,
+  }));
+  assert.deepEqual(
+    totalityReactions.props,
+    { glasses: 0, projectionCards: 0 },
+    'eye-protection props must disappear only during safe totality'
+  );
+  assert.ok(totalityReactions.reaction.movementScale < 0.1, 'city life must pause at totality');
   const eclipsePixels = await sampleRenderedFrame(page);
   assert.ok(eclipsePixels.visibleSamples > 200, 'the totality scene is too dark to read');
   assert.ok(

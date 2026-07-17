@@ -36,6 +36,7 @@ export interface RuntimeEnv {
   setEnvironmentGrade: (golden: number, night: number) => void;
   setThemeGrade: (id: string, sepia: number, saturation: number) => void;
   setCinematicFocus: (active: boolean, target: THREE.Vector3) => void;
+  setCameraFocusDistance: (distance: number) => void;
   setQuality: (profile: QualityProfile) => void;
   syncSize: () => void;
   dispose: () => void;
@@ -154,8 +155,6 @@ export function bootstrap(initialQuality: QualityProfile): RuntimeEnv {
   const finalPass = new EffectPass(
     camera,
     toneMapping,
-    colorLuts.goldenEffect,
-    colorLuts.nightEffect,
     colorLuts.themeEffect,
     gradeEffect,
     smaaEffect
@@ -166,9 +165,19 @@ export function bootstrap(initialQuality: QualityProfile): RuntimeEnv {
   const loadingManager = new THREE.LoadingManager();
   let quality = initialQuality;
   let cinematicActive = false;
+  let ambientOcclusionNear = true;
+
+  const syncDistanceEffects = () => {
+    const aoEnabled = quality.ambientOcclusion && ambientOcclusionNear;
+    normalPass.enabled = aoEnabled;
+    aoPass.enabled = aoEnabled;
+    bloomPass.enabled = quality.bloom && ambientOcclusionNear;
+  };
 
   const syncSize = () => {
-    const pixelRatio = Math.min(window.devicePixelRatio, quality.pixelRatio);
+    const distanceScale = ambientOcclusionNear ? 1 : 0.8;
+    const adaptivePixelRatio = Math.max(1, quality.pixelRatio * distanceScale);
+    const pixelRatio = Math.min(window.devicePixelRatio, adaptivePixelRatio);
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setPixelRatio(pixelRatio);
@@ -181,11 +190,9 @@ export function bootstrap(initialQuality: QualityProfile): RuntimeEnv {
     renderer.shadowMap.enabled = profile.shadows;
     renderer.shadowMap.needsUpdate = true;
     composer.multisampling = profile.msaaSamples;
-    normalPass.enabled = profile.ambientOcclusion;
-    aoPass.enabled = profile.ambientOcclusion;
+    syncDistanceEffects();
     normalPass.resolution.scale = profile.aoResolutionScale;
     aoEffect.resolution.scale = profile.aoResolutionScale;
-    bloomPass.enabled = profile.bloom;
     depthOfFieldPass.enabled = cinematicActive && profile.cinematicDepthOfField;
     smaaEffect.applyPreset(SMAA_PRESETS[profile.smaa]);
     labelRenderer.domElement.style.display = profile.labels ? '' : 'none';
@@ -196,6 +203,15 @@ export function bootstrap(initialQuality: QualityProfile): RuntimeEnv {
     cinematicActive = active;
     depthOfField.target = target;
     depthOfFieldPass.enabled = active && quality.cinematicDepthOfField;
+  };
+
+  const setCameraFocusDistance = (distance: number) => {
+    if (!Number.isFinite(distance)) return;
+    const nextNear = ambientOcclusionNear ? distance < 112 : distance < 102;
+    if (nextNear === ambientOcclusionNear) return;
+    ambientOcclusionNear = nextNear;
+    syncDistanceEffects();
+    syncSize();
   };
 
   window.addEventListener('resize', syncSize);
@@ -228,13 +244,17 @@ export function bootstrap(initialQuality: QualityProfile): RuntimeEnv {
     setBloomStrength: (strength) => {
       bloomEffect.intensity = strength;
     },
-    setEnvironmentGrade: (golden, night) => colorLuts.setEnvironment(golden, night),
+    setEnvironmentGrade: (golden, night) => {
+      gradeEffect.parameters.golden.value = golden;
+      gradeEffect.parameters.night.value = night;
+    },
     setThemeGrade: (id, sepia, saturation) => {
       colorLuts.setTheme(id);
       gradeEffect.parameters.sepia.value = sepia;
       gradeEffect.parameters.saturation.value = saturation;
     },
     setCinematicFocus,
+    setCameraFocusDistance,
     setQuality,
     syncSize,
     dispose,

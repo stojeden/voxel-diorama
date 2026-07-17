@@ -21,9 +21,9 @@
 - **Żywe przystanki i stacje**: pasażerowie korzystają z tras omijających ławki, słupy, wiaty, barierki i bryły dworców zamiast przenikać przez geometrię.
 
 ### Światło i atmosfera
-- Fizyczne niebo (rozpraszanie Rayleigha/Mie) — **efektowne wschody słońca i golden hour**, płynne przejścia wszystkich faz dnia oraz odbicia nieba i słońca w szybach budynków (PMREM environment z GPU crossfade).
+- Fizyczne niebo (rozpraszanie Rayleigha/Mie) — **efektowne wschody słońca i golden hour**, płynne przejścia wszystkich faz dnia oraz odbicia nieba i słońca w szybach budynków. Neutralna mapa PMREM powstaje w preloaderze, a światło i atmosfera zmieniają się bez kosztownych regeneracji w pętli animacji.
 - **Fazy księżyca**, gwiazdy, spadające gwiazdy, **zorza polarna** w pogodne noce.
-- **Eclipse 2.0** — 96-sekundowe, deterministyczne zaćmienie uruchamiane klawiszem `E`: kamera pokazuje nisko zawieszone Słońce nad miastem, Księżyc przechodzi przez kolejne kontakty, pojawia się pierścień diamentowy, korona, perły Baily'ego i gwiazdy. Niebo, horyzont, ekspozycja oraz miejskie światła reagują płynnie, a scena pozostaje czytelna także podczas totalności.
+- **Eclipse 2.0** — 96-sekundowe, deterministyczne zaćmienie uruchamiane klawiszem `E`: kamera pokazuje nisko zawieszone Słońce nad miastem, Księżyc przechodzi przez kolejne kontakty, pojawia się pierścień diamentowy, korona, chromosfera, protuberancje, perły Baily'ego i gwiazdy. Pod drzewami widać projekcje sierpów, a w High tuż przy kontakcie pojawiają się shadow bands. Mieszkańcy zwalniają, patrzą ku Słońcu, używają przyczepionych do głów okularów lub kart projekcyjnych; pies reaguje na zmianę światła, a jezioro odbija koronę.
 - **Automat pogodowy**: chmury voxelowe, deszcz (mokry, lustrzany asfalt), śnieg z **zalegającą zimą** (białe dachy, oszronione drzewa, **zamarzające jezioro**), mgła i wiatr kołyszący drzewami.
 - **Zegar 1× / 2× / 3×** oraz tryb **⏱ REAL TIME** — pora dnia i pogoda synchronizują się z lokalizacją widza (geolokalizacja + SunCalc + Open-Meteo).
 - **Rytm mieszkań**: około północy gasną pierwsze okna, o 01:42 kolejne, o 02:30 pozostają pojedyncze światła, o 02:45 bloki są ciemne, a od 04:00 miasto budzi się sekwencyjnie.
@@ -42,7 +42,10 @@
 - 🐄 **Krowa i UFO** — krowa pasie się nad jeziorem; co drugą noc latający spodek wciąga ją wiązką, a następnej nocy odstawia. Rankiem po porwaniu **rolnik** szuka jej, drapie się po głowie i wygraża kosmitom — a po powrocie radośnie ją klepie.
 - 👽 Czasem kosmici robią zamiast tego **nalot na kiosk** (rano stoi zapora „zamknięte").
 - 🎣 **Wędkarz** w czapeczce, ze skrzynką: rano wychodzi z bloku, łowi nad brzegiem (raz na kilka brań wyciąga rybę wielką jak on sam — zawsze ucieka), zimą **łowi w przeręblu na środku zamarzniętego jeziora**, siedząc na dopasowanym stołku z poprawnie zgiętymi nogami, a wieczorem wraca do domu.
-- 📮 **Listonosz** na rowerze objeżdża rano południową dzielnicę — czasem goni go pies.
+- 📮 **Listonosz** w niebieskim uniformie, czapce i z przewieszoną torbą objeżdża
+  rano południową dzielnicę. Ma trzy osobne punkty doręczeń, a czasem goni go
+  pies; stabilny yaw roweru utrzymuje postać nad jezdnią także podczas pościgu
+  i na ciasnych zakrętach.
 - 🎈 **Balon** na ogrzane powietrze przelatuje w pogodne dni i o zmierzchu, pięknie podświetlony ogniem palnika.
 - 🕊️ **Mewy** szybują i bankują w zakrętach. Przy narastającym zaćmieniu od 85% pokrycia wybierają najbliższe dachy i kolejno na nich siadają; po totalności wzlatują, gdy pokrycie spadnie do 65%. Nocą również śpią na dachach.
 
@@ -71,7 +74,7 @@ npm run dev      # http://localhost:5173
 ```
 
 ```bash
-npm test         # 97 testów (vitest): geometria, światło, rytm miasta,
+npm test         # 114 testów (vitest): geometria, światło, rytm miasta,
                  # nawigacja pieszych, aktorzy i maszyny stanów pojazdów
 npm run typecheck # typy
 npm run build    # produkcja → dist/
@@ -79,22 +82,28 @@ npm run validate # typy + unit + build + Chrome/WebGL + budżety wydajności
 BENCH_HEADFUL=1 npm run test:performance # jeden Chrome, 4 scenariusze Metal/High
 ```
 
-Wymagania: Node 20.19+, przeglądarka z WebGL2. Cel wydajnościowy to **stabilne 60 FPS na Apple M1 Pro** w profilu High. Twardy benchmark zachowuje próg 58 FPS; po rozszerzeniu sceny szeroki overview wymaga dalszego profilowania i ponownego pomiaru na chłodnym urządzeniu.
+Wymagania: Node 20.19+, przeglądarka z WebGL2. Cel wydajnościowy to **stabilne 60 FPS na Apple M1 Pro** w profilu High. Twardy benchmark zachowuje próg 58 FPS oraz limit p95 20,5 ms.
 
 ### Profile jakości
 
 - **Auto** dobiera profil startowy do liczby rdzeni i pamięci, a następnie reaguje na utrzymujący się czas klatki z cooldownem i histerezą.
-- **Low / Medium / High** kontrolują DPR, cienie, bloom, AO, cząstki pogody, liczbę aktorów, etykiety, częstotliwość PMREM i budżety świateł ulicznych, przystankowych, dworcowych oraz okiennych.
+- **Low / Medium / High** kontrolują DPR, cienie, bloom, AO, cząstki pogody, liczbę aktorów, etykiety i budżety świateł ulicznych, przystankowych, dworcowych oraz okiennych. Panorama automatycznie ogranicza niewidoczne w tej skali AO, bloom, lampy punktowe, DPR i rozdzielczość cieni; bliskie kadry zachowują pełny detal.
 - W trybie deweloperskim klawisz `P` włącza ładowany na żądanie panel `stats-gl` z FPS oraz czasem CPU/GPU.
 - `window.__diorama.getMetrics()` udostępnia draw calle, trójkąty, pamięć renderera i aktywny profil dla diagnostyki oraz testów.
 
 ### Stan walidacji
 
-- 97/97 testów jednostkowych w 14 plikach testowych.
+- 114/114 testów jednostkowych w 18 plikach testowych.
 - `npm run typecheck` i produkcyjny `npm run build` przechodzą.
-- Smoke test obejmuje desktop/mobile, totalność zaćmienia, niepusty canvas, luminancję, ochronę przed przepaleniami, kolizje pieszych, rytm miasta i budżety renderera.
-- Dedykowany benchmark Metal zachowuje próg 58 FPS. Kamera pociągu przekraczała 60 FPS, ale szeroki pierwszy overview był niestabilny podczas serii pomiarów; wynik nie jest przedstawiany jako zaliczony.
-- Preloader kompiluje dzienne i nocne warianty shaderów, wykonuje ukryte klatki composera i opróżnia kolejkę GPU przed odsłonięciem sceny.
+- Smoke test obejmuje desktop/mobile, fazę częściową i totalność, zjawiska
+  optyczne, reakcje mieszkańców, kompletną sylwetkę listonosza, niepusty canvas,
+  luminancję, ochronę przed przepaleniami, kolizje pieszych, rytm miasta i
+  budżety renderera.
+- Dedykowany benchmark Metal na M1 Pro przechodzi: 95,7 FPS w nocnym TPP ze śniegiem, 117,3 FPS podczas totalności i około 120 FPS w panoramach; p95 każdego scenariusza pozostaje poniżej 17 ms.
+- Deterministyczny preloader pokazuje monotoniczny postęp `0–100%` wyłącznie po
+  ukończeniu realnych etapów: budowy proceduralnego świata, aktorów i pogody,
+  kompilacji wariantów poranka, dnia, golden hour, nocy i totalności, ukrytych
+  klatek composera oraz synchronizacji kolejki GPU.
 
 ## 🏗️ Architektura
 
@@ -110,17 +119,21 @@ src/
 ├── experience/
 │   ├── Themes.ts            # motywy (palety + światło + morfing cyber)
 │   ├── RouteChapters.ts     # narracyjne etykiety trasy
-│   └── EclipseTimeline.ts   # deterministyczne kontakty, geometria i irradiancja
+│   ├── EclipseTimeline.ts   # deterministyczne kontakty, geometria i irradiancja
+│   └── EclipseWorldReaction.ts # reakcje życia miasta na pokrycie Słońca
 ├── environment/
 │   ├── sky.ts               # czysty model słońca/kolorów (testowalny)
 │   ├── CityRhythm.ts        # rozkład autobusu i sekwencje świateł mieszkań
-│   ├── DayNightCycle.ts     # niebo, księżyc, światła, zaćmienia, PMREM crossfade
+│   ├── DayNightCycle.ts     # niebo, księżyc, światła, zaćmienia i PMREM
 │   ├── EclipseVisual.ts     # proceduralne Słońce, Księżyc, korona i pierścień
+│   ├── EclipseGroundEffects.ts # sierpy pod drzewami i shadow bands
+│   ├── EclipsePhenomena.ts  # budżety zjawisk optycznych Low/Medium/High
 │   ├── LakeSurface.ts       # PBR jeziora, fale, deszcz, zamarzanie i mgła
 │   ├── Weather.ts           # automat pogodowy, chmury, śnieg, wiatr, mokro
 │   └── RealTime.ts          # geolokalizacja + SunCalc + Open-Meteo
 ├── effects/
 │   ├── PortalGlow.ts        # kwantowe pierścienie tuneli
+│   ├── EclipseCrowdProps.ts # instancjonowane okulary i projekcje mieszkańców
 │   ├── Balloon.ts           # balon / kosmiczny odrzutowiec
 │   └── GlitchTimeDilation.ts# grading filmowy (golden hour, sepia, vibrance)
 └── world/

@@ -27,7 +27,7 @@ describe('QualityManager', () => {
       aoResolutionScale: 0.5,
       cinematicDepthOfField: true,
       smaa: 'high',
-      pixelRatio: 1.25,
+      pixelRatio: 1.15,
     });
     expect(low).toMatchObject({
       ambientOcclusion: false,

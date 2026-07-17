@@ -12,7 +12,7 @@ export interface UiHandle {
   paused: boolean;
   tourActive: boolean;
   timeScale: number;
-  setLoadingProgress: (progress: number) => void;
+  setLoadingProgress: (progress: number, stage?: string) => void;
   hideLoadingScreen: () => void;
   setInfoText: (text: string) => void;
   setClock: (text: string) => void;
@@ -48,6 +48,10 @@ function requireEl<T extends HTMLElement>(id: string): T {
 
 export function mountUi(): UiHandle {
   const loadingEl = requireEl<HTMLDivElement>('loading-screen');
+  const loadingBarTrackEl = loadingEl.querySelector<HTMLDivElement>('[role="progressbar"]');
+  if (!loadingBarTrackEl) throw new Error('Loading progressbar is missing');
+  const loadingBarEl = requireEl<HTMLDivElement>('loading-progress-bar');
+  const loadingStageEl = requireEl<HTMLDivElement>('loading-stage');
   const loadingProgressEl = requireEl<HTMLDivElement>('loading-progress');
   const speedControlEl = requireEl<HTMLInputElement>('speed-control');
   const chapterEl = requireEl<HTMLDivElement>('chapter');
@@ -81,14 +85,24 @@ export function mountUi(): UiHandle {
   panelToggleEl.addEventListener('click', togglePanel);
 
   let toastTimer: number | null = null;
+  let loadingProgress = 0;
 
   const handle: UiHandle = {
     speedSetting: Number(speedControlEl.value) / 100,
     paused: false,
     tourActive: false,
     timeScale: 1,
-    setLoadingProgress(progress) {
-      loadingProgressEl.textContent = `${Math.round(progress)}%`;
+    setLoadingProgress(progress, stage) {
+      if (!Number.isFinite(progress)) return;
+      const clampedProgress = Math.min(100, Math.max(0, progress));
+      if (clampedProgress < loadingProgress) return;
+      const nextProgress = clampedProgress;
+      loadingProgress = nextProgress;
+      const roundedProgress = Math.round(nextProgress);
+      loadingBarEl.style.transform = `scaleX(${nextProgress / 100})`;
+      loadingBarTrackEl.setAttribute('aria-valuenow', String(roundedProgress));
+      loadingProgressEl.textContent = `${roundedProgress}%`;
+      if (stage) loadingStageEl.textContent = stage;
     },
     hideLoadingScreen() {
       loadingEl.classList.add('is-hidden');
