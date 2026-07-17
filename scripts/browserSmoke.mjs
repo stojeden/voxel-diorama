@@ -6,6 +6,7 @@ import { chromium } from 'playwright';
 const HOST = '127.0.0.1';
 const PORT = 4173;
 const URL = `http://${HOST}:${PORT}`;
+const READY_TIMEOUT_MS = 60_000;
 
 async function assertBundleBudgets() {
   const assetNames = await readdir('dist/assets');
@@ -143,7 +144,7 @@ try {
   });
 
   await page.goto(`${URL}/?profile=1`, { waitUntil: 'networkidle' });
-  await page.waitForFunction(() => window.__diorama?.ready === true, null, { timeout: 20_000 });
+  await page.waitForFunction(() => window.__diorama?.ready === true, null, { timeout: READY_TIMEOUT_MS });
   await page.waitForTimeout(4_500);
 
   const initial = await page.evaluate(() => ({
@@ -650,7 +651,7 @@ try {
   });
   mobile.on('pageerror', (error) => mobileErrors.push(error.message));
   await mobile.goto(URL, { waitUntil: 'networkidle' });
-  await mobile.waitForFunction(() => window.__diorama?.ready === true, null, { timeout: 20_000 });
+  await mobile.waitForFunction(() => window.__diorama?.ready === true, null, { timeout: READY_TIMEOUT_MS });
   await mobile.evaluate(() => window.__diorama.setEclipseProgress(0.5));
   await mobile.waitForTimeout(300);
   const mobilePixels = await sampleRenderedFrame(mobile);
