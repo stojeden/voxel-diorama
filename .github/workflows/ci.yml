@@ -32,5 +32,5 @@ jobs:
       - name: Install browser
         run: npx playwright install --with-deps chromium
 
-      - name: Browser smoke and performance budgets
+      - name: Browser smoke and renderer budgets
         run: node scripts/browserSmoke.mjs
