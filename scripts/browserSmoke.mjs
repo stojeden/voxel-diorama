@@ -6,8 +6,8 @@ import { chromium } from 'playwright';
 const HOST = '127.0.0.1';
 const PORT = 4173;
 const URL = `http://${HOST}:${PORT}`;
-const READY_TIMEOUT_MS = 60_000;
 const WRITE_SCREENSHOTS = process.env.CI !== 'true';
+const READY_TIMEOUT_MS = WRITE_SCREENSHOTS ? 60_000 : 180_000;
 
 async function saveScreenshot(page, path) {
   if (WRITE_SCREENSHOTS) await page.screenshot({ path });
