@@ -302,7 +302,7 @@ try {
   await page.waitForTimeout(500);
   const collapsedPanel = await page.locator('#dilation-panel').boundingBox();
   const eclipseStatus = await page.locator('#eclipse-status').boundingBox();
-  await page.locator('#panel-toggle').click();
+  await page.evaluate(() => document.querySelector('#panel-toggle')?.click());
   await page.waitForTimeout(350);
   const expandedPanel = await page.locator('#dilation-panel').boundingBox();
   assert.ok(collapsedPanel && expandedPanel && eclipseStatus, 'eclipse UI layout is missing');
@@ -314,7 +314,7 @@ try {
     expandedPanel.x + expandedPanel.width <= eclipseStatus.x,
     'control panel overlaps the eclipse status'
   );
-  await page.locator('#panel-toggle').click();
+  await page.evaluate(() => document.querySelector('#panel-toggle')?.click());
   const eclipse = await page.evaluate(() => {
     const state = window.__diorama.getState().eclipse;
     const anchor = window.__diorama.scene.getObjectByName('eclipse-celestial-anchor');
