@@ -23,6 +23,7 @@ export interface UiHandle {
   setTimeScale: (scale: number) => void;
   setRealTime: (active: boolean, label?: string) => void;
   setQuality: (snapshot: QualitySnapshot) => void;
+  setEclipseStatus: (visible: boolean, title?: string, detail?: string, progress?: number) => void;
   showToast: (text: string) => void;
   setCameraMode: (mode: CameraMode) => void;
   onCameraMode: (handler: (mode: 'train' | 'bus') => void) => void;
@@ -35,6 +36,7 @@ export interface UiHandle {
   onRealTimeToggle: (handler: () => void) => void;
   onQualityCycle: (handler: () => void) => void;
   onProfilerToggle: (handler: () => void) => void;
+  onEclipseStart: (handler: () => void) => void;
   dispose: () => void;
 }
 
@@ -66,6 +68,11 @@ export function mountUi(): UiHandle {
   const timeSpeedEl = requireEl<HTMLDivElement>('time-speed');
   const panelEl = requireEl<HTMLDivElement>('dilation-panel');
   const panelToggleEl = requireEl<HTMLButtonElement>('panel-toggle');
+  const eclipseButtonEl = requireEl<HTMLButtonElement>('eclipse-button');
+  const eclipseStatusEl = requireEl<HTMLDivElement>('eclipse-status');
+  const eclipseTitleEl = requireEl<HTMLDivElement>('eclipse-title');
+  const eclipseDetailEl = requireEl<HTMLDivElement>('eclipse-detail');
+  const eclipseProgressEl = requireEl<HTMLDivElement>('eclipse-progress');
 
   const togglePanel = () => {
     const collapsed = panelEl.classList.toggle('is-collapsed');
@@ -147,6 +154,13 @@ export function mountUi(): UiHandle {
       qualityButtonEl.dataset.mode = snapshot.mode;
       qualityButtonEl.title = `Profil renderingu: ${snapshot.level}`;
     },
+    setEclipseStatus(visible, title = '', detail = '', progress = 0) {
+      eclipseStatusEl.hidden = !visible;
+      if (!visible) return;
+      eclipseTitleEl.textContent = title;
+      eclipseDetailEl.textContent = detail;
+      eclipseProgressEl.style.transform = `scaleX(${Math.min(1, Math.max(0, progress))})`;
+    },
     showToast(text) {
       weatherToastEl.textContent = text;
       weatherToastEl.hidden = false;
@@ -221,6 +235,10 @@ export function mountUi(): UiHandle {
     onProfilerToggle(handler) {
       keyHandlers.profiler = handler;
     },
+    onEclipseStart(handler) {
+      keyHandlers.eclipse = handler;
+      eclipseButtonEl.addEventListener('click', handler);
+    },
     dispose() {
       speedControlEl.removeEventListener('input', onSpeed);
       window.removeEventListener('keydown', onKey);
@@ -236,6 +254,7 @@ export function mountUi(): UiHandle {
     realtime?: () => void;
     quality?: () => void;
     profiler?: () => void;
+    eclipse?: () => void;
   } = {};
 
   const onSpeed = () => {
@@ -258,6 +277,8 @@ export function mountUi(): UiHandle {
       keyHandlers.quality?.();
     } else if ((e.key === 'p' || e.key === 'P') && import.meta.env.DEV) {
       keyHandlers.profiler?.();
+    } else if (e.key === 'e' || e.key === 'E') {
+      keyHandlers.eclipse?.();
     } else if (e.key === '1' || e.key === '2' || e.key === '3') {
       keyHandlers.timeScale?.(Number(e.key));
     } else if (e.key === ' ' || e.code === 'Space') {

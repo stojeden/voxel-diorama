@@ -1,5 +1,11 @@
 import * as THREE from 'three';
-import { BLOCK_CONFIGS, COLORS, LAKE, WORLD_HALF_SIZE } from './WorldLayout';
+import {
+  BLOCK_CONFIGS,
+  COLORS,
+  LAKE,
+  WORLD_HALF_SIZE,
+  type BlockConfig,
+} from './WorldLayout';
 import { mergeStaticMeshes } from '../performance/mergeStaticMeshes';
 
 /**
@@ -15,9 +21,28 @@ const MAX_ALTITUDE = 27;
 const BUILDING_AVOIDANCE_BUFFER = 3;
 const MAX_TURN_RATE = 0.65; // rad/s
 const CLIMB_RATE = 2.2; // m/s
+export const ECLIPSE_ROOST_COVERAGE = 0.85;
+export const ECLIPSE_TAKE_OFF_COVERAGE = 0.65;
 
 type WingMode = 'flap' | 'glide';
-type LifeMode = 'fly' | 'toRoost' | 'roost';
+type LifeMode = 'fly' | 'toRoost' | 'roost' | 'takeOff';
+type RoostReason = 'night' | 'eclipse' | null;
+export type EclipseCoverageDirection = 'increasing' | 'decreasing';
+
+/**
+ * Eclipse roost hysteresis. A gull commits only on the incoming phase and
+ * remains committed through totality until daylight has clearly returned.
+ */
+export function eclipseRoostRequested(
+  wasRequested: boolean,
+  coverage: number,
+  direction: EclipseCoverageDirection
+): boolean {
+  if (!Number.isFinite(coverage)) return wasRequested;
+  if (direction === 'increasing' && coverage >= ECLIPSE_ROOST_COVERAGE) return true;
+  if (direction === 'decreasing' && coverage <= ECLIPSE_TAKE_OFF_COVERAGE) return false;
+  return wasRequested;
+}
 
 const GULL_GEOMETRIES = {
   body: new THREE.SphereGeometry(0.34, 8, 6),
@@ -46,9 +71,11 @@ interface Gull {
   modeTimeLeft: number;
   bank: number;
   phase: number;
-  /** Day/night behaviour: gulls sleep on rooftops after dark. */
   lifeMode: LifeMode;
-  roost: THREE.Vector3;
+  roostReason: RoostReason;
+  nightRoost: THREE.Vector3;
+  activeRoost: THREE.Vector3;
+  takeOffClearanceY: number;
 }
 
 function maxBuildingHeightNear(x: number, z: number, radius: number): number {
@@ -145,11 +172,72 @@ function roostSpotFor(index: number): THREE.Vector3 {
   );
 }
 
+function deterministicUnit(seed: number): number {
+  let value = seed | 0;
+  value = Math.imul(value ^ (value >>> 16), 0x45d9f3b);
+  value = Math.imul(value ^ (value >>> 16), 0x45d9f3b);
+  value ^= value >>> 16;
+  return (value >>> 0) / 4294967296;
+}
+
+function roofCoordinate(origin: number, size: number, seed: number): number {
+  const extent = Math.max(0, size - 1);
+  const margin = Math.min(1.25, extent * 0.3);
+  return origin + margin + deterministicUnit(seed) * Math.max(0, extent - margin * 2);
+}
+
+/** Selects a stable, spread-out point on the nearest roof for this gull. */
+export function nearestEclipseRoost(
+  position: Pick<THREE.Vector3, 'x' | 'z'>,
+  gullIndex: number,
+  blocks: readonly BlockConfig[] = BLOCK_CONFIGS
+): THREE.Vector3 {
+  if (blocks.length === 0) throw new Error('Cannot select an eclipse roost without buildings');
+
+  let nearest = blocks[0];
+  let nearestIndex = 0;
+  let nearestDistance = Number.POSITIVE_INFINITY;
+  for (let blockIndex = 0; blockIndex < blocks.length; blockIndex++) {
+    const block = blocks[blockIndex];
+    const closestX = THREE.MathUtils.clamp(position.x, block.x, block.x + block.w - 1);
+    const closestZ = THREE.MathUtils.clamp(position.z, block.z, block.z + block.d - 1);
+    const distance = (closestX - position.x) ** 2 + (closestZ - position.z) ** 2;
+    if (distance < nearestDistance) {
+      nearest = block;
+      nearestIndex = blockIndex;
+      nearestDistance = distance;
+    }
+  }
+
+  const seed = (gullIndex + 1) * 73856093 ^ (nearestIndex + 1) * 19349663;
+  return new THREE.Vector3(
+    roofCoordinate(nearest.x, nearest.w, seed),
+    nearest.h + 0.55,
+    roofCoordinate(nearest.z, nearest.d, seed ^ 0x9e3779b9)
+  );
+}
+
 export class Birds {
   private gulls: Gull[] = [];
   private readonly scene: THREE.Scene;
   private hidden = false;
   private activeCount = GULL_COUNT;
+  private eclipseRoostActive = false;
+
+  /**
+   * Supplies the physical eclipse state independently from the day/night light.
+   * Call on every eclipse frame so threshold crossings remain deterministic.
+   */
+  setEclipseState(coverage: number, direction: EclipseCoverageDirection): void {
+    const normalizedCoverage = Number.isFinite(coverage)
+      ? THREE.MathUtils.clamp(coverage, 0, 1)
+      : coverage;
+    this.eclipseRoostActive = eclipseRoostRequested(
+      this.eclipseRoostActive,
+      normalizedCoverage,
+      direction
+    );
+  }
 
   /** Cyberpunk: no gulls over the megacity. */
   setHidden(hidden: boolean): void {
@@ -180,6 +268,7 @@ export class Birds {
       const target = new THREE.Vector3();
       pickTarget(target);
 
+      const nightRoost = roostSpotFor(i);
       this.gulls.push({
         group: mesh.group,
         leftWing: mesh.leftWing,
@@ -198,7 +287,10 @@ export class Birds {
         bank: 0,
         phase: Math.random() * Math.PI * 2,
         lifeMode: 'fly',
-        roost: roostSpotFor(i),
+        roostReason: null,
+        nightRoost,
+        activeRoost: nightRoost.clone(),
+        takeOffClearanceY: MIN_ALTITUDE,
       });
     }
   }
@@ -207,11 +299,36 @@ export class Birds {
     if (this.hidden) return;
     for (let gullIndex = 0; gullIndex < this.activeCount; gullIndex++) {
       const gull = this.gulls[gullIndex];
-      // ── Day/night life cycle: head to a roost after dark, wake at dawn ──
-      if (night > 0.62 && gull.lifeMode === 'fly') {
+      // Explicit eclipse state takes precedence over eclipse-darkened lighting.
+      if (this.eclipseRoostActive && gull.roostReason !== 'eclipse') {
+        gull.activeRoost.copy(nearestEclipseRoost(gull.position, gullIndex));
+        gull.roostReason = 'eclipse';
         gull.lifeMode = 'toRoost';
-        gull.target.set(gull.roost.x, 0, gull.roost.z);
-      } else if (night < 0.45 && gull.lifeMode !== 'fly') {
+        gull.target.set(gull.activeRoost.x, 0, gull.activeRoost.z);
+      } else if (!this.eclipseRoostActive && gull.roostReason === 'eclipse') {
+        if (night > 0.62) {
+          gull.activeRoost.copy(gull.nightRoost);
+          gull.roostReason = 'night';
+          gull.lifeMode = 'toRoost';
+          gull.target.set(gull.activeRoost.x, 0, gull.activeRoost.z);
+        } else {
+          gull.roostReason = null;
+          gull.lifeMode = 'takeOff';
+          gull.takeOffClearanceY = Math.max(MIN_ALTITUDE, gull.activeRoost.y + 5.5);
+          gull.altitudeTarget = gull.takeOffClearanceY;
+          gull.target.set(
+            gull.position.x + Math.sin(gull.heading) * 8,
+            0,
+            gull.position.z + Math.cos(gull.heading) * 8
+          );
+        }
+      } else if (!this.eclipseRoostActive && night > 0.62 && gull.roostReason !== 'night') {
+        gull.activeRoost.copy(gull.nightRoost);
+        gull.roostReason = 'night';
+        gull.lifeMode = 'toRoost';
+        gull.target.set(gull.activeRoost.x, 0, gull.activeRoost.z);
+      } else if (night < 0.45 && gull.roostReason === 'night') {
+        gull.roostReason = null;
         gull.lifeMode = 'fly';
         pickTarget(gull.target);
         gull.altitudeTarget = MIN_ALTITUDE + Math.random() * (MAX_ALTITUDE - MIN_ALTITUDE);
@@ -220,9 +337,9 @@ export class Birds {
       if (gull.lifeMode === 'roost') {
         // Asleep: sit still, wings folded, gentle breathing.
         gull.group.position.set(
-          gull.roost.x,
-          gull.roost.y + Math.sin(elapsed * 1.1 + gull.phase) * 0.02,
-          gull.roost.z
+          gull.activeRoost.x,
+          gull.activeRoost.y + Math.sin(elapsed * 1.1 + gull.phase) * 0.02,
+          gull.activeRoost.z
         );
         gull.group.rotation.set(0, gull.heading + Math.PI, 0);
         gull.leftWing.rotation.z = -0.05;
@@ -231,15 +348,17 @@ export class Birds {
       }
 
       if (gull.lifeMode === 'toRoost') {
-        gull.target.set(gull.roost.x, 0, gull.roost.z);
-        const horizontal = Math.hypot(gull.roost.x - gull.position.x, gull.roost.z - gull.position.z);
+        gull.target.set(gull.activeRoost.x, 0, gull.activeRoost.z);
+        const horizontal = Math.hypot(
+          gull.activeRoost.x - gull.position.x,
+          gull.activeRoost.z - gull.position.z
+        );
         // Glide down toward the roost height as the gull approaches.
-        gull.altitudeTarget = gull.roost.y + Math.min(horizontal * 0.4, 14);
-        if (horizontal < 2.2 && Math.abs(gull.position.y - gull.roost.y) < 3.4) {
-          gull.lifeMode = 'roost';
-          gull.position.copy(gull.roost);
-          continue;
-        }
+        gull.altitudeTarget = gull.activeRoost.y + Math.min(horizontal * 0.4, 14);
+      } else if (gull.lifeMode === 'takeOff' && gull.position.y >= gull.takeOffClearanceY - 0.1) {
+        gull.lifeMode = 'fly';
+        pickTarget(gull.target);
+        gull.altitudeTarget = MIN_ALTITUDE + Math.random() * (MAX_ALTITUDE - MIN_ALTITUDE);
       }
       // ── Steering: turn smoothly toward the current target ──
       const toTargetX = gull.target.x - gull.position.x;
@@ -260,14 +379,36 @@ export class Birds {
       // ── Altitude: stay above the buildings beneath, ease toward target ──
       const localCeiling =
         maxBuildingHeightNear(gull.position.x, gull.position.z, 6) + BUILDING_AVOIDANCE_BUFFER;
-      const wantY = Math.max(gull.altitudeTarget, localCeiling);
+      const landingDistance =
+        gull.lifeMode === 'toRoost'
+          ? Math.hypot(gull.activeRoost.x - gull.position.x, gull.activeRoost.z - gull.position.z)
+          : Number.POSITIVE_INFINITY;
+      const avoidanceFloor = landingDistance < 6 ? gull.activeRoost.y : localCeiling;
+      const wantY = Math.max(gull.altitudeTarget, avoidanceFloor);
       const dy = THREE.MathUtils.clamp(wantY - gull.position.y, -CLIMB_RATE * delta, CLIMB_RATE * delta);
       gull.position.y += dy;
 
       // ── Move forward; wind pushes everyone gently downwind (+x) ──
       const speed = gull.speed * (1 + wind * 0.15);
-      gull.position.x += Math.sin(gull.heading) * speed * delta + wind * 1.6 * delta;
-      gull.position.z += Math.cos(gull.heading) * speed * delta;
+      if (gull.lifeMode === 'toRoost') {
+        const distance = Math.max(distToTarget, 1e-6);
+        const landingSpeed = Math.min(speed, Math.max(0.7, distToTarget * 0.65));
+        const step = Math.min(distance, landingSpeed * delta);
+        gull.position.x += (toTargetX / distance) * step;
+        gull.position.z += (toTargetZ / distance) * step;
+      } else {
+        gull.position.x += Math.sin(gull.heading) * speed * delta + wind * 1.6 * delta;
+        gull.position.z += Math.cos(gull.heading) * speed * delta;
+      }
+
+      if (
+        gull.lifeMode === 'toRoost' &&
+        gull.position.distanceToSquared(gull.activeRoost) < 1e-8
+      ) {
+        gull.lifeMode = 'roost';
+        gull.leftWing.rotation.z = -0.05;
+        gull.rightWing.rotation.z = 0.05;
+      }
 
       // Soft world bounds — steer back inside.
       if (Math.abs(gull.position.x) > WORLD_HALF_SIZE + 14 || Math.abs(gull.position.z) > WORLD_HALF_SIZE + 14) {

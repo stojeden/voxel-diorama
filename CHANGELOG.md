@@ -11,6 +11,15 @@ a wersjonowanie projektu docelowo stosuje [Semantic Versioning](https://semver.o
 
 ### Added
 
+- `EclipseTimeline` z deterministycznymi kontaktami C1-C4, dokładnym polem
+  przecięcia tarcz, irradiancją, totalnością, koroną i perłami Baily'ego.
+- Proceduralny `EclipseVisual`: widoczne z dalekiej kamery Słońce i Księżyc,
+  korona z promieniami, chromosfera, pierścień diamentowy i gwiazdy bez
+  zewnętrznych modeli ani tekstur.
+- Sterowanie `E` i przycisk „Zaćmienie”, szerokie kadrowanie zjawiska oraz HUD
+  z fazą, pokryciem, paskiem postępu i komunikatem bezpieczeństwa.
+- Reakcje mew na zaćmienie: od 85% pokrycia dolatują do najbliższych dachów,
+  pozostają tam przez totalność i startują po spadku pokrycia do 65%.
 - Testowalny `CityRhythm` sterujący ostatnią pętlą autobusu, nocną przerwą,
   porannym rozwożeniem pasażerów i sekwencjami świateł mieszkań.
 - Pięć deterministycznych grup okien mieszkalnych, które gasną etapami od
@@ -26,6 +35,11 @@ a wersjonowanie projektu docelowo stosuje [Semantic Versioning](https://semver.o
 
 ### Changed
 
+- Zaćmienie trwa 96 sekund, zatrzymuje symulowaną pozycję Słońca, ale nie życie
+  miasta, i płynnie steruje niebem, ekspozycją, światłami oraz widocznością
+  gwiazd. Swobodna kamera nadal może przerwać automatyczne kadrowanie.
+- Wbudowana tarcza Słońca z shadera nieba jest ukrywana podczas zaćmienia, aby
+  na scenie nie pojawiały się dwa Słońca.
 - Wszystkie fazy dnia i nocy przechodzą płynnie; bezpośrednie słońce, ambient,
   księżyc i ekspozycja nie zmieniają się już skokowo.
 - PMREM korzysta z GPU crossfade przy stałej intensywności środowiska.
@@ -41,6 +55,8 @@ a wersjonowanie projektu docelowo stosuje [Semantic Versioning](https://semver.o
 
 ### Fixed
 
+- Zwinięty panel `TRANS CITY EXPRESS` zachowuje szerokość wersji rozwiniętej
+  i nie nachodzi na centralny status zaćmienia.
 - Pasażerowie autobusowi i kolejowi nie przenikają przez wiaty, ławki, słupy,
   barierki ani bryły stacji.
 - Plakaty nie są zatopione w voxelowych ścianach przystanków.
@@ -52,6 +68,9 @@ a wersjonowanie projektu docelowo stosuje [Semantic Versioning](https://semver.o
 
 ### Performance
 
+- Warstwa zaćmienia jest pojedynczym billboardem proceduralnym z profilem
+  jakości, nie wymusza regenerowania PMREM w każdej klatce i ma osobny
+  scenariusz `eclipse-totality-overview` w benchmarku High.
 - Dodano adaptacyjne profile Low, Medium, High i Auto, budżety świateł,
   dynamiczne ładowanie profilera oraz metryki `renderer.info` (`cad8325`).
 - Rendering P1 wykorzystuje profilowane SMAA/SSAO, selektywny bloom, LUT-y,
@@ -62,10 +81,10 @@ a wersjonowanie projektu docelowo stosuje [Semantic Versioning](https://semver.o
 
 ### Validation
 
-- 78 testów w 12 plikach testowych.
+- 97 testów w 14 plikach testowych.
 - Przechodzą `npm run typecheck`, `npm test` i `npm run build`.
-- Smoke test sprawdza desktop/mobile, canvas, luminancję, kolizje, oświetlenie,
-  rytm miasta, aktorów i budżety renderera.
+- Smoke test sprawdza desktop/mobile, totalność i warstwy zaćmienia, canvas,
+  luminancję, kolizje, oświetlenie, rytm miasta, aktorów i budżety renderera.
 
 ### Commits
 
