@@ -7,6 +7,11 @@ const HOST = '127.0.0.1';
 const PORT = 4173;
 const URL = `http://${HOST}:${PORT}`;
 const READY_TIMEOUT_MS = 60_000;
+const WRITE_SCREENSHOTS = process.env.CI !== 'true';
+
+async function saveScreenshot(page, path) {
+  if (WRITE_SCREENSHOTS) await page.screenshot({ path });
+}
 
 async function assertBundleBudgets() {
   const assetNames = await readdir('dist/assets');
@@ -178,7 +183,7 @@ try {
     desktopPixels.sceneClippedSamples / desktopPixels.sceneSamples < 0.12,
     'desktop scene highlights are overexposed'
   );
-  await page.screenshot({ path: '/tmp/voxel-diorama-desktop.png' });
+  await saveScreenshot(page, '/tmp/voxel-diorama-desktop.png');
 
   await page.evaluate(() => window.__diorama.setTime(0.32));
   await page.waitForTimeout(350);
@@ -224,7 +229,7 @@ try {
     );
   });
   await page.waitForTimeout(40);
-  await page.screenshot({ path: '/tmp/voxel-diorama-postman.png' });
+  await saveScreenshot(page, '/tmp/voxel-diorama-postman.png');
   await page.evaluate(async () => {
     await window.__diorama.controls.setLookAt(70, 48, 80, 0, 6, 0, false);
   });
@@ -234,7 +239,7 @@ try {
     await page.evaluate((t) => window.__diorama.setTime(t), time);
     await page.waitForTimeout(350);
     const sample = await sampleRenderedFrame(page);
-    await page.screenshot({ path: `/tmp/voxel-diorama-${label}.png` });
+    await saveScreenshot(page, `/tmp/voxel-diorama-${label}.png`);
     exposureSamples[label] = sample;
     const clippedRatio = sample.sceneClippedSamples / sample.sceneSamples;
     assert.ok(
@@ -274,7 +279,7 @@ try {
     'station passengers must react to the eclipse'
   );
   assert.ok(partialEclipse.postman.eclipseAlert > 0, 'the dog must react to the changing light');
-  await page.screenshot({ path: '/tmp/voxel-diorama-eclipse-partial.png' });
+  await saveScreenshot(page, '/tmp/voxel-diorama-eclipse-partial.png');
 
   await page.evaluate(() => window.__diorama.setEclipseProgress(0.35));
   await page.waitForTimeout(350);
@@ -349,7 +354,7 @@ try {
     eclipsePixels.sceneClippedSamples / eclipsePixels.sceneSamples < 0.12,
     'totality overexposes the city'
   );
-  await page.screenshot({ path: '/tmp/voxel-diorama-eclipse-totality.png' });
+  await saveScreenshot(page, '/tmp/voxel-diorama-eclipse-totality.png');
   await page.evaluate(() => window.__diorama.setEclipseProgress(1));
 
   const cityRhythm = {};
@@ -403,7 +408,7 @@ try {
   await page.waitForTimeout(800);
   const lakePixels = await sampleRenderedFrame(page);
   assert.ok(lakePixels.maxLuminance - lakePixels.minLuminance > 25, 'lake view lacks visual contrast');
-  await page.screenshot({ path: '/tmp/voxel-diorama-lake-rain.png' });
+  await saveScreenshot(page, '/tmp/voxel-diorama-lake-rain.png');
   await page.evaluate(() => window.__diorama.clearWeather());
 
   const grocerySignCount = await page.evaluate(() => {
@@ -420,7 +425,7 @@ try {
     await window.__diorama.controls.setLookAt(-4, 6, 17, -11, 0.3, 28, false);
   });
   await page.waitForTimeout(450);
-  await page.screenshot({ path: '/tmp/voxel-diorama-bus-stop.png' });
+  await saveScreenshot(page, '/tmp/voxel-diorama-bus-stop.png');
 
   await page.evaluate(async () => {
     await window.__diorama.controls.setLookAt(-37, 6, 51, -45, 0.6, 44, false);
@@ -440,7 +445,7 @@ try {
     }
     if (!sawWalkingPassenger) throw new Error('lake bus-stop navigation did not animate');
   });
-  await page.screenshot({ path: '/tmp/voxel-diorama-lake-bus-stop.png' });
+  await saveScreenshot(page, '/tmp/voxel-diorama-lake-bus-stop.png');
 
   await page.evaluate(async () => {
     await window.__diorama.controls.setLookAt(39, 13, 19, 25, 6, 3, false);
@@ -461,7 +466,7 @@ try {
     }
     if (!sawWalkingPassenger) throw new Error('railway passenger navigation did not animate');
   });
-  await page.screenshot({ path: '/tmp/voxel-diorama-station-navigation.png' });
+  await saveScreenshot(page, '/tmp/voxel-diorama-station-navigation.png');
 
   const busStopDetails = await page.evaluate(() => {
     const result = { posters: 0, fixtures: 0, lights: 0, posterFaceDistances: [] };
@@ -549,14 +554,14 @@ try {
     nightBusStopMetrics.quality.estimatedFps >= 30,
     `night bus-stop smoke test became unresponsive (${nightBusStopMetrics.quality.estimatedFps.toFixed(1)} FPS)`
   );
-  await page.screenshot({ path: '/tmp/voxel-diorama-night-bus-stop.png' });
+  await saveScreenshot(page, '/tmp/voxel-diorama-night-bus-stop.png');
 
   await page.evaluate(async () => {
     window.__diorama.setTime(0.5);
     await window.__diorama.controls.setLookAt(-31, 6, 7, -28.5, 1.5, 16, false);
   });
   await page.waitForTimeout(350);
-  await page.screenshot({ path: '/tmp/voxel-diorama-grocery.png' });
+  await saveScreenshot(page, '/tmp/voxel-diorama-grocery.png');
 
   await page.evaluate(async () => {
     window.__diorama.setTime(0.86);
@@ -576,7 +581,7 @@ try {
   });
   await page.waitForTimeout(450);
   const cowNightPixels = await sampleRenderedFrame(page);
-  await page.screenshot({ path: '/tmp/voxel-diorama-night-cow.png' });
+  await saveScreenshot(page, '/tmp/voxel-diorama-night-cow.png');
   assert.ok(cowNightPixels.visibleSamples > 150, 'street lighting leaves the cow district unreadable');
   assert.ok(cowNightPixels.maxLuminance - cowNightPixels.minLuminance > 25, 'cow district lacks night contrast');
 
@@ -604,7 +609,7 @@ try {
   assert.equal(winterFisherman.seatedLegsVisible, true, 'bent seated legs are hidden');
   assert.equal(winterFisherman.standingLegsVisible, false, 'standing legs intersect the stool');
   assert.ok(winterFisherman.figureY < 0, 'winter fisherman still floats above the stool');
-  await page.screenshot({ path: '/tmp/voxel-diorama-winter-fisherman.png' });
+  await saveScreenshot(page, '/tmp/voxel-diorama-winter-fisherman.png');
   await page.evaluate(() => {
     window.__diorama.debugSetSnowCover(0);
     window.__diorama.clearWeather();
@@ -688,7 +693,7 @@ try {
     mobileLayout.clock.bottom <= mobileLayout.eclipse.top
   );
   assert.equal(eclipseOverlapsClock, false, 'mobile eclipse status overlaps the clock');
-  await mobile.screenshot({ path: '/tmp/voxel-diorama-mobile.png' });
+  await saveScreenshot(mobile, '/tmp/voxel-diorama-mobile.png');
   await mobile.close();
   assert.deepEqual(mobileErrors, [], `mobile browser errors:\n${mobileErrors.join('\n')}`);
 
