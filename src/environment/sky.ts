@@ -84,7 +84,7 @@ export function sceneExposure(
   return (
     (0.34 + day * 0.12 + clamp01(golden) * 0.04) *
     themeMultiplier *
-    (1 - clamp01(eclipse) * 0.68)
+    (1 - clamp01(eclipse) * 0.18)
   );
 }
 

@@ -165,6 +165,55 @@ try {
     );
   }
 
+  await page.evaluate(() => window.__diorama.setEclipseProgress(0.5));
+  await page.waitForTimeout(500);
+  const collapsedPanel = await page.locator('#dilation-panel').boundingBox();
+  const eclipseStatus = await page.locator('#eclipse-status').boundingBox();
+  await page.locator('#panel-toggle').click();
+  await page.waitForTimeout(350);
+  const expandedPanel = await page.locator('#dilation-panel').boundingBox();
+  assert.ok(collapsedPanel && expandedPanel && eclipseStatus, 'eclipse UI layout is missing');
+  assert.ok(
+    Math.abs(collapsedPanel.width - expandedPanel.width) < 1,
+    `control panel width changes when expanded (${collapsedPanel.width} vs ${expandedPanel.width})`
+  );
+  assert.ok(
+    expandedPanel.x + expandedPanel.width <= eclipseStatus.x,
+    'control panel overlaps the eclipse status'
+  );
+  await page.locator('#panel-toggle').click();
+  const eclipse = await page.evaluate(() => {
+    const state = window.__diorama.getState().eclipse;
+    const anchor = window.__diorama.scene.getObjectByName('eclipse-celestial-anchor');
+    const solarLayer = window.__diorama.scene.getObjectByName('eclipse-solar-layer');
+    const moonLayer = window.__diorama.scene.getObjectByName('eclipse-moon-layer');
+    return {
+      state,
+      anchorVisible: anchor?.visible ?? false,
+      solarVisible: solarLayer?.visible ?? false,
+      moonVisible: moonLayer?.visible ?? false,
+    };
+  });
+  assert.equal(eclipse.state.phase, 'totality');
+  assert.ok(eclipse.state.coverage > 0.999, 'the Moon must fully cover the Sun at maximum eclipse');
+  assert.ok(eclipse.state.corona > 0.99, 'the corona must be fully visible during totality');
+  assert.ok(
+    eclipse.anchorVisible && eclipse.solarVisible && eclipse.moonVisible,
+    'the camera-relative eclipse layers must remain visible'
+  );
+  const eclipsePixels = await sampleRenderedFrame(page);
+  assert.ok(eclipsePixels.visibleSamples > 200, 'the totality scene is too dark to read');
+  assert.ok(
+    eclipsePixels.maxLuminance - eclipsePixels.minLuminance > 25,
+    'the totality scene lacks corona and horizon contrast'
+  );
+  assert.ok(
+    eclipsePixels.sceneClippedSamples / eclipsePixels.sceneSamples < 0.12,
+    'totality overexposes the city'
+  );
+  await page.screenshot({ path: '/tmp/voxel-diorama-eclipse-totality.png' });
+  await page.evaluate(() => window.__diorama.setEclipseProgress(1));
+
   const cityRhythm = {};
   for (const [label, time] of [
     ['lateEvening', (23 * 60 + 50) / 1440],
@@ -393,8 +442,9 @@ try {
   assert.ok(cowNightPixels.visibleSamples > 150, 'street lighting leaves the cow district unreadable');
   assert.ok(cowNightPixels.maxLuminance - cowNightPixels.minLuminance > 25, 'cow district lacks night contrast');
 
+  await page.evaluate(() => window.__diorama.setTime(0.42));
+  await page.waitForTimeout(900);
   const winterFisherman = await page.evaluate(async () => {
-    window.__diorama.setTime(0.42);
     window.__diorama.debugWinterFisherman();
     await window.__diorama.controls.setLookAt(-45, 4.2, 69, -39, 0.4, 62, false);
     await new Promise((resolve) => setTimeout(resolve, 450));
@@ -464,21 +514,25 @@ try {
   mobile.on('pageerror', (error) => mobileErrors.push(error.message));
   await mobile.goto(URL, { waitUntil: 'networkidle' });
   await mobile.waitForFunction(() => window.__diorama?.ready === true, null, { timeout: 20_000 });
+  await mobile.evaluate(() => window.__diorama.setEclipseProgress(0.5));
+  await mobile.waitForTimeout(300);
   const mobilePixels = await sampleRenderedFrame(mobile);
   assert.ok(mobilePixels.visibleSamples > 200, 'mobile canvas is blank');
   assert.ok(mobilePixels.maxLuminance - mobilePixels.minLuminance > 25, 'mobile canvas lacks visual contrast');
   const mobileLayout = await mobile.evaluate(() => {
     const panel = document.querySelector('#dilation-panel').getBoundingClientRect();
+    const eclipse = document.querySelector('#eclipse-status').getBoundingClientRect();
     const clock = document.querySelector('#time-display').getBoundingClientRect();
     const info = document.querySelector('#info').getBoundingClientRect();
     return {
       panel: { left: panel.left, right: panel.right, top: panel.top, bottom: panel.bottom },
+      eclipse: { left: eclipse.left, right: eclipse.right, top: eclipse.top, bottom: eclipse.bottom },
       clock: { left: clock.left, right: clock.right, top: clock.top, bottom: clock.bottom },
       info: { left: info.left, right: info.right, top: info.top, bottom: info.bottom },
       viewport: { width: innerWidth, height: innerHeight },
     };
   });
-  for (const rect of [mobileLayout.panel, mobileLayout.clock, mobileLayout.info]) {
+  for (const rect of [mobileLayout.panel, mobileLayout.eclipse, mobileLayout.clock, mobileLayout.info]) {
     assert.ok(rect.left >= -1 && rect.right <= mobileLayout.viewport.width + 1, 'mobile UI exceeds viewport width');
     assert.ok(rect.top >= -1 && rect.bottom <= mobileLayout.viewport.height + 1, 'mobile UI exceeds viewport height');
   }
@@ -489,6 +543,13 @@ try {
     mobileLayout.clock.bottom <= mobileLayout.panel.top
   );
   assert.equal(panelOverlapsClock, false, 'mobile panel overlaps the clock');
+  const eclipseOverlapsClock = !(
+    mobileLayout.eclipse.right <= mobileLayout.clock.left ||
+    mobileLayout.clock.right <= mobileLayout.eclipse.left ||
+    mobileLayout.eclipse.bottom <= mobileLayout.clock.top ||
+    mobileLayout.clock.bottom <= mobileLayout.eclipse.top
+  );
+  assert.equal(eclipseOverlapsClock, false, 'mobile eclipse status overlaps the clock');
   await mobile.screenshot({ path: '/tmp/voxel-diorama-mobile.png' });
   await mobile.close();
   assert.deepEqual(mobileErrors, [], `mobile browser errors:\n${mobileErrors.join('\n')}`);

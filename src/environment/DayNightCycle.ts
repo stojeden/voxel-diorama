@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { QualityProfile } from '../performance/QualityManager';
+import { EclipseVisual, type EclipseRenderState } from './EclipseVisual';
 import { Sky } from 'three/addons/objects/Sky.js';
 import {
   residentialWindowActivityAt,
@@ -276,22 +277,27 @@ export class DayNightCycle {
   private moonIllumination = 1;
 
   // ── Solar eclipse ──
-  private eclipseStrength = 0;
+  private eclipseState: EclipseRenderState = {
+    active: false,
+    coverage: 0,
+    separation: 1.25,
+    irradiance: 1,
+    corona: 0,
+    beads: 0,
+    stars: 0,
+    totality: 0,
+  };
   private lightingInitialized = false;
   private smoothedNight = 1;
   private smoothedGolden = 0;
   private smoothedSunStrength = 0;
-  private readonly eclipseDisc: THREE.Mesh;
-  private readonly eclipseDiscMaterial: THREE.MeshBasicMaterial;
-  private readonly eclipseCorona: THREE.Mesh;
-  private readonly eclipseCoronaMaterial: THREE.MeshBasicMaterial;
+  private readonly eclipseVisual: EclipseVisual;
 
   private readonly tmpSunDir = new THREE.Vector3();
   private readonly tmpMoonDir = new THREE.Vector3();
   private readonly tmpColor = new THREE.Color();
   private readonly tmpSunColor = new THREE.Color();
   private readonly tmpWhite = new THREE.Color(0xffffff);
-  private readonly tmpZero = new THREE.Vector3();
   private readonly shadowFocus = new THREE.Vector3();
   private shadowRadius = 95;
   private lightSelectionCooldown = 0;
@@ -310,6 +316,7 @@ export class DayNightCycle {
     // ── Atmosphere ──
     this.sky = new Sky();
     this.sky.scale.setScalar(2000);
+    this.installEclipseSkyShader();
     scene.add(this.sky);
 
     this.envScene = new THREE.Scene();
@@ -400,27 +407,7 @@ export class DayNightCycle {
       this.disposables.push(geo, mat);
     }
 
-    // ── Eclipse: dark moon disc + additive corona, placed along the sun ray ──
-    this.eclipseDiscMaterial = new THREE.MeshBasicMaterial({ color: 0x05060a, fog: false });
-    const discGeo = new THREE.CircleGeometry(24, 40);
-    this.eclipseDisc = new THREE.Mesh(discGeo, this.eclipseDiscMaterial);
-    this.eclipseDisc.visible = false;
-    scene.add(this.eclipseDisc);
-    this.disposables.push(discGeo, this.eclipseDiscMaterial);
-
-    this.eclipseCoronaMaterial = new THREE.MeshBasicMaterial({
-      color: 0xfff4dd,
-      transparent: true,
-      opacity: 0,
-      blending: THREE.AdditiveBlending,
-      side: THREE.DoubleSide,
-      fog: false,
-    });
-    const coronaGeo = new THREE.RingGeometry(24, 36, 48);
-    this.eclipseCorona = new THREE.Mesh(coronaGeo, this.eclipseCoronaMaterial);
-    this.eclipseCorona.visible = false;
-    scene.add(this.eclipseCorona);
-    this.disposables.push(coronaGeo, this.eclipseCoronaMaterial);
+    this.eclipseVisual = new EclipseVisual(scene);
 
     // ── Aurora: two curved curtains with independent phases ──
     for (let i = 0; i < 2; i++) {
@@ -439,6 +426,39 @@ export class DayNightCycle {
     }
 
     this.installEnvironmentBlending();
+  }
+
+  private installEclipseSkyShader(): void {
+    const material = this.sky.material;
+    material.uniforms.eclipseDarkness = { value: 0 };
+    material.uniforms.eclipseTotality = { value: 0 };
+
+    const outputMarker = 'gl_FragColor = vec4( texColor, 1.0 );';
+    if (!material.fragmentShader.includes(outputMarker)) {
+      throw new Error('Three.js Sky shader changed; eclipse atmosphere patch needs updating');
+    }
+    material.fragmentShader = material.fragmentShader
+      .replace(
+        'uniform float time;',
+        `uniform float time;
+        uniform float eclipseDarkness;
+        uniform float eclipseTotality;`
+      )
+      .replace(
+        outputMarker,
+        `float eclipseHorizon = pow( 1.0 - clamp( direction.y, 0.0, 1.0 ), 3.0 );
+        vec3 eclipseZenith = vec3( 0.004, 0.009, 0.035 );
+        vec3 eclipseHorizonColor = vec3( 0.24, 0.065, 0.025 );
+        vec3 eclipseSky = mix(
+          eclipseZenith,
+          eclipseHorizonColor,
+          eclipseHorizon * eclipseTotality
+        );
+        float eclipseBlend = eclipseDarkness * mix( 0.68, 0.88, eclipseTotality );
+        texColor = mix( texColor, eclipseSky, eclipseBlend );
+        gl_FragColor = vec4( texColor, 1.0 );`
+      );
+    material.needsUpdate = true;
   }
 
   private installEnvironmentBlending(): void {
@@ -486,9 +506,40 @@ export class DayNightCycle {
     this.auroraTarget = clamp01(strength);
   }
 
-  /** 0..1 — solar eclipse: the moon slides over the sun, the world darkens. */
+  /** Compatibility helper for diagnostics that directly set eclipse coverage. */
   setEclipse(strength: number): void {
-    this.eclipseStrength = clamp01(strength);
+    const coverage = clamp01(strength);
+    this.setEclipseState({
+      active: coverage > 0.001,
+      coverage,
+      separation: 1.25 * (1 - coverage),
+      irradiance: 1 - coverage * 0.985,
+      corona: Math.pow(coverage, 4),
+      beads: Math.pow(coverage, 10),
+      stars: Math.pow(coverage, 7),
+      totality: THREE.MathUtils.smoothstep(coverage, 0.985, 1),
+    });
+  }
+
+  setEclipseState(state: EclipseRenderState): void {
+    this.eclipseState = {
+      active: state.active,
+      coverage: clamp01(state.coverage),
+      separation: THREE.MathUtils.clamp(state.separation, -1.35, 1.35),
+      irradiance: clamp01(state.irradiance),
+      corona: clamp01(state.corona),
+      beads: clamp01(state.beads),
+      stars: clamp01(state.stars),
+      totality: clamp01(state.totality),
+    };
+  }
+
+  getBloomObjects(): THREE.Object3D[] {
+    return this.eclipseVisual.getBloomObjects();
+  }
+
+  getOcclusionExclusions(): THREE.Object3D[] {
+    return this.eclipseVisual.getOcclusionExclusions();
   }
 
   /** Focuses the directional shadow budget around the currently viewed area. */
@@ -506,6 +557,7 @@ export class DayNightCycle {
   }
 
   setQuality(profile: QualityProfile): void {
+    this.eclipseVisual.setQuality(profile.level);
     this.envInterval = profile.pmremInterval;
     this.shadowsEnabled = profile.shadows;
     this.streetLightBudget = profile.streetLightBudget;
@@ -520,11 +572,17 @@ export class DayNightCycle {
 
   update(t: number, dtReal: number, cloudCover: number, nightFloor = 0): DayLightState {
     this.elapsed += dtReal;
-    const eclipse = this.eclipseStrength;
+    const eclipseState = this.eclipseState;
+    const eclipse = eclipseState.coverage;
+    const eclipseDarkness = 1 - eclipseState.irradiance;
     const elevation = sunElevationAt(t);
     // Themes like Neon Noir keep the city in eternal dusk via nightFloor;
     // a solar eclipse pushes the world toward night for half a minute.
-    const targetNight = Math.max(nightFactorAt(t), nightFloor, eclipse * 0.72);
+    const targetNight = Math.max(
+      nightFactorAt(t),
+      nightFloor,
+      eclipseDarkness * 0.52 + eclipseState.totality * 0.12
+    );
     const targetGolden = goldenFactorAt(t);
     const targetSunStrength = directSunFactorAt(t);
     const lightingBlend = this.lightingInitialized ? 1 - Math.exp(-Math.max(0, dtReal) * 3.2) : 1;
@@ -541,13 +599,17 @@ export class DayNightCycle {
     const uniforms = this.sky.material.uniforms;
     // An eclipse chokes the scattered light: the whole sky dims with the sun.
     const turbidity = 2.0 + cloudCover * 11 + golden * 1.6;
-    const rayleigh = (2.4 + golden * 1.4) * (1 - eclipse * 0.8);
-    const mie = (0.0035 + golden * 0.014 + cloudCover * 0.008) * (1 - eclipse * 0.92);
+    const rayleigh = (2.4 + golden * 1.4) * (1 - eclipseDarkness * 0.82);
+    const mie =
+      (0.0035 + golden * 0.014 + cloudCover * 0.008) * (1 - eclipseDarkness * 0.94);
     uniforms.turbidity.value = turbidity;
     uniforms.rayleigh.value = rayleigh;
     uniforms.mieCoefficient.value = mie;
     uniforms.mieDirectionalG.value = 0.82;
     uniforms.sunPosition.value.copy(sunDir);
+    uniforms.showSunDisc.value = eclipseState.active ? 0 : 1;
+    uniforms.eclipseDarkness.value = eclipseDarkness;
+    uniforms.eclipseTotality.value = eclipseState.totality;
 
     // ── Sun light ──
     const sunStrength = this.smoothedSunStrength;
@@ -555,7 +617,11 @@ export class DayNightCycle {
     this.sunLight.target.position.copy(this.shadowFocus);
     // nightFloor (eternal-dusk themes) and an eclipse both mute the sun.
     this.sunLight.intensity =
-      sunStrength * 2.2 * (1 - cloudCover * 0.62) * (1 - nightFloor * 0.8) * (1 - eclipse * 0.96);
+      sunStrength *
+      2.2 *
+      (1 - cloudCover * 0.62) *
+      (1 - nightFloor * 0.8) *
+      eclipseState.irradiance;
     sunColorAt(t, this.tmpSunColor);
     this.sunLight.color.copy(this.tmpSunColor);
     this.sunLight.castShadow = this.shadowsEnabled && sunStrength > 0.002;
@@ -570,30 +636,16 @@ export class DayNightCycle {
     this.moonLight.intensity =
       night * (0.06 + this.moonIllumination * 0.5) * (1 - cloudCover * 0.8) * clamp01(moonDir.y * 4);
 
-    // ── Eclipse visuals: black disc + corona sliding over the sun ──
-    if (eclipse > 0.01) {
-      this.eclipseDisc.visible = true;
-      this.eclipseCorona.visible = true;
-      // The disc slides across the sun: offset shrinks to 0 at totality.
-      const slide = (1 - eclipse) * 60;
-      const eye = this.camera?.position;
-      this.eclipseDisc.position.copy(sunDir).multiplyScalar(490);
-      if (eye) this.eclipseDisc.position.add(eye);
-      this.eclipseDisc.position.x -= slide;
-      this.eclipseDisc.lookAt(eye ?? this.tmpZero);
-      this.eclipseCorona.position.copy(this.eclipseDisc.position);
-      this.eclipseCorona.lookAt(eye ?? this.tmpZero);
-      this.eclipseCoronaMaterial.opacity = Math.pow(eclipse, 2) * 0.85;
-    } else {
-      this.eclipseDisc.visible = false;
-      this.eclipseCorona.visible = false;
-    }
+    this.eclipseVisual.update(this.camera, sunDir, eclipseState, dtReal, cloudCover);
 
     // ── Fill lights ──
-    this.ambientLight.intensity = (0.16 + day * 0.5 + golden * 0.1) * (1 - eclipse * 0.55);
+    this.ambientLight.intensity =
+      (0.16 + day * 0.5 + golden * 0.1) * (1 - eclipseDarkness * 0.38) +
+      eclipseState.totality * 0.1;
     skyColorAt(t, this.tmpColor);
     this.ambientLight.color.copy(this.tmpColor).lerp(this.tmpWhite, 0.35);
-    this.hemisphereLight.intensity = (0.22 + day * 0.5) * (1 - eclipse * 0.6);
+    this.hemisphereLight.intensity =
+      (0.22 + day * 0.5) * (1 - eclipseDarkness * 0.42) + eclipseState.totality * 0.08;
     this.hemisphereLight.color.copy(this.tmpColor);
 
     // ── Fog colour tracks the horizon (density owned by Weather) ──
@@ -602,10 +654,19 @@ export class DayNightCycle {
       this.scene.fog.color
         .copy(this.tmpColor)
         .lerp(new THREE.Color(0x9aa3ad), cloudCover * fogGrey * day);
+      if (eclipseDarkness > 0.001) {
+        this.scene.fog.color.lerp(
+          new THREE.Color(0x171d36),
+          eclipseDarkness * (0.5 + eclipseState.totality * 0.28)
+        );
+      }
     }
 
     // ── Stars ──
-    const starAlpha = clamp01((night - 0.45) / 0.5) * (1 - cloudCover);
+    const starAlpha = Math.max(
+      clamp01((night - 0.45) / 0.5),
+      eclipseState.stars * 0.88
+    ) * (1 - cloudCover);
     this.starMaterial.opacity = starAlpha * 0.95;
     this.starField.visible = starAlpha > 0.02;
     this.starField.rotation.y = this.elapsed * 0.004;
@@ -690,6 +751,8 @@ export class DayNightCycle {
 
     // ── Environment map (reflections in glass) — throttled regeneration ──
     this.updateEnvironmentTransition(dtReal);
+    this.scene.environmentIntensity =
+      ENVIRONMENT_INTENSITY * (1 - eclipseDarkness * 0.72);
     this.envCooldown -= dtReal;
     const elevationDelta = Math.abs(elevation - this.envLastElevation);
     const cloudDelta = Math.abs(cloudCover - this.envLastCloud);
@@ -779,6 +842,7 @@ export class DayNightCycle {
   }
 
   dispose(): void {
+    this.eclipseVisual.dispose();
     for (const item of this.disposables) item.dispose();
     this.envTarget?.dispose();
     this.envPendingTarget?.dispose();

@@ -67,6 +67,13 @@ const scenarios = [
   { name: 'golden-clear-overview', time: 0.28, weather: 'clear', camera: 'overview' },
   { name: 'noon-rain-overview', time: 0.5, weather: 'rain', camera: 'overview' },
   { name: 'night-snow-train', time: 0.02, weather: 'snow', camera: 'train' },
+  {
+    name: 'eclipse-totality-overview',
+    time: 0.715,
+    weather: 'clear',
+    camera: 'overview',
+    eclipseProgress: 0.5,
+  },
 ];
 
 const preview = spawn(process.execPath, ['node_modules/vite/bin/vite.js', 'preview', '--host', HOST, '--port', String(PORT), '--strictPort'], {
@@ -114,9 +121,10 @@ try {
 
   const results = [];
   for (const scenario of scenarios) {
-    await page.evaluate(({ time, weather }) => {
+    await page.evaluate(({ time, weather, eclipseProgress }) => {
       window.__diorama.setTime(time);
       window.__diorama.setWeather(weather);
+      if (eclipseProgress !== undefined) window.__diorama.setEclipseProgress(eclipseProgress);
     }, scenario);
     if (scenario.camera === 'train') await page.keyboard.press('t');
     else {

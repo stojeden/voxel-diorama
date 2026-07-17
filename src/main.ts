@@ -19,9 +19,10 @@ import { Balloon } from './effects/Balloon';
 import { Fisherman } from './world/Fisherman';
 import { Postman } from './world/Postman';
 import { chapterForProgress } from './experience/RouteChapters';
+import { EclipseTimeline, type EclipseTimelineState } from './experience/EclipseTimeline';
 import { themeById, type DioramaTheme } from './experience/Themes';
 import { DAY_SECONDS, LEVEL_CROSSING, TUNNEL_LENGTH, WORLD_HALF_SIZE } from './world/WorldLayout';
-import { sceneBloomStrength, sceneExposure } from './environment/sky';
+import { sceneBloomStrength, sceneExposure, sunDirectionAt } from './environment/sky';
 import {
   QualityManager,
   type QualityMode,
@@ -49,7 +50,6 @@ const postman = new Postman(env.scene);
 const balloon = new Balloon(env.scene);
 const railSignals = new RailSignals(env.scene);
 const weather = new Weather(env.scene, windUniforms);
-env.setOcclusionExclusions(weather.getOcclusionExclusions());
 const dayNight = new DayNightCycle(env.scene, env.renderer, {
   streetLights: world.streetLights,
   streetGlowMesh: world.streetGlowMesh,
@@ -63,6 +63,10 @@ const dayNight = new DayNightCycle(env.scene, env.renderer, {
   windowLights: world.windowLights,
   windowGlowMaterials: world.windowGlowMaterials,
 });
+env.setOcclusionExclusions([
+  ...weather.getOcclusionExclusions(),
+  ...dayNight.getOcclusionExclusions(),
+]);
 const portalGlow = new PortalGlow(env.scene);
 dayNight.camera = env.camera;
 let realTime: RealTimeSync | null = null;
@@ -82,6 +86,9 @@ env.scene.traverse((object) => {
   });
   if (glows) bloomTargets.push(object);
 });
+for (const object of dayNight.getBloomObjects()) {
+  if (!bloomTargets.includes(object)) bloomTargets.push(object);
+}
 env.setBloomSelection(bloomTargets);
 
 const unsubscribeQuality = quality.subscribe((profile, snapshot) => {
@@ -125,11 +132,15 @@ let simTime = 0.262 * DAY_SECONDS;
 let renderTime = simTime;
 let simMoonPhase = 0.35; // waxing gibbous to start — photogenic
 let auroraNight = Math.random() < 0.5;
-// Solar eclipse: some days, around noon, the moon slides over the sun.
-let eclipseDay = Math.random() < 0.45;
+const ECLIPSE_VIEW_TIME = 0.715;
+const eclipseTimeline = new EclipseTimeline({ durationSeconds: 96 });
+let eclipseState = eclipseTimeline.getState();
+let eclipseDebugStrength: number | null = null;
+let eclipseCheckpointLocked = false;
+let eclipseDay = true;
 let eclipseDoneToday = false;
-let eclipseProgress = -1; // -1 = inactive, otherwise 0..1 over ECLIPSE_SECONDS
-const ECLIPSE_SECONDS = 30;
+const eclipseViewSun = new THREE.Vector3();
+const eclipseViewCamera = new THREE.Vector3();
 
 ui.setInfoText('PRZECIĄGNIJ — OBRÓT • PRAWY PRZYCISK — PRZESUŃ • SCROLL — ZOOM');
 ui.setTimeScale(1);
@@ -263,6 +274,67 @@ ui.onProfilerToggle(() => {
   void toggleProfiler().then((active) => ui.showToast(active ? 'PROFILER: WŁĄCZONY' : 'PROFILER: WYŁĄCZONY'));
 });
 
+function focusEclipseView(): void {
+  if (tour.isActive()) {
+    tour.stop();
+    ui.setTourActive(false);
+  }
+  cameraMode = 'free';
+  ui.setCameraMode('free');
+  env.controls.enabled = true;
+
+  sunDirectionAt(ECLIPSE_VIEW_TIME, eclipseViewSun);
+  eclipseViewCamera.set(-eclipseViewSun.x, 0, -eclipseViewSun.z).normalize().multiplyScalar(148);
+  eclipseViewCamera.y = 46;
+  env.controls.setLookAt(
+    eclipseViewCamera.x,
+    eclipseViewCamera.y,
+    eclipseViewCamera.z,
+    0,
+    36,
+    0,
+    true
+  );
+}
+
+function startEclipse(focusView = true): void {
+  if (realTime?.isActive()) {
+    realTime.disable();
+    weather.setExternal(null);
+    ui.setRealTime(false);
+  }
+  simTime = ECLIPSE_VIEW_TIME * DAY_SECONDS;
+  renderTime = simTime;
+  eclipseState = eclipseTimeline.start();
+  eclipseDebugStrength = null;
+  eclipseCheckpointLocked = false;
+  eclipseDoneToday = true;
+  if (focusView) focusEclipseView();
+  ui.showToast('ZAĆMIENIE SŁOŃCA · CZAS ZJAWISKA SKOMPRESOWANY');
+}
+
+ui.onEclipseStart(() => startEclipse(true));
+
+if (import.meta.env.DEV) {
+  const eclipseCheckpoint = new URLSearchParams(window.location.search).get('eclipse');
+  const checkpoints: Record<string, number> = {
+    c1: 0.18,
+    c2: 0.39,
+    totality: 0.5,
+    c3: 0.61,
+    c4: 0.82,
+  };
+  const checkpoint = eclipseCheckpoint ? checkpoints[eclipseCheckpoint] : undefined;
+  if (checkpoint !== undefined) {
+    simTime = ECLIPSE_VIEW_TIME * DAY_SECONDS;
+    renderTime = simTime;
+    eclipseState = eclipseTimeline.seek(checkpoint, false);
+    eclipseCheckpointLocked = true;
+    eclipseDoneToday = true;
+    focusEclipseView();
+  }
+}
+
 // ─── Animation ───
 const clock = new THREE.Clock();
 let elapsed = 0;
@@ -282,6 +354,27 @@ function formatClock(t01: number): string {
   const hours = Math.floor(t01 * 24);
   const minutes = Math.floor((t01 * 24 * 60) % 60);
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+}
+
+const ECLIPSE_PHASE_LABELS: Record<EclipseTimelineState['phase'], string> = {
+  'partial-in': 'FAZA CZĘŚCIOWA · C1 → C2',
+  'c2-diamond-ring': 'C2 · DIAMENTOWY PIERŚCIEŃ',
+  totality: 'TOTALNOŚĆ · KORONA SŁONECZNA',
+  'c3-diamond-ring': 'C3 · DIAMENTOWY PIERŚCIEŃ',
+  'partial-out': 'FAZA CZĘŚCIOWA · C3 → C4',
+  complete: 'C4 · KONIEC ZAĆMIENIA',
+};
+
+function updateEclipseHud(state: EclipseTimelineState, active: boolean): void {
+  if (!active) {
+    ui.setEclipseStatus(false);
+    return;
+  }
+  const coverage = Math.round(state.coverage * 100);
+  const safety = state.phase === 'totality'
+    ? 'KORONA WIDOCZNA · CZAS SYMULACJI SKOMPRESOWANY'
+    : 'POKRYCIE ' + coverage + '% · UŻYWAJ FILTRA SŁONECZNEGO';
+  ui.setEclipseStatus(true, ECLIPSE_PHASE_LABELS[state.phase], safety, state.progress);
 }
 
 async function warmRenderer(): Promise<void> {
@@ -339,13 +432,13 @@ function animate() {
     renderTime = (renderTime + diff * Math.min(1, rawDelta * 0.8) + DAY_SECONDS) % DAY_SECONDS;
     simTime = renderTime;
   } else {
-    simTime += delta * timeScale;
+    if (!eclipseState.running && !eclipseCheckpointLocked) simTime += delta * timeScale;
     if (simTime >= DAY_SECONDS) {
       simTime -= DAY_SECONDS;
       // New simulated day — advance the moon phase noticeably.
       simMoonPhase = (simMoonPhase + 0.125) % 1;
       auroraNight = Math.random() < 0.5;
-      eclipseDay = Math.random() < 0.45;
+      eclipseDay = false;
       eclipseDoneToday = false;
     }
     const dayOverride = tour.getDayTimeTarget();
@@ -368,20 +461,25 @@ function animate() {
   }
   dayNight.setAuroraStrength(auroraNight && weather.isClearNight() ? 0.85 : 0);
 
-  // ── Solar eclipse: triggers around noon on "eclipse days" ──
-  if (eclipseProgress < 0 && eclipseDay && !eclipseDoneToday && Math.abs(t01 - 0.5) < 0.01) {
-    eclipseProgress = 0;
-    eclipseDoneToday = true;
-    ui.showToast('☀️🌑 ZAĆMIENIE SŁOŃCA');
+  // ── Eclipse 2.0: deterministic, compressed event with explicit phases ──
+  if (!eclipseState.running && eclipseDay && !eclipseDoneToday && Math.abs(t01 - ECLIPSE_VIEW_TIME) < 0.008) {
+    startEclipse(true);
   }
-  if (eclipseProgress >= 0) {
-    eclipseProgress += rawDelta / ECLIPSE_SECONDS;
-    if (eclipseProgress >= 1) {
-      eclipseProgress = -1;
-      dayNight.setEclipse(0);
-    } else {
-      dayNight.setEclipse(Math.sin(eclipseProgress * Math.PI));
-    }
+  eclipseState = eclipseTimeline.update(eclipseState.running ? delta : 0);
+  const eclipseActive = eclipseState.running || eclipseState.phase !== 'complete' && eclipseState.progress > 0;
+  if (eclipseDebugStrength === null) {
+    dayNight.setEclipseState({
+      active: eclipseActive,
+      coverage: eclipseState.coverage,
+      separation: eclipseState.separation,
+      irradiance: eclipseState.irradiance,
+      corona: eclipseState.corona,
+      beads: eclipseState.beads,
+      stars: eclipseState.stars,
+      totality: eclipseState.totality,
+    });
+  } else {
+    dayNight.setEclipse(eclipseDebugStrength);
   }
 
   // ── Weather (live override or auto machine) ──
@@ -443,6 +541,10 @@ function animate() {
   optionalActorAccumulator += delta;
   const actorInterval = 1 / quality.getProfile().optionalActorHz;
   const stationState = train.getStationState();
+  birds.setEclipseState(
+    eclipseState.coverage,
+    eclipseState.progress < 0.5 ? 'increasing' : 'decreasing'
+  );
   if (optionalActorAccumulator >= actorInterval) {
     const actorDelta = optionalActorAccumulator;
     optionalActorAccumulator = 0;
@@ -508,10 +610,11 @@ function animate() {
   }
 
   // ── Post FX ──
+  const gradeNight = light.eclipse > 0.001 ? Math.min(light.night, 0.25) : light.night;
   env.gradeEffect.parameters.time.value = elapsed;
   env.gradeEffect.parameters.golden.value = light.golden;
-  env.gradeEffect.parameters.night.value = light.night;
-  env.setEnvironmentGrade(light.golden, light.night);
+  env.gradeEffect.parameters.night.value = gradeNight;
+  env.setEnvironmentGrade(light.golden, gradeNight);
   env.setBloomStrength(sceneBloomStrength(light.night, light.golden, currentTheme.bloomMul));
   env.controls.getTarget(postFocusTarget);
   env.setCinematicFocus(tour.isActive(), postFocusTarget);
@@ -535,6 +638,7 @@ function animate() {
     }
     ui.setChapter(chapterForProgress(train.getRouteProgress()));
     ui.setStation(stationState);
+    updateEclipseHud(eclipseState, eclipseActive);
   }
 
   env.renderer.info.reset();
@@ -601,6 +705,7 @@ const debugHandle: DioramaDebugHandle = {
     cloud: weather.getCloudCover(),
     wind: weather.getWind(),
     trainProgress: train.getRouteProgress(),
+    eclipse: eclipseState,
   }),
   getMetrics: () => {
     const info = env.renderer.info;
@@ -663,10 +768,21 @@ const debugHandle: DioramaDebugHandle = {
   stationPassengers: () => passengerCrowd.getPassengerDebugState(),
   applyTheme,
   startEclipse: () => {
-    eclipseProgress = 0;
-    eclipseDoneToday = true;
+    startEclipse(true);
   },
-  setEclipseStrength: (s: number) => dayNight.setEclipse(s),
+  setEclipseProgress: (progress: number, running = false) => {
+    simTime = ECLIPSE_VIEW_TIME * DAY_SECONDS;
+    renderTime = simTime;
+    eclipseDebugStrength = null;
+    eclipseState = eclipseTimeline.seek(progress, running);
+    eclipseCheckpointLocked = !running;
+    focusEclipseView();
+  },
+  setEclipseStrength: (s: number) => {
+    eclipseState = eclipseTimeline.stop();
+    eclipseDebugStrength = s > 0 ? THREE.MathUtils.clamp(s, 0, 1) : null;
+    if (eclipseDebugStrength === null) dayNight.setEclipse(0);
+  },
   /** Render one frame synchronously and return it as a JPEG data URL
    * (the WebGL buffer isn't preserved, so render+read must share a tick). */
   captureFrame: (width = 960, jpegQuality = 0.82) => {

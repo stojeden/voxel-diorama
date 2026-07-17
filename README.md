@@ -23,7 +23,7 @@
 ### Światło i atmosfera
 - Fizyczne niebo (rozpraszanie Rayleigha/Mie) — **efektowne wschody słońca i golden hour**, płynne przejścia wszystkich faz dnia oraz odbicia nieba i słońca w szybach budynków (PMREM environment z GPU crossfade).
 - **Fazy księżyca**, gwiazdy, spadające gwiazdy, **zorza polarna** w pogodne noce.
-- **Zaćmienia słońca** — w losowe dni księżyc nasuwa się na słońce: świat ciemnieje, zapalają się latarnie, mewy w popłochu siadają.
+- **Eclipse 2.0** — 96-sekundowe, deterministyczne zaćmienie uruchamiane klawiszem `E`: kamera pokazuje nisko zawieszone Słońce nad miastem, Księżyc przechodzi przez kolejne kontakty, pojawia się pierścień diamentowy, korona, perły Baily'ego i gwiazdy. Niebo, horyzont, ekspozycja oraz miejskie światła reagują płynnie, a scena pozostaje czytelna także podczas totalności.
 - **Automat pogodowy**: chmury voxelowe, deszcz (mokry, lustrzany asfalt), śnieg z **zalegającą zimą** (białe dachy, oszronione drzewa, **zamarzające jezioro**), mgła i wiatr kołyszący drzewami.
 - **Zegar 1× / 2× / 3×** oraz tryb **⏱ REAL TIME** — pora dnia i pogoda synchronizują się z lokalizacją widza (geolokalizacja + SunCalc + Open-Meteo).
 - **Rytm mieszkań**: około północy gasną pierwsze okna, o 01:42 kolejne, o 02:30 pozostają pojedyncze światła, o 02:45 bloki są ciemne, a od 04:00 miasto budzi się sekwencyjnie.
@@ -44,7 +44,7 @@
 - 🎣 **Wędkarz** w czapeczce, ze skrzynką: rano wychodzi z bloku, łowi nad brzegiem (raz na kilka brań wyciąga rybę wielką jak on sam — zawsze ucieka), zimą **łowi w przeręblu na środku zamarzniętego jeziora**, siedząc na dopasowanym stołku z poprawnie zgiętymi nogami, a wieczorem wraca do domu.
 - 📮 **Listonosz** na rowerze objeżdża rano południową dzielnicę — czasem goni go pies.
 - 🎈 **Balon** na ogrzane powietrze przelatuje w pogodne dni i o zmierzchu, pięknie podświetlony ogniem palnika.
-- 🕊️ **Mewy** szybują, bankują w zakrętach i nocą śpią na dachach.
+- 🕊️ **Mewy** szybują i bankują w zakrętach. Przy narastającym zaćmieniu od 85% pokrycia wybierają najbliższe dachy i kolejno na nich siadają; po totalności wzlatują, gdy pokrycie spadnie do 65%. Nocą również śpią na dachach.
 
 ## 🎮 Sterowanie
 
@@ -56,6 +56,7 @@
 | Filmowy oblot dioramy (wschód→zachód) | „Pokaż dioramę" |
 | Prędkość zegara | `1` `2` `3` |
 | Tryb czasu rzeczywistego | `R` lub ⏱ REAL TIME |
+| Zaćmienie Słońca / szeroki widok zjawiska | `E` lub „Zaćmienie” |
 | Pogoda (auto → słońce → chmury → deszcz → śnieg → mgła) | `W` lub przycisk pogody |
 | Motyw dioramy | 🎭 |
 | Prędkość pociągu | suwak / `←` `→` |
@@ -70,12 +71,12 @@ npm run dev      # http://localhost:5173
 ```
 
 ```bash
-npm test         # 78 testów (vitest): geometria, światło, rytm miasta,
+npm test         # 97 testów (vitest): geometria, światło, rytm miasta,
                  # nawigacja pieszych, aktorzy i maszyny stanów pojazdów
 npm run typecheck # typy
 npm run build    # produkcja → dist/
 npm run validate # typy + unit + build + Chrome/WebGL + budżety wydajności
-BENCH_HEADFUL=1 npm run test:performance # jeden Chrome, 3 scenariusze Metal/High
+BENCH_HEADFUL=1 npm run test:performance # jeden Chrome, 4 scenariusze Metal/High
 ```
 
 Wymagania: Node 20.19+, przeglądarka z WebGL2. Cel wydajnościowy to **stabilne 60 FPS na Apple M1 Pro** w profilu High. Twardy benchmark zachowuje próg 58 FPS; po rozszerzeniu sceny szeroki overview wymaga dalszego profilowania i ponownego pomiaru na chłodnym urządzeniu.
@@ -89,9 +90,9 @@ Wymagania: Node 20.19+, przeglądarka z WebGL2. Cel wydajnościowy to **stabilne
 
 ### Stan walidacji
 
-- 78/78 testów jednostkowych w 12 plikach testowych.
+- 97/97 testów jednostkowych w 14 plikach testowych.
 - `npm run typecheck` i produkcyjny `npm run build` przechodzą.
-- Smoke test obejmuje desktop/mobile, niepusty canvas, luminancję, ochronę przed przepaleniami, kolizje pieszych, rytm miasta i budżety renderera.
+- Smoke test obejmuje desktop/mobile, totalność zaćmienia, niepusty canvas, luminancję, ochronę przed przepaleniami, kolizje pieszych, rytm miasta i budżety renderera.
 - Dedykowany benchmark Metal zachowuje próg 58 FPS. Kamera pociągu przekraczała 60 FPS, ale szeroki pierwszy overview był niestabilny podczas serii pomiarów; wynik nie jest przedstawiany jako zaliczony.
 - Preloader kompiluje dzienne i nocne warianty shaderów, wykonuje ukryte klatki composera i opróżnia kolejkę GPU przed odsłonięciem sceny.
 
@@ -108,11 +109,13 @@ src/
 │   └── DevStats.ts          # ładowany na żądanie profiler CPU/GPU
 ├── experience/
 │   ├── Themes.ts            # motywy (palety + światło + morfing cyber)
-│   └── RouteChapters.ts     # narracyjne etykiety trasy
+│   ├── RouteChapters.ts     # narracyjne etykiety trasy
+│   └── EclipseTimeline.ts   # deterministyczne kontakty, geometria i irradiancja
 ├── environment/
 │   ├── sky.ts               # czysty model słońca/kolorów (testowalny)
 │   ├── CityRhythm.ts        # rozkład autobusu i sekwencje świateł mieszkań
 │   ├── DayNightCycle.ts     # niebo, księżyc, światła, zaćmienia, PMREM crossfade
+│   ├── EclipseVisual.ts     # proceduralne Słońce, Księżyc, korona i pierścień
 │   ├── LakeSurface.ts       # PBR jeziora, fale, deszcz, zamarzanie i mgła
 │   ├── Weather.ts           # automat pogodowy, chmury, śnieg, wiatr, mokro
 │   └── RealTime.ts          # geolokalizacja + SunCalc + Open-Meteo
