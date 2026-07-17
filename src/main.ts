@@ -20,6 +20,8 @@ import { Fisherman } from './world/Fisherman';
 import { Postman } from './world/Postman';
 import { chapterForProgress } from './experience/RouteChapters';
 import { EclipseTimeline, type EclipseTimelineState } from './experience/EclipseTimeline';
+import { eclipseWorldReactionAt } from './experience/EclipseWorldReaction';
+import { EclipseCrowdProps } from './effects/EclipseCrowdProps';
 import { themeById, type DioramaTheme } from './experience/Themes';
 import { DAY_SECONDS, LEVEL_CROSSING, TUNNEL_LENGTH, WORLD_HALF_SIZE } from './world/WorldLayout';
 import { sceneBloomStrength, sceneExposure, sunDirectionAt } from './environment/sky';
@@ -33,12 +35,14 @@ import type { DevStatsHandle } from './performance/DevStats';
 const quality = new QualityManager();
 const env = bootstrap(quality.getProfile());
 const ui = mountUi();
+ui.setLoadingProgress(4, 'RENDERER GOTOWY');
 
 // Shared uniforms: Weather writes wind strength, tree foliage shader reads it.
 const windUniforms: WindUniforms = { uTime: { value: 0 }, uWind: { value: 0 } };
 
 // ─── World ───
 const world = createWorld(env.scene, windUniforms);
+ui.setLoadingProgress(10, 'MIASTO I KRAJOBRAZ');
 const train = createTrain(env.scene);
 const bus = createBus(env.scene);
 const birds = new Birds(env.scene);
@@ -47,8 +51,10 @@ const lakeLife = new LakeLife(env.scene, 4);
 const lakesideCow = new LakesideCow(env.scene);
 const fisherman = new Fisherman(env.scene);
 const postman = new Postman(env.scene);
+const eclipseCrowdProps = new EclipseCrowdProps(env.scene);
 const balloon = new Balloon(env.scene);
 const railSignals = new RailSignals(env.scene);
+ui.setLoadingProgress(16, 'POJAZDY I MIESZKAŃCY');
 const weather = new Weather(env.scene, windUniforms);
 const dayNight = new DayNightCycle(env.scene, env.renderer, {
   streetLights: world.streetLights,
@@ -63,6 +69,7 @@ const dayNight = new DayNightCycle(env.scene, env.renderer, {
   windowLights: world.windowLights,
   windowGlowMaterials: world.windowGlowMaterials,
 });
+ui.setLoadingProgress(20, 'OŚWIETLENIE I POGODA');
 env.setOcclusionExclusions([
   ...weather.getOcclusionExclusions(),
   ...dayNight.getOcclusionExclusions(),
@@ -98,6 +105,7 @@ const unsubscribeQuality = quality.subscribe((profile, snapshot) => {
   world.setQuality(profile);
   birds.setDensity(profile.actorDensity);
   passengerCrowd.setDensity(profile.actorDensity);
+  eclipseCrowdProps.setQuality(profile.level);
   ui.setQuality(snapshot);
 });
 
@@ -108,9 +116,8 @@ ui.onQualityCycle(() => {
 
 // ─── Loading manager ───
 env.loadingManager.onProgress = (_url, loaded, total) => {
-  ui.setLoadingProgress(total > 0 ? (loaded / total) * 100 : 100);
+  if (total > 0) ui.setLoadingProgress(4 + (loaded / total) * 6, 'ZASOBY SCENY');
 };
-ui.setLoadingProgress(0);
 
 // ─── State ───
 type CameraMode = 'free' | 'train' | 'bus';
@@ -135,12 +142,14 @@ let auroraNight = Math.random() < 0.5;
 const ECLIPSE_VIEW_TIME = 0.715;
 const eclipseTimeline = new EclipseTimeline({ durationSeconds: 96 });
 let eclipseState = eclipseTimeline.getState();
+let eclipseReaction = eclipseWorldReactionAt(0, 0);
 let eclipseDebugStrength: number | null = null;
 let eclipseCheckpointLocked = false;
 let eclipseDay = true;
 let eclipseDoneToday = false;
 const eclipseViewSun = new THREE.Vector3();
 const eclipseViewCamera = new THREE.Vector3();
+const eclipseReflectionSun = new THREE.Vector3();
 
 ui.setInfoText('PRZECIĄGNIJ — OBRÓT • PRAWY PRZYCISK — PRZESUŃ • SCROLL — ZOOM');
 ui.setTimeScale(1);
@@ -339,6 +348,7 @@ if (import.meta.env.DEV) {
 const clock = new THREE.Clock();
 let elapsed = 0;
 let loadingHidden = false;
+let loadingCompletedAt = -1;
 let optionalActorAccumulator = 0;
 let hudAccumulator = 0;
 let shadowFocusAccumulator = 0;
@@ -386,12 +396,35 @@ async function warmRenderer(): Promise<void> {
   });
 
   try {
-    ui.setLoadingProgress(25);
+    ui.setLoadingProgress(24, 'KOMPILOWANIE PORANKA');
+    dayNight.update(renderTime / DAY_SECONDS, 1, 0, currentTheme.nightFloor);
+    await env.renderer.compileAsync(env.scene, env.camera);
+    env.composer.render(0);
+    ui.setLoadingProgress(42, 'KOMPILOWANIE ŚWIATŁA DNIA');
     dayNight.update(0.5, 1, 0, currentTheme.nightFloor);
     await env.renderer.compileAsync(env.scene, env.camera);
     env.composer.render(0);
-    ui.setLoadingProgress(62);
+    ui.setLoadingProgress(56, 'KOMPILOWANIE ZŁOTEJ GODZINY');
+    dayNight.update(0.28, 1, 0, currentTheme.nightFloor);
+    await env.renderer.compileAsync(env.scene, env.camera);
+    env.composer.render(0);
+    ui.setLoadingProgress(70, 'KOMPILOWANIE NOCY');
     dayNight.update(0.86, 1, 0, currentTheme.nightFloor);
+    await env.renderer.compileAsync(env.scene, env.camera);
+    env.composer.render(0);
+    ui.setLoadingProgress(84, 'KOMPILOWANIE ZAĆMIENIA');
+    dayNight.setCameraFocusDistance(148);
+    dayNight.setEclipseState({
+      active: true,
+      coverage: 1,
+      separation: 0,
+      irradiance: 0.025,
+      corona: 1,
+      beads: 0,
+      stars: 1,
+      totality: 1,
+    });
+    dayNight.update(ECLIPSE_VIEW_TIME, 1, 0, currentTheme.nightFloor);
     await env.renderer.compileAsync(env.scene, env.camera);
     env.composer.render(0);
     env.renderer.getContext().finish();
@@ -401,7 +434,25 @@ async function warmRenderer(): Promise<void> {
     console.warn('[Preloader] shader warm-up fell back to first-frame compilation', error);
   } finally {
     for (const [object, visible] of visibility) object.visible = visible;
+    dayNight.setCameraFocusDistance(
+      env.camera.position.distanceTo(postFocusTarget)
+    );
+    dayNight.setEclipseState({
+      active:
+        eclipseState.running ||
+        (eclipseState.phase !== 'complete' && eclipseState.progress > 0),
+      coverage: eclipseState.coverage,
+      separation: eclipseState.separation,
+      irradiance: eclipseState.irradiance,
+      corona: eclipseState.corona,
+      beads: eclipseState.beads,
+      stars: eclipseState.stars,
+      totality: eclipseState.totality,
+    });
     dayNight.update(renderTime / DAY_SECONDS, 1, weather.getCloudCover(), currentTheme.nightFloor);
+    env.composer.render(0);
+    env.renderer.getContext().finish();
+    ui.setLoadingProgress(96, 'PRZYGOTOWANIE PIERWSZEJ KLATKI');
     rendererWarm = true;
   }
 }
@@ -462,10 +513,20 @@ function animate() {
   dayNight.setAuroraStrength(auroraNight && weather.isClearNight() ? 0.85 : 0);
 
   // ── Eclipse 2.0: deterministic, compressed event with explicit phases ──
-  if (!eclipseState.running && eclipseDay && !eclipseDoneToday && Math.abs(t01 - ECLIPSE_VIEW_TIME) < 0.008) {
+  if (
+    !eclipseState.running &&
+    !eclipseCheckpointLocked &&
+    eclipseDay &&
+    !eclipseDoneToday &&
+    Math.abs(t01 - ECLIPSE_VIEW_TIME) < 0.008
+  ) {
     startEclipse(true);
   }
   eclipseState = eclipseTimeline.update(eclipseState.running ? delta : 0);
+  eclipseReaction = eclipseWorldReactionAt(eclipseState.coverage, eclipseState.totality);
+  passengerCrowd.setEclipseReaction(eclipseReaction);
+  bus.setEclipseReaction(eclipseReaction);
+  postman.setEclipseReaction(eclipseReaction);
   const eclipseActive = eclipseState.running || eclipseState.phase !== 'complete' && eclipseState.progress > 0;
   if (eclipseDebugStrength === null) {
     dayNight.setEclipseState({
@@ -511,6 +572,11 @@ function animate() {
   );
   world.setSnowCover(weather.getSnowCover());
   world.setWetness(weather.getWetness());
+  sunDirectionAt(t01, eclipseReflectionSun);
+  world.setEclipseReflection(
+    eclipseState.corona * (0.45 + eclipseState.totality * 0.55),
+    eclipseReflectionSun
+  );
   world.updateEnvironment(
     elapsed,
     weather.getWind(),
@@ -559,6 +625,7 @@ function animate() {
     if (stationState.kind === 'dwelling') boardingStations.add(stationState.stationLabel);
     passengerCrowd.update(actorDelta, boardingStations);
   }
+  eclipseCrowdProps.update(eclipseReaction, eclipseState.separation);
 
   // ── Onboard cab cameras (train / bus) ──
   if (cameraMode !== 'free' && !tour.isActive()) {
@@ -617,6 +684,9 @@ function animate() {
   env.setEnvironmentGrade(light.golden, gradeNight);
   env.setBloomStrength(sceneBloomStrength(light.night, light.golden, currentTheme.bloomMul));
   env.controls.getTarget(postFocusTarget);
+  const cameraFocusDistance = env.camera.position.distanceTo(postFocusTarget);
+  env.setCameraFocusDistance(cameraFocusDistance);
+  dayNight.setCameraFocusDistance(cameraFocusDistance);
   env.setCinematicFocus(tour.isActive(), postFocusTarget);
 
   // ── HUD: DOM does not need a 60 Hz update cadence. ──
@@ -647,11 +717,15 @@ function animate() {
   devStats?.update();
 
   if (!loadingHidden && rendererWarm) {
-    ui.setLoadingProgress(100);
-    ui.hideLoadingScreen();
-    loadingHidden = true;
-    debugHandle.ready = true;
-    window.dispatchEvent(new CustomEvent('diorama-ready'));
+    if (loadingCompletedAt < 0) {
+      loadingCompletedAt = performance.now();
+      ui.setLoadingProgress(100, 'GOTOWE');
+    } else if (performance.now() - loadingCompletedAt >= 140) {
+      ui.hideLoadingScreen();
+      loadingHidden = true;
+      debugHandle.ready = true;
+      window.dispatchEvent(new CustomEvent('diorama-ready'));
+    }
   }
 }
 
@@ -706,6 +780,7 @@ const debugHandle: DioramaDebugHandle = {
     wind: weather.getWind(),
     trainProgress: train.getRouteProgress(),
     eclipse: eclipseState,
+    eclipseReaction,
   }),
   getMetrics: () => {
     const info = env.renderer.info;
@@ -766,6 +841,8 @@ const debugHandle: DioramaDebugHandle = {
     })),
   debugTrainStation: (label: string) => passengerCrowd.debugStartDwell(label),
   stationPassengers: () => passengerCrowd.getPassengerDebugState(),
+  eclipseCrowdProps: () => eclipseCrowdProps.getDebugState(),
+  postmanState: () => postman.getDebugState(),
   applyTheme,
   startEclipse: () => {
     startEclipse(true);
@@ -809,6 +886,7 @@ if (import.meta.hot) {
     bus.dispose();
     birds.dispose();
     passengerCrowd.dispose();
+    eclipseCrowdProps.dispose();
     lakeLife.dispose();
     lakesideCow.dispose();
     fisherman.dispose();

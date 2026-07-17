@@ -9,8 +9,16 @@ import {
   nearestCurveT,
   type BusStop,
 } from './WorldLayout';
-import { buildPassenger, easeInOut, type PassengerBuild } from './PassengerCrowd';
+import {
+  applyPassengerEclipsePose,
+  buildPassenger,
+  eclipsePassengerPoseFor,
+  easeInOut,
+  type EclipsePassengerPose,
+  type PassengerBuild,
+} from './PassengerCrowd';
 import { mergeStaticMeshes } from '../performance/mergeStaticMeshes';
+import type { EclipseWorldReactionState } from '../experience/EclipseWorldReaction';
 import {
   MINUTES_PER_DAY,
   busServiceWindowAt,
@@ -223,6 +231,7 @@ interface BusPassenger {
   currentOpacity: number;
   targetOpacity: number;
   atStop: boolean;
+  eclipsePose: EclipsePassengerPose;
 }
 
 interface StopCrowd {
@@ -275,6 +284,7 @@ function buildStopCrowd(scene: THREE.Scene, stop: BusStop): StopCrowd {
       currentOpacity: 0,
       targetOpacity: 0.92,
       atStop: true,
+      eclipsePose: eclipsePassengerPoseFor(i),
     });
   }
 
@@ -293,6 +303,7 @@ export interface BusHandle {
     atStop: boolean;
     colliding: boolean;
     position: [number, number, number];
+    observingEclipse: boolean;
   }>;
   getServiceDebugState: () => {
     mode: BusServiceMode;
@@ -302,6 +313,7 @@ export interface BusHandle {
   };
   /** 0..1 — cyberpunk look morph (dark hull, neon glow). */
   setCyberLook: (factor: number) => void;
+  setEclipseReaction: (reaction: EclipseWorldReactionState) => void;
   dispose: () => void;
 }
 
@@ -330,6 +342,13 @@ export function createBus(scene: THREE.Scene): BusHandle {
   let serviceInitialized = false;
   let previousT01 = 0;
   let previousServiceWindow: BusServiceWindow = 'day';
+  let eclipseReaction: EclipseWorldReactionState = {
+    attention: 0,
+    movementScale: 1,
+    eyeProtection: 0,
+    projection: 0,
+    dogAlert: 0,
+  };
   const finalStopsRemaining = new Set<string>();
   const morningStopsRemaining = new Set<string>();
 
@@ -525,6 +544,7 @@ export function createBus(scene: THREE.Scene): BusHandle {
     const lerp = 1 - Math.exp(-6 * Math.max(delta, 0.0001));
     p.currentOpacity += (p.targetOpacity - p.currentOpacity) * lerp;
     for (const mat of p.build.materials) mat.opacity = p.currentOpacity;
+    applyPassengerEclipsePose(p.build, p.eclipsePose, eclipseReaction.attention);
   }
 
   return {
@@ -649,13 +669,14 @@ export function createBus(scene: THREE.Scene): BusHandle {
       }
 
       // ── Crowds ──
+      const peopleDelta = delta * eclipseReaction.movementScale;
       for (const crowd of crowds) {
         const dwellHere = state.kind === 'dwelling' && state.stop.label === crowd.stop.label;
         if (dwellHere && !crowd.wasDwelling) {
           startDwell(crowd, serviceMode === 'normal' ? 'normal' : serviceMode);
         }
         crowd.wasDwelling = dwellHere;
-        for (const p of crowd.passengers) updatePassenger(p, crowd.colliders, delta);
+        for (const p of crowd.passengers) updatePassenger(p, crowd.colliders, peopleDelta);
       }
     },
     getPosition(target = new THREE.Vector3()) {
@@ -682,6 +703,7 @@ export function createBus(scene: THREE.Scene): BusHandle {
           atStop: passenger.atStop,
           colliding: !isPointClear(passenger.build.group.position, crowd.colliders),
           position: passenger.build.group.position.toArray() as [number, number, number],
+          observingEclipse: eclipseReaction.attention > 0.5,
         }))
       );
     },
@@ -706,6 +728,9 @@ export function createBus(scene: THREE.Scene): BusHandle {
       roofMaterial.color.lerpColors(BUS_ROOF_NORMAL, BUS_ROOF_CYBER, factor);
       windowMaterial.color.lerpColors(BUS_GLASS_NORMAL, BUS_GLASS_CYBER, factor);
       windowMaterial.emissive.lerpColors(BUS_GLASS_NORMAL, BUS_GLASS_CYBER, factor);
+    },
+    setEclipseReaction(reaction) {
+      eclipseReaction = reaction;
     },
     dispose() {
       scene.remove(group);

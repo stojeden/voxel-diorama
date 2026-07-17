@@ -131,6 +131,9 @@ try {
       await page.evaluate(() => window.__diorama.controls.setLookAt(70, 48, 80, 0, 6, 0, false));
     }
     await page.waitForTimeout(2_000);
+    // Discard a short state-local sample so lazy shader variants, shadow maps,
+    // and post-processing targets are not counted as sustained animation cost.
+    await measureFrames(page, 1);
     const timing = await measureFrames(page);
     const metrics = await page.evaluate(() => window.__diorama.getMetrics());
     results.push({ ...scenario, timing, renderer: metrics.renderer });

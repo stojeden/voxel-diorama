@@ -7,12 +7,14 @@ import {
   type CollisionRect,
 } from './BusStopNavigation';
 import { stationColliders, stationPassengerRoutes } from './StationNavigation';
+import type { EclipseWorldReactionState } from '../experience/EclipseWorldReaction';
 
 const JACKET_COLORS = [0x9c3838, 0x2b5f9a, 0x355d2a, 0xc4a35a, 0x6c4a8a, 0x444444, 0xb87333];
 const SKIN_COLORS = [0xe8c39a, 0xd4a173, 0xa57448, 0xfcd7b6];
 export const PASSENGER_SCALE = 0.78;
 
 type Activity = 'idle' | 'boarding' | 'disembarking';
+export type EclipsePassengerPose = 'glasses' | 'projection' | 'watch';
 
 interface Passenger {
   group: THREE.Group;
@@ -40,6 +42,7 @@ interface Passenger {
   phase: number;
   currentOpacity: number;
   targetOpacity: number;
+  eclipsePose: EclipsePassengerPose;
 }
 
 interface StationCrowd {
@@ -70,6 +73,38 @@ export interface PassengerBuild {
   materials: THREE.MeshStandardMaterial[];
 }
 
+export function eclipsePassengerPoseFor(index: number): EclipsePassengerPose {
+  return index % 3 === 0 ? 'glasses' : index % 3 === 1 ? 'projection' : 'watch';
+}
+
+export function applyPassengerEclipsePose(
+  passenger: PassengerBuild,
+  pose: EclipsePassengerPose,
+  attention: number
+): void {
+  passenger.head.rotation.x = THREE.MathUtils.lerp(0, -0.58, attention);
+  if (attention <= 0.001) return;
+  passenger.legs.rotation.x *= 1 - attention;
+  if (pose === 'glasses') {
+    passenger.rightArm.rotation.x = THREE.MathUtils.lerp(
+      passenger.rightArm.rotation.x,
+      -1.72,
+      attention
+    );
+  } else if (pose === 'projection') {
+    passenger.leftArm.rotation.x = THREE.MathUtils.lerp(
+      passenger.leftArm.rotation.x,
+      -1.18,
+      attention
+    );
+    passenger.rightArm.rotation.x = THREE.MathUtils.lerp(
+      passenger.rightArm.rotation.x,
+      -1.18,
+      attention
+    );
+  }
+}
+
 /** Voxel-person builder — shared with the bus stop crowds. */
 export function buildPassenger(): PassengerBuild {
   const group = new THREE.Group();
@@ -92,6 +127,7 @@ export function buildPassenger(): PassengerBuild {
   group.add(body);
 
   const head = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.55, 0.55), skinMat);
+  head.name = 'passenger-head';
   head.position.y = 2.18;
   head.castShadow = false;
   group.add(head);
@@ -118,6 +154,13 @@ export class PassengerCrowd {
   private readonly scene: THREE.Scene;
   private clock = 0;
   private density = 1;
+  private eclipseReaction: EclipseWorldReactionState = {
+    attention: 0,
+    movementScale: 1,
+    eyeProtection: 0,
+    projection: 0,
+    dogAlert: 0,
+  };
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
@@ -167,6 +210,7 @@ export class PassengerCrowd {
           phase: Math.random() * Math.PI * 2,
           currentOpacity: 0,
           targetOpacity: 0.92,
+          eclipsePose: eclipsePassengerPoseFor(i),
         });
       }
 
@@ -184,8 +228,13 @@ export class PassengerCrowd {
     }
   }
 
+  setEclipseReaction(reaction: EclipseWorldReactionState): void {
+    this.eclipseReaction = reaction;
+  }
+
   update(delta: number, stationsBoarding: Set<string>): void {
-    this.clock += delta;
+    const peopleDelta = delta * this.eclipseReaction.movementScale;
+    this.clock += peopleDelta;
 
     for (const crowd of this.crowds) {
       const isDwelling = stationsBoarding.has(crowd.station.label);
@@ -206,7 +255,7 @@ export class PassengerCrowd {
       crowd.lastDwellSignal = isDwelling;
 
       for (const p of crowd.passengers) {
-        if (p.group.visible) this.updatePassenger(p, crowd.colliders, delta);
+        if (p.group.visible) this.updatePassenger(p, crowd.colliders, peopleDelta);
       }
     }
   }
@@ -247,6 +296,7 @@ export class PassengerCrowd {
       p.leftArm.rotation.x = Math.sin(this.clock * 0.9 + p.phase) * 0.08;
       p.rightArm.rotation.x = -Math.sin(this.clock * 0.9 + p.phase) * 0.08;
       p.group.rotation.y = p.facingTrack;
+      p.legs.rotation.x = 0;
 
       p.targetOpacity = 0.92;
     } else {
@@ -296,6 +346,7 @@ export class PassengerCrowd {
     const lerp = 1 - Math.exp(-6 * Math.max(delta, 0.0001));
     p.currentOpacity += (p.targetOpacity - p.currentOpacity) * lerp;
     for (const mat of p.materials) mat.opacity = p.currentOpacity;
+    applyPassengerEclipsePose(p, p.eclipsePose, this.eclipseReaction.attention);
   }
 
   debugStartDwell(stationLabel: string): boolean {
@@ -312,6 +363,7 @@ export class PassengerCrowd {
     activity: Activity;
     colliding: boolean;
     position: [number, number, number];
+    observingEclipse: boolean;
   }> {
     return this.crowds.flatMap((crowd) =>
       crowd.passengers.map((passenger) => ({
@@ -319,6 +371,7 @@ export class PassengerCrowd {
         activity: passenger.activity,
         colliding: !isPointClear(passenger.group.position, crowd.colliders),
         position: passenger.group.position.toArray() as [number, number, number],
+        observingEclipse: this.eclipseReaction.attention > 0.5,
       }))
     );
   }

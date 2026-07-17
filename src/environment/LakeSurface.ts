@@ -15,6 +15,8 @@ export class LakeSurface {
     rain: { value: 0 },
     freeze: { value: 0 },
     detail: { value: 1 },
+    eclipseReflection: { value: 0 },
+    eclipseSunDirection: { value: new THREE.Vector3(0, 1, 0) },
   };
   private readonly disposables: Array<{ dispose: () => void }> = [];
   private freeze = 0;
@@ -56,6 +58,8 @@ export class LakeSurface {
       shader.uniforms.uLakeRain = this.uniforms.rain;
       shader.uniforms.uLakeFreeze = this.uniforms.freeze;
       shader.uniforms.uLakeDetail = this.uniforms.detail;
+      shader.uniforms.uEclipseReflection = this.uniforms.eclipseReflection;
+      shader.uniforms.uEclipseSunDirection = this.uniforms.eclipseSunDirection;
       shader.vertexShader = shader.vertexShader
         .replace(
           '#include <common>',
@@ -65,6 +69,8 @@ export class LakeSurface {
           uniform float uLakeRain;
           uniform float uLakeFreeze;
           uniform float uLakeDetail;
+          uniform float uEclipseReflection;
+          uniform vec3 uEclipseSunDirection;
           varying vec2 vLakeUv;
           float lakeHeight(vec2 p) {
             float amplitude = (1.0 - uLakeFreeze) * uLakeDetail;
@@ -91,15 +97,40 @@ export class LakeSurface {
           transformed.z += lakeHeight(position.xy);`
         );
       shader.fragmentShader = shader.fragmentShader
-        .replace('#include <common>', '#include <common>\nvarying vec2 vLakeUv;')
+        .replace(
+          '#include <common>',
+          `#include <common>
+          varying vec2 vLakeUv;
+          uniform float uLakeTime;
+          uniform float uLakeDetail;
+          uniform float uEclipseReflection;
+          uniform vec3 uEclipseSunDirection;`
+        )
         .replace(
           '#include <clipping_planes_fragment>',
           `#include <clipping_planes_fragment>
           vec2 lakeEllipse = (vLakeUv - 0.5) * 2.0;
           if (dot(lakeEllipse, lakeEllipse) > 1.0) discard;`
+        )
+        .replace(
+          '#include <dithering_fragment>',
+          `vec2 eclipseUv = (vLakeUv - 0.5) * 2.0;
+          vec2 eclipseDirection = normalize(uEclipseSunDirection.xz + vec2(0.0001));
+          float eclipseAcross = dot(eclipseUv, vec2(-eclipseDirection.y, eclipseDirection.x));
+          float eclipseAlong = dot(eclipseUv, eclipseDirection);
+          float eclipseStreak = exp(-abs(eclipseAcross) * 11.0) *
+            smoothstep(-0.72, -0.08, eclipseAlong) *
+            (1.0 - smoothstep(0.1, 0.92, eclipseAlong));
+          float eclipseShimmer = 0.58 + 0.42 * sin(
+            eclipseAlong * 82.0 + eclipseAcross * 21.0 + uLakeTime * 1.7
+          );
+          float eclipseHighOnly = smoothstep(0.82, 0.98, uLakeDetail);
+          gl_FragColor.rgb += vec3(0.52, 0.68, 0.92) * eclipseStreak *
+            eclipseShimmer * uEclipseReflection * eclipseHighOnly * 0.72;
+          #include <dithering_fragment>`
         );
     };
-    this.surfaceMaterial.customProgramCacheKey = () => 'lake-surface-p1';
+    this.surfaceMaterial.customProgramCacheKey = () => 'lake-surface-eclipse-p2';
 
     const surface = new THREE.Mesh(surfaceGeometry, this.surfaceMaterial);
     surface.rotation.x = -Math.PI / 2;
@@ -210,6 +241,11 @@ export class LakeSurface {
   setQuality(detail: number): void {
     this.uniforms.detail.value = THREE.MathUtils.clamp(detail, 0.25, 1);
     this.surfaceMaterial.envMapIntensity = THREE.MathUtils.lerp(1.1, 2, detail);
+  }
+
+  setEclipseReflection(strength: number, sunDirection: THREE.Vector3): void {
+    this.uniforms.eclipseReflection.value = THREE.MathUtils.clamp(strength, 0, 1);
+    this.uniforms.eclipseSunDirection.value.copy(sunDirection).normalize();
   }
 
   update(elapsed: number, wind: number, rain: number, freeze: number, mist: number): void {

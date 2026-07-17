@@ -32,15 +32,8 @@ function makeLut(transform: RgbTransform, size = 16): LookupTexture {
 }
 
 export class ColorLutPipeline {
-  readonly goldenEffect: LUT3DEffect;
-  readonly nightEffect: LUT3DEffect;
   readonly themeEffect: LUT3DEffect;
 
-  private readonly goldenLut = makeLut((r, g, b) => [r * 1.055 + 0.012, g * 1.005, b * 0.9]);
-  private readonly nightLut = makeLut((r, g, b) => {
-    const [sr, sg, sb] = saturation(r, g, b, 0.88);
-    return [sr * 0.86, sg * 0.94, sb * 1.075 + 0.008];
-  });
   private readonly themeLuts: Record<ThemeLutId, LookupTexture> = {
     classic: makeLut((r, g, b) => [r, g, b]),
     retro: makeLut((r, g, b) => [r * 1.03 + g * 0.025, g * 0.95 + r * 0.018, b * 0.82]),
@@ -54,16 +47,8 @@ export class ColorLutPipeline {
       blendFunction: BlendFunction.NORMAL,
       tetrahedralInterpolation: false,
     };
-    this.goldenEffect = new LUT3DEffect(this.goldenLut, options);
-    this.nightEffect = new LUT3DEffect(this.nightLut, options);
     this.themeEffect = new LUT3DEffect(this.themeLuts.classic, options);
-    this.setEnvironment(0, 0);
     this.setTheme('classic');
-  }
-
-  setEnvironment(golden: number, night: number): void {
-    this.goldenEffect.blendMode.opacity.value = THREE.MathUtils.clamp(golden * 0.46, 0, 0.46);
-    this.nightEffect.blendMode.opacity.value = THREE.MathUtils.clamp(night * 0.42, 0, 0.42);
   }
 
   setTheme(id: string): void {
@@ -75,8 +60,6 @@ export class ColorLutPipeline {
   dispose(): void {
     // EffectComposer owns and disposes the effects. This class owns only the
     // generated lookup textures shared by those effects.
-    this.goldenLut.dispose();
-    this.nightLut.dispose();
     for (const lut of Object.values(this.themeLuts)) lut.dispose();
   }
 }
