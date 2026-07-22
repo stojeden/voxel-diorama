@@ -196,7 +196,11 @@ try {
   await saveScreenshot(page, '/tmp/voxel-diorama-desktop.png');
 
   await page.evaluate(() => window.__diorama.setTime(0.32));
-  await page.waitForTimeout(350);
+  await page.waitForFunction(
+    () => window.__diorama.postmanState().active === true,
+    null,
+    { timeout: SIMULATION_TIMEOUT_MS }
+  );
   const postmanRenderState = await page.evaluate(() => {
     const state = window.__diorama.postmanState();
     const uniform = window.__diorama.scene.getObjectByName('postman-uniform');
