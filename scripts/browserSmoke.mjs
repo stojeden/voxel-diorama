@@ -113,6 +113,34 @@ async function sampleRenderedFrame(page) {
   });
 }
 
+async function assertMobileLayout(page) {
+  const layout = await page.evaluate(() => {
+    const panel = document.querySelector('#control-panel').getBoundingClientRect();
+    const eclipse = document.querySelector('#eclipse-status').getBoundingClientRect();
+    const clock = document.querySelector('#time-display').getBoundingClientRect();
+    const info = document.querySelector('#info').getBoundingClientRect();
+    return {
+      panel: { left: panel.left, right: panel.right, top: panel.top, bottom: panel.bottom },
+      eclipse: { left: eclipse.left, right: eclipse.right, top: eclipse.top, bottom: eclipse.bottom },
+      clock: { left: clock.left, right: clock.right, top: clock.top, bottom: clock.bottom },
+      info: { left: info.left, right: info.right, top: info.top, bottom: info.bottom },
+      viewport: { width: innerWidth, height: innerHeight },
+    };
+  });
+  for (const rect of [layout.panel, layout.eclipse, layout.clock, layout.info]) {
+    assert.ok(rect.left >= -1 && rect.right <= layout.viewport.width + 1, 'mobile UI exceeds viewport width');
+    assert.ok(rect.top >= -1 && rect.bottom <= layout.viewport.height + 1, 'mobile UI exceeds viewport height');
+  }
+  const overlaps = (first, second) => !(
+    first.right <= second.left ||
+    second.right <= first.left ||
+    first.bottom <= second.top ||
+    second.bottom <= first.top
+  );
+  assert.equal(overlaps(layout.panel, layout.clock), false, 'mobile panel overlaps the clock');
+  assert.equal(overlaps(layout.eclipse, layout.clock), false, 'mobile eclipse status overlaps the clock');
+}
+
 const preview = spawn(process.execPath, ['node_modules/vite/bin/vite.js', 'preview', '--host', HOST, '--port', String(PORT), '--strictPort'], {
   cwd: process.cwd(),
   stdio: ['ignore', 'pipe', 'pipe'],
@@ -205,6 +233,31 @@ try {
   );
   await saveScreenshot(page, '/tmp/voxel-diorama-desktop.png');
 
+  if (IS_CI) {
+    await page.evaluate(() => window.__diorama.setQuality('low'));
+    const low = await page.evaluate(() => window.__diorama.getMetrics());
+    assert.equal(low.quality.level, 'low');
+    assert.ok(low.renderer.pixelRatio <= 1);
+    await page.evaluate(() => window.__diorama.setQuality('auto'));
+
+    const profilerEnabled = await page.evaluate(() => window.__diorama.toggleProfiler());
+    assert.equal(profilerEnabled, true);
+    await page.waitForSelector('[data-diorama-profiler="true"]', { state: 'attached' });
+    const profilerDisabled = await page.evaluate(() => window.__diorama.toggleProfiler());
+    assert.equal(profilerDisabled, false);
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await assertMobileLayout(page);
+    assert.deepEqual(consoleErrors, [], `browser errors:\n${consoleErrors.join('\n')}`);
+    console.log(JSON.stringify({
+      mode: 'ci-software-renderer-smoke',
+      quality: initial.metrics.quality,
+      renderer: initial.metrics.renderer,
+      desktopPixels,
+      browserErrors: consoleErrors.length,
+    }, null, 2));
+    await page.close();
+  } else {
   await page.evaluate(() => window.__diorama.setTime(0.32));
   await page.waitForFunction(
     () => window.__diorama.postmanState().active === true,
@@ -688,37 +741,7 @@ try {
   const mobilePixels = await sampleRenderedFrame(mobile);
   assert.ok(mobilePixels.visibleSamples > 200, 'mobile canvas is blank');
   assert.ok(mobilePixels.maxLuminance - mobilePixels.minLuminance > 25, 'mobile canvas lacks visual contrast');
-  const mobileLayout = await mobile.evaluate(() => {
-    const panel = document.querySelector('#control-panel').getBoundingClientRect();
-    const eclipse = document.querySelector('#eclipse-status').getBoundingClientRect();
-    const clock = document.querySelector('#time-display').getBoundingClientRect();
-    const info = document.querySelector('#info').getBoundingClientRect();
-    return {
-      panel: { left: panel.left, right: panel.right, top: panel.top, bottom: panel.bottom },
-      eclipse: { left: eclipse.left, right: eclipse.right, top: eclipse.top, bottom: eclipse.bottom },
-      clock: { left: clock.left, right: clock.right, top: clock.top, bottom: clock.bottom },
-      info: { left: info.left, right: info.right, top: info.top, bottom: info.bottom },
-      viewport: { width: innerWidth, height: innerHeight },
-    };
-  });
-  for (const rect of [mobileLayout.panel, mobileLayout.eclipse, mobileLayout.clock, mobileLayout.info]) {
-    assert.ok(rect.left >= -1 && rect.right <= mobileLayout.viewport.width + 1, 'mobile UI exceeds viewport width');
-    assert.ok(rect.top >= -1 && rect.bottom <= mobileLayout.viewport.height + 1, 'mobile UI exceeds viewport height');
-  }
-  const panelOverlapsClock = !(
-    mobileLayout.panel.right <= mobileLayout.clock.left ||
-    mobileLayout.clock.right <= mobileLayout.panel.left ||
-    mobileLayout.panel.bottom <= mobileLayout.clock.top ||
-    mobileLayout.clock.bottom <= mobileLayout.panel.top
-  );
-  assert.equal(panelOverlapsClock, false, 'mobile panel overlaps the clock');
-  const eclipseOverlapsClock = !(
-    mobileLayout.eclipse.right <= mobileLayout.clock.left ||
-    mobileLayout.clock.right <= mobileLayout.eclipse.left ||
-    mobileLayout.eclipse.bottom <= mobileLayout.clock.top ||
-    mobileLayout.clock.bottom <= mobileLayout.eclipse.top
-  );
-  assert.equal(eclipseOverlapsClock, false, 'mobile eclipse status overlaps the clock');
+  await assertMobileLayout(mobile);
   await saveScreenshot(mobile, '/tmp/voxel-diorama-mobile.png');
   await mobile.close();
   assert.deepEqual(mobileErrors, [], `mobile browser errors:\n${mobileErrors.join('\n')}`);
@@ -733,6 +756,7 @@ try {
     nightBusStopFps: nightBusStopMetrics.quality.estimatedFps,
     browserErrors: consoleErrors.length,
   }, null, 2));
+  }
 } catch (error) {
   console.error(previewLog);
   throw error;
