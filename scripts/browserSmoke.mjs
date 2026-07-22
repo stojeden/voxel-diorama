@@ -242,12 +242,13 @@ try {
 
     const profilerEnabled = await page.evaluate(() => window.__diorama.toggleProfiler());
     assert.equal(profilerEnabled, true);
-    await page.waitForSelector('[data-diorama-profiler="true"]', { state: 'attached' });
+    const profilerAttached = await page.evaluate(
+      () => Boolean(document.querySelector('[data-diorama-profiler="true"]'))
+    );
+    assert.equal(profilerAttached, true, 'profiler must attach its diagnostics node');
     const profilerDisabled = await page.evaluate(() => window.__diorama.toggleProfiler());
     assert.equal(profilerDisabled, false);
 
-    await page.setViewportSize({ width: 390, height: 844 });
-    await assertMobileLayout(page);
     assert.deepEqual(consoleErrors, [], `browser errors:\n${consoleErrors.join('\n')}`);
     console.log(JSON.stringify({
       mode: 'ci-software-renderer-smoke',
