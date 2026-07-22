@@ -133,8 +133,18 @@ try {
     '/usr/bin/chromium',
     '/usr/bin/chromium-browser',
   ]);
-  browser = await chromium.launch({ headless: true, executablePath });
+  browser = await chromium.launch({
+    headless: true,
+    executablePath,
+    args: [
+      '--disable-background-timer-throttling',
+      '--disable-renderer-backgrounding',
+      '--disable-backgrounding-occluded-windows',
+    ],
+  });
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 });
+  assert.equal(browser.contexts().length, 1, 'smoke test must use exactly one browser context');
+  assert.equal(page.context().pages().length, 1, 'smoke test must use exactly one browser page');
   const consoleErrors = [];
   page.on('console', (message) => {
     if (message.type() === 'error') consoleErrors.push(message.text());
