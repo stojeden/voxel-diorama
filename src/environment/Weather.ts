@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { WindUniforms } from '../world/WorldGenerator';
 import type { QualityProfile } from '../performance/QualityManager';
+import { fallbackRandom, type RandomSource } from '../core/Random';
 
 export type WeatherKind = 'clear' | 'cloudy' | 'rain' | 'snow' | 'fog';
 export type WeatherSetting = WeatherKind | 'auto';
@@ -65,9 +66,9 @@ interface CloudDescriptor {
   visibility: number;
 }
 
-function pickTransition(from: WeatherKind): WeatherKind {
+function pickTransition(from: WeatherKind, random: RandomSource): WeatherKind {
   const options = TRANSITIONS[from];
-  let roll = Math.random();
+  let roll = random();
   for (const [kind, weight] of options) {
     roll -= weight;
     if (roll <= 0) return kind;
@@ -76,6 +77,7 @@ function pickTransition(from: WeatherKind): WeatherKind {
 }
 
 export class Weather {
+  private readonly random: RandomSource;
   private setting: WeatherSetting = 'auto';
   private kind: WeatherKind = 'clear';
   private externalKind: WeatherKind | null = null;
@@ -113,16 +115,17 @@ export class Weather {
   private activeCloudCount = CLOUD_COUNT;
   private cloudUpdateAccumulator = 0;
 
-  constructor(scene: THREE.Scene, windUniforms: WindUniforms) {
+  constructor(scene: THREE.Scene, windUniforms: WindUniforms, random = fallbackRandom('weather')) {
     this.scene = scene;
     this.windUniforms = windUniforms;
+    this.random = random;
 
     // ── Rain (slanted streaks) ──
     this.rainPositions = new Float32Array(RAIN_COUNT * 2 * 3);
     for (let i = 0; i < RAIN_COUNT; i++) {
-      const x = (Math.random() - 0.5) * RAIN_AREA * 2;
-      const y = Math.random() * (RAIN_TOP - RAIN_BOTTOM) + RAIN_BOTTOM;
-      const z = (Math.random() - 0.5) * RAIN_AREA * 2;
+      const x = (random() - 0.5) * RAIN_AREA * 2;
+      const y = random() * (RAIN_TOP - RAIN_BOTTOM) + RAIN_BOTTOM;
+      const z = (random() - 0.5) * RAIN_AREA * 2;
       const idx = i * 6;
       this.rainPositions[idx] = x;
       this.rainPositions[idx + 1] = y;
@@ -148,10 +151,10 @@ export class Weather {
     this.snowPositions = new Float32Array(SNOW_COUNT * 3);
     this.snowPhases = new Float32Array(SNOW_COUNT);
     for (let i = 0; i < SNOW_COUNT; i++) {
-      this.snowPositions[i * 3] = (Math.random() - 0.5) * RAIN_AREA * 2;
-      this.snowPositions[i * 3 + 1] = Math.random() * SNOW_TOP;
-      this.snowPositions[i * 3 + 2] = (Math.random() - 0.5) * RAIN_AREA * 2;
-      this.snowPhases[i] = Math.random() * Math.PI * 2;
+      this.snowPositions[i * 3] = (random() - 0.5) * RAIN_AREA * 2;
+      this.snowPositions[i * 3 + 1] = random() * SNOW_TOP;
+      this.snowPositions[i * 3 + 2] = (random() - 0.5) * RAIN_AREA * 2;
+      this.snowPhases[i] = random() * Math.PI * 2;
     }
     this.snowGeometry = new THREE.BufferGeometry();
     this.snowGeometry.setAttribute('position', new THREE.BufferAttribute(this.snowPositions, 3));
@@ -182,16 +185,16 @@ export class Weather {
     let totalInstances = 0;
     const cloudData: Array<{ offsets: THREE.Vector3[]; scales: number[] }> = [];
     for (let c = 0; c < CLOUD_COUNT; c++) {
-      const puffs = 18 + Math.floor(Math.random() * 16);
+      const puffs = 18 + Math.floor(random() * 16);
       const offsets: THREE.Vector3[] = [];
       const scales: number[] = [];
-      const spreadX = 7 + Math.random() * 6;
+      const spreadX = 7 + random() * 6;
       for (let p = 0; p < puffs; p++) {
-        const ox = (Math.random() - 0.5) * 2 * spreadX;
-        const oz = (Math.random() - 0.5) * 2 * (spreadX * 0.55);
-        const oy = (Math.random() - 0.5) * 2.4 * (1 - Math.abs(ox) / (spreadX + 1));
+        const ox = (random() - 0.5) * 2 * spreadX;
+        const oz = (random() - 0.5) * 2 * (spreadX * 0.55);
+        const oy = (random() - 0.5) * 2.4 * (1 - Math.abs(ox) / (spreadX + 1));
         offsets.push(new THREE.Vector3(ox, oy, oz));
-        scales.push(0.7 + Math.random() * 0.9 * (1 - Math.abs(ox) / (spreadX + 2)));
+        scales.push(0.7 + random() * 0.9 * (1 - Math.abs(ox) / (spreadX + 2)));
       }
       cloudData.push({ offsets, scales });
       totalInstances += puffs;
@@ -208,10 +211,10 @@ export class Weather {
     for (let c = 0; c < CLOUD_COUNT; c++) {
       const data = cloudData[c];
       this.clouds.push({
-        x: (Math.random() - 0.5) * 2 * (RAIN_AREA - 20),
-        y: CLOUD_MIN_Y + Math.random() * (CLOUD_MAX_Y - CLOUD_MIN_Y),
-        z: (Math.random() - 0.5) * 2 * (RAIN_AREA - 30),
-        speed: 0.8 + Math.random() * 0.7,
+        x: (random() - 0.5) * 2 * (RAIN_AREA - 20),
+        y: CLOUD_MIN_Y + random() * (CLOUD_MAX_Y - CLOUD_MIN_Y),
+        z: (random() - 0.5) * 2 * (RAIN_AREA - 30),
+        speed: 0.8 + random() * 0.7,
         first: cursor,
         count: data.offsets.length,
         offsets: data.offsets,
@@ -319,8 +322,8 @@ export class Weather {
     } else if (this.setting === 'auto') {
       this.nextChangeIn -= simDelta;
       if (this.nextChangeIn <= 0) {
-        this.kind = pickTransition(this.kind);
-        this.nextChangeIn = 25 + Math.random() * 35;
+        this.kind = pickTransition(this.kind, this.random);
+        this.nextChangeIn = 25 + this.random() * 35;
       }
     }
 
@@ -376,8 +379,8 @@ export class Weather {
         this.rainPositions[idx] += slant;
         this.rainPositions[idx + 3] += slant;
         if (this.rainPositions[idx + 1] < RAIN_BOTTOM) {
-          const x = (Math.random() - 0.5) * RAIN_AREA * 2;
-          const z = (Math.random() - 0.5) * RAIN_AREA * 2;
+          const x = (this.random() - 0.5) * RAIN_AREA * 2;
+          const z = (this.random() - 0.5) * RAIN_AREA * 2;
           this.rainPositions[idx] = x;
           this.rainPositions[idx + 1] = RAIN_TOP;
           this.rainPositions[idx + 2] = z;
@@ -402,9 +405,9 @@ export class Weather {
           (Math.sin(this.elapsed * 0.8 + this.snowPhases[i]) * 0.5 + wind * 2.4) * realDelta;
         this.snowPositions[idx + 2] += Math.cos(this.elapsed * 0.6 + this.snowPhases[i]) * 0.4 * realDelta;
         if (this.snowPositions[idx + 1] < -1) {
-          this.snowPositions[idx] = (Math.random() - 0.5) * RAIN_AREA * 2;
+          this.snowPositions[idx] = (this.random() - 0.5) * RAIN_AREA * 2;
           this.snowPositions[idx + 1] = SNOW_TOP;
-          this.snowPositions[idx + 2] = (Math.random() - 0.5) * RAIN_AREA * 2;
+          this.snowPositions[idx + 2] = (this.random() - 0.5) * RAIN_AREA * 2;
         }
       }
       (this.snowGeometry.attributes.position as THREE.BufferAttribute).needsUpdate = true;
@@ -426,7 +429,7 @@ export class Weather {
         cloud.x += (cloud.speed + wind * 5) * cloudDelta;
         if (cloud.x > RAIN_AREA) {
           cloud.x = -RAIN_AREA;
-          cloud.z = (Math.random() - 0.5) * 2 * (RAIN_AREA - 30);
+          cloud.z = (this.random() - 0.5) * 2 * (RAIN_AREA - 30);
         }
 
         const s = cloud.visibility;

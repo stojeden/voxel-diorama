@@ -25,7 +25,7 @@
 - **Fazy księżyca**, gwiazdy, spadające gwiazdy, **zorza polarna** w pogodne noce.
 - **Eclipse 2.0** — 96-sekundowe, deterministyczne zaćmienie uruchamiane klawiszem `E`: kamera pokazuje nisko zawieszone Słońce nad miastem, Księżyc przechodzi przez kolejne kontakty, pojawia się pierścień diamentowy, korona, chromosfera, protuberancje, perły Baily'ego i gwiazdy. Pod drzewami widać projekcje sierpów, a w High tuż przy kontakcie pojawiają się shadow bands. Mieszkańcy zwalniają, patrzą ku Słońcu, używają przyczepionych do głów okularów lub kart projekcyjnych; pies reaguje na zmianę światła, a jezioro odbija koronę.
 - **Automat pogodowy**: chmury voxelowe, deszcz (mokry, lustrzany asfalt), śnieg z **zalegającą zimą** (białe dachy, oszronione drzewa, **zamarzające jezioro**), mgła i wiatr kołyszący drzewami.
-- **Zegar 1× / 2× / 3×** oraz tryb **⏱ REAL TIME** — pora dnia i pogoda synchronizują się z lokalizacją widza (geolokalizacja + SunCalc + Open-Meteo).
+- **Zegar 1× / 2× / 3×** oraz tryb **⏱ REAL TIME** — obecna wersja synchronizuje porę dnia, fazę Księżyca i pogodę przez SunCalc + Open-Meteo; przy aktywacji prosi o lokalizację, a po odmowie używa Warszawy. W roadmapie jest zastąpienie tego trybem bez promptu, opartym o strefę czasową przeglądarki i jawnie opisaną lokalizację przybliżoną.
 - **Rytm mieszkań**: około północy gasną pierwsze okna, o 01:42 kolejne, o 02:30 pozostają pojedyncze światła, o 02:45 bloki są ciemne, a od 04:00 miasto budzi się sekwencyjnie.
 - **Oświetlenie bezpieczeństwa**: wiaty mają zewnętrzne, dwustronne lightboxy i oprawy pod dachem, a dworce nocą pozostają jaśniejsze od przystanków.
 
@@ -56,7 +56,7 @@
 | Obrót / przesuwanie / zoom kamery | mysz (drag / PPM / scroll) |
 | Kamera TPP za pociągiem | `T` lub 🚆 |
 | Kamera TPP za autobusem | `B` lub 🚌 |
-| Filmowy oblot dioramy (wschód→zachód) | „Pokaż dioramę" |
+| Filmowy tour: pociąg → autobus → jezioro → mieszkańcy → golden hour → totalność → Cyberpunk | „Pokaż dioramę" |
 | Prędkość zegara | `1` `2` `3` |
 | Tryb czasu rzeczywistego | `R` lub ⏱ REAL TIME |
 | Zaćmienie Słońca / szeroki widok zjawiska | `E` lub „Zaćmienie” |
@@ -74,8 +74,8 @@ npm run dev      # http://localhost:5173 — bez automatycznego otwierania kolej
 ```
 
 ```bash
-npm test         # 114 testów (vitest): geometria, światło, rytm miasta,
-                 # nawigacja pieszych, aktorzy i maszyny stanów pojazdów
+npm test         # 131 testów (vitest): geometria, światło, rytm miasta,
+                 # deterministyczność, kamera, tour, aktorzy i pojazdy
 npm run typecheck # typy
 npm run build    # produkcja → dist/
 npm run validate # typy + unit + build + Chrome/WebGL + budżety wydajności
@@ -92,18 +92,20 @@ sekwencyjnie, przy zamkniętych ręcznych kartach aplikacji.
 - **Auto** dobiera profil startowy do liczby rdzeni i pamięci, a następnie reaguje na utrzymujący się czas klatki z cooldownem i histerezą.
 - **Low / Medium / High** kontrolują DPR, cienie, bloom, AO, cząstki pogody, liczbę aktorów, etykiety i budżety świateł ulicznych, przystankowych, dworcowych oraz okiennych. Panorama automatycznie ogranicza niewidoczne w tej skali AO, bloom, lampy punktowe, DPR i rozdzielczość cieni; bliskie kadry zachowują pełny detal.
 - W trybie deweloperskim klawisz `P` włącza ładowany na żądanie panel `stats-gl` z FPS oraz czasem CPU/GPU.
-- `window.__diorama.getMetrics()` udostępnia draw calle, trójkąty, pamięć renderera i aktywny profil dla diagnostyki oraz testów.
+- `window.__diorama.getMetrics()` udostępnia draw calle, trójkąty, pamięć renderera, aktywny profil, seed symulacji, seed layoutu i wersję checkpointu dla diagnostyki oraz testów.
 
 ### Stan walidacji
 
-- 114/114 testów jednostkowych w 18 plikach testowych.
+- 131/131 testów jednostkowych w 23 plikach testowych.
 - `npm run typecheck` i produkcyjny `npm run build` przechodzą.
 - Smoke test obejmuje desktop/mobile, fazę częściową i totalność, zjawiska
   optyczne, reakcje mieszkańców, kompletną sylwetkę listonosza, niepusty canvas,
   luminancję, ochronę przed przepaleniami, kolizje pieszych, rytm miasta i
   budżety renderera.
-- Trzy izolowane, sekwencyjne serie Metal/High na M1 Pro przechodzą wszystkie
-  pięć scenariuszy: minimum 58,67 FPS, najgorsze p95 17,7 ms i TTI 1,56–1,62 s.
+- Ostatni izolowany przebieg Metal/High na M1 Pro przechodzi wszystkie pięć
+  wersjonowanych checkpointów przy około 120 FPS, p95 9,1–9,2 ms, bez hitchy
+  i z TTI około 1,41 s. Historyczna bramka pozostaje niezmieniona: minimum
+  58 FPS i p95 najwyżej 20,5 ms.
   Kamera autobusu korzysta z bliskiego LOD: zachowuje reflektory pojazdu,
   najbliższe fizyczne światła miasta, bloom, grading i cienie, ale pomija SSAO
   oraz odległe światła, które wcześniej przeciążały każdy fragment kadru.
@@ -116,14 +118,24 @@ sekwencyjnie, przy zamkniętych ręcznych kartach aplikacji.
 
 ```
 src/
-├── main.ts                  # pętla animacji oparta na THREE.Timer i orkiestracja
+├── main.ts                  # composition root i pojedyncza pętla requestAnimationFrame
 ├── bootstrap.ts             # renderer, composer HDR, kamera i postprocessing
 ├── ui.ts                    # panel sterowania
-├── CinematicTour.ts         # filmowy oblot
+├── CinematicTour.ts         # bezalokacyjna sekwencja siedmiu rozdziałów
+├── core/
+│   └── Random.ts            # jawny seed i niezależne strumienie RNG
+├── debug/
+│   └── DioramaDebugTypes.ts # kontrakt window.__diorama
 ├── performance/
 │   ├── QualityManager.ts    # profile jakości i adaptacja Auto
 │   └── DevStats.ts          # ładowany na żądanie profiler CPU/GPU
 ├── experience/
+│   ├── FrameContext.ts      # współdzielony kontekst klatki bez alokacji
+│   ├── ExperienceDirector.ts # zegar symulacji, checkpointy i tour
+│   ├── CameraDirector.ts    # automatyczne kadry i natychmiastowe przerwanie
+│   ├── Checkpoints.ts       # narracyjne i benchmarkowe stany startowe
+│   ├── ShotDefinitions.ts   # jedno źródło prawdy dla stałych ujęć
+│   ├── RendererWarmup.ts    # deterministyczny warm-up shaderów
 │   ├── Themes.ts            # motywy (palety + światło + morfing cyber)
 │   ├── RouteChapters.ts     # narracyjne etykiety trasy
 │   ├── EclipseTimeline.ts   # deterministyczne kontakty, geometria i irradiancja
@@ -137,7 +149,7 @@ src/
 │   ├── EclipsePhenomena.ts  # budżety zjawisk optycznych Low/Medium/High
 │   ├── LakeSurface.ts       # PBR jeziora, fale, deszcz, zamarzanie i mgła
 │   ├── Weather.ts           # automat pogodowy, chmury, śnieg, wiatr, mokro
-│   └── RealTime.ts          # geolokalizacja + SunCalc + Open-Meteo
+│   └── RealTime.ts          # legacy: geolokalizacja/fallback + SunCalc + Open-Meteo
 ├── effects/
 │   ├── PortalGlow.ts        # kwantowe pierścienie tuneli
 │   ├── EclipseCrowdProps.ts # instancjonowane okulary i projekcje mieszkańców

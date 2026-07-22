@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { TUNNEL_LENGTH, WORLD_HALF_SIZE } from '../world/WorldLayout';
+import { fallbackRandom, type RandomSource } from '../core/Random';
 
 /**
  * "Quantum portal" dressing for the two tunnel mouths: a softly swirling
@@ -54,13 +55,15 @@ function buildRingMaterial(): THREE.ShaderMaterial {
 }
 
 export class PortalGlow {
+  private readonly random: RandomSource;
   private readonly portals: Portal[] = [];
   private readonly ringGeometry: THREE.TorusGeometry;
   private readonly sparkMaterial: THREE.PointsMaterial;
   private readonly scene: THREE.Scene;
 
-  constructor(scene: THREE.Scene) {
+  constructor(scene: THREE.Scene, random = fallbackRandom('portal')) {
     this.scene = scene;
+    this.random = random;
     this.ringGeometry = new THREE.TorusGeometry(3.5, 0.15, 8, 48);
     this.sparkMaterial = new THREE.PointsMaterial({
       color: 0x9fc4ff,
@@ -83,7 +86,7 @@ export class PortalGlow {
       const sparkPositions = new Float32Array(SPARKS_PER_PORTAL * 3);
       const sparkPhases = new Float32Array(SPARKS_PER_PORTAL);
       for (let i = 0; i < SPARKS_PER_PORTAL; i++) {
-        sparkPhases[i] = Math.random() * Math.PI * 2;
+        sparkPhases[i] = this.random() * Math.PI * 2;
       }
       const sparkGeometry = new THREE.BufferGeometry();
       sparkGeometry.setAttribute('position', new THREE.BufferAttribute(sparkPositions, 3));

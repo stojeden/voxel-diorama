@@ -19,6 +19,7 @@ import {
 } from './PassengerCrowd';
 import { mergeStaticMeshes } from '../performance/mergeStaticMeshes';
 import type { EclipseWorldReactionState } from '../experience/EclipseWorldReaction';
+import { fallbackRandom, type RandomSource } from '../core/Random';
 import {
   MINUTES_PER_DAY,
   busServiceWindowAt,
@@ -242,7 +243,7 @@ interface StopCrowd {
   colliders: CollisionRect[];
 }
 
-function buildStopCrowd(scene: THREE.Scene, stop: BusStop): StopCrowd {
+function buildStopCrowd(scene: THREE.Scene, stop: BusStop, random: RandomSource): StopCrowd {
   const lanePoint = BUS_ROUTE_CURVE.getPointAt(stop.atT);
   const tangent = BUS_ROUTE_CURVE.getTangentAt(stop.atT).normalize();
   const c = busShelterCenter(stop);
@@ -261,7 +262,7 @@ function buildStopCrowd(scene: THREE.Scene, stop: BusStop): StopCrowd {
     const path = busStopWalkingPath(stop, waitPos, doorPos);
     const pathMetrics = polylineLengths(path);
 
-    const build = buildPassenger();
+    const build = buildPassenger(random);
     build.group.name = `bus-passenger-${stop.label}-${i}`;
     build.group.position.copy(waitPos);
     const facing = Math.atan2(doorPos.x - waitPos.x, doorPos.z - waitPos.z);
@@ -278,8 +279,8 @@ function buildStopCrowd(scene: THREE.Scene, stop: BusStop): StopCrowd {
       facing,
       activity: 'idle',
       progress: 0,
-      duration: 2.2 + Math.random() * 0.8,
-      phase: Math.random() * Math.PI * 2,
+      duration: 2.2 + random() * 0.8,
+      phase: random() * Math.PI * 2,
       delay: 0,
       currentOpacity: 0,
       targetOpacity: 0.92,
@@ -295,6 +296,8 @@ export interface BusHandle {
   update: (delta: number, nightFactor: number, crossingBlocked: boolean, t01: number) => void;
   getPosition: (target?: THREE.Vector3) => THREE.Vector3;
   getDirection: (target?: THREE.Vector3) => THREE.Vector3;
+  getRouteProgress: () => number;
+  seekRouteProgress: (progress: number) => void;
   getStopState: () => { dwelling: boolean; label: string };
   debugStartDwell: (label: string) => boolean;
   getPassengerDebugState: () => Array<{
@@ -325,14 +328,14 @@ const BUS_ROOF_CYBER = new THREE.Color(0x20262e);
 const BUS_GLASS_NORMAL = new THREE.Color(COLORS.windowLit);
 const BUS_GLASS_CYBER = new THREE.Color(0x35e6ff);
 
-export function createBus(scene: THREE.Scene): BusHandle {
+export function createBus(scene: THREE.Scene, random = fallbackRandom('bus')): BusHandle {
   const {
     group, wheels, doors, materials, windowMaterial, headLights, beamMaterials,
     bodyMaterial, roofMaterial,
   } = buildBusMesh();
   scene.add(group);
 
-  const crowds = BUS_STOPS.map((stop) => buildStopCrowd(scene, stop));
+  const crowds = BUS_STOPS.map((stop) => buildStopCrowd(scene, stop, random));
 
   let leadT = wrap01(BUS_STOPS[0].atT + 0.3);
   let currentSpeed = BASE_SPEED;
@@ -467,7 +470,7 @@ export function createBus(scene: THREE.Scene): BusHandle {
       const disembarks = purpose === 'morning-release' ||
         (purpose === 'normal' && !p.atStop);
       p.progress = 0;
-      p.duration = 2.0 + Math.random() * 0.8;
+      p.duration = 2.0 + random() * 0.8;
       if (boards && p.atStop) {
         p.activity = 'boarding';
         p.delay = 0.9 + i * 0.16;
@@ -687,6 +690,15 @@ export function createBus(scene: THREE.Scene): BusHandle {
     },
     getDirection(target = new THREE.Vector3()) {
       return target.copy(forward);
+    },
+    getRouteProgress() {
+      return leadT;
+    },
+    seekRouteProgress(progress) {
+      leadT = wrap01(progress);
+      currentSpeed = BASE_SPEED;
+      state = { kind: 'cruising' };
+      serviceMode = 'normal';
     },
     getStopState() {
       if (state.kind === 'dwelling') return { dwelling: true, label: state.stop.label };

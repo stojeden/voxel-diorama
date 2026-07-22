@@ -546,6 +546,7 @@ export interface TrainHandle {
   isGroundPointOccupied: (x: number, z: number, clearance?: number) => boolean;
   getSpeedFactor: () => number;
   getRouteProgress: () => number;
+  seekRouteProgress: (progress: number) => void;
   getStationState: () => TrainPublicState;
   setLivery: (livery: TrainLivery) => void;
   setHeadlightsEnabled: (enabled: boolean) => void;
@@ -741,7 +742,7 @@ export function createTrain(scene: THREE.Scene): TrainHandle {
       return target.copy(sampleAt(leadT));
     },
     getDirection(target = new THREE.Vector3()) {
-      return target.copy(TRAIN_ROUTE_CURVE.getTangentAt(wrapT(leadT))).normalize();
+      return TRAIN_ROUTE_CURVE.getTangentAt(wrapT(leadT), target).normalize();
     },
     isGroundPointOccupied(x, z, clearance = 4) {
       return carRefs.some(
@@ -756,6 +757,11 @@ export function createTrain(scene: THREE.Scene): TrainHandle {
     },
     getRouteProgress() {
       return wrapT(leadT);
+    },
+    seekRouteProgress(progress) {
+      leadT = wrapT(progress);
+      currentSpeed = BASE_SPEED_METERS_PER_S;
+      state = { kind: 'cruising' };
     },
     getStationState() {
       const label =

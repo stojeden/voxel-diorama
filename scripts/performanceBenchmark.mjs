@@ -12,6 +12,7 @@ const HEADFUL = process.env.BENCH_HEADFUL === '1';
 const REQUIRED_FPS = Number(process.env.BENCH_MIN_FPS ?? 58);
 const MAX_TTI_MS = Number(process.env.BENCH_MAX_TTI_MS ?? 20_000);
 const QUALITY = process.env.BENCH_QUALITY ?? 'high';
+const SIMULATION_SEED = Number(process.env.BENCH_SEED ?? 20260722);
 const SCENARIO_FILTER = process.env.BENCH_SCENARIO;
 const DISABLE_SHADOWS = process.env.BENCH_DISABLE_SHADOWS === '1';
 const DISABLE_LOCAL_LIGHTS = process.env.BENCH_DISABLE_LOCAL_LIGHTS === '1';
@@ -85,6 +86,25 @@ async function waitForServer(timeoutMs = 15_000) {
     await new Promise((resolve) => setTimeout(resolve, 150));
   }
   throw new Error(`Preview did not start within ${timeoutMs} ms`);
+}
+
+async function applyDiagnosticOverrides(page) {
+  const state = await page.evaluate(({ disableShadows, disableLocalLights }) => {
+    if (disableShadows) window.__diorama.renderer.shadowMap.enabled = false;
+    let visibleLocalLights = 0;
+    window.__diorama.scene.traverse((object) => {
+      if (!object.isPointLight && !object.isSpotLight) return;
+      if (disableLocalLights) object.visible = false;
+      if (object.visible) visibleLocalLights++;
+    });
+    return {
+      shadowsEnabled: window.__diorama.renderer.shadowMap.enabled,
+      visibleLocalLights,
+    };
+  }, { disableShadows: DISABLE_SHADOWS, disableLocalLights: DISABLE_LOCAL_LIGHTS });
+  if (DISABLE_SHADOWS) assert.equal(state.shadowsEnabled, false, 'shadow diagnostic override was not applied');
+  if (DISABLE_LOCAL_LIGHTS) assert.equal(state.visibleLocalLights, 0, 'local-light diagnostic override was not applied');
+  return state;
 }
 
 async function measureFrames(page, seconds = 3) {
@@ -171,17 +191,11 @@ async function measureGpuFrame(page, sampleCount = 3) {
 }
 
 const allScenarios = [
-  { name: 'golden-clear-overview', time: 0.28, weather: 'clear', camera: 'overview' },
-  { name: 'noon-rain-overview', time: 0.5, weather: 'rain', camera: 'overview' },
-  { name: 'night-snow-train', time: 0.02, weather: 'snow', camera: 'train' },
-  { name: 'evening-rain-bus', time: 0.82, weather: 'rain', camera: 'bus' },
-  {
-    name: 'eclipse-totality-overview',
-    time: 0.715,
-    weather: 'clear',
-    camera: 'overview',
-    eclipseProgress: 0.5,
-  },
+  { name: 'golden-clear-overview', checkpoint: 'golden-clear-overview', camera: 'overview' },
+  { name: 'noon-rain-overview', checkpoint: 'noon-rain-overview', camera: 'overview' },
+  { name: 'night-snow-train', checkpoint: 'night-snow-train', camera: 'train' },
+  { name: 'evening-rain-bus', checkpoint: 'evening-rain-bus', camera: 'bus' },
+  { name: 'eclipse-totality-overview', checkpoint: 'eclipse-totality-overview', camera: 'overview' },
 ];
 const scenarios = SCENARIO_FILTER
   ? allScenarios.filter((scenario) => scenario.name === SCENARIO_FILTER)
@@ -236,7 +250,7 @@ try {
       window.__benchmarkReadyAt = performance.now();
     }, { once: true });
   });
-  await page.goto(URL, { waitUntil: 'networkidle' });
+  await page.goto(`${URL}/?seed=${SIMULATION_SEED}&quality=${QUALITY}`, { waitUntil: 'networkidle' });
   await page.waitForFunction(() => window.__diorama?.ready === true, null, { timeout: MAX_TTI_MS });
   const readiness = await page.evaluate(() => {
     const navigation = performance.getEntriesByType('navigation')[0];
@@ -248,19 +262,7 @@ try {
       firstContentfulPaintMs: firstContentfulPaint?.startTime ?? null,
     };
   });
-  await page.evaluate((quality) => window.__diorama.setQuality(quality), QUALITY);
-  if (DISABLE_SHADOWS) {
-    await page.evaluate(() => {
-      window.__diorama.renderer.shadowMap.enabled = false;
-    });
-  }
-  if (DISABLE_LOCAL_LIGHTS) {
-    await page.evaluate(() => {
-      window.__diorama.scene.traverse((object) => {
-        if (object.isPointLight || object.isSpotLight) object.visible = false;
-      });
-    });
-  }
+  await applyDiagnosticOverrides(page);
 
   const identity = await page.evaluate(() => window.__diorama.getMetrics().renderer);
   const softwareRenderer = /swiftshader|software|llvmpipe/i.test(identity.gpu);
@@ -268,11 +270,20 @@ try {
 
   const results = [];
   for (const scenario of scenarios) {
-    await page.evaluate(({ time, weather, eclipseProgress }) => {
-      window.__diorama.setTime(time);
-      window.__diorama.setWeather(weather);
-      if (eclipseProgress !== undefined) window.__diorama.setEclipseProgress(eclipseProgress);
-    }, scenario);
+    await page.goto(
+      `${URL}/?seed=${SIMULATION_SEED}&checkpoint=${scenario.checkpoint}&quality=${QUALITY}`,
+      { waitUntil: 'networkidle' }
+    );
+    await page.waitForFunction(() => window.__diorama?.ready === true, null, { timeout: MAX_TTI_MS });
+    const diagnostics = await applyDiagnosticOverrides(page);
+    const { checkpointState, qualityLevel } = await page.evaluate(() => ({
+      checkpointState: window.__diorama.getState(),
+      qualityLevel: window.__diorama.getMetrics().quality.level,
+    }));
+    assert.equal(checkpointState.simulationSeed, SIMULATION_SEED);
+    assert.equal(checkpointState.checkpoint?.id, scenario.checkpoint);
+    assert.equal(qualityLevel, QUALITY, `checkpoint ${scenario.checkpoint} ignored BENCH_QUALITY`);
+    await page.evaluate(() => window.__diorama.releaseCheckpoint());
     if (scenario.camera === 'train') await page.keyboard.press('t');
     else if (scenario.camera === 'bus') await page.keyboard.press('b');
     else {
@@ -298,7 +309,17 @@ try {
     };
     const gpu = await measureGpuFrame(page);
     const metrics = await page.evaluate(() => window.__diorama.getMetrics());
-    results.push({ ...scenario, timing, cpu, gpu, renderer: metrics.renderer });
+    results.push({
+      ...scenario,
+      simulationSeed: metrics.simulationSeed,
+      layoutSeed: metrics.layoutSeed,
+      checkpointRevision: checkpointState.checkpoint.revision,
+      diagnostics,
+      timing,
+      cpu,
+      gpu,
+      renderer: metrics.renderer,
+    });
     if (scenario.camera === 'train') await page.keyboard.press('t');
     else if (scenario.camera === 'bus') await page.keyboard.press('b');
   }
@@ -306,6 +327,7 @@ try {
   console.log(JSON.stringify({
     headful: HEADFUL,
     quality: QUALITY,
+    simulationSeed: SIMULATION_SEED,
     isolation: 'exclusive process lock, one browser context, one page',
     diagnosticShadowsDisabled: DISABLE_SHADOWS,
     diagnosticLocalLightsDisabled: DISABLE_LOCAL_LIGHTS,

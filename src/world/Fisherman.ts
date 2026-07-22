@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { FISHERMAN_HOME, FISHERMAN_SPOT, GROUND_SURFACE_Y, LAKE } from './WorldLayout';
 import { buildPassenger, PASSENGER_SCALE, type PassengerBuild } from './PassengerCrowd';
+import { fallbackRandom, type RandomSource } from '../core/Random';
 
 /**
  * The fisherman. Lives in the block just west of the lake: he walks out of
@@ -34,6 +35,7 @@ export const ICE_SEATED_Y =
 const WALK_SPEED = 1.7;
 
 export class Fisherman {
+  private readonly random: RandomSource;
   private readonly scene: THREE.Scene;
   private readonly figure: PassengerBuild;
   private readonly seatedLegGroup = new THREE.Group();
@@ -70,8 +72,9 @@ export class Fisherman {
   private hologram = false;
   private holoOriginals: Array<{ mat: THREE.MeshStandardMaterial; color: number }> | null = null;
 
-  constructor(scene: THREE.Scene) {
+  constructor(scene: THREE.Scene, random = fallbackRandom('fisherman')) {
     this.scene = scene;
+    this.random = random;
     this.heading = Math.atan2(LAKE.x - FISHERMAN_SPOT.x, LAKE.z - FISHERMAN_SPOT.z);
 
     // ── Permanent props at the spot: stool + tackle box ──
@@ -173,7 +176,7 @@ export class Fisherman {
     this.iceGearGroup.add(iceBoxLid);
 
     // ── The fisherman himself, with a cap ──
-    this.figure = buildPassenger();
+    this.figure = buildPassenger(random);
     this.figure.group.name = 'fisherman';
     this.seatedLegGroup.name = 'fisherman-seated-legs';
     this.seatedLegGroup.visible = false;
@@ -393,7 +396,7 @@ export class Fisherman {
       case 'bite':
         this.float.position.y = this.floatHome.y + Math.sin(elapsed * 22) * 0.12 - 0.08;
         if (this.phaseTimer <= 0) {
-          if (Math.random() < 0.4) {
+          if (this.random() < 0.4) {
             this.phase = 'fishFlight';
             this.fishT = 0;
             this.bigFish.visible = true;
@@ -437,7 +440,7 @@ export class Fisherman {
         this.splashMaterial.opacity = Math.max(0, this.splashMaterial.opacity - delta * 1.2);
         if (this.phaseTimer <= 0) {
           this.phase = 'idle';
-          this.phaseTimer = 7 + Math.random() * 9;
+          this.phaseTimer = 7 + this.random() * 9;
         }
         break;
     }

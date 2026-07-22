@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { LAKE } from './WorldLayout';
+import { fallbackRandom, type RandomSource } from '../core/Random';
 
 /**
  * Little voxel fish that periodically jump out of the lake. Each jump
@@ -61,11 +62,11 @@ function buildFish(): { group: THREE.Group; material: THREE.MeshStandardMaterial
   return { group, material: bodyMat, splash, splashMat };
 }
 
-function randomLakePoint(out: THREE.Vector3): void {
+function randomLakePoint(out: THREE.Vector3, random: RandomSource): void {
   // Rejection sample inside the lake ellipse.
   for (let i = 0; i < 8; i++) {
-    const x = (Math.random() * 2 - 1) * LAKE_RADIUS_X;
-    const z = (Math.random() * 2 - 1) * LAKE_RADIUS_Z;
+    const x = (random() * 2 - 1) * LAKE_RADIUS_X;
+    const z = (random() * 2 - 1) * LAKE_RADIUS_Z;
     const normalized = (x * x) / (LAKE_RADIUS_X * LAKE_RADIUS_X) + (z * z) / (LAKE_RADIUS_Z * LAKE_RADIUS_Z);
     if (normalized < 0.85) {
       out.set(LAKE_CENTER.x + x, WATER_Y, LAKE_CENTER.z + z);
@@ -77,12 +78,14 @@ function randomLakePoint(out: THREE.Vector3): void {
 }
 
 export class LakeLife {
+  private readonly random: RandomSource;
   private readonly fishes: Fish[] = [];
   private readonly scene: THREE.Scene;
   private readonly disposables: Array<{ dispose: () => void }> = [];
   private clock = 0;
 
-  constructor(scene: THREE.Scene, count = 4) {
+  constructor(scene: THREE.Scene, count = 4, random = fallbackRandom('lake-life')) {
+    this.random = random;
     this.scene = scene;
     for (let i = 0; i < count; i++) {
       const built = buildFish();
@@ -96,10 +99,10 @@ export class LakeLife {
         splashMaterial: built.splashMat,
         splashMesh: built.splash,
         state: 'waiting',
-        waitUntil: 3 + Math.random() * 8 + i * 1.5,
+        waitUntil: 3 + random() * 8 + i * 1.5,
         jumpStart: 0,
-        jumpDuration: 1.0 + Math.random() * 0.4,
-        jumpHeight: 0.9 + Math.random() * 0.5,
+        jumpDuration: 1.0 + random() * 0.4,
+        jumpHeight: 0.9 + random() * 0.5,
         startPos: new THREE.Vector3(),
         endPos: new THREE.Vector3(),
       };
@@ -122,11 +125,11 @@ export class LakeLife {
   }
 
   private startJump(fish: Fish): void {
-    randomLakePoint(fish.startPos);
-    randomLakePoint(fish.endPos);
+    randomLakePoint(fish.startPos, this.random);
+    randomLakePoint(fish.endPos, this.random);
     // Keep entry and exit close (gives a believable arc).
     const dir = new THREE.Vector3().subVectors(fish.endPos, fish.startPos).normalize();
-    fish.endPos.copy(fish.startPos).addScaledVector(dir, 0.9 + Math.random() * 0.6);
+    fish.endPos.copy(fish.startPos).addScaledVector(dir, 0.9 + this.random() * 0.6);
 
     fish.state = 'jumping';
     fish.jumpStart = this.clock;
@@ -144,7 +147,7 @@ export class LakeLife {
     if (t >= 1) {
       fish.group.visible = false;
       fish.state = 'waiting';
-      fish.waitUntil = this.clock + 4 + Math.random() * 9;
+      fish.waitUntil = this.clock + 4 + this.random() * 9;
       // Final splash at landing position.
       fish.splashMesh.position.set(fish.endPos.x, WATER_Y + 0.02, fish.endPos.z);
       fish.splashMaterial.opacity = 0.6;

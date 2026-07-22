@@ -2,7 +2,7 @@ import * as THREE from 'three';
 
 import { bootstrap } from './bootstrap';
 import { mountUi } from './ui';
-import { CinematicTour } from './CinematicTour';
+import type { TourFrame } from './CinematicTour';
 import { createWorld, type WindUniforms } from './world/WorldGenerator';
 import { createTrain } from './world/Train';
 import { createBus } from './world/Bus';
@@ -19,20 +19,41 @@ import { Balloon } from './effects/Balloon';
 import { Fisherman } from './world/Fisherman';
 import { Postman } from './world/Postman';
 import { chapterForProgress } from './experience/RouteChapters';
-import { EclipseTimeline, type EclipseTimelineState } from './experience/EclipseTimeline';
+import { EclipseTimeline } from './experience/EclipseTimeline';
 import { eclipseWorldReactionAt } from './experience/EclipseWorldReaction';
 import { EclipseCrowdProps } from './effects/EclipseCrowdProps';
 import { themeById, type DioramaTheme } from './experience/Themes';
-import { DAY_SECONDS, LEVEL_CROSSING, TUNNEL_LENGTH, WORLD_HALF_SIZE } from './world/WorldLayout';
+import { DAY_SECONDS, LEVEL_CROSSING } from './world/WorldLayout';
+import { createWorldRandom } from './core/Random';
+import { createFrameContext } from './experience/FrameContext';
+import { ExperienceDirector } from './experience/ExperienceDirector';
+import { CameraDirector, type CameraMode } from './experience/CameraDirector';
+import { warmRenderer } from './experience/RendererWarmup';
+import { formatClock, updateEclipseHud } from './experience/Hud';
+import {
+  WORLD_LAYOUT_SEED,
+  getCheckpoint,
+  type CheckpointDefinition,
+  type CheckpointId,
+} from './experience/Checkpoints';
 import { sceneBloomStrength, sceneExposure, sunDirectionAt } from './environment/sky';
 import {
   QualityManager,
   type QualityMode,
-  type QualitySnapshot,
 } from './performance/QualityManager';
 import type { DevStatsHandle } from './performance/DevStats';
+import type { DioramaDebugHandle } from './debug/DioramaDebugTypes';
 
-const quality = new QualityManager();
+const query = new URLSearchParams(window.location.search);
+const requestedCheckpoint = getCheckpoint(query.get('checkpoint'));
+const worldRandom = createWorldRandom(query.get('seed') ?? undefined);
+const qualityParam = query.get('quality');
+const requestedQuality = qualityParam === 'low' || qualityParam === 'medium' || qualityParam === 'high'
+  ? qualityParam
+  : undefined;
+// An explicit query parameter is a benchmark/debug override. Checkpoints only
+// provide the default profile when the caller did not request one.
+const quality = new QualityManager(undefined, requestedQuality ?? requestedCheckpoint?.quality);
 const env = bootstrap(quality.getProfile());
 const ui = mountUi();
 ui.setLoadingProgress(4, 'RENDERER GOTOWY');
@@ -44,18 +65,18 @@ const windUniforms: WindUniforms = { uTime: { value: 0 }, uWind: { value: 0 } };
 const world = createWorld(env.scene, windUniforms);
 ui.setLoadingProgress(10, 'MIASTO I KRAJOBRAZ');
 const train = createTrain(env.scene);
-const bus = createBus(env.scene);
-const birds = new Birds(env.scene);
-const passengerCrowd = new PassengerCrowd(env.scene);
-const lakeLife = new LakeLife(env.scene, 4);
-const lakesideCow = new LakesideCow(env.scene);
-const fisherman = new Fisherman(env.scene);
+const bus = createBus(env.scene, worldRandom.stream('bus'));
+const birds = new Birds(env.scene, worldRandom.stream('birds'));
+const passengerCrowd = new PassengerCrowd(env.scene, worldRandom.stream('station-crowd'));
+const lakeLife = new LakeLife(env.scene, 4, worldRandom.stream('lake-life'));
+const lakesideCow = new LakesideCow(env.scene, worldRandom.stream('cow'));
+const fisherman = new Fisherman(env.scene, worldRandom.stream('fisherman'));
 const postman = new Postman(env.scene);
 const eclipseCrowdProps = new EclipseCrowdProps(env.scene);
-const balloon = new Balloon(env.scene);
+const balloon = new Balloon(env.scene, worldRandom.stream('balloon'));
 const railSignals = new RailSignals(env.scene);
 ui.setLoadingProgress(16, 'POJAZDY I MIESZKAŃCY');
-const weather = new Weather(env.scene, windUniforms);
+const weather = new Weather(env.scene, windUniforms, worldRandom.stream('weather'));
 const dayNight = new DayNightCycle(env.scene, env.renderer, {
   streetLights: world.streetLights,
   streetGlowMesh: world.streetGlowMesh,
@@ -68,16 +89,15 @@ const dayNight = new DayNightCycle(env.scene, env.renderer, {
   stationGlowMaterial: world.stationGlowMaterial,
   windowLights: world.windowLights,
   windowGlowMaterials: world.windowGlowMaterials,
-});
+}, worldRandom.stream('day-night-stars'), worldRandom.stream('shooting-stars'));
 ui.setLoadingProgress(20, 'OŚWIETLENIE I POGODA');
 env.setOcclusionExclusions([
   ...weather.getOcclusionExclusions(),
   ...dayNight.getOcclusionExclusions(),
 ]);
-const portalGlow = new PortalGlow(env.scene);
+const portalGlow = new PortalGlow(env.scene, worldRandom.stream('portal'));
 dayNight.camera = env.camera;
 let realTime: RealTimeSync | null = null;
-const tour = new CinematicTour(env.controls);
 
 const bloomTargets: THREE.Object3D[] = [];
 env.scene.traverse((object) => {
@@ -110,6 +130,7 @@ const unsubscribeQuality = quality.subscribe((profile, snapshot) => {
 });
 
 ui.onQualityCycle(() => {
+  interruptCameraForUi();
   const mode = quality.cycleMode();
   ui.showToast(`JAKOŚĆ: ${mode.toUpperCase()}`);
 });
@@ -120,25 +141,7 @@ env.loadingManager.onProgress = (_url, loaded, total) => {
 };
 
 // ─── State ───
-type CameraMode = 'free' | 'train' | 'bus';
 let cameraMode: CameraMode = 'free';
-let cameraJustSwitched = false;
-const camDesiredPos = new THREE.Vector3();
-const camDesiredTarget = new THREE.Vector3();
-const camSmoothPos = new THREE.Vector3();
-const camSmoothTarget = new THREE.Vector3();
-const prevVehiclePos = new THREE.Vector3();
-const FREE_CAM_POS = new THREE.Vector3(70, 48, 80);
-const FREE_CAM_TARGET = new THREE.Vector3(0, 6, 0);
-
-let paused = false;
-let timeScale = 1;
-/** Simulated clock, seconds within the DAY_SECONDS cycle. Starts at sunrise. */
-let simTime = 0.262 * DAY_SECONDS;
-/** Smoothed time actually rendered (tour / real-time overrides blend into it). */
-let renderTime = simTime;
-let simMoonPhase = 0.35; // waxing gibbous to start — photogenic
-let auroraNight = Math.random() < 0.5;
 const ECLIPSE_VIEW_TIME = 0.715;
 const eclipseTimeline = new EclipseTimeline({ durationSeconds: 96 });
 let eclipseState = eclipseTimeline.getState();
@@ -149,28 +152,60 @@ let eclipseDay = true;
 let eclipseDoneToday = false;
 const eclipseViewSun = new THREE.Vector3();
 const eclipseViewCamera = new THREE.Vector3();
+const eclipseViewTarget = new THREE.Vector3(0, 36, 0);
 const eclipseReflectionSun = new THREE.Vector3();
+let previousDayProgress = 0.262;
+let activeCheckpoint: CheckpointDefinition | null = null;
+
+const experience = new ExperienceDirector({
+  daySeconds: DAY_SECONDS,
+  random: worldRandom.stream('experience'),
+});
+
+const cameraDirector = new CameraDirector({
+  controls: env.controls,
+  inputElement: env.renderer.domElement,
+  onInterrupt: () => handleCameraInterrupt(),
+  onModeChange: (mode) => {
+    cameraMode = mode;
+    ui.setCameraMode(mode);
+  },
+});
+
+function endTourOverrides(): void {
+  experience.stopTour();
+  cameraDirector.stopTour();
+  experience.setClockLocked(false);
+  eclipseCheckpointLocked = false;
+  eclipseState = eclipseTimeline.stop();
+  weather.setExternal(null);
+  ui.setTourActive(false);
+  ui.setInfoText('PRZECIĄGNIJ — OBRÓT • PRAWY PRZYCISK — PRZESUŃ • SCROLL — ZOOM');
+}
+
+function releaseCheckpointState(interruptCamera: boolean): void {
+  activeCheckpoint = null;
+  experience.releaseCheckpoint();
+  experience.setClockLocked(false);
+  eclipseCheckpointLocked = false;
+  weather.setExternal(null);
+  if (interruptCamera) cameraDirector.interrupt('explicit');
+}
+
+function handleCameraInterrupt(): void {
+  if (activeCheckpoint) releaseCheckpointState(false);
+  if (experience.isTourActive()) endTourOverrides();
+}
 
 ui.setInfoText('PRZECIĄGNIJ — OBRÓT • PRAWY PRZYCISK — PRZESUŃ • SCROLL — ZOOM');
 ui.setTimeScale(1);
 ui.setWeatherLabel('POGODA: AUTO');
 
 function setCameraMode(mode: 'train' | 'bus'): void {
-  if (tour.isActive()) {
-    tour.stop();
-    ui.setTourActive(false);
+  if (experience.isTourActive()) {
+    endTourOverrides();
   }
-  cameraMode = cameraMode === mode ? 'free' : mode;
-  cameraJustSwitched = true;
-  ui.setCameraMode(cameraMode);
-  if (cameraMode === 'free') {
-    env.controls.enabled = true;
-    env.controls.setLookAt(
-      FREE_CAM_POS.x, FREE_CAM_POS.y, FREE_CAM_POS.z,
-      FREE_CAM_TARGET.x, FREE_CAM_TARGET.y, FREE_CAM_TARGET.z,
-      true
-    );
-  }
+  cameraDirector.toggleVehicleMode(mode);
 }
 
 ui.onCameraMode(setCameraMode);
@@ -190,20 +225,68 @@ function applyTheme(id: string): void {
   ui.showToast(`STYL: ${currentTheme.label.toUpperCase()}`);
 }
 
-ui.onThemeChange(applyTheme);
+function setCyberFactorImmediate(factor: number): void {
+  cyberFactor = THREE.MathUtils.clamp(factor, 0, 1);
+  world.setCyberRise(cyberFactor);
+  bus.setCyberLook(cyberFactor);
+  const cyberOn = cyberFactor > 0.5;
+  if (cyberOn === cyberActorsOn) return;
+  cyberActorsOn = cyberOn;
+  birds.setHidden(cyberOn);
+  fisherman.setHologram(cyberOn);
+  lakesideCow.setSuppressed(cyberOn);
+  balloon.setCyberMode(cyberOn);
+}
+
+function interruptCameraForUi(): void {
+  if (cameraDirector.isAutomated()) cameraDirector.interrupt('explicit');
+}
+
+ui.onThemeChange((id) => {
+  interruptCameraForUi();
+  applyTheme(id);
+});
+
+function applyTourChapter(frame: TourFrame): void {
+  const chapter = frame.chapter;
+  if (chapter.trainProgress !== undefined) train.seekRouteProgress(chapter.trainProgress);
+  if (chapter.busProgress !== undefined) bus.seekRouteProgress(chapter.busProgress);
+  weather.debugSetImmediate(chapter.weather);
+  if (currentTheme.id !== chapter.theme) applyTheme(chapter.theme);
+  if (chapter.eclipseProgress === null) {
+    eclipseState = eclipseTimeline.stop();
+    eclipseCheckpointLocked = false;
+    experience.setClockLocked(false);
+  } else {
+    experience.setTime(chapter.dayProgress);
+    experience.setClockLocked(true);
+    eclipseState = eclipseTimeline.seek(chapter.eclipseProgress, false);
+    eclipseCheckpointLocked = true;
+    eclipseDoneToday = true;
+  }
+  ui.setChapter(`TOUR · ${chapter.label}`);
+}
 
 ui.onTourButton(() => {
-  if (tour.isActive()) {
-    tour.stop();
-    ui.setTourActive(false);
+  if (experience.isTourActive()) {
+    endTourOverrides();
   } else {
-    cameraMode = 'free';
-    ui.setCameraMode('free');
-    tour.start(() => ui.setTourActive(false));
+    if (realTime?.isActive()) {
+      realTime.disable();
+      weather.setExternal(null);
+      ui.setRealTime(false);
+    }
+    activeCheckpoint = null;
+    experience.releaseCheckpoint();
+    const first = experience.startTour(() => endTourOverrides());
+    applyTourChapter(first);
+    cameraDirector.startTour(first);
+    ui.setInfoText('PRZECIĄGNIJ, PRZEWIŃ LUB DOTKNIJ, ABY PRZEJĄĆ KAMERĘ');
   }
 });
 
 ui.onWeatherCycle(() => {
+  interruptCameraForUi();
   if (realTime?.isActive()) {
     ui.showToast('POGODA STEROWANA TRYBEM NA ŻYWO');
     return;
@@ -214,17 +297,20 @@ ui.onWeatherCycle(() => {
 });
 
 ui.onPauseToggle(() => {
-  paused = ui.paused;
+  interruptCameraForUi();
+  experience.setPaused(ui.paused);
 });
 
 ui.onTimeScale((scale) => {
+  interruptCameraForUi();
   if (realTime?.isActive()) return;
-  timeScale = scale;
+  experience.setTimeScale(scale);
   ui.setTimeScale(scale);
 });
 
 let realTimePending = false;
 ui.onRealTimeToggle(() => {
+  interruptCameraForUi();
   if (realTimePending) return;
   if (realTime?.isActive()) {
     realTime.disable();
@@ -244,7 +330,7 @@ ui.onRealTimeToggle(() => {
       ui.setRealTime(true, label);
       ui.showToast(`CZAS RZECZYWISTY · ${label}`);
       // Snap the clock to the real sun immediately.
-      renderTime = realTime!.getCycleT() * DAY_SECONDS;
+      experience.setTime(realTime!.getCycleT());
     })
     .catch((error: unknown) => {
       console.error('[RealTime] activation failed', error);
@@ -280,30 +366,19 @@ async function toggleProfiler(): Promise<boolean> {
 }
 
 ui.onProfilerToggle(() => {
+  interruptCameraForUi();
   void toggleProfiler().then((active) => ui.showToast(active ? 'PROFILER: WŁĄCZONY' : 'PROFILER: WYŁĄCZONY'));
 });
 
 function focusEclipseView(): void {
-  if (tour.isActive()) {
-    tour.stop();
-    ui.setTourActive(false);
+  if (experience.isTourActive()) {
+    endTourOverrides();
   }
-  cameraMode = 'free';
-  ui.setCameraMode('free');
-  env.controls.enabled = true;
 
   sunDirectionAt(ECLIPSE_VIEW_TIME, eclipseViewSun);
   eclipseViewCamera.set(-eclipseViewSun.x, 0, -eclipseViewSun.z).normalize().multiplyScalar(148);
   eclipseViewCamera.y = 46;
-  env.controls.setLookAt(
-    eclipseViewCamera.x,
-    eclipseViewCamera.y,
-    eclipseViewCamera.z,
-    0,
-    36,
-    0,
-    true
-  );
+  cameraDirector.focusEclipse(eclipseViewCamera, eclipseViewTarget);
 }
 
 function startEclipse(focusView = true): void {
@@ -312,8 +387,8 @@ function startEclipse(focusView = true): void {
     weather.setExternal(null);
     ui.setRealTime(false);
   }
-  simTime = ECLIPSE_VIEW_TIME * DAY_SECONDS;
-  renderTime = simTime;
+  experience.setTime(ECLIPSE_VIEW_TIME);
+  experience.setClockLocked(true);
   eclipseState = eclipseTimeline.start();
   eclipseDebugStrength = null;
   eclipseCheckpointLocked = false;
@@ -322,10 +397,13 @@ function startEclipse(focusView = true): void {
   ui.showToast('ZAĆMIENIE SŁOŃCA · CZAS ZJAWISKA SKOMPRESOWANY');
 }
 
-ui.onEclipseStart(() => startEclipse(true));
+ui.onEclipseStart(() => {
+  interruptCameraForUi();
+  startEclipse(true);
+});
 
-if (import.meta.env.DEV) {
-  const eclipseCheckpoint = new URLSearchParams(window.location.search).get('eclipse');
+if (import.meta.env.DEV && !requestedCheckpoint) {
+  const eclipseCheckpoint = query.get('eclipse');
   const checkpoints: Record<string, number> = {
     c1: 0.18,
     c2: 0.39,
@@ -335,8 +413,7 @@ if (import.meta.env.DEV) {
   };
   const checkpoint = eclipseCheckpoint ? checkpoints[eclipseCheckpoint] : undefined;
   if (checkpoint !== undefined) {
-    simTime = ECLIPSE_VIEW_TIME * DAY_SECONDS;
-    renderTime = simTime;
+    experience.setTime(ECLIPSE_VIEW_TIME);
     eclipseState = eclipseTimeline.seek(checkpoint, false);
     eclipseCheckpointLocked = true;
     eclipseDoneToday = true;
@@ -344,10 +421,48 @@ if (import.meta.env.DEV) {
   }
 }
 
+const checkpointCameraPosition = new THREE.Vector3();
+const checkpointCameraTarget = new THREE.Vector3();
+
+function applyBootCheckpoint(checkpoint: CheckpointDefinition): void {
+  experience.stopTour();
+  cameraDirector.stopTour();
+  ui.setTourActive(false);
+  activeCheckpoint = checkpoint;
+  experience.lockCheckpoint(checkpoint.timeOfDay);
+  weather.debugSetImmediate(checkpoint.weather);
+  applyTheme(checkpoint.theme);
+  setCyberFactorImmediate(checkpoint.theme === 'cyberpunk' ? 1 : 0);
+  if (checkpoint.trainProgress !== undefined) train.seekRouteProgress(checkpoint.trainProgress);
+  if (checkpoint.busProgress !== undefined) bus.seekRouteProgress(checkpoint.busProgress);
+  eclipseDebugStrength = null;
+  if (checkpoint.eclipseProgress === null) {
+    eclipseState = eclipseTimeline.stop();
+    eclipseCheckpointLocked = false;
+  } else {
+    eclipseState = eclipseTimeline.seek(checkpoint.eclipseProgress, false);
+    eclipseCheckpointLocked = true;
+    eclipseDoneToday = true;
+  }
+  experience.setClockLocked(checkpoint.eclipseProgress !== null);
+  checkpointCameraPosition.fromArray(checkpoint.camera.position);
+  checkpointCameraTarget.fromArray(checkpoint.camera.target);
+  cameraDirector.frameAbsolute(checkpointCameraPosition, checkpointCameraTarget, false, 'overview');
+  ui.setChapter(`CHECKPOINT · ${checkpoint.id.toUpperCase()}`);
+}
+
+function releaseCheckpoint(): void {
+  releaseCheckpointState(true);
+}
+
+if (requestedCheckpoint) applyBootCheckpoint(requestedCheckpoint);
+
 // ─── Animation ───
 const timer = new THREE.Timer();
 timer.connect(document);
-let elapsed = 0;
+const frame = createFrameContext();
+let rafId = 0;
+let running = true;
 let loadingHidden = false;
 let loadingCompletedAt = -1;
 let optionalActorAccumulator = 0;
@@ -358,118 +473,27 @@ const trainPosition = new THREE.Vector3();
 const trainDirection = new THREE.Vector3();
 const busPosition = new THREE.Vector3();
 const busDirection = new THREE.Vector3();
+const cameraSubjects = { trainPosition, trainDirection, busPosition, busDirection };
 const postFocusTarget = new THREE.Vector3();
 const boardingStations = new Set<string>();
 
-function formatClock(t01: number): string {
-  const hours = Math.floor(t01 * 24);
-  const minutes = Math.floor((t01 * 24 * 60) % 60);
-  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
-}
-
-const ECLIPSE_PHASE_LABELS: Record<EclipseTimelineState['phase'], string> = {
-  'partial-in': 'FAZA CZĘŚCIOWA · C1 → C2',
-  'c2-diamond-ring': 'C2 · DIAMENTOWY PIERŚCIEŃ',
-  totality: 'TOTALNOŚĆ · KORONA SŁONECZNA',
-  'c3-diamond-ring': 'C3 · DIAMENTOWY PIERŚCIEŃ',
-  'partial-out': 'FAZA CZĘŚCIOWA · C3 → C4',
-  complete: 'C4 · KONIEC ZAĆMIENIA',
-};
-
-function updateEclipseHud(state: EclipseTimelineState, active: boolean): void {
-  if (!active) {
-    ui.setEclipseStatus(false);
-    return;
-  }
-  const coverage = Math.round(state.coverage * 100);
-  const safety = state.phase === 'totality'
-    ? 'KORONA WIDOCZNA · CZAS SYMULACJI SKOMPRESOWANY'
-    : 'POKRYCIE ' + coverage + '% · UŻYWAJ FILTRA SŁONECZNEGO';
-  ui.setEclipseStatus(true, ECLIPSE_PHASE_LABELS[state.phase], safety, state.progress);
-}
-
-async function warmRenderer(): Promise<void> {
-  const visibility = new Map<THREE.Object3D, boolean>();
-  env.scene.traverse((object) => {
-    if (object instanceof THREE.Light) return;
-    visibility.set(object, object.visible);
-    object.visible = true;
-  });
-
-  try {
-    ui.setLoadingProgress(24, 'KOMPILOWANIE PORANKA');
-    dayNight.update(renderTime / DAY_SECONDS, 1, 0, currentTheme.nightFloor);
-    await env.renderer.compileAsync(env.scene, env.camera);
-    env.composer.render(0);
-    ui.setLoadingProgress(42, 'KOMPILOWANIE ŚWIATŁA DNIA');
-    dayNight.update(0.5, 1, 0, currentTheme.nightFloor);
-    await env.renderer.compileAsync(env.scene, env.camera);
-    env.composer.render(0);
-    ui.setLoadingProgress(56, 'KOMPILOWANIE ZŁOTEJ GODZINY');
-    dayNight.update(0.28, 1, 0, currentTheme.nightFloor);
-    await env.renderer.compileAsync(env.scene, env.camera);
-    env.composer.render(0);
-    ui.setLoadingProgress(70, 'KOMPILOWANIE NOCY');
-    dayNight.update(0.86, 1, 0, currentTheme.nightFloor);
-    await env.renderer.compileAsync(env.scene, env.camera);
-    env.composer.render(0);
-    ui.setLoadingProgress(84, 'KOMPILOWANIE ZAĆMIENIA');
-    dayNight.setCameraFocusDistance(148);
-    dayNight.setEclipseState({
-      active: true,
-      coverage: 1,
-      separation: 0,
-      irradiance: 0.025,
-      corona: 1,
-      beads: 0,
-      stars: 1,
-      totality: 1,
-    });
-    dayNight.update(ECLIPSE_VIEW_TIME, 1, 0, currentTheme.nightFloor);
-    await env.renderer.compileAsync(env.scene, env.camera);
-    env.composer.render(0);
-    env.renderer.getContext().finish();
-  } catch (error) {
-    // Parallel shader compilation is an optimisation. The first render remains
-    // a valid fallback on browsers without a compatible implementation.
-    console.warn('[Preloader] shader warm-up fell back to first-frame compilation', error);
-  } finally {
-    for (const [object, visible] of visibility) object.visible = visible;
-    dayNight.setCameraFocusDistance(
-      env.camera.position.distanceTo(postFocusTarget)
-    );
-    dayNight.setEclipseState({
-      active:
-        eclipseState.running ||
-        (eclipseState.phase !== 'complete' && eclipseState.progress > 0),
-      coverage: eclipseState.coverage,
-      separation: eclipseState.separation,
-      irradiance: eclipseState.irradiance,
-      corona: eclipseState.corona,
-      beads: eclipseState.beads,
-      stars: eclipseState.stars,
-      totality: eclipseState.totality,
-    });
-    dayNight.update(renderTime / DAY_SECONDS, 1, weather.getCloudCover(), currentTheme.nightFloor);
-    env.composer.render(0);
-    env.renderer.getContext().finish();
-    ui.setLoadingProgress(96, 'PRZYGOTOWANIE PIERWSZEJ KLATKI');
-    rendererWarm = true;
-  }
-}
-
 function animate(timestamp?: number) {
-  requestAnimationFrame(animate);
+  if (!running) return;
+  rafId = requestAnimationFrame(animate);
   timer.update(timestamp);
   const measuredDelta = timer.getDelta();
   const rawDelta = Math.min(measuredDelta, 0.1);
   if (!document.hidden) quality.sampleFrame(measuredDelta);
-  const delta = paused ? 0 : rawDelta;
-  elapsed += delta;
+  const presentationDelta = experience.isCheckpointLocked() ? 0 : rawDelta;
+  const delta = experience.isPaused() ? 0 : presentationDelta;
+  frame.frameIndex++;
+  frame.timestampMs = timestamp ?? performance.now();
+  frame.realDelta = rawDelta;
+  frame.simulationDelta = delta;
+  frame.elapsedSimulation += delta;
 
-  env.controls.update(rawDelta);
-  tour.update(rawDelta);
-  shadowFocusAccumulator += rawDelta;
+  env.controls.update(presentationDelta);
+  shadowFocusAccumulator += presentationDelta;
   if (shadowFocusAccumulator >= 0.2) {
     env.controls.getTarget(postFocusTarget);
     const shadowRadius = env.camera.position.distanceTo(postFocusTarget) * 0.72;
@@ -477,42 +501,31 @@ function animate(timestamp?: number) {
     shadowFocusAccumulator = 0;
   }
 
-  // ── Clock: real time, tour override, or free-running simulation ──
-  if (realTime?.isActive()) {
-    const target = realTime.getCycleT() * DAY_SECONDS;
-    let diff = target - renderTime;
-    if (Math.abs(diff) > DAY_SECONDS / 2) diff -= Math.sign(diff) * DAY_SECONDS;
-    renderTime = (renderTime + diff * Math.min(1, rawDelta * 0.8) + DAY_SECONDS) % DAY_SECONDS;
-    simTime = renderTime;
-  } else {
-    if (!eclipseState.running && !eclipseCheckpointLocked) simTime += delta * timeScale;
-    if (simTime >= DAY_SECONDS) {
-      simTime -= DAY_SECONDS;
-      // New simulated day — advance the moon phase noticeably.
-      simMoonPhase = (simMoonPhase + 0.125) % 1;
-      auroraNight = Math.random() < 0.5;
-      eclipseDay = false;
-      eclipseDoneToday = false;
-    }
-    const dayOverride = tour.getDayTimeTarget();
-    if (dayOverride !== null) {
-      const blend = 1 - Math.exp(-0.6 * Math.max(rawDelta, 0.0001));
-      renderTime += (dayOverride - renderTime) * blend;
-    } else {
-      renderTime = simTime;
-    }
+  // ── Clock: one owner for simulation, real time and tour overrides ──
+  let experienceState = experience.update(
+    frame,
+    realTime?.isActive() ? realTime.getCycleT() : null
+  );
+  if (eclipseState.running) {
+    experience.setTime(ECLIPSE_VIEW_TIME);
+    experienceState = experience.getState();
   }
-  const t01 = ((renderTime / DAY_SECONDS) % 1 + 1) % 1;
+  const t01 = experienceState.t01;
+  if (!realTime?.isActive() && t01 < previousDayProgress && !experience.isCheckpointLocked()) {
+    eclipseDay = false;
+    eclipseDoneToday = false;
+  }
+  previousDayProgress = t01;
+  if (experienceState.tour?.entered) applyTourChapter(experienceState.tour);
 
   // ── Moon & aurora ──
   if (realTime?.isActive()) {
     const moon = realTime.getMoon();
     dayNight.setMoonPhase(moon.phase, moon.fraction);
   } else {
-    const illumination = 0.5 - 0.5 * Math.cos(simMoonPhase * Math.PI * 2);
-    dayNight.setMoonPhase(simMoonPhase, illumination);
+    dayNight.setMoonPhase(experienceState.moonPhase, experienceState.moonIllumination);
   }
-  dayNight.setAuroraStrength(auroraNight && weather.isClearNight() ? 0.85 : 0);
+  dayNight.setAuroraStrength(experienceState.auroraEnabled && weather.isClearNight() ? 0.85 : 0);
 
   // ── Eclipse 2.0: deterministic, compressed event with explicit phases ──
   if (
@@ -525,6 +538,9 @@ function animate(timestamp?: number) {
     startEclipse(true);
   }
   eclipseState = eclipseTimeline.update(eclipseState.running ? delta : 0);
+  if (eclipseState.phase === 'complete' && !activeCheckpoint) {
+    experience.setClockLocked(false);
+  }
   eclipseReaction = eclipseWorldReactionAt(eclipseState.coverage, eclipseState.totality);
   passengerCrowd.setEclipseReaction(eclipseReaction);
   bus.setEclipseReaction(eclipseReaction);
@@ -550,12 +566,12 @@ function animate(timestamp?: number) {
     const live = realTime.getWeather();
     weather.setExternal(live ? live.kind : null, live?.windNorm ?? 0);
   }
-  weather.update(delta * timeScale, rawDelta);
+  weather.update(delta * experience.getTimeScale(), presentationDelta);
 
   // ── Lighting ──
   const skyCloud = Math.min(1, weather.getCloudCover() + currentTheme.turbidityAdd * 0.1);
   dayNight.setCameraMode(cameraMode);
-  const light = dayNight.update(t01, rawDelta, skyCloud, currentTheme.nightFloor);
+  const light = dayNight.update(t01, presentationDelta, skyCloud, currentTheme.nightFloor);
   env.renderer.toneMappingExposure = sceneExposure(
     light.night,
     light.golden,
@@ -565,7 +581,7 @@ function animate(timestamp?: number) {
 
   // ── Vehicles & life ──
   const speedMultiplier = 0.5 + ui.speedSetting * 1.3;
-  train.update(delta, elapsed, light.night, speedMultiplier);
+  train.update(delta, frame.elapsedSimulation, light.night, speedMultiplier);
   train.getPosition(trainPosition);
   bus.update(
     delta,
@@ -573,6 +589,15 @@ function animate(timestamp?: number) {
     train.isGroundPointOccupied(LEVEL_CROSSING.x, LEVEL_CROSSING.z, 5),
     t01
   );
+  const activeCameraRig = experienceState.tour?.chapter.cameraRig;
+  const cameraAutomation = cameraDirector.getAutomation();
+  if (cameraAutomation === 'train' || cameraAutomation === 'tour' && activeCameraRig === 'train') {
+    train.getDirection(trainDirection);
+  }
+  if (cameraAutomation === 'bus' || cameraAutomation === 'tour' && activeCameraRig === 'bus') {
+    bus.getPosition(busPosition);
+    bus.getDirection(busDirection);
+  }
   // Do not pay the global fragment-shader cost of the other vehicle's spotlights
   // in a chase camera. The followed vehicle keeps its physical headlights.
   train.setHeadlightsEnabled(cameraMode !== 'bus');
@@ -585,7 +610,7 @@ function animate(timestamp?: number) {
     eclipseReflectionSun
   );
   world.updateEnvironment(
-    elapsed,
+    frame.elapsedSimulation,
     weather.getWind(),
     weather.getKind() === 'rain' ? 1 : 0,
     THREE.MathUtils.smoothstep(weather.getSnowCover(), 0.42, 0.82),
@@ -593,22 +618,15 @@ function animate(timestamp?: number) {
   );
 
   railSignals.update(trainPosition);
-  portalGlow.update(elapsed, rawDelta, trainPosition);
+  portalGlow.update(frame.elapsedSimulation, presentationDelta, trainPosition);
 
   // ── Cyberpunk morph: towers rise/sink, actors swap at the midpoint ──
   const cyberTarget = currentTheme.cyber ? 1 : 0;
   if (Math.abs(cyberTarget - cyberFactor) > 0.001) {
-    cyberFactor += Math.sign(cyberTarget - cyberFactor) * Math.min(rawDelta * 0.45, Math.abs(cyberTarget - cyberFactor));
-    world.setCyberRise(cyberFactor);
-    bus.setCyberLook(cyberFactor);
-  }
-  const cyberOn = cyberFactor > 0.5;
-  if (cyberOn !== cyberActorsOn) {
-    cyberActorsOn = cyberOn;
-    birds.setHidden(cyberOn);
-    fisherman.setHologram(cyberOn);
-    lakesideCow.setSuppressed(cyberOn);
-    balloon.setCyberMode(cyberOn);
+    setCyberFactorImmediate(
+      cyberFactor + Math.sign(cyberTarget - cyberFactor) *
+      Math.min(presentationDelta * 0.45, Math.abs(cyberTarget - cyberFactor))
+    );
   }
 
   optionalActorAccumulator += delta;
@@ -621,12 +639,12 @@ function animate(timestamp?: number) {
   if (optionalActorAccumulator >= actorInterval) {
     const actorDelta = optionalActorAccumulator;
     optionalActorAccumulator = 0;
-    birds.update(actorDelta, elapsed, weather.getWind(), light.night);
+    birds.update(actorDelta, frame.elapsedSimulation, weather.getWind(), light.night);
     lakeLife.update(actorDelta, weather.getSnowCover() > 0.5);
-    lakesideCow.update(actorDelta, elapsed, light.night);
-    fisherman.update(actorDelta, elapsed, light.night, weather.getSnowCover());
-    postman.update(actorDelta, elapsed, t01);
-    balloon.update(actorDelta, elapsed, light.night, weather.getCloudCover(), weather.getWind());
+    lakesideCow.update(actorDelta, frame.elapsedSimulation, light.night);
+    fisherman.update(actorDelta, frame.elapsedSimulation, light.night, weather.getSnowCover());
+    postman.update(actorDelta, frame.elapsedSimulation, t01);
+    balloon.update(actorDelta, frame.elapsedSimulation, light.night, weather.getCloudCover(), weather.getWind());
 
     boardingStations.clear();
     if (stationState.kind === 'dwelling') boardingStations.add(stationState.stationLabel);
@@ -634,58 +652,11 @@ function animate(timestamp?: number) {
   }
   eclipseCrowdProps.update(eclipseReaction, eclipseState.separation);
 
-  // ── Onboard cab cameras (train / bus) ──
-  if (cameraMode !== 'free' && !tour.isActive()) {
-    env.controls.enabled = false;
-    const pos = cameraMode === 'train' ? trainPosition : bus.getPosition(busPosition);
-    const dir = cameraMode === 'train' ? train.getDirection(trainDirection) : bus.getDirection(busDirection);
-    // Third-person game camera: behind and above the vehicle, looking ahead.
-    const behind = cameraMode === 'train' ? 13 : 10.5;
-    let height = cameraMode === 'train' ? 7 : 5.5;
-    let targetLift = 0;
-    if (cameraMode === 'train') {
-      // Near the portals the camera climbs OVER the tunnel embankment
-      // instead of clipping through the hill while the train dives in.
-      const tunnelZoneStart = WORLD_HALF_SIZE - TUNNEL_LENGTH - 18;
-      const intoZone = Math.max(0, Math.abs(pos.x) - tunnelZoneStart);
-      const lift = Math.min(1, intoZone / 12);
-      height += lift * 10;
-      targetLift = lift * 4;
-    } else {
-      // Bus camera soars OVER the viaduct (and the train on it) when the
-      // bus drives through the underpass on the east cross street.
-      const d = Math.hypot(pos.x - 34, pos.z - 9.8);
-      const lift = Math.max(0, 1 - d / 24);
-      height += lift * 11;
-      targetLift = lift * 5;
-    }
-    camDesiredPos.copy(pos).addScaledVector(dir, -behind);
-    camDesiredPos.y += height;
-    camDesiredTarget.copy(pos).addScaledVector(dir, 11);
-    camDesiredTarget.y += 2.2 + targetLift;
-
-    // Hard cut on the portal teleport; smooth follow otherwise.
-    const jumped = cameraJustSwitched || prevVehiclePos.distanceTo(pos) > 25;
-    if (jumped) {
-      camSmoothPos.copy(camDesiredPos);
-      camSmoothTarget.copy(camDesiredTarget);
-      cameraJustSwitched = false;
-    } else {
-      const camLerp = 1 - Math.exp(-7 * Math.max(rawDelta, 0.0001));
-      camSmoothPos.lerp(camDesiredPos, camLerp);
-      camSmoothTarget.lerp(camDesiredTarget, camLerp);
-    }
-    env.controls.setLookAt(
-      camSmoothPos.x, camSmoothPos.y, camSmoothPos.z,
-      camSmoothTarget.x, camSmoothTarget.y, camSmoothTarget.z,
-      false
-    );
-    prevVehiclePos.copy(pos);
-  }
+  cameraDirector.update(frame, experienceState.tour, cameraSubjects);
 
   // ── Post FX ──
   const gradeNight = light.eclipse > 0.001 ? Math.min(light.night, 0.25) : light.night;
-  env.gradeEffect.parameters.time.value = elapsed;
+  env.gradeEffect.parameters.time.value = frame.elapsedSimulation;
   env.gradeEffect.parameters.golden.value = light.golden;
   env.gradeEffect.parameters.night.value = gradeNight;
   env.setEnvironmentGrade(light.golden, gradeNight);
@@ -695,9 +666,10 @@ function animate(timestamp?: number) {
   env.setCameraFocusDistance(cameraFocusDistance);
   env.setCameraPerformanceMode(cameraMode);
   dayNight.setCameraFocusDistance(cameraFocusDistance);
-  env.setCinematicFocus(tour.isActive(), postFocusTarget);
+  env.setCinematicFocus(experience.isTourActive(), postFocusTarget);
 
   // ── HUD: DOM does not need a 60 Hz update cadence. ──
+  // UI cadence may advance while a checkpoint freezes every visual simulation delta.
   hudAccumulator += rawDelta;
   if (hudAccumulator >= 0.1) {
     hudAccumulator = 0;
@@ -707,6 +679,7 @@ function animate(timestamp?: number) {
         `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')} · NA ŻYWO`
       );
     } else {
+      const timeScale = experience.getTimeScale();
       ui.setClock(`${formatClock(t01)}${timeScale > 1 ? ` · ${timeScale}×` : ''}`);
     }
     if (!realTime?.isActive() && weather.getSetting() === 'auto') {
@@ -714,13 +687,15 @@ function animate(timestamp?: number) {
     } else if (realTime?.isActive()) {
       ui.setWeatherLabel(`POGODA: ${weather.getLabel()}`);
     }
-    ui.setChapter(chapterForProgress(train.getRouteProgress()));
+    if (!experience.isTourActive() && !activeCheckpoint) {
+      ui.setChapter(chapterForProgress(train.getRouteProgress()));
+    }
     ui.setStation(stationState);
-    updateEclipseHud(eclipseState, eclipseActive);
+    updateEclipseHud(ui, eclipseState, eclipseActive);
   }
 
   env.renderer.info.reset();
-  env.composer.render(rawDelta);
+  env.composer.render(presentationDelta);
   if (quality.getProfile().labels) env.labelRenderer.render(env.scene, env.camera);
   devStats?.update();
 
@@ -737,56 +712,26 @@ function animate(timestamp?: number) {
   }
 }
 
-interface DioramaMetrics {
-  ready: boolean;
-  quality: QualitySnapshot;
-  renderer: {
-    gpu: string;
-    vendor: string;
-    calls: number;
-    triangles: number;
-    lines: number;
-    points: number;
-    geometries: number;
-    textures: number;
-    programs: number;
-    pixelRatio: number;
-    canvasWidth: number;
-    canvasHeight: number;
-  };
-}
-
-interface DioramaDebugHandle {
-  ready: boolean;
-  setTime: (t01: number) => void;
-  getState: () => Record<string, unknown>;
-  getMetrics: () => DioramaMetrics;
-  setQuality: (mode: QualityMode) => void;
-  toggleProfiler: () => Promise<boolean>;
-  setWeather: (kind: 'clear' | 'cloudy' | 'rain' | 'snow' | 'fog') => void;
-  clearWeather: () => void;
-  captureFrame: (width?: number, jpegQuality?: number) => string;
-  [key: string]: unknown;
-}
-
-declare global {
-  interface Window {
-    __diorama: DioramaDebugHandle;
-  }
-}
-
 const debugHandle: DioramaDebugHandle = {
   ready: false,
-  setTime: (t01: number) => {
-    simTime = t01 * DAY_SECONDS;
-    renderTime = simTime;
-  },
+  setTime: (t01: number) => experience.setTime(t01),
   getState: () => ({
-    t01: renderTime / DAY_SECONDS,
+    t01: experience.getState().t01,
+    simulationSeed: worldRandom.seed,
+    layoutSeed: WORLD_LAYOUT_SEED,
+    checkpoint: activeCheckpoint
+      ? { id: activeCheckpoint.id, revision: activeCheckpoint.revision }
+      : null,
+    cameraMode: cameraDirector.getMode(),
+    cameraAutomation: cameraDirector.getAutomation(),
+    tourChapter: experience.getState().tour?.chapter.id ?? null,
+    theme: currentTheme.id,
+    cyberFactor,
     weather: weather.getKind(),
     cloud: weather.getCloudCover(),
     wind: weather.getWind(),
     trainProgress: train.getRouteProgress(),
+    busProgress: bus.getRouteProgress(),
     eclipse: eclipseState,
     eclipseReaction,
   }),
@@ -797,6 +742,11 @@ const debugHandle: DioramaDebugHandle = {
     return {
       ready: debugHandle.ready,
       quality: quality.getSnapshot(),
+      simulationSeed: worldRandom.seed,
+      layoutSeed: WORLD_LAYOUT_SEED,
+      checkpoint: activeCheckpoint
+        ? { id: activeCheckpoint.id, revision: activeCheckpoint.revision }
+        : null,
       renderer: {
         gpu: debugInfo
           ? String(gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL))
@@ -823,9 +773,27 @@ const debugHandle: DioramaDebugHandle = {
     weather.debugSetImmediate(kind);
   },
   clearWeather: () => weather.setExternal(null),
+  loadCheckpoint: (id: CheckpointId) => {
+    const checkpoint = getCheckpoint(id);
+    if (!checkpoint) throw new Error(`Unknown checkpoint: ${id}`);
+    const url = new URL(window.location.href);
+    url.searchParams.set('seed', String(worldRandom.seed));
+    url.searchParams.set('checkpoint', checkpoint.id);
+    url.searchParams.set('quality', checkpoint.quality);
+    window.location.assign(url);
+  },
+  releaseCheckpoint,
   scene: env.scene,
   renderer: env.renderer,
   controls: env.controls,
+  cameraPose: () => {
+    env.controls.getTarget(postFocusTarget, false);
+    return {
+      position: env.camera.position.toArray(),
+      target: postFocusTarget.toArray(),
+      distance: env.camera.position.distanceTo(postFocusTarget),
+    };
+  },
   summonUfo: (event?: 'abduct' | 'return' | 'kioskRaid') => lakesideCow.debugSummonUfo(event),
   placeCowAtMeadow: () => lakesideCow.debugPlaceCowAtMeadow(),
   farmerPhase: () => lakesideCow.getFarmerPhase(),
@@ -856,15 +824,32 @@ const debugHandle: DioramaDebugHandle = {
     startEclipse(true);
   },
   setEclipseProgress: (progress: number, running = false) => {
-    simTime = ECLIPSE_VIEW_TIME * DAY_SECONDS;
-    renderTime = simTime;
+    experience.setTime(ECLIPSE_VIEW_TIME);
+    experience.setClockLocked(true);
     eclipseDebugStrength = null;
     eclipseState = eclipseTimeline.seek(progress, running);
     eclipseCheckpointLocked = !running;
-    focusEclipseView();
+  },
+  focusEclipseView,
+  startTour: () => {
+    if (experience.isTourActive()) return;
+    const first = experience.startTour(() => endTourOverrides());
+    applyTourChapter(first);
+    cameraDirector.startTour(first);
+    ui.setTourActive(true);
+  },
+  stopTour: () => {
+    endTourOverrides();
+  },
+  seekTourChapter: (id: Parameters<ExperienceDirector['seekTour']>[0], progress = 0) => {
+    const tourFrame = experience.seekTour(id, progress);
+    applyTourChapter(tourFrame);
+    cameraDirector.startTour(tourFrame);
   },
   setEclipseStrength: (s: number) => {
     eclipseState = eclipseTimeline.stop();
+    eclipseCheckpointLocked = false;
+    experience.setClockLocked(false);
     eclipseDebugStrength = s > 0 ? THREE.MathUtils.clamp(s, 0, 1) : null;
     if (eclipseDebugStrength === null) dayNight.setEclipse(0);
   },
@@ -883,7 +868,18 @@ const debugHandle: DioramaDebugHandle = {
 };
 
 window.__diorama = debugHandle;
-void warmRenderer().finally(() => {
+void warmRenderer({
+  env,
+  ui,
+  dayNight,
+  weather,
+  focusTarget: postFocusTarget,
+  eclipseViewTime: ECLIPSE_VIEW_TIME,
+  getTheme: () => currentTheme,
+  getDayProgress: () => experience.getState().t01,
+  getEclipseState: () => eclipseState,
+}).finally(() => {
+  rendererWarm = true;
   timer.reset();
   animate();
 });
@@ -891,7 +887,10 @@ void warmRenderer().finally(() => {
 // HMR cleanup
 if (import.meta.hot) {
   import.meta.hot.dispose(() => {
+    running = false;
+    cancelAnimationFrame(rafId);
     unsubscribeQuality();
+    cameraDirector.dispose();
     timer.dispose();
     devStats?.dispose();
     train.dispose();

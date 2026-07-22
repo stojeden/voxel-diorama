@@ -8,6 +8,7 @@ import {
 } from './BusStopNavigation';
 import { stationColliders, stationPassengerRoutes } from './StationNavigation';
 import type { EclipseWorldReactionState } from '../experience/EclipseWorldReaction';
+import { fallbackRandom, type RandomSource } from '../core/Random';
 
 const JACKET_COLORS = [0x9c3838, 0x2b5f9a, 0x355d2a, 0xc4a35a, 0x6c4a8a, 0x444444, 0xb87333];
 const SKIN_COLORS = [0xe8c39a, 0xd4a173, 0xa57448, 0xfcd7b6];
@@ -106,11 +107,11 @@ export function applyPassengerEclipsePose(
 }
 
 /** Voxel-person builder — shared with the bus stop crowds. */
-export function buildPassenger(): PassengerBuild {
+export function buildPassenger(random = fallbackRandom('passenger-build')): PassengerBuild {
   const group = new THREE.Group();
   group.scale.setScalar(PASSENGER_SCALE);
-  const jacket = JACKET_COLORS[Math.floor(Math.random() * JACKET_COLORS.length)];
-  const skin = SKIN_COLORS[Math.floor(Math.random() * SKIN_COLORS.length)];
+  const jacket = JACKET_COLORS[Math.floor(random() * JACKET_COLORS.length)];
+  const skin = SKIN_COLORS[Math.floor(random() * SKIN_COLORS.length)];
 
   const jacketMat = makeMat(jacket);
   const skinMat = makeMat(skin, { roughness: 0.7 });
@@ -150,6 +151,7 @@ export function easeInOut(t: number): number {
 }
 
 export class PassengerCrowd {
+  private readonly random: RandomSource;
   private crowds: StationCrowd[] = [];
   private readonly scene: THREE.Scene;
   private clock = 0;
@@ -162,7 +164,8 @@ export class PassengerCrowd {
     dogAlert: 0,
   };
 
-  constructor(scene: THREE.Scene) {
+  constructor(scene: THREE.Scene, random = fallbackRandom('station-crowd')) {
+    this.random = random;
     this.scene = scene;
     for (const station of STATION_STOPS) {
       const platformCenter = TRAIN_ROUTE_CURVE.getPointAt(station.centerT);
@@ -183,7 +186,7 @@ export class PassengerCrowd {
         const boardingPos = route.boardingPosition;
         const pathMetrics = polylineLengths(route.path);
 
-        const built = buildPassenger();
+        const built = buildPassenger(random);
         built.group.name = `station-passenger-${station.label}-${i}`;
         built.group.position.copy(platformPos);
         built.group.rotation.y = facingTrack;
@@ -206,8 +209,8 @@ export class PassengerCrowd {
           facingTrack,
           activity: 'idle',
           progress: 0,
-          activityDuration: 3 + Math.random() * 2,
-          phase: Math.random() * Math.PI * 2,
+          activityDuration: 3 + random() * 2,
+          phase: random() * Math.PI * 2,
           currentOpacity: 0,
           targetOpacity: 0.92,
           eclipsePose: eclipsePassengerPoseFor(i),
@@ -268,14 +271,14 @@ export class PassengerCrowd {
       if (boards) {
         p.activity = 'boarding';
         p.progress = 0;
-        p.activityDuration = 2.6 + Math.random() * 0.8;
+        p.activityDuration = 2.6 + this.random() * 0.8;
         p.currentOpacity = 0.92;
         p.targetOpacity = 0.92;
         p.group.position.copy(p.platformPos);
       } else {
         p.activity = 'disembarking';
         p.progress = 0;
-        p.activityDuration = 2.6 + Math.random() * 0.8;
+        p.activityDuration = 2.6 + this.random() * 0.8;
         p.currentOpacity = 0;
         p.targetOpacity = 0.92;
         p.group.position.copy(p.boardingPos);

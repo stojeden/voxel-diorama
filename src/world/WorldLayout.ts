@@ -693,8 +693,10 @@ function isPlaceableProp(x: number, z: number, railClearance: number): boolean {
   return true;
 }
 
+export const WORLD_LAYOUT_SEED = 20260610;
+
 export const TREE_POSITIONS: Array<[number, number]> = (() => {
-  const rng = mulberry32(20260610);
+  const rng = mulberry32(WORLD_LAYOUT_SEED);
   const out: Array<[number, number]> = [];
   let attempts = 0;
   while (out.length < 46 && attempts < 4000) {

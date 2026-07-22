@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { fallbackRandom, type RandomSource } from '../core/Random';
 
 /**
  * Hot-air balloon (and, in cyberpunk mode, a space jet).
@@ -20,6 +21,7 @@ function smoothstep(a: number, b: number, x: number): number {
 }
 
 export class Balloon {
+  private readonly random: RandomSource;
   private readonly scene: THREE.Scene;
   private readonly group = new THREE.Group();
   private readonly balloonGroup = new THREE.Group();
@@ -37,8 +39,9 @@ export class Balloon {
   private z = 0;
   private bobPhase = 0;
 
-  constructor(scene: THREE.Scene) {
+  constructor(scene: THREE.Scene, random = fallbackRandom('balloon')) {
     this.scene = scene;
+    this.random = random;
 
     // ── Balloon model ──
     this.envelopeMaterial = new THREE.MeshStandardMaterial({ color: 0xd23a3a, roughness: 0.6 });
@@ -170,8 +173,8 @@ export class Balloon {
       const weatherOk = this.cyber || (night < 0.8 && cloudCover < 0.4);
       if (this.cooldown <= 0 && weatherOk) {
         this.flying = true;
-        this.z = (Math.random() - 0.5) * 90;
-        this.bobPhase = Math.random() * Math.PI * 2;
+        this.z = (this.random() - 0.5) * 90;
+        this.bobPhase = this.random() * Math.PI * 2;
         this.group.position.set(-EDGE, this.cyber ? CRUISE_Y - 6 : ENTRY_Y, this.z);
         this.group.visible = true;
       }
@@ -210,7 +213,7 @@ export class Balloon {
     if (this.group.position.x > EDGE) {
       this.flying = false;
       this.group.visible = false;
-      this.cooldown = 50 + Math.random() * 100;
+      this.cooldown = 50 + this.random() * 100;
     }
   }
 

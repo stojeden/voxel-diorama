@@ -194,7 +194,7 @@ try {
     document.addEventListener('DOMContentLoaded', collectLoadingProgress, { once: true });
   });
 
-  await page.goto(`${URL}/?profile=1`, { waitUntil: 'networkidle' });
+  await page.goto(`${URL}/?profile=1&seed=20260722`, { waitUntil: 'networkidle' });
   await page.waitForFunction(() => window.__diorama?.ready === true, null, { timeout: READY_TIMEOUT_MS });
   await page.waitForTimeout(4_500);
 
@@ -644,6 +644,9 @@ try {
   await saveScreenshot(page, '/tmp/voxel-diorama-grocery.png');
 
   await page.evaluate(async () => {
+    // This assertion isolates street-light readability from the independently
+    // tested weather machine; rain/fog must not make the sample timing flaky.
+    window.__diorama.setWeather('clear');
     window.__diorama.setTime(0.86);
     window.__diorama.placeCowAtMeadow();
     const cow = window.__diorama.scene.getObjectByName('lakeside-cow');
@@ -662,7 +665,10 @@ try {
   await page.waitForTimeout(450);
   const cowNightPixels = await sampleRenderedFrame(page);
   await saveScreenshot(page, '/tmp/voxel-diorama-night-cow.png');
-  assert.ok(cowNightPixels.visibleSamples > 150, 'street lighting leaves the cow district unreadable');
+  assert.ok(
+    cowNightPixels.visibleSamples > 150,
+    `street lighting leaves the cow district unreadable (${cowNightPixels.visibleSamples}/${cowNightPixels.totalSamples} visible samples)`
+  );
   assert.ok(cowNightPixels.maxLuminance - cowNightPixels.minLuminance > 25, 'cow district lacks night contrast');
 
   await page.evaluate(() => window.__diorama.setTime(0.42));
@@ -726,6 +732,55 @@ try {
   await page.waitForSelector('[data-diorama-profiler="true"]', { state: 'attached' });
   const profilerDisabled = await page.evaluate(() => window.__diorama.toggleProfiler());
   assert.equal(profilerDisabled, false);
+
+  // A real first drag/wheel must synchronously take ownership from every tour shot.
+  await page.evaluate(() => window.__diorama.startTour());
+  await page.mouse.move(720, 450);
+  await page.mouse.down();
+  const dragInterrupted = await page.evaluate(() => window.__diorama.getState().tourChapter === null);
+  assert.equal(dragInterrupted, true, 'first pointerdown must interrupt the tour synchronously');
+  const cameraBeforeDrag = await page.evaluate(() => window.__diorama.cameraPose().position);
+  await page.mouse.move(780, 430, { steps: 3 });
+  await page.mouse.up();
+  await page.waitForTimeout(50);
+  const cameraAfterDrag = await page.evaluate(() => window.__diorama.cameraPose().position);
+  assert.notDeepEqual(cameraAfterDrag, cameraBeforeDrag, 'the first drag must move the released camera');
+
+  await page.evaluate(() => window.__diorama.startTour());
+  const distanceBeforeWheel = await page.evaluate(() => window.__diorama.cameraPose().distance);
+  await page.mouse.wheel(0, 180);
+  await page.waitForTimeout(50);
+  const wheelState = await page.evaluate(() => ({
+    interrupted: window.__diorama.getState().tourChapter === null,
+    distance: window.__diorama.cameraPose().distance,
+  }));
+  assert.equal(wheelState.interrupted, true, 'first wheel must interrupt the tour synchronously');
+  assert.notEqual(wheelState.distance, distanceBeforeWheel, 'the first wheel must zoom the released camera');
+
+  const checkpointUrl = `${URL}/?seed=20260722&checkpoint=totality&quality=high`;
+  const loadCheckpointState = async () => {
+    await page.goto(checkpointUrl, { waitUntil: 'networkidle' });
+    await page.waitForFunction(() => window.__diorama?.ready === true, null, { timeout: READY_TIMEOUT_MS });
+    return page.evaluate(() => {
+      const state = window.__diorama.getState();
+      return {
+        simulationSeed: state.simulationSeed,
+        layoutSeed: state.layoutSeed,
+        checkpoint: state.checkpoint,
+        t01: state.t01,
+        theme: state.theme,
+        cyberFactor: state.cyberFactor,
+        weather: state.weather,
+        trainProgress: state.trainProgress,
+        busProgress: state.busProgress,
+        camera: window.__diorama.cameraPose(),
+        eclipseProgress: state.eclipse.progress,
+      };
+    });
+  };
+  const checkpointA = await loadCheckpointState();
+  const checkpointB = await loadCheckpointState();
+  assert.deepEqual(checkpointB, checkpointA, 'same seed+checkpoint must reproduce the same scene fingerprint');
   assert.deepEqual(consoleErrors, [], `browser errors:\n${consoleErrors.join('\n')}`);
   await page.close();
 

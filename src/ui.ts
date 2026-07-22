@@ -141,7 +141,7 @@ export function mountUi(): UiHandle {
     setTourActive(active) {
       handle.tourActive = active;
       tourButtonEl.classList.toggle('is-active', active);
-      tourButtonEl.textContent = active ? 'Zatrzymaj tour' : 'Pokaż dioramę';
+      tourButtonEl.textContent = active ? 'Przerwij tour' : 'Pokaż dioramę';
     },
     setWeatherLabel(text) {
       weatherButtonEl.textContent = text;

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { QualityProfile } from '../performance/QualityManager';
+import { fallbackRandom, type RandomSource } from '../core/Random';
 import { EclipseVisual, type EclipseRenderState } from './EclipseVisual';
 import { Sky } from 'three/addons/objects/Sky.js';
 import {
@@ -235,6 +236,8 @@ function buildAuroraMaterial(phaseOffset: number): THREE.ShaderMaterial {
 }
 
 export class DayNightCycle {
+  private readonly random: RandomSource;
+  private readonly eventRandom: RandomSource;
   private readonly scene: THREE.Scene;
   private readonly renderer: THREE.WebGLRenderer;
   private readonly hooks: DayNightHooks;
@@ -312,7 +315,15 @@ export class DayNightCycle {
 
   private readonly disposables: Array<{ dispose: () => void }> = [];
 
-  constructor(scene: THREE.Scene, renderer: THREE.WebGLRenderer, hooks: DayNightHooks) {
+  constructor(
+    scene: THREE.Scene,
+    renderer: THREE.WebGLRenderer,
+    hooks: DayNightHooks,
+    random = fallbackRandom('day-night-stars'),
+    eventRandom = fallbackRandom('shooting-stars')
+  ) {
+    this.random = random;
+    this.eventRandom = eventRandom;
     this.scene = scene;
     this.renderer = renderer;
     this.hooks = hooks;
@@ -363,8 +374,8 @@ export class DayNightCycle {
     // ── Stars ──
     const starPositions = new Float32Array(STAR_COUNT * 3);
     for (let i = 0; i < STAR_COUNT; i++) {
-      const theta = Math.random() * Math.PI * 2;
-      const phi = Math.acos(Math.random() * 0.95); // upper hemisphere
+      const theta = random() * Math.PI * 2;
+      const phi = Math.acos(random() * 0.95); // upper hemisphere
       const r = 620;
       starPositions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
       starPositions[i * 3 + 1] = r * Math.cos(phi) + 4;
@@ -867,15 +878,19 @@ export class DayNightCycle {
         const fade = clamp01(star.life / star.maxLife);
         star.material.opacity = fade * 0.9;
         if (star.life <= 0) star.line.visible = false;
-      } else if (starAlpha > 0.6 && Math.random() < dt * 0.12) {
-        star.maxLife = 0.7 + Math.random() * 0.6;
+      } else if (dt > 0 && starAlpha > 0.6 && this.eventRandom() < dt * 0.12) {
+        star.maxLife = 0.7 + this.eventRandom() * 0.6;
         star.life = star.maxLife;
         star.line.position.set(
-          (Math.random() - 0.5) * 360,
-          120 + Math.random() * 120,
-          (Math.random() - 0.5) * 360
+          (this.eventRandom() - 0.5) * 360,
+          120 + this.eventRandom() * 120,
+          (this.eventRandom() - 0.5) * 360
         );
-        star.velocity.set(-(60 + Math.random() * 80), -(18 + Math.random() * 22), (Math.random() - 0.5) * 30);
+        star.velocity.set(
+          -(60 + this.eventRandom() * 80),
+          -(18 + this.eventRandom() * 22),
+          (this.eventRandom() - 0.5) * 30
+        );
         star.line.visible = true;
       }
     }

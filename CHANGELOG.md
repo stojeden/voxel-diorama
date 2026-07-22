@@ -11,6 +11,15 @@ a wersjonowanie projektu docelowo stosuje [Semantic Versioning](https://semver.o
 
 ### Added
 
+- Minimalne `ExperienceDirector`, `CameraDirector` i współdzielony,
+  bezalokacyjny `FrameContext`; `main.ts` pozostaje composition rootem zamiast
+  zmieniać się w nowy framework dla samego refaktoru.
+- Jawny seed symulacji, oddzielny seed statycznego layoutu, niezależne strumienie
+  RNG oraz 12 wersjonowanych checkpointów narracyjnych i benchmarkowych.
+- Testy deterministycznego startu, kontraktu checkpointów, sekwencji touru oraz
+  przejmowania kamery pierwszym gestem użytkownika.
+- Siedmiorozdziałowy filmowy tour pokazujący kolejno pociąg, autobus, jezioro,
+  mieszkańców, golden hour, totalność i Cyberpunk.
 - `EclipseTimeline` z deterministycznymi kontaktami C1-C4, dokładnym polem
   przecięcia tarcz, irradiancją, totalnością, koroną i perłami Baily'ego.
 - Proceduralny `EclipseVisual`: widoczne z dalekiej kamery Słońce i Księżyc,
@@ -39,6 +48,13 @@ a wersjonowanie projektu docelowo stosuje [Semantic Versioning](https://semver.o
 
 ### Changed
 
+- `CameraDirector` jest jedynym produkcyjnym właścicielem automatycznych ujęć;
+  `pointerdown`, dotyk i kółko przerywają tour, kamery pojazdów, panoramę lub
+  kadr zaćmienia w fazie capture, nie połykając pierwszego gestu.
+- Warm-up renderera nie przesuwa zegara symulacji ani strumieni losowych, a
+  debug API ładuje checkpoint przez świeże uruchomienie z zachowaniem seeda.
+- Tour korzysta z jednego zestawu definicji kadrów i ustawia deterministyczne
+  pozycje pociągu oraz autobusu na wejściu do odpowiednich rozdziałów.
 - Usunięto relikty nazewnictwa dylatacji czasu z aktywnego produktu: panel
   sterowania ma neutralne selektory, a grading filmowy znajduje się w
   `CinematicGrade.ts`.
@@ -69,6 +85,11 @@ a wersjonowanie projektu docelowo stosuje [Semantic Versioning](https://semver.o
 
 ### Fixed
 
+- HMR anuluje własny `requestAnimationFrame`, dzięki czemu nie zostawia drugiej
+  pętli renderującej. Zakończenie i przerwanie touru sprząta blokady zegara,
+  pogodę, totalność i stan kamery w jednym miejscu.
+- Checkpoint Cyberpunk ustawia docelowy morph przed zamrożeniem, a kadr
+  totalności jest wyliczony względem rzeczywistego kierunku Słońca.
 - Zwinięty panel `TRANS CITY EXPRESS` zachowuje szerokość wersji rozwiniętej
   i nie nachodzi na centralny status zaćmienia.
 - Pasażerowie autobusowi i kolejowi nie przenikają przez wiaty, ławki, słupy,
@@ -116,11 +137,13 @@ a wersjonowanie projektu docelowo stosuje [Semantic Versioning](https://semver.o
 
 ### Validation
 
-- 114 testów w 18 plikach testowych.
+- 131 testów w 23 plikach testowych.
 - Przechodzą `npm run typecheck`, `npm test` i `npm run build`.
 - Smoke test sprawdza desktop/mobile, monotoniczny preloader kończący na 100%,
   totalność i warstwy zaćmienia, canvas, luminancję, kolizje, oświetlenie, rytm
-  miasta, aktorów i budżety renderera.
+  miasta, aktorów i budżety renderera. Dodatkowo wykonuje rzeczywisty pierwszy
+  drag i wheel przerywający automatykę oraz dwa świeże starty tego samego
+  seeda/checkpointu, porównując stan sceny.
 
 ### Commits
 

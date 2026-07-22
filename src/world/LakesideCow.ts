@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { COW_MEADOW, GROUND_SURFACE_Y, KIOSK_MAIN, LAKE } from './WorldLayout';
 import { buildPassenger, easeInOut, type PassengerBuild } from './PassengerCrowd';
+import { fallbackRandom, type RandomSource } from '../core/Random';
 
 /**
  * A voxel cow grazing in the meadow by the lake.
@@ -54,8 +55,8 @@ interface FarmerStep {
   duration?: number;
 }
 
-function buildFarmer(): PassengerBuild {
-  const farmer = buildPassenger();
+function buildFarmer(random: RandomSource): PassengerBuild {
+  const farmer = buildPassenger(random);
   // A straw hat so he reads as "the farmer", not a commuter.
   const hatMat = new THREE.MeshStandardMaterial({ color: 0xc9a14e, roughness: 0.9 });
   const brim = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.08, 0.85), hatMat);
@@ -224,6 +225,7 @@ function buildUfo(): { parts: UfoParts; disposables: Array<{ dispose: () => void
 }
 
 export class LakesideCow {
+  private readonly random: RandomSource;
   private readonly scene: THREE.Scene;
   private readonly cow: CowParts;
   private readonly ufo: UfoParts;
@@ -261,8 +263,9 @@ export class LakesideCow {
   private dayArmed = false;
   private cowJustReturned = false;
 
-  constructor(scene: THREE.Scene) {
+  constructor(scene: THREE.Scene, random = fallbackRandom('cow')) {
     this.scene = scene;
+    this.random = random;
 
     const cowBuild = buildCow();
     this.cow = cowBuild.parts;
@@ -277,7 +280,7 @@ export class LakesideCow {
     this.disposables.push(...ufoBuild.disposables);
     scene.add(this.ufo.group);
 
-    this.farmer = buildFarmer();
+    this.farmer = buildFarmer(random);
     this.farmer.group.visible = false;
     scene.add(this.farmer.group);
 
@@ -386,9 +389,9 @@ export class LakesideCow {
       if (!this.cowPresent) {
         this.pendingEvent = 'return';
       } else {
-        this.pendingEvent = Math.random() < 0.3 ? 'kioskRaid' : 'abduct';
+        this.pendingEvent = this.random() < 0.3 ? 'kioskRaid' : 'abduct';
       }
-      this.eventDelay = 5 + Math.random() * 8;
+      this.eventDelay = 5 + this.random() * 8;
       // A new night: yesterday's raid is over — kiosk restocked & reopened.
       if (this.kioskClosed) {
         this.kioskClosed = false;
@@ -553,7 +556,7 @@ export class LakesideCow {
       this.cowMode = 'sleep';
     } else if (night < 0.4 && this.cowMode === 'sleep') {
       this.cowMode = 'graze';
-      this.grazeTimer = 3 + Math.random() * 6;
+      this.grazeTimer = 3 + this.random() * 6;
     }
 
     if (this.cowMode === 'sleep') {
@@ -579,8 +582,8 @@ export class LakesideCow {
       this.grazeTimer -= delta;
       if (this.grazeTimer <= 0) {
         // Pick a new grazing spot in the meadow (never in the water).
-        const angle = Math.random() * Math.PI * 2;
-        const r = Math.random() * MEADOW.wanderRadius;
+        const angle = this.random() * Math.PI * 2;
+        const r = this.random() * MEADOW.wanderRadius;
         this.walkTarget.set(MEADOW.x + Math.cos(angle) * r, 0.5, MEADOW.z + Math.sin(angle) * r);
         clampOutsideLake(this.walkTarget);
         this.cowMode = 'walk';
@@ -591,7 +594,7 @@ export class LakesideCow {
       const dist = Math.hypot(dx, dz);
       if (dist < 0.2) {
         this.cowMode = 'graze';
-        this.grazeTimer = 5 + Math.random() * 9;
+        this.grazeTimer = 5 + this.random() * 9;
       } else {
         this.heading = Math.atan2(dx, dz);
         const step = Math.min(dist, 0.75 * delta);

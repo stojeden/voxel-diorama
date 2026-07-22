@@ -7,6 +7,7 @@ import {
   type BlockConfig,
 } from './WorldLayout';
 import { mergeStaticMeshes } from '../performance/mergeStaticMeshes';
+import { fallbackRandom, type RandomSource } from '../core/Random';
 
 /**
  * Seagulls with believable flight: they steer smoothly toward wandering
@@ -137,19 +138,19 @@ function createGullMesh(): { group: THREE.Group; leftWing: THREE.Group; rightWin
   return { group, leftWing, rightWing };
 }
 
-function pickTarget(out: THREE.Vector3): void {
+function pickTarget(out: THREE.Vector3, random: RandomSource): void {
   // Gulls love the lake — bias targets toward it.
-  if (Math.random() < 0.35) {
+  if (random() < 0.35) {
     out.set(
-      LAKE.x + (Math.random() - 0.5) * LAKE.radiusX * 2.4,
+      LAKE.x + (random() - 0.5) * LAKE.radiusX * 2.4,
       0,
-      LAKE.z + (Math.random() - 0.5) * LAKE.radiusZ * 2.4
+      LAKE.z + (random() - 0.5) * LAKE.radiusZ * 2.4
     );
   } else {
     out.set(
-      (Math.random() - 0.5) * 2 * (WORLD_HALF_SIZE - 10),
+      (random() - 0.5) * 2 * (WORLD_HALF_SIZE - 10),
       0,
-      (Math.random() - 0.5) * 2 * (WORLD_HALF_SIZE - 10)
+      (random() - 0.5) * 2 * (WORLD_HALF_SIZE - 10)
     );
   }
 }
@@ -218,6 +219,7 @@ export function nearestEclipseRoost(
 }
 
 export class Birds {
+  private readonly random: RandomSource;
   private gulls: Gull[] = [];
   private readonly scene: THREE.Scene;
   private hidden = false;
@@ -257,16 +259,17 @@ export class Birds {
     }
   }
 
-  constructor(scene: THREE.Scene) {
+  constructor(scene: THREE.Scene, random = fallbackRandom('birds')) {
     this.scene = scene;
+    this.random = random;
 
     for (let i = 0; i < GULL_COUNT; i++) {
       const mesh = createGullMesh();
-      mesh.group.scale.setScalar(0.85 + Math.random() * 0.35);
+      mesh.group.scale.setScalar(0.85 + random() * 0.35);
       scene.add(mesh.group);
 
       const target = new THREE.Vector3();
-      pickTarget(target);
+      pickTarget(target, random);
 
       const nightRoost = roostSpotFor(i);
       this.gulls.push({
@@ -274,18 +277,18 @@ export class Birds {
         leftWing: mesh.leftWing,
         rightWing: mesh.rightWing,
         position: new THREE.Vector3(
-          (Math.random() - 0.5) * 2 * (WORLD_HALF_SIZE - 20),
-          MIN_ALTITUDE + Math.random() * (MAX_ALTITUDE - MIN_ALTITUDE),
-          (Math.random() - 0.5) * 2 * (WORLD_HALF_SIZE - 20)
+          (random() - 0.5) * 2 * (WORLD_HALF_SIZE - 20),
+          MIN_ALTITUDE + random() * (MAX_ALTITUDE - MIN_ALTITUDE),
+          (random() - 0.5) * 2 * (WORLD_HALF_SIZE - 20)
         ),
-        heading: Math.random() * Math.PI * 2,
-        speed: 4.2 + Math.random() * 2.4,
+        heading: random() * Math.PI * 2,
+        speed: 4.2 + random() * 2.4,
         target,
-        altitudeTarget: MIN_ALTITUDE + Math.random() * (MAX_ALTITUDE - MIN_ALTITUDE),
-        wingMode: Math.random() > 0.5 ? 'glide' : 'flap',
-        modeTimeLeft: 1 + Math.random() * 3,
+        altitudeTarget: MIN_ALTITUDE + random() * (MAX_ALTITUDE - MIN_ALTITUDE),
+        wingMode: random() > 0.5 ? 'glide' : 'flap',
+        modeTimeLeft: 1 + random() * 3,
         bank: 0,
-        phase: Math.random() * Math.PI * 2,
+        phase: random() * Math.PI * 2,
         lifeMode: 'fly',
         roostReason: null,
         nightRoost,
@@ -330,8 +333,8 @@ export class Birds {
       } else if (night < 0.45 && gull.roostReason === 'night') {
         gull.roostReason = null;
         gull.lifeMode = 'fly';
-        pickTarget(gull.target);
-        gull.altitudeTarget = MIN_ALTITUDE + Math.random() * (MAX_ALTITUDE - MIN_ALTITUDE);
+        pickTarget(gull.target, this.random);
+        gull.altitudeTarget = MIN_ALTITUDE + this.random() * (MAX_ALTITUDE - MIN_ALTITUDE);
       }
 
       if (gull.lifeMode === 'roost') {
@@ -357,16 +360,16 @@ export class Birds {
         gull.altitudeTarget = gull.activeRoost.y + Math.min(horizontal * 0.4, 14);
       } else if (gull.lifeMode === 'takeOff' && gull.position.y >= gull.takeOffClearanceY - 0.1) {
         gull.lifeMode = 'fly';
-        pickTarget(gull.target);
-        gull.altitudeTarget = MIN_ALTITUDE + Math.random() * (MAX_ALTITUDE - MIN_ALTITUDE);
+        pickTarget(gull.target, this.random);
+        gull.altitudeTarget = MIN_ALTITUDE + this.random() * (MAX_ALTITUDE - MIN_ALTITUDE);
       }
       // ── Steering: turn smoothly toward the current target ──
       const toTargetX = gull.target.x - gull.position.x;
       const toTargetZ = gull.target.z - gull.position.z;
       const distToTarget = Math.hypot(toTargetX, toTargetZ);
       if (distToTarget < 10 && gull.lifeMode === 'fly') {
-        pickTarget(gull.target);
-        gull.altitudeTarget = MIN_ALTITUDE + Math.random() * (MAX_ALTITUDE - MIN_ALTITUDE);
+        pickTarget(gull.target, this.random);
+        gull.altitudeTarget = MIN_ALTITUDE + this.random() * (MAX_ALTITUDE - MIN_ALTITUDE);
       }
 
       const desiredHeading = Math.atan2(toTargetX, toTargetZ);
@@ -421,10 +424,10 @@ export class Birds {
       if (gull.modeTimeLeft <= 0) {
         if (gull.wingMode === 'glide') {
           gull.wingMode = 'flap';
-          gull.modeTimeLeft = 0.9 + Math.random() * 1.6 + (climbing ? 1.2 : 0);
+          gull.modeTimeLeft = 0.9 + this.random() * 1.6 + (climbing ? 1.2 : 0);
         } else {
           gull.wingMode = 'glide';
-          gull.modeTimeLeft = 2.2 + Math.random() * 3.5 - (climbing ? 1.5 : 0);
+          gull.modeTimeLeft = 2.2 + this.random() * 3.5 - (climbing ? 1.5 : 0);
         }
       }
 
