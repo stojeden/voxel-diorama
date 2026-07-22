@@ -39,6 +39,11 @@ a wersjonowanie projektu docelowo stosuje [Semantic Versioning](https://semver.o
 
 ### Changed
 
+- Usunięto relikty nazewnictwa dylatacji czasu z aktywnego produktu: panel
+  sterowania ma neutralne selektory, a grading filmowy znajduje się w
+  `CinematicGrade.ts`.
+- Pętla animacji korzysta z `THREE.Timer` połączonego z Page Visibility API,
+  renderer używa wspieranego `PCFShadowMap`, a dokument deklaruje język polski.
 - Zaćmienie trwa 96 sekund, zatrzymuje symulowaną pozycję Słońca, ale nie życie
   miasta, i płynnie steruje niebem, ekspozycją, światłami oraz widocznością
   gwiazd. Swobodna kamera nadal może przerwać automatyczne kadrowanie.
@@ -84,6 +89,16 @@ a wersjonowanie projektu docelowo stosuje [Semantic Versioning](https://semver.o
 
 ### Performance
 
+- Benchmark wydajności ma wyłączną blokadę procesu i twardo wymusza jeden
+  kontekst przeglądarki oraz jedną kartę. Równoległe instancje Dioramy nie mogą
+  już bezgłośnie zaniżać wyniku.
+- Serwer deweloperski nie otwiera automatycznie nowej zakładki przy każdym
+  uruchomieniu; sesje QA tworzą i sprzątają dokładnie jedną kartę.
+- Kamera autobusu ma dedykowany bliski LOD: ogranicza koszt SSAO, DPR i
+  nakładających się fizycznych świateł, zachowując reflektory autobusu, najbliższe
+  światła miasta, emissive'y, glow, bloom, grading oraz cienie.
+- Budżety bundla obejmują teraz osobno bootstrap aplikacji, kod aplikacyjny,
+  `three`, `camera-controls` i `postprocessing`.
 - Warstwa zaćmienia jest pojedynczym billboardem proceduralnym z profilem
   jakości, nie wymusza regenerowania PMREM w każdej klatce i ma osobny
   scenariusz `eclipse-totality-overview` w benchmarku High.
@@ -95,8 +110,9 @@ a wersjonowanie projektu docelowo stosuje [Semantic Versioning](https://semver.o
   sześciokrotnie bez zmiany układu dróg, chodników i trawy.
 - Odległościowy LOD ogranicza w panoramie SSAO, bloom, lampy punktowe, DPR i
   rozdzielczość cieni; bliskie ujęcia zachowują pełny detal.
-- Twardy benchmark na M1 Pro przechodzi próg 58 FPS i p95 20,5 ms: 95,7 FPS
-  w nocnym TPP ze śniegiem, 117,3 FPS podczas totalności i około 120 FPS w panoramach.
+- Trzy czyste, sekwencyjne serie M1 Pro przechodzą aktualny gate we wszystkich
+  pięciu scenariuszach: minimum 58,67 FPS, najgorsze p95 17,7 ms oraz TTI
+  1,56–1,62 s.
 
 ### Validation
 
@@ -122,5 +138,5 @@ a wersjonowanie projektu docelowo stosuje [Semantic Versioning](https://semver.o
 - Cykl dnia i nocy, pogoda, motywy wizualne, kamera swobodna i kamery pojazdów.
 - Aktorzy i scenki środowiskowe: pasażerowie, ptaki, ryby, wędkarz, listonosz,
   pies, krowa, farmer, UFO i balon.
-- UI narracji o dylatacji czasu, testy Vitest, build Vite, CI oraz wdrożenie
+- Panel sterowania pociągiem, testy Vitest, build Vite, CI oraz wdrożenie
   GitHub Pages.

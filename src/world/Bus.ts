@@ -314,6 +314,7 @@ export interface BusHandle {
   /** 0..1 — cyberpunk look morph (dark hull, neon glow). */
   setCyberLook: (factor: number) => void;
   setEclipseReaction: (reaction: EclipseWorldReactionState) => void;
+  setHeadlightsEnabled: (enabled: boolean) => void;
   dispose: () => void;
 }
 
@@ -339,6 +340,7 @@ export function createBus(scene: THREE.Scene): BusHandle {
   let clock = 0;
   let state: BusState = { kind: 'cruising' };
   let serviceMode: BusServiceMode = 'normal';
+  let headlightsEnabled = true;
   let serviceInitialized = false;
   let previousT01 = 0;
   let previousServiceWindow: BusServiceWindow = 'day';
@@ -662,6 +664,7 @@ export function createBus(scene: THREE.Scene): BusHandle {
       windowMaterial.emissiveIntensity = 0.25 + nightFactor * 0.9;
       const beamStrength = Math.min(1, nightFactor * 1.4);
       for (const lamp of headLights) {
+        lamp.visible = headlightsEnabled;
         lamp.intensity = 4 + beamStrength * 240;
       }
       for (const beamMat of beamMaterials) {
@@ -731,6 +734,10 @@ export function createBus(scene: THREE.Scene): BusHandle {
     },
     setEclipseReaction(reaction) {
       eclipseReaction = reaction;
+    },
+    setHeadlightsEnabled(enabled) {
+      headlightsEnabled = enabled;
+      for (const lamp of headLights) lamp.visible = enabled;
     },
     dispose() {
       scene.remove(group);

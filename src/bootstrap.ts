@@ -15,7 +15,7 @@ import {
   ToneMappingEffect,
   ToneMappingMode,
 } from 'postprocessing';
-import { CinematicGradeEffect } from './effects/GlitchTimeDilation';
+import { CinematicGradeEffect } from './effects/CinematicGrade';
 import { ColorLutPipeline } from './effects/ColorLuts';
 import type { QualityProfile } from './performance/QualityManager';
 
@@ -37,6 +37,7 @@ export interface RuntimeEnv {
   setThemeGrade: (id: string, sepia: number, saturation: number) => void;
   setCinematicFocus: (active: boolean, target: THREE.Vector3) => void;
   setCameraFocusDistance: (distance: number) => void;
+  setCameraPerformanceMode: (mode: 'free' | 'train' | 'bus') => void;
   setQuality: (profile: QualityProfile) => void;
   syncSize: () => void;
   dispose: () => void;
@@ -59,7 +60,7 @@ export function bootstrap(initialQuality: QualityProfile): RuntimeEnv {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, initialQuality.pixelRatio));
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.shadowMap.enabled = initialQuality.shadows;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.type = THREE.PCFShadowMap;
   renderer.toneMapping = THREE.NoToneMapping;
   renderer.toneMappingExposure = 1;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -166,9 +167,16 @@ export function bootstrap(initialQuality: QualityProfile): RuntimeEnv {
   let quality = initialQuality;
   let cinematicActive = false;
   let ambientOcclusionNear = true;
+  let cameraPerformanceMode: 'free' | 'train' | 'bus' = 'free';
 
   const syncDistanceEffects = () => {
-    const aoEnabled = quality.ambientOcclusion && ambientOcclusionNear;
+    // The low, fast-moving bus camera sees far more overlapping city geometry
+    // than the train or overview. Its full-scene normal+SSAO pass duplicated
+    // the visible draw workload and made High fall to every-other-vblank on M1.
+    // SMAA, bloom, grading and shadows remain active, so this is a targeted LOD
+    // rather than a wholesale quality downgrade.
+    const aoEnabled =
+      quality.ambientOcclusion && ambientOcclusionNear && cameraPerformanceMode !== 'bus';
     normalPass.enabled = aoEnabled;
     aoPass.enabled = aoEnabled;
     bloomPass.enabled = quality.bloom && ambientOcclusionNear;
@@ -176,7 +184,8 @@ export function bootstrap(initialQuality: QualityProfile): RuntimeEnv {
 
   const syncSize = () => {
     const distanceScale = ambientOcclusionNear ? 1 : 0.8;
-    const adaptivePixelRatio = Math.max(1, quality.pixelRatio * distanceScale);
+    const cameraScale = cameraPerformanceMode === 'bus' ? 0.87 : 1;
+    const adaptivePixelRatio = Math.max(1, quality.pixelRatio * distanceScale * cameraScale);
     const pixelRatio = Math.min(window.devicePixelRatio, adaptivePixelRatio);
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
@@ -210,6 +219,13 @@ export function bootstrap(initialQuality: QualityProfile): RuntimeEnv {
     const nextNear = ambientOcclusionNear ? distance < 112 : distance < 102;
     if (nextNear === ambientOcclusionNear) return;
     ambientOcclusionNear = nextNear;
+    syncDistanceEffects();
+    syncSize();
+  };
+
+  const setCameraPerformanceMode = (mode: 'free' | 'train' | 'bus') => {
+    if (mode === cameraPerformanceMode) return;
+    cameraPerformanceMode = mode;
     syncDistanceEffects();
     syncSize();
   };
@@ -255,6 +271,7 @@ export function bootstrap(initialQuality: QualityProfile): RuntimeEnv {
     },
     setCinematicFocus,
     setCameraFocusDistance,
+    setCameraPerformanceMode,
     setQuality,
     syncSize,
     dispose,

@@ -70,7 +70,7 @@
 
 ```bash
 npm install
-npm run dev      # http://localhost:5173
+npm run dev      # http://localhost:5173 — bez automatycznego otwierania kolejnej karty
 ```
 
 ```bash
@@ -79,10 +79,13 @@ npm test         # 114 testów (vitest): geometria, światło, rytm miasta,
 npm run typecheck # typy
 npm run build    # produkcja → dist/
 npm run validate # typy + unit + build + Chrome/WebGL + budżety wydajności
-BENCH_HEADFUL=1 npm run test:performance # jeden Chrome, 4 scenariusze Metal/High
+BENCH_HEADFUL=1 npm run test:performance # jeden Chrome, jedna karta, 5 scenariuszy Metal/High
 ```
 
 Wymagania: Node 20.19+, przeglądarka z WebGL2. Cel wydajnościowy to **stabilne 60 FPS na Apple M1 Pro** w profilu High. Twardy benchmark zachowuje próg 58 FPS oraz limit p95 20,5 ms.
+Benchmark ma blokadę procesu i sam odrzuca równoległe uruchomienie, dzięki czemu
+wyniku nie zaniżają dodatkowe instancje Dioramy. Kolejne serie należy uruchamiać
+sekwencyjnie, przy zamkniętych ręcznych kartach aplikacji.
 
 ### Profile jakości
 
@@ -99,7 +102,11 @@ Wymagania: Node 20.19+, przeglądarka z WebGL2. Cel wydajnościowy to **stabilne
   optyczne, reakcje mieszkańców, kompletną sylwetkę listonosza, niepusty canvas,
   luminancję, ochronę przed przepaleniami, kolizje pieszych, rytm miasta i
   budżety renderera.
-- Dedykowany benchmark Metal na M1 Pro przechodzi: 95,7 FPS w nocnym TPP ze śniegiem, 117,3 FPS podczas totalności i około 120 FPS w panoramach; p95 każdego scenariusza pozostaje poniżej 17 ms.
+- Trzy izolowane, sekwencyjne serie Metal/High na M1 Pro przechodzą wszystkie
+  pięć scenariuszy: minimum 58,67 FPS, najgorsze p95 17,7 ms i TTI 1,56–1,62 s.
+  Kamera autobusu korzysta z bliskiego LOD: zachowuje reflektory pojazdu,
+  najbliższe fizyczne światła miasta, bloom, grading i cienie, ale pomija SSAO
+  oraz odległe światła, które wcześniej przeciążały każdy fragment kadru.
 - Deterministyczny preloader pokazuje monotoniczny postęp `0–100%` wyłącznie po
   ukończeniu realnych etapów: budowy proceduralnego świata, aktorów i pogody,
   kompilacji wariantów poranka, dnia, golden hour, nocy i totalności, ukrytych
@@ -109,7 +116,7 @@ Wymagania: Node 20.19+, przeglądarka z WebGL2. Cel wydajnościowy to **stabilne
 
 ```
 src/
-├── main.ts                  # pętla animacji i orkiestracja wszystkiego
+├── main.ts                  # pętla animacji oparta na THREE.Timer i orkiestracja
 ├── bootstrap.ts             # renderer, composer HDR, kamera i postprocessing
 ├── ui.ts                    # panel sterowania
 ├── CinematicTour.ts         # filmowy oblot
@@ -135,7 +142,7 @@ src/
 │   ├── PortalGlow.ts        # kwantowe pierścienie tuneli
 │   ├── EclipseCrowdProps.ts # instancjonowane okulary i projekcje mieszkańców
 │   ├── Balloon.ts           # balon / kosmiczny odrzutowiec
-│   └── GlitchTimeDilation.ts# grading filmowy (golden hour, sepia, vibrance)
+│   └── CinematicGrade.ts    # grading filmowy (golden hour, sepia, vibrance)
 └── world/
     ├── WorldLayout.ts       # ŹRÓDŁO PRAWDY: trasy, drogi, kotwice aktorów
     ├── WorldGenerator.ts    # voxelowe miasto, tory, zima, cyber-wieże

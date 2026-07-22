@@ -298,6 +298,14 @@ export class Weather {
     if (kind !== null) this.kind = kind;
   }
 
+  /** Deterministic state setter for browser smoke and performance scenarios. */
+  debugSetImmediate(kind: WeatherKind): void {
+    this.setExternal(kind);
+    Object.assign(this.values, TARGETS[kind]);
+    this.snowCover = kind === 'snow' ? 1 : 0;
+    this.wetness = kind === 'rain' ? 1 : 0;
+  }
+
   /**
    * @param simDelta seconds of simulated time (scaled by clock speed)
    * @param realDelta seconds of wall-clock time (particles animate on this)

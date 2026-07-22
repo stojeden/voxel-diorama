@@ -70,7 +70,7 @@ export function mountUi(): UiHandle {
   const themeButtonEl = requireEl<HTMLButtonElement>('theme-button');
   const themePanelEl = requireEl<HTMLDivElement>('theme-panel');
   const timeSpeedEl = requireEl<HTMLDivElement>('time-speed');
-  const panelEl = requireEl<HTMLDivElement>('dilation-panel');
+  const panelEl = requireEl<HTMLDivElement>('control-panel');
   const panelToggleEl = requireEl<HTMLButtonElement>('panel-toggle');
   const eclipseButtonEl = requireEl<HTMLButtonElement>('eclipse-button');
   const eclipseStatusEl = requireEl<HTMLDivElement>('eclipse-status');

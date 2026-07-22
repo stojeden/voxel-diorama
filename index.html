@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="pl">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -21,13 +21,13 @@
       background: rgba(0,0,0,0.6); padding: 8px 16px; border-radius: 4px;
       pointer-events: none; z-index: 10;
     }
-    #dilation-panel {
+    #control-panel {
       position: fixed; top: 16px; left: 16px; width: 260px;
       color: #fff; font-family: 'Courier New', monospace; font-size: 11px;
       background: rgba(0,0,0,0.66); border: 1px solid rgba(255,255,255,0.14);
       border-radius: 5px; z-index: 10; overflow: hidden;
     }
-    #dilation-panel.is-collapsed { width: 260px; }
+    #control-panel.is-collapsed { width: 260px; }
     #panel-toggle {
       pointer-events: auto; cursor: pointer; width: 100%;
       display: flex; align-items: center; justify-content: space-between; gap: 10px;
@@ -40,7 +40,7 @@
       color: rgba(255,221,136,0.6); font-size: 10px;
       transition: transform 220ms ease;
     }
-    #dilation-panel.is-collapsed #panel-toggle .panel-chevron {
+    #control-panel.is-collapsed #panel-toggle .panel-chevron {
       transform: rotate(-90deg);
     }
     #panel-body {
@@ -49,7 +49,7 @@
       transition: max-height 280ms ease, opacity 240ms ease, padding 240ms ease;
       opacity: 1;
     }
-    #dilation-panel.is-collapsed #panel-body {
+    #control-panel.is-collapsed #panel-body {
       max-height: 0; opacity: 0; padding-top: 0; padding-bottom: 0;
       pointer-events: none;
     }
@@ -196,7 +196,7 @@
     #loading-stage { color: rgba(255,255,255,0.68); font-size: 10px; }
     @media (max-width: 600px) {
       #time-display { top: 8px; right: 8px; }
-      #dilation-panel { top: 52px; left: 8px; max-width: calc(100vw - 16px); }
+      #control-panel { top: 52px; left: 8px; max-width: calc(100vw - 16px); }
       #info {
         bottom: 8px; width: calc(100vw - 16px); max-width: 420px;
         padding: 6px 8px; font-size: 9px; line-height: 1.35; text-align: center;
@@ -223,7 +223,7 @@
       </div>
     </div>
   </div>
-  <div id="dilation-panel" class="is-collapsed" aria-label="Panel sterowania pociągiem">
+  <div id="control-panel" class="is-collapsed" aria-label="Panel sterowania pociągiem">
     <button id="panel-toggle" type="button" aria-expanded="false" aria-controls="panel-body">
       <span class="panel-title">TRANS CITY EXPRESS</span>
       <span class="panel-chevron" aria-hidden="true">▾</span>

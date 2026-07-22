@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
-import { access } from 'node:fs/promises';
+import { access, open, readFile, unlink } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { chromium } from 'playwright';
 
 const HOST = '127.0.0.1';
@@ -8,6 +10,56 @@ const PORT = 4174;
 const URL = `http://${HOST}:${PORT}`;
 const HEADFUL = process.env.BENCH_HEADFUL === '1';
 const REQUIRED_FPS = Number(process.env.BENCH_MIN_FPS ?? 58);
+const MAX_TTI_MS = Number(process.env.BENCH_MAX_TTI_MS ?? 20_000);
+const QUALITY = process.env.BENCH_QUALITY ?? 'high';
+const SCENARIO_FILTER = process.env.BENCH_SCENARIO;
+const DISABLE_SHADOWS = process.env.BENCH_DISABLE_SHADOWS === '1';
+const DISABLE_LOCAL_LIGHTS = process.env.BENCH_DISABLE_LOCAL_LIGHTS === '1';
+const LOCK_PATH = join(tmpdir(), 'voxel-diorama-performance-benchmark.lock');
+
+async function acquireBenchmarkLock() {
+  try {
+    const handle = await open(LOCK_PATH, 'wx');
+    await handle.writeFile(`${process.pid}\n`);
+    return handle;
+  } catch (error) {
+    if (error.code !== 'EEXIST') throw error;
+
+    const ownerPid = Number.parseInt(await readFile(LOCK_PATH, 'utf8'), 10);
+    if (Number.isInteger(ownerPid)) {
+      try {
+        process.kill(ownerPid, 0);
+        throw new Error(
+          `performance benchmark is already running (PID ${ownerPid}); ` +
+          'only one Diorama browser instance is allowed'
+        );
+      } catch (ownerError) {
+        if (ownerError.code !== 'ESRCH') throw ownerError;
+      }
+    }
+
+    await unlink(LOCK_PATH);
+    return acquireBenchmarkLock();
+  }
+}
+
+async function releaseBenchmarkLock(handle) {
+  await handle.close();
+  try {
+    await unlink(LOCK_PATH);
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error;
+  }
+}
+
+function round(value, precision = 1) {
+  const scale = 10 ** precision;
+  return Math.round(value * scale) / scale;
+}
+
+function metricValue(metrics, name) {
+  return metrics.metrics.find((metric) => metric.name === name)?.value ?? 0;
+}
 
 async function firstExisting(paths) {
   for (const path of paths) {
@@ -58,15 +110,71 @@ async function measureFrames(page, seconds = 3) {
       averageFrameMs: sum / deltas.length,
       p95FrameMs: percentile(0.95),
       p99FrameMs: percentile(0.99),
+      maxFrameMs: deltas.at(-1),
+      hitchCount: deltas.filter((value) => value > 50).length,
       slowFrameRatio: deltas.filter((value) => value > 20.5).length / deltas.length,
     };
   }, seconds);
 }
 
-const scenarios = [
+async function measureGpuFrame(page, sampleCount = 3) {
+  return page.evaluate(async (count) => {
+    const renderer = window.__diorama?.renderer;
+    const gl = renderer?.getContext();
+    const extension = gl?.getExtension('EXT_disjoint_timer_query_webgl2');
+    if (!gl || !extension || typeof gl.createQuery !== 'function') {
+      return {
+        available: false,
+        method: 'EXT_disjoint_timer_query_webgl2',
+        reason: 'GPU timer query is unavailable',
+      };
+    }
+
+    const samples = [];
+    for (let index = 0; index < count; index++) {
+      const query = gl.createQuery();
+      if (!query) {
+        return { available: false, method: 'EXT_disjoint_timer_query_webgl2', reason: 'Could not allocate GPU query' };
+      }
+      gl.beginQuery(extension.TIME_ELAPSED_EXT, query);
+      window.__diorama.captureFrame(320, 0.5);
+      gl.endQuery(extension.TIME_ELAPSED_EXT);
+
+      const deadline = performance.now() + 2_000;
+      let available = false;
+      while (!available && performance.now() < deadline) {
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        available = gl.getQueryParameter(query, gl.QUERY_RESULT_AVAILABLE);
+      }
+      const disjoint = gl.getParameter(extension.GPU_DISJOINT_EXT);
+      if (!available || disjoint) {
+        gl.deleteQuery(query);
+        return {
+          available: false,
+          method: 'EXT_disjoint_timer_query_webgl2',
+          reason: disjoint ? 'GPU timing became disjoint' : 'GPU query timed out',
+        };
+      }
+      samples.push(gl.getQueryParameter(query, gl.QUERY_RESULT) / 1_000_000);
+      gl.deleteQuery(query);
+    }
+    samples.sort((a, b) => a - b);
+    return {
+      available: true,
+      method: 'EXT_disjoint_timer_query_webgl2 around an explicit composer frame',
+      sampleCount: samples.length,
+      medianRenderMs: Math.round(samples[Math.floor(samples.length / 2)] * 10) / 10,
+      minRenderMs: Math.round(samples[0] * 10) / 10,
+      maxRenderMs: Math.round(samples.at(-1) * 10) / 10,
+    };
+  }, sampleCount);
+}
+
+const allScenarios = [
   { name: 'golden-clear-overview', time: 0.28, weather: 'clear', camera: 'overview' },
   { name: 'noon-rain-overview', time: 0.5, weather: 'rain', camera: 'overview' },
   { name: 'night-snow-train', time: 0.02, weather: 'snow', camera: 'train' },
+  { name: 'evening-rain-bus', time: 0.82, weather: 'rain', camera: 'bus' },
   {
     name: 'eclipse-totality-overview',
     time: 0.715,
@@ -75,18 +183,25 @@ const scenarios = [
     eclipseProgress: 0.5,
   },
 ];
+const scenarios = SCENARIO_FILTER
+  ? allScenarios.filter((scenario) => scenario.name === SCENARIO_FILTER)
+  : allScenarios;
+assert.ok(scenarios.length > 0, `unknown benchmark scenario: ${SCENARIO_FILTER}`);
+assert.ok(['low', 'medium', 'high'].includes(QUALITY), `unknown benchmark quality: ${QUALITY}`);
 
-const preview = spawn(process.execPath, ['node_modules/vite/bin/vite.js', 'preview', '--host', HOST, '--port', String(PORT), '--strictPort'], {
-  cwd: process.cwd(),
-  stdio: ['ignore', 'pipe', 'pipe'],
-  detached: process.platform !== 'win32',
-});
+const benchmarkLock = await acquireBenchmarkLock();
+let preview;
 let previewLog = '';
-preview.stdout.on('data', (chunk) => { previewLog += chunk.toString(); });
-preview.stderr.on('data', (chunk) => { previewLog += chunk.toString(); });
-
 let browser;
 try {
+  preview = spawn(process.execPath, ['node_modules/vite/bin/vite.js', 'preview', '--host', HOST, '--port', String(PORT), '--strictPort'], {
+    cwd: process.cwd(),
+    stdio: ['ignore', 'pipe', 'pipe'],
+    detached: process.platform !== 'win32',
+  });
+  preview.stdout.on('data', (chunk) => { previewLog += chunk.toString(); });
+  preview.stderr.on('data', (chunk) => { previewLog += chunk.toString(); });
+
   await waitForServer();
   const executablePath = await firstExisting([
     '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
@@ -106,14 +221,46 @@ try {
     ],
   });
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2 });
+  assert.equal(browser.contexts().length, 1, 'benchmark must use exactly one browser context');
+  assert.equal(page.context().pages().length, 1, 'benchmark must use exactly one browser page');
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Performance.enable');
   const errors = [];
   page.on('console', (message) => {
     if (message.type() === 'error') errors.push(message.text());
   });
   page.on('pageerror', (error) => errors.push(error.message));
+  await page.addInitScript(() => {
+    window.__benchmarkReadyAt = null;
+    window.addEventListener('diorama-ready', () => {
+      window.__benchmarkReadyAt = performance.now();
+    }, { once: true });
+  });
   await page.goto(URL, { waitUntil: 'networkidle' });
-  await page.waitForFunction(() => window.__diorama?.ready === true, null, { timeout: 20_000 });
-  await page.evaluate(() => window.__diorama.setQuality('high'));
+  await page.waitForFunction(() => window.__diorama?.ready === true, null, { timeout: MAX_TTI_MS });
+  const readiness = await page.evaluate(() => {
+    const navigation = performance.getEntriesByType('navigation')[0];
+    const firstContentfulPaint = performance.getEntriesByName('first-contentful-paint')[0];
+    return {
+      timeToInteractiveMs: window.__benchmarkReadyAt ?? performance.now(),
+      definition: 'diorama-ready after preload, shader warm-up, first interactive animation frame and loader dismissal',
+      domContentLoadedMs: navigation?.domContentLoadedEventEnd ?? null,
+      firstContentfulPaintMs: firstContentfulPaint?.startTime ?? null,
+    };
+  });
+  await page.evaluate((quality) => window.__diorama.setQuality(quality), QUALITY);
+  if (DISABLE_SHADOWS) {
+    await page.evaluate(() => {
+      window.__diorama.renderer.shadowMap.enabled = false;
+    });
+  }
+  if (DISABLE_LOCAL_LIGHTS) {
+    await page.evaluate(() => {
+      window.__diorama.scene.traverse((object) => {
+        if (object.isPointLight || object.isSpotLight) object.visible = false;
+      });
+    });
+  }
 
   const identity = await page.evaluate(() => window.__diorama.getMetrics().renderer);
   const softwareRenderer = /swiftshader|software|llvmpipe/i.test(identity.gpu);
@@ -127,6 +274,7 @@ try {
       if (eclipseProgress !== undefined) window.__diorama.setEclipseProgress(eclipseProgress);
     }, scenario);
     if (scenario.camera === 'train') await page.keyboard.press('t');
+    else if (scenario.camera === 'bus') await page.keyboard.press('b');
     else {
       await page.evaluate(() => window.__diorama.controls.setLookAt(70, 48, 80, 0, 6, 0, false));
     }
@@ -134,14 +282,48 @@ try {
     // Discard a short state-local sample so lazy shader variants, shadow maps,
     // and post-processing targets are not counted as sustained animation cost.
     await measureFrames(page, 1);
+    const cpuBefore = await cdp.send('Performance.getMetrics');
     const timing = await measureFrames(page);
+    const cpuAfter = await cdp.send('Performance.getMetrics');
+    const wallSeconds = timing.averageFrameMs * timing.frames / 1_000;
+    const mainThreadTaskSeconds = metricValue(cpuAfter, 'TaskDuration') - metricValue(cpuBefore, 'TaskDuration');
+    const scriptSeconds = metricValue(cpuAfter, 'ScriptDuration') - metricValue(cpuBefore, 'ScriptDuration');
+    const layoutSeconds = metricValue(cpuAfter, 'LayoutDuration') - metricValue(cpuBefore, 'LayoutDuration');
+    const cpu = {
+      scope: 'Chromium renderer main thread; not total system CPU',
+      taskMs: round(mainThreadTaskSeconds * 1_000),
+      busyPercent: round((mainThreadTaskSeconds / wallSeconds) * 100),
+      scriptMs: round(scriptSeconds * 1_000),
+      layoutMs: round(layoutSeconds * 1_000),
+    };
+    const gpu = await measureGpuFrame(page);
     const metrics = await page.evaluate(() => window.__diorama.getMetrics());
-    results.push({ ...scenario, timing, renderer: metrics.renderer });
+    results.push({ ...scenario, timing, cpu, gpu, renderer: metrics.renderer });
     if (scenario.camera === 'train') await page.keyboard.press('t');
+    else if (scenario.camera === 'bus') await page.keyboard.press('b');
   }
 
-  console.log(JSON.stringify({ headful: HEADFUL, gpu: identity.gpu, vendor: identity.vendor, results }, null, 2));
+  console.log(JSON.stringify({
+    headful: HEADFUL,
+    quality: QUALITY,
+    isolation: 'exclusive process lock, one browser context, one page',
+    diagnosticShadowsDisabled: DISABLE_SHADOWS,
+    diagnosticLocalLightsDisabled: DISABLE_LOCAL_LIGHTS,
+    readiness: {
+      ...readiness,
+      timeToInteractiveMs: round(readiness.timeToInteractiveMs),
+      domContentLoadedMs: readiness.domContentLoadedMs === null ? null : round(readiness.domContentLoadedMs),
+      firstContentfulPaintMs: readiness.firstContentfulPaintMs === null ? null : round(readiness.firstContentfulPaintMs),
+    },
+    gpu: identity.gpu,
+    vendor: identity.vendor,
+    results,
+  }, null, 2));
   assert.deepEqual(errors, [], `browser errors:\n${errors.join('\n')}`);
+  assert.ok(
+    readiness.timeToInteractiveMs <= MAX_TTI_MS,
+    `TTI ${readiness.timeToInteractiveMs.toFixed(1)} ms exceeds ${MAX_TTI_MS} ms`
+  );
   for (const result of results) {
     assert.ok(
       result.timing.averageFps >= REQUIRED_FPS,
@@ -155,9 +337,10 @@ try {
 } finally {
   await browser?.close();
   try {
-    if (preview.pid && process.platform !== 'win32') process.kill(-preview.pid, 'SIGTERM');
-    else preview.kill('SIGTERM');
+    if (preview?.pid && process.platform !== 'win32') process.kill(-preview.pid, 'SIGTERM');
+    else preview?.kill('SIGTERM');
   } catch (error) {
     if (error.code !== 'ESRCH') throw error;
   }
+  await releaseBenchmarkLock(benchmarkLock);
 }

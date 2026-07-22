@@ -345,7 +345,8 @@ if (import.meta.env.DEV) {
 }
 
 // ─── Animation ───
-const clock = new THREE.Clock();
+const timer = new THREE.Timer();
+timer.connect(document);
 let elapsed = 0;
 let loadingHidden = false;
 let loadingCompletedAt = -1;
@@ -457,9 +458,10 @@ async function warmRenderer(): Promise<void> {
   }
 }
 
-function animate() {
+function animate(timestamp?: number) {
   requestAnimationFrame(animate);
-  const measuredDelta = clock.getDelta();
+  timer.update(timestamp);
+  const measuredDelta = timer.getDelta();
   const rawDelta = Math.min(measuredDelta, 0.1);
   if (!document.hidden) quality.sampleFrame(measuredDelta);
   const delta = paused ? 0 : rawDelta;
@@ -552,6 +554,7 @@ function animate() {
 
   // ── Lighting ──
   const skyCloud = Math.min(1, weather.getCloudCover() + currentTheme.turbidityAdd * 0.1);
+  dayNight.setCameraMode(cameraMode);
   const light = dayNight.update(t01, rawDelta, skyCloud, currentTheme.nightFloor);
   env.renderer.toneMappingExposure = sceneExposure(
     light.night,
@@ -570,6 +573,10 @@ function animate() {
     train.isGroundPointOccupied(LEVEL_CROSSING.x, LEVEL_CROSSING.z, 5),
     t01
   );
+  // Do not pay the global fragment-shader cost of the other vehicle's spotlights
+  // in a chase camera. The followed vehicle keeps its physical headlights.
+  train.setHeadlightsEnabled(cameraMode !== 'bus');
+  bus.setHeadlightsEnabled(cameraMode !== 'train');
   world.setSnowCover(weather.getSnowCover());
   world.setWetness(weather.getWetness());
   sunDirectionAt(t01, eclipseReflectionSun);
@@ -686,6 +693,7 @@ function animate() {
   env.controls.getTarget(postFocusTarget);
   const cameraFocusDistance = env.camera.position.distanceTo(postFocusTarget);
   env.setCameraFocusDistance(cameraFocusDistance);
+  env.setCameraPerformanceMode(cameraMode);
   dayNight.setCameraFocusDistance(cameraFocusDistance);
   env.setCinematicFocus(tour.isActive(), postFocusTarget);
 
@@ -812,7 +820,7 @@ const debugHandle: DioramaDebugHandle = {
   setQuality: (mode: QualityMode) => quality.setMode(mode),
   toggleProfiler,
   setWeather: (kind: 'clear' | 'cloudy' | 'rain' | 'snow' | 'fog') => {
-    weather.setExternal(kind);
+    weather.debugSetImmediate(kind);
   },
   clearWeather: () => weather.setExternal(null),
   scene: env.scene,
@@ -875,12 +883,16 @@ const debugHandle: DioramaDebugHandle = {
 };
 
 window.__diorama = debugHandle;
-void warmRenderer().finally(animate);
+void warmRenderer().finally(() => {
+  timer.reset();
+  animate();
+});
 
 // HMR cleanup
 if (import.meta.hot) {
   import.meta.hot.dispose(() => {
     unsubscribeQuality();
+    timer.dispose();
     devStats?.dispose();
     train.dispose();
     bus.dispose();

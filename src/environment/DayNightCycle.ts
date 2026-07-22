@@ -304,6 +304,7 @@ export class DayNightCycle {
   private shadowRadius = 95;
   private lightSelectionCooldown = 0;
   private wideView = false;
+  private cameraMode: 'free' | 'train' | 'bus' = 'free';
 
   /** Set by main — the eclipse disc is positioned relative to the camera
    * so it stays optically aligned with the (infinitely far) shader sun. */
@@ -567,6 +568,10 @@ export class DayNightCycle {
     this.syncShadowMapResolution();
   }
 
+  setCameraMode(mode: 'free' | 'train' | 'bus'): void {
+    this.cameraMode = mode;
+  }
+
   private syncShadowMapResolution(force = false): void {
     const targetSize = this.wideView ? Math.min(512, this.shadowMapSize) : this.shadowMapSize;
     if (!force && targetSize === this.appliedShadowMapSize) return;
@@ -723,10 +728,22 @@ export class DayNightCycle {
       );
       this.lightSelectionCooldown = 0.5;
     }
-    const streetLightBudget = this.wideView ? 0 : this.streetLightBudget;
-    const busStopLightBudget = this.wideView ? 0 : this.busStopLightBudget;
-    const stationLightBudget = this.wideView ? Math.min(1, this.stationLightBudget) : this.stationLightBudget;
-    const windowLightBudget = this.wideView ? 0 : this.windowLightBudget;
+    // Point/spot lights are evaluated by every physical fragment. In the low
+    // bus chase camera, a dozen city lights overlap most of the screen and
+    // become substantially more expensive than their draw-call count suggests.
+    // Keep the nearest street and shelter pools; emissive fixtures and glow
+    // meshes preserve the rest of the city lighting without global shader cost.
+    const busChaseView = this.cameraMode === 'bus';
+    const streetLightBudget = this.wideView
+      ? 0
+      : busChaseView ? Math.min(1, this.streetLightBudget) : this.streetLightBudget;
+    const busStopLightBudget = this.wideView
+      ? 0
+      : busChaseView ? Math.min(1, this.busStopLightBudget) : this.busStopLightBudget;
+    const stationLightBudget = this.wideView
+      ? Math.min(1, this.stationLightBudget)
+      : busChaseView ? 0 : this.stationLightBudget;
+    const windowLightBudget = this.wideView || busChaseView ? 0 : this.windowLightBudget;
     const physicalLightThreshold = this.wideView ? 0.28 : 0.001;
     for (let i = 0; i < this.hooks.streetLights.length; i++) {
       const light = this.hooks.streetLights[i];

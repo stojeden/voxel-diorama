@@ -548,6 +548,7 @@ export interface TrainHandle {
   getRouteProgress: () => number;
   getStationState: () => TrainPublicState;
   setLivery: (livery: TrainLivery) => void;
+  setHeadlightsEnabled: (enabled: boolean) => void;
   dispose: () => void;
 }
 
@@ -626,6 +627,7 @@ export function createTrain(scene: THREE.Scene): TrainHandle {
 
   const headLights = locoBuild.headLights ?? [];
   const headBeams = locoBuild.beamMaterials ?? [];
+  let headlightsEnabled = true;
 
   // ─── Simulation state ───
   const totalLength = ROUTE_LENGTH;
@@ -728,6 +730,7 @@ export function createTrain(scene: THREE.Scene): TrainHandle {
       // alive at dusk.
       const beamStrength = Math.min(1, nightFactor * 1.4);
       for (const lamp of headLights) {
+        lamp.visible = headlightsEnabled;
         lamp.intensity = 6 + beamStrength * 340;
       }
       for (const beamMat of headBeams) {
@@ -771,6 +774,10 @@ export function createTrain(scene: THREE.Scene): TrainHandle {
       mats.passenger.color.setHex(palette.passenger);
       mats.passengerAccent.color.setHex(palette.passengerAccent);
       mats.passengerDark.color.setHex(palette.passengerDark);
+    },
+    setHeadlightsEnabled(enabled) {
+      headlightsEnabled = enabled;
+      for (const lamp of headLights) lamp.visible = enabled;
     },
     dispose() {
       for (const car of carRefs) {

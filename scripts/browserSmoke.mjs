@@ -17,22 +17,28 @@ async function saveScreenshot(page, path) {
 
 async function assertBundleBudgets() {
   const assetNames = await readdir('dist/assets');
-  const entry =
-    assetNames.find((name) => /^main-.*\.js$/.test(name)) ??
-    assetNames.find((name) => /^index-.*\.js$/.test(name));
+  const entry = assetNames.find((name) => /^index-.*\.js$/.test(name));
+  const bootstrap = assetNames.find((name) => /^main-.*\.js$/.test(name));
   const three = assetNames.find((name) => /^three-.*\.js$/.test(name));
-  const renderingEffects = assetNames.find((name) => /^index-.*\.js$/.test(name));
+  const cameraControls = assetNames.find((name) => /^camera-controls-.*\.js$/.test(name));
+  const postprocessing = assetNames.find((name) => /^postprocessing-.*\.js$/.test(name));
   assert.ok(entry, 'application entry chunk is missing');
+  assert.ok(bootstrap, 'application bootstrap chunk is missing');
   assert.ok(three, 'Three.js vendor chunk is missing');
-  assert.ok(renderingEffects, 'rendering effects chunk is missing');
+  assert.ok(cameraControls, 'camera-controls vendor chunk is missing');
+  assert.ok(postprocessing, 'postprocessing vendor chunk is missing');
   const entryBytes = (await stat(`dist/assets/${entry}`)).size;
+  const bootstrapBytes = (await stat(`dist/assets/${bootstrap}`)).size;
   const threeBytes = (await stat(`dist/assets/${three}`)).size;
-  const renderingEffectsBytes = (await stat(`dist/assets/${renderingEffects}`)).size;
-  assert.ok(entryBytes <= 200_000, `application chunk budget exceeded: ${entryBytes} bytes`);
+  const cameraControlsBytes = (await stat(`dist/assets/${cameraControls}`)).size;
+  const postprocessingBytes = (await stat(`dist/assets/${postprocessing}`)).size;
+  assert.ok(entryBytes <= 240_000, `application chunk budget exceeded: ${entryBytes} bytes`);
+  assert.ok(bootstrapBytes <= 50_000, `application bootstrap budget exceeded: ${bootstrapBytes} bytes`);
   assert.ok(threeBytes <= 800_000, `Three.js chunk budget exceeded: ${threeBytes} bytes`);
+  assert.ok(cameraControlsBytes <= 60_000, `camera-controls chunk budget exceeded: ${cameraControlsBytes} bytes`);
   assert.ok(
-    renderingEffectsBytes <= 420_000,
-    `rendering effects chunk budget exceeded: ${renderingEffectsBytes} bytes`
+    postprocessingBytes <= 300_000,
+    `postprocessing chunk budget exceeded: ${postprocessingBytes} bytes`
   );
 }
 
@@ -155,6 +161,7 @@ try {
   await page.waitForTimeout(4_500);
 
   const initial = await page.evaluate(() => ({
+    documentLanguage: document.documentElement.lang,
     state: window.__diorama.getState(),
     metrics: window.__diorama.getMetrics(),
     frameLength: window.__diorama.captureFrame(640, 0.75).length,
@@ -162,6 +169,7 @@ try {
     loadingAriaValue: document.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow'),
     loadingBarTransform: document.querySelector('#loading-progress-bar')?.style.transform,
   }));
+  assert.equal(initial.documentLanguage, 'pl', 'document language must match the Polish interface');
   assert.ok(initial.loadingSamples.length >= 5, `preloader exposed too few real stages: ${initial.loadingSamples}`);
   assert.equal(initial.loadingSamples.at(-1), 100, 'preloader must finish at 100%');
   assert.equal(initial.loadingAriaValue, '100', 'preloader accessibility value must finish at 100');
@@ -302,11 +310,11 @@ try {
   });
   await page.waitForTimeout(350);
   await page.waitForTimeout(500);
-  const collapsedPanel = await page.locator('#dilation-panel').boundingBox();
+  const collapsedPanel = await page.locator('#control-panel').boundingBox();
   const eclipseStatus = await page.locator('#eclipse-status').boundingBox();
   await page.evaluate(() => document.querySelector('#panel-toggle')?.click());
   await page.waitForTimeout(350);
-  const expandedPanel = await page.locator('#dilation-panel').boundingBox();
+  const expandedPanel = await page.locator('#control-panel').boundingBox();
   assert.ok(collapsedPanel && expandedPanel && eclipseStatus, 'eclipse UI layout is missing');
   assert.ok(
     Math.abs(collapsedPanel.width - expandedPanel.width) < 1,
@@ -667,7 +675,7 @@ try {
   assert.ok(mobilePixels.visibleSamples > 200, 'mobile canvas is blank');
   assert.ok(mobilePixels.maxLuminance - mobilePixels.minLuminance > 25, 'mobile canvas lacks visual contrast');
   const mobileLayout = await mobile.evaluate(() => {
-    const panel = document.querySelector('#dilation-panel').getBoundingClientRect();
+    const panel = document.querySelector('#control-panel').getBoundingClientRect();
     const eclipse = document.querySelector('#eclipse-status').getBoundingClientRect();
     const clock = document.querySelector('#time-display').getBoundingClientRect();
     const info = document.querySelector('#info').getBoundingClientRect();

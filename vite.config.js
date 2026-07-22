@@ -19,18 +19,42 @@ export default defineConfig({
     // Three itself is a large, cacheable vendor chunk. Application code has a
     // separate, much smaller budget enforced by the browser smoke test.
     chunkSizeWarningLimit: 800,
-    rollupOptions: {
+    rolldownOptions: {
       input: resolve(__dirname, 'index.html'),
+      preserveEntrySignatures: 'allow-extension',
       output: {
-        manualChunks(id) {
-          if (id.includes('/node_modules/three/')) return 'three';
-          if (id.includes('/node_modules/camera-controls/')) return 'camera-controls';
-          return undefined;
+        // Keep execution order while splitting packages without recursively
+        // absorbing their dependencies into whichever group is processed
+        // first. In particular, postprocessing must not swallow Three.js.
+        strictExecutionOrder: true,
+        codeSplitting: {
+          groups: [
+            {
+              name: 'three',
+              test: /node_modules[\\/]three[\\/]/,
+              priority: 30,
+              includeDependenciesRecursively: false,
+            },
+            {
+              name: 'camera-controls',
+              test: /node_modules[\\/]camera-controls[\\/]/,
+              priority: 20,
+              includeDependenciesRecursively: false,
+            },
+            {
+              name: 'postprocessing',
+              test: /node_modules[\\/]postprocessing[\\/]/,
+              priority: 20,
+              includeDependenciesRecursively: false,
+            },
+          ],
         },
       },
     },
   },
   server: {
-    open: true,
+    // Multiple dev invocations must not multiply GPU-heavy Diorama tabs.
+    // Open one tab explicitly only when a human or a browser test needs it.
+    open: false,
   },
 });
