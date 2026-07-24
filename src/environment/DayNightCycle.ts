@@ -34,6 +34,8 @@ export interface DayLightState {
   night: number;
   golden: number;
   sunElevation: number;
+  /** 0..1 direct solar transmission after cloud/theme/eclipse attenuation. */
+  directSun: number;
   /** 0..1 — current solar-eclipse strength (0 = no eclipse). */
   eclipse: number;
 }
@@ -653,12 +655,12 @@ export class DayNightCycle {
     this.sunLight.position.copy(sunDir).multiplyScalar(140).add(this.shadowFocus);
     this.sunLight.target.position.copy(this.shadowFocus);
     // nightFloor (eternal-dusk themes) and an eclipse both mute the sun.
-    this.sunLight.intensity =
+    const directSun =
       sunStrength *
-      2.2 *
       (1 - cloudCover * 0.62) *
       (1 - nightFloor * 0.8) *
       eclipseState.irradiance;
+    this.sunLight.intensity = directSun * 2.2;
     sunColorAt(t, this.tmpSunColor);
     this.sunLight.color.copy(this.tmpSunColor);
     const directShadowStrength = sunStrength * eclipseState.irradiance;
@@ -818,7 +820,7 @@ export class DayNightCycle {
       this.envLastCloud = cloudCover;
     }
 
-    return { night, golden, sunElevation: elevation, eclipse };
+    return { night, golden, sunElevation: elevation, directSun, eclipse };
   }
 
   private regenerateEnvironment(skyUniforms: Record<string, THREE.IUniform>): void {

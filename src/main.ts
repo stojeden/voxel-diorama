@@ -13,6 +13,10 @@ import { LakesideCow } from './world/LakesideCow';
 import { RailSignals } from './world/RailSignals';
 import { DayNightCycle } from './environment/DayNightCycle';
 import { Weather } from './environment/Weather';
+import {
+  RainbowAtmosphere,
+  type RainbowFrameInput,
+} from './environment/RainbowAtmosphere';
 import type { RealTimeSync } from './environment/RealTime';
 import { PortalGlow } from './effects/PortalGlow';
 import { Balloon } from './effects/Balloon';
@@ -36,7 +40,13 @@ import {
   type CheckpointDefinition,
   type CheckpointId,
 } from './experience/Checkpoints';
-import { sceneBloomStrength, sceneExposure, sunDirectionAt } from './environment/sky';
+import {
+  sceneBloomStrength,
+  sceneExposure,
+  sunColorAt,
+  sunDirectionAt,
+  sunElevationAt,
+} from './environment/sky';
 import {
   QualityManager,
   type QualityMode,
@@ -54,7 +64,8 @@ const requestedQuality = qualityParam === 'low' || qualityParam === 'medium' || 
 // An explicit query parameter is a benchmark/debug override. Checkpoints only
 // provide the default profile when the caller did not request one.
 const quality = new QualityManager(undefined, requestedQuality ?? requestedCheckpoint?.quality);
-const env = bootstrap(quality.getProfile());
+const rainbow = new RainbowAtmosphere(worldRandom.stream('rainbow-source'));
+const env = bootstrap(quality.getProfile(), rainbow.effect);
 const ui = mountUi();
 ui.setLoadingProgress(4, 'RENDERER GOTOWY');
 
@@ -122,6 +133,7 @@ const unsubscribeQuality = quality.subscribe((profile, snapshot) => {
   env.setQuality(profile);
   dayNight.setQuality(profile);
   weather.setQuality(profile);
+  rainbow.setQuality(profile.level);
   world.setQuality(profile);
   birds.setDensity(profile.actorDensity);
   passengerCrowd.setDensity(profile.actorDensity);
@@ -154,6 +166,20 @@ const eclipseViewSun = new THREE.Vector3();
 const eclipseViewCamera = new THREE.Vector3();
 const eclipseViewTarget = new THREE.Vector3(0, 36, 0);
 const eclipseReflectionSun = new THREE.Vector3();
+const rainbowSunColor = new THREE.Color();
+const rainbowFrame: RainbowFrameInput = {
+  camera: env.camera,
+  sunDirection: eclipseReflectionSun,
+  sunElevation: 0,
+  sunColor: rainbowSunColor,
+  directSun: 0,
+  cloudCover: 0,
+  rainIntensity: 0,
+  airborneMoisture: 0,
+  wind: 0,
+  realDelta: 0,
+  elapsed: 0,
+};
 let previousDayProgress = 0.262;
 let activeCheckpoint: CheckpointDefinition | null = null;
 
@@ -189,6 +215,7 @@ function releaseCheckpointState(interruptCamera: boolean): void {
   experience.setClockLocked(false);
   eclipseCheckpointLocked = false;
   weather.setExternal(null);
+  rainbow.releaseDebugSource();
   if (interruptCamera) cameraDirector.interrupt('explicit');
 }
 
@@ -431,6 +458,12 @@ function applyBootCheckpoint(checkpoint: CheckpointDefinition): void {
   activeCheckpoint = checkpoint;
   experience.lockCheckpoint(checkpoint.timeOfDay);
   weather.debugSetImmediate(checkpoint.weather);
+  weather.debugSetAirborneMoisture(checkpoint.rainbowMoisture ?? 0);
+  if (checkpoint.rainbowSource !== undefined) {
+    rainbow.debugSetSource(checkpoint.rainbowSource);
+  } else {
+    rainbow.releaseDebugSource();
+  }
   applyTheme(checkpoint.theme);
   setCyberFactorImmediate(checkpoint.theme === 'cyberpunk' ? 1 : 0);
   if (checkpoint.trainProgress !== undefined) train.seekRouteProgress(checkpoint.trainProgress);
@@ -572,6 +605,8 @@ function animate(timestamp?: number) {
   const skyCloud = Math.min(1, weather.getCloudCover() + currentTheme.turbidityAdd * 0.1);
   dayNight.setCameraMode(cameraMode);
   const light = dayNight.update(t01, presentationDelta, skyCloud, currentTheme.nightFloor);
+  sunDirectionAt(t01, eclipseReflectionSun);
+  sunColorAt(t01, rainbowSunColor);
   env.renderer.toneMappingExposure = sceneExposure(
     light.night,
     light.golden,
@@ -604,7 +639,6 @@ function animate(timestamp?: number) {
   bus.setHeadlightsEnabled(cameraMode !== 'train');
   world.setSnowCover(weather.getSnowCover());
   world.setWetness(weather.getWetness());
-  sunDirectionAt(t01, eclipseReflectionSun);
   world.setEclipseReflection(
     eclipseState.corona * (0.45 + eclipseState.totality * 0.55),
     eclipseReflectionSun
@@ -653,8 +687,22 @@ function animate(timestamp?: number) {
   eclipseCrowdProps.update(eclipseReaction, eclipseState.separation);
 
   cameraDirector.update(frame, experienceState.tour, cameraSubjects);
+  // A future camera rig may move an ancestor rather than the camera itself.
+  // Update dirty parents as well so rainbow reconstruction and frustum culling
+  // consume the same current world transform as the renderer.
+  env.camera.updateWorldMatrix(true, false);
 
   // ── Post FX ──
+  rainbowFrame.sunElevation = sunElevationAt(t01);
+  rainbowFrame.directSun = light.directSun;
+  rainbowFrame.cloudCover = skyCloud;
+  rainbowFrame.rainIntensity = weather.getRainIntensity();
+  rainbowFrame.airborneMoisture = weather.getAirborneMoisture();
+  rainbowFrame.wind = weather.getWind();
+  rainbowFrame.realDelta = presentationDelta;
+  rainbowFrame.elapsed = frame.elapsedSimulation;
+  rainbow.update(rainbowFrame);
+  env.setAtmosphereEnabled(rainbow.isEffectActive());
   const gradeNight = light.eclipse > 0.001 ? Math.min(light.night, 0.25) : light.night;
   env.gradeEffect.parameters.time.value = frame.elapsedSimulation;
   env.gradeEffect.parameters.golden.value = light.golden;
@@ -730,6 +778,9 @@ const debugHandle: DioramaDebugHandle = {
     weather: weather.getKind(),
     cloud: weather.getCloudCover(),
     wind: weather.getWind(),
+    rain: weather.getRainIntensity(),
+    airborneMoisture: weather.getAirborneMoisture(),
+    rainbow: rainbow.getDebugState(),
     trainProgress: train.getRouteProgress(),
     busProgress: bus.getRouteProgress(),
     eclipse: eclipseState,
@@ -773,6 +824,13 @@ const debugHandle: DioramaDebugHandle = {
     weather.debugSetImmediate(kind);
   },
   clearWeather: () => weather.setExternal(null),
+  setRainbowSource: (index: number, strength = 1) => {
+    weather.debugSetAirborneMoisture(
+      Number.isFinite(strength) ? THREE.MathUtils.clamp(strength, 0, 1) : 0
+    );
+    rainbow.debugSetSource(Number.isFinite(index) ? index : 0);
+  },
+  releaseRainbowSource: () => rainbow.releaseDebugSource(),
   loadCheckpoint: (id: CheckpointId) => {
     const checkpoint = getCheckpoint(id);
     if (!checkpoint) throw new Error(`Unknown checkpoint: ${id}`);
@@ -855,7 +913,7 @@ const debugHandle: DioramaDebugHandle = {
   },
   /** Render one frame synchronously and return it as a JPEG data URL
    * (the WebGL buffer isn't preserved, so render+read must share a tick). */
-  captureFrame: (width = 960, jpegQuality = 0.82) => {
+  captureFrame: (width = 960, jpegQuality = 0.82, format: 'jpeg' | 'png' = 'jpeg') => {
     env.composer.render(0);
     const source = env.renderer.domElement;
     const scale = width / source.width;
@@ -863,7 +921,9 @@ const debugHandle: DioramaDebugHandle = {
     canvas.width = width;
     canvas.height = Math.round(source.height * scale);
     canvas.getContext('2d')!.drawImage(source, 0, 0, canvas.width, canvas.height);
-    return canvas.toDataURL('image/jpeg', jpegQuality);
+    return format === 'png'
+      ? canvas.toDataURL('image/png')
+      : canvas.toDataURL('image/jpeg', jpegQuality);
   },
 };
 

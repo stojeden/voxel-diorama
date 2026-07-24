@@ -25,6 +25,7 @@
 - **Fazy księżyca**, gwiazdy, spadające gwiazdy, **zorza polarna** w pogodne noce.
 - **Eclipse 2.0** — 96-sekundowe, deterministyczne zaćmienie uruchamiane klawiszem `E`: kamera pokazuje nisko zawieszone Słońce nad miastem, Księżyc przechodzi przez kolejne kontakty, pojawia się pierścień diamentowy, korona, chromosfera, protuberancje, perły Baily'ego i gwiazdy. Pod drzewami widać projekcje sierpów, a w High tuż przy kontakcie pojawiają się shadow bands. Mieszkańcy zwalniają, patrzą ku Słońcu, używają przyczepionych do głów okularów lub kart projekcyjnych; pies reaguje na zmianę światła, a jezioro odbija koronę.
 - **Automat pogodowy**: chmury voxelowe, deszcz (mokry, lustrzany asfalt), śnieg z **zalegającą zimą** (białe dachy, oszronione drzewa, **zamarzające jezioro**), mgła i wiatr kołyszący drzewami.
+- **Tęcza po deszczu oparta na optyce geometrycznej**: zależna od obserwatora oś antysłoneczna, dyspersja 400–700 nm wyprowadzona z prawa Snella, D65/CIE/Fresnel, lokalna kurtyna wilgoci po opadzie oraz przycinanie do aktualnej głębokości sceny. Histogram rodzin promieni pierwszego i drugiego rzędu przez kuliste krople tworzy kaustyki, ogony rozpraszania i przerwę pasma Aleksandra; High dodaje słabą tęczę wtórną. Osobny deterministyczny RNG wybiera po każdym opadzie kurtynę nad jeziorem, łąką albo północnym parkiem, dlatego pozorny początek i koniec wynikają z kamery, Słońca, kropel i geometrii świata zamiast stałych punktów. Efekt narasta w kilka sekund i przy dobrych warunkach pozostaje wyraźny zwykle przez około 60–75 sekund czasu rzeczywistego. Używa wyłącznie małego LUT generowanego przy starcie — bez importowanej tekstury ani dodatkowych świateł.
 - **Zegar 1× / 2× / 3×** oraz tryb **⏱ REAL TIME** — obecna wersja synchronizuje porę dnia, fazę Księżyca i pogodę przez SunCalc + Open-Meteo; przy aktywacji prosi o lokalizację, a po odmowie używa Warszawy. W roadmapie jest zastąpienie tego trybem bez promptu, opartym o strefę czasową przeglądarki i jawnie opisaną lokalizację przybliżoną.
 - **Rytm mieszkań**: około północy gasną pierwsze okna, o 01:42 kolejne, o 02:30 pozostają pojedyncze światła, o 02:45 bloki są ciemne, a od 04:00 miasto budzi się sekwencyjnie.
 - **Oświetlenie bezpieczeństwa**: wiaty mają zewnętrzne, dwustronne lightboxy i oprawy pod dachem, a dworce nocą pozostają jaśniejsze od przystanków.
@@ -74,12 +75,12 @@ npm run dev      # http://localhost:5173 — bez automatycznego otwierania kolej
 ```
 
 ```bash
-npm test         # 131 testów (vitest): geometria, światło, rytm miasta,
+npm test         # 159 testów (vitest): geometria, światło, optyka, rytm miasta,
                  # deterministyczność, kamera, tour, aktorzy i pojazdy
 npm run typecheck # typy
 npm run build    # produkcja → dist/
 npm run validate # typy + unit + build + Chrome/WebGL + budżety wydajności
-BENCH_HEADFUL=1 npm run test:performance # jeden Chrome, jedna karta, 5 scenariuszy Metal/High
+BENCH_HEADFUL=1 npm run test:performance # 7 stanów, 15 pomiarów (para tęczy 5× AB/BA), Metal/High
 ```
 
 Wymagania: Node 20.19+, przeglądarka z WebGL2. Cel wydajnościowy to **stabilne 60 FPS na Apple M1 Pro** w profilu High. Twardy benchmark zachowuje próg 58 FPS oraz limit p95 20,5 ms.
@@ -96,19 +97,26 @@ sekwencyjnie, przy zamkniętych ręcznych kartach aplikacji.
 
 ### Stan walidacji
 
-- 131/131 testów jednostkowych w 23 plikach testowych.
+- 159/159 testów jednostkowych w 26 plikach testowych.
 - `npm run typecheck` i produkcyjny `npm run build` przechodzą.
 - Smoke test obejmuje desktop/mobile, fazę częściową i totalność, zjawiska
   optyczne, reakcje mieszkańców, kompletną sylwetkę listonosza, niepusty canvas,
   luminancję, ochronę przed przepaleniami, kolizje pieszych, rytm miasta i
   budżety renderera.
-- Ostatni izolowany przebieg Metal/High na M1 Pro przechodzi wszystkie pięć
-  wersjonowanych checkpointów przy około 120 FPS, p95 9,1–9,2 ms, bez hitchy
-  i z TTI około 1,41 s. Historyczna bramka pozostaje niezmieniona: minimum
+- Ostatni izolowany przebieg Metal/High na M1 Pro przechodzi wszystkie siedem
+  wersjonowanych stanów przy około 120 FPS, p95 9,0–9,2 ms, bez hitchy
+  i z TTI około 1,16 s. Historyczna bramka pozostaje niezmieniona: minimum
   58 FPS i p95 najwyżej 20,5 ms.
   Kamera autobusu korzysta z bliskiego LOD: zachowuje reflektory pojazdu,
   najbliższe fizyczne światła miasta, bloom, grading i cienie, ale pomija SSAO
   oraz odległe światła, które wcześniej przeciążały każdy fragment kadru.
+- Pięć izolowanych par kontrolnych tęczy OFF/ON utrzymuje około 120 FPS:
+  p95 pozostaje bez hitchy. Finalna seria po domknięciu obsługi transformów
+  kamery dała medianę delty p95 +0,2 ms, CPU +0,1 pp i jawnego timera GPU
+  +0,4 ms (limit +2 ms). Koszt zasobów to dokładnie jeden
+  fullscreen draw call i jeden trójkąt bez różnicy liczby tekstur, geometrii
+  ani programów po warm-upie. Pary biegną AB/BA z kontrolą identycznego stanu
+  przed i po każdym pomiarze.
 - Deterministyczny preloader pokazuje monotoniczny postęp `0–100%` wyłącznie po
   ukończeniu realnych etapów: budowy proceduralnego świata, aktorów i pogody,
   kompilacji wariantów poranka, dnia, golden hour, nocy i totalności, ukrytych
@@ -148,6 +156,8 @@ src/
 │   ├── EclipseGroundEffects.ts # sierpy pod drzewami i shadow bands
 │   ├── EclipsePhenomena.ts  # budżety zjawisk optycznych Low/Medium/High
 │   ├── LakeSurface.ts       # PBR jeziora, fale, deszcz, zamarzanie i mgła
+│   ├── RainbowOptics.ts     # Snell, dyspersja, CIE/D65 i Fresnel
+│   ├── RainbowAtmosphere.ts # depth-aware efekt tęczy i kurtyna opadu
 │   ├── Weather.ts           # automat pogodowy, chmury, śnieg, wiatr, mokro
 │   └── RealTime.ts          # legacy: geolokalizacja/fallback + SunCalc + Open-Meteo
 ├── effects/

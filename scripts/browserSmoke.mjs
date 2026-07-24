@@ -113,6 +113,84 @@ async function sampleRenderedFrame(page) {
   });
 }
 
+async function compareCapturedFrames(page, before, after) {
+  return page.evaluate(async ({ beforeUrl, afterUrl }) => {
+    const decode = async (url) => {
+      const image = new Image();
+      image.src = url;
+      await image.decode();
+      const canvas = document.createElement('canvas');
+      canvas.width = image.width;
+      canvas.height = image.height;
+      const context = canvas.getContext('2d', { willReadFrequently: true });
+      context.drawImage(image, 0, 0);
+      return {
+        pixels: context.getImageData(0, 0, canvas.width, canvas.height).data,
+        width: canvas.width,
+        height: canvas.height,
+      };
+    };
+    const firstFrame = await decode(beforeUrl);
+    const secondFrame = await decode(afterUrl);
+    if (
+      firstFrame.width !== secondFrame.width ||
+      firstFrame.height !== secondFrame.height
+    ) {
+      throw new Error('captured rainbow frames have different dimensions');
+    }
+    const first = firstFrame.pixels;
+    const second = secondFrame.pixels;
+    const chromaticRows = new Uint8Array(firstFrame.height);
+    const chromaticColumns = new Uint8Array(firstFrame.width);
+    let changedPixels = 0;
+    let chromaticPixels = 0;
+    let maxChannelDelta = 0;
+    for (let index = 0; index < first.length; index += 4) {
+      const delta = Math.max(
+        Math.abs(first[index] - second[index]),
+        Math.abs(first[index + 1] - second[index + 1]),
+        Math.abs(first[index + 2] - second[index + 2])
+      );
+      if (delta >= 4) changedPixels++;
+      const firstChroma = Math.max(first[index], first[index + 1], first[index + 2]) -
+        Math.min(first[index], first[index + 1], first[index + 2]);
+      const secondChroma = Math.max(second[index], second[index + 1], second[index + 2]) -
+        Math.min(second[index], second[index + 1], second[index + 2]);
+      if (delta >= 4 && secondChroma >= firstChroma + 4) {
+        chromaticPixels++;
+        const pixelIndex = index / 4;
+        chromaticRows[Math.floor(pixelIndex / firstFrame.width)] = 1;
+        chromaticColumns[pixelIndex % firstFrame.width] = 1;
+      }
+      maxChannelDelta = Math.max(maxChannelDelta, delta);
+    }
+    const span = (mask) => {
+      const first = mask.indexOf(1);
+      const last = mask.lastIndexOf(1);
+      return first < 0 ? 0 : last - first + 1;
+    };
+    const longestRun = (mask) => {
+      let longest = 0;
+      let current = 0;
+      for (const value of mask) {
+        current = value ? current + 1 : 0;
+        longest = Math.max(longest, current);
+      }
+      return longest;
+    };
+    return {
+      changedPixels,
+      chromaticPixels,
+      maxChannelDelta,
+      chromaticRowSpan: span(chromaticRows),
+      chromaticColumnSpan: span(chromaticColumns),
+      longestChromaticColumnRun: longestRun(chromaticColumns),
+      width: firstFrame.width,
+      height: firstFrame.height,
+    };
+  }, { beforeUrl: before, afterUrl: after });
+}
+
 async function assertMobileLayout(page) {
   const layout = await page.evaluate(() => {
     const panel = document.querySelector('#control-panel').getBoundingClientRect();
@@ -232,6 +310,70 @@ try {
     'desktop scene highlights are overexposed'
   );
   await saveScreenshot(page, '/tmp/voxel-diorama-desktop.png');
+
+  await page.goto(
+    `${URL}/?profile=1&seed=20260724&checkpoint=post-rain-clear-lake&quality=high`,
+    { waitUntil: 'networkidle' }
+  );
+  await page.waitForFunction(() => window.__diorama?.ready === true, null, { timeout: READY_TIMEOUT_MS });
+  await page.waitForFunction(
+    () => getComputedStyle(document.querySelector('#loading-screen')).visibility === 'hidden',
+    null,
+    { timeout: READY_TIMEOUT_MS }
+  );
+  await page.waitForTimeout(250);
+  const rainbowOffFrame = await page.evaluate(
+    () => window.__diorama.captureFrame(480, 1, 'png')
+  );
+  await page.goto(
+    `${URL}/?profile=1&seed=20260724&checkpoint=post-rain-rainbow-lake&quality=high`,
+    { waitUntil: 'networkidle' }
+  );
+  await page.waitForFunction(() => window.__diorama?.ready === true, null, { timeout: READY_TIMEOUT_MS });
+  await page.waitForFunction(
+    () => getComputedStyle(document.querySelector('#loading-screen')).visibility === 'hidden',
+    null,
+    { timeout: READY_TIMEOUT_MS }
+  );
+  await page.waitForTimeout(250);
+  const rainbowCheckpoint = await page.evaluate(() => {
+    const state = window.__diorama.getState();
+    return {
+      checkpoint: state.checkpoint,
+      airborneMoisture: state.airborneMoisture,
+      rainbow: state.rainbow,
+    };
+  });
+  assert.equal(rainbowCheckpoint.checkpoint?.id, 'post-rain-rainbow-lake');
+  assert.equal(rainbowCheckpoint.airborneMoisture, 1);
+  assert.equal(rainbowCheckpoint.rainbow.source, 'lake');
+  assert.equal(rainbowCheckpoint.rainbow.visible, true);
+  assert.ok(rainbowCheckpoint.rainbow.strength > 0.05);
+  const rainbowOnFrame = await page.evaluate(
+    () => window.__diorama.captureFrame(480, 1, 'png')
+  );
+  const rainbowPixels = await compareCapturedFrames(page, rainbowOffFrame, rainbowOnFrame);
+  assert.ok(rainbowPixels.changedPixels > 400, 'rainbow checkpoint changed too few rendered pixels');
+  assert.ok(rainbowPixels.chromaticPixels > 120, 'rainbow lacks the expected chromatic arc');
+  assert.ok(rainbowPixels.maxChannelDelta >= 8, 'rainbow is not visibly distinguishable from control');
+  assert.ok(
+    rainbowPixels.chromaticRowSpan > rainbowPixels.height * 0.15,
+    'rainbow chroma does not span a plausible vertical arc'
+  );
+  assert.ok(
+    rainbowPixels.chromaticColumnSpan > rainbowPixels.width * 0.25,
+    'rainbow chroma does not span a plausible horizontal arc'
+  );
+  assert.ok(
+    rainbowPixels.longestChromaticColumnRun > rainbowPixels.width * 0.2,
+    'rainbow chroma is too fragmented to form a continuous arc'
+  );
+  await saveScreenshot(page, '/tmp/voxel-diorama-rainbow.png');
+
+  if (!IS_CI) {
+    await page.goto(`${URL}/?profile=1&seed=20260722`, { waitUntil: 'networkidle' });
+    await page.waitForFunction(() => window.__diorama?.ready === true, null, { timeout: READY_TIMEOUT_MS });
+  }
 
   if (IS_CI) {
     await page.evaluate(() => window.__diorama.setQuality('low'));

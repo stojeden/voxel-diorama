@@ -14,6 +14,7 @@ import {
   SSAOEffect,
   ToneMappingEffect,
   ToneMappingMode,
+  type Effect,
 } from 'postprocessing';
 import { CinematicGradeEffect } from './effects/CinematicGrade';
 import { ColorLutPipeline } from './effects/ColorLuts';
@@ -33,6 +34,7 @@ export interface RuntimeEnv {
   setBloomSelection: (objects: Iterable<THREE.Object3D>) => void;
   setOcclusionExclusions: (objects: Iterable<THREE.Object3D>) => void;
   setBloomStrength: (strength: number) => void;
+  setAtmosphereEnabled: (enabled: boolean) => void;
   setEnvironmentGrade: (golden: number, night: number) => void;
   setThemeGrade: (id: string, sepia: number, saturation: number) => void;
   setCinematicFocus: (active: boolean, target: THREE.Vector3) => void;
@@ -49,7 +51,10 @@ const SMAA_PRESETS = {
   high: SMAAPreset.HIGH,
 } as const;
 
-export function bootstrap(initialQuality: QualityProfile): RuntimeEnv {
+export function bootstrap(
+  initialQuality: QualityProfile,
+  atmosphereEffect?: Effect
+): RuntimeEnv {
   const scene = new THREE.Scene();
   scene.fog = new THREE.FogExp2(0x87ceeb, 0.003);
 
@@ -96,8 +101,10 @@ export function bootstrap(initialQuality: QualityProfile): RuntimeEnv {
   let occlusionExclusions: THREE.Object3D[] = [];
   let occlusionVisibility: boolean[] = [];
   composer.addPass(new LambdaPass(() => {
-    occlusionVisibility = occlusionExclusions.map((object) => object.visible);
-    for (const object of occlusionExclusions) object.visible = false;
+    for (let index = 0; index < occlusionExclusions.length; index++) {
+      occlusionVisibility[index] = occlusionExclusions[index].visible;
+      occlusionExclusions[index].visible = false;
+    }
   }));
 
   const normalPass = new NormalPass(scene, camera, {
@@ -125,6 +132,13 @@ export function bootstrap(initialQuality: QualityProfile): RuntimeEnv {
     }
   }));
   composer.addPass(aoPass);
+
+  // Ownership transfers to EffectPass/EffectComposer. Its single dispose path
+  // also releases resources owned directly by the effect (the spectral LUT).
+  const atmospherePass = atmosphereEffect
+    ? new EffectPass(camera, atmosphereEffect)
+    : null;
+  if (atmospherePass) composer.addPass(atmospherePass);
 
   const bloomEffect = new SelectiveBloomEffect(scene, camera, {
     intensity: 0.22,
@@ -259,6 +273,9 @@ export function bootstrap(initialQuality: QualityProfile): RuntimeEnv {
     },
     setBloomStrength: (strength) => {
       bloomEffect.intensity = strength;
+    },
+    setAtmosphereEnabled: (enabled) => {
+      if (atmospherePass) atmospherePass.enabled = enabled;
     },
     setEnvironmentGrade: (golden, night) => {
       gradeEffect.parameters.golden.value = golden;

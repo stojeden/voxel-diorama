@@ -728,6 +728,39 @@ export const RAIL_SIGNAL_POSITIONS: Array<[number, number, boolean]> = [
 /** Cow meadow just east of the lake shore. */
 export const COW_MEADOW = { x: LAKE.x + LAKE.radiusX + 5, z: LAKE.z - 7, wanderRadius: 2.4 } as const;
 
+/**
+ * Open, naturally humid parts of the diorama where a receding rain curtain
+ * can remain lit after the wider storm has moved on. These are atmospheric
+ * source volumes, not fixed "ends" of a rainbow; the observer/Sun geometry
+ * still decides where the bow appears to touch the landscape.
+ */
+export const RAINBOW_MOISTURE_ZONES = [
+  {
+    id: 'lake',
+    x: LAKE.x,
+    z: LAKE.z,
+    baseY: -0.35,
+    jitterX: LAKE.radiusX * 0.8,
+    jitterZ: LAKE.radiusZ * 0.8,
+  },
+  {
+    id: 'lakeside-meadow',
+    x: COW_MEADOW.x,
+    z: COW_MEADOW.z,
+    baseY: 0,
+    jitterX: 8,
+    jitterZ: 7,
+  },
+  {
+    id: 'north-park',
+    x: PLAYGROUND.x - 8,
+    z: PLAYGROUND.z - 8,
+    baseY: 0,
+    jitterX: 10,
+    jitterZ: 8,
+  },
+] as const;
+
 /** Fisherman's stool — right at the water line on the west shore. */
 export const FISHERMAN_SPOT = { x: -55.6, z: 59.6, facingLake: true } as const;
 

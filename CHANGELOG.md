@@ -11,6 +11,24 @@ a wersjonowanie projektu docelowo stosuje [Semantic Versioning](https://semver.o
 
 ### Added
 
+- Tęcza po deszczu oparta na optyce geometrycznej jako pojedynczy efekt
+  postprocessingu: obserwatorowa oś antysłoneczna, dyspersja Snella 400–700 nm,
+  D65/CIE/Fresnel, histogram rodzin promieni pierwszego i drugiego rzędu
+  wypiekany do proceduralnego LUT, lokalne kurtyny wilgoci po opadzie oraz
+  przycinanie drogi optycznej do bufora głębokości i gruntu.
+- Deterministyczne checkpointy tęczy OFF/ON, bramka browser smoke sprawdzająca
+  chromatyczność, zasięg i ciągłość łuku, testy optyki i wilgoci oraz
+  pięciokrotny benchmark AB/BA z limitami p95, CPU, timera GPU i zasobów.
+- High-only słaba tęcza wtórna i pas Aleksandra wynikający z przerwy między
+  rodzinami promieni, bez sztucznego kątowego przyciemniania tła; Low/Medium
+  pomijają w shaderze odczyt i wkład wtórnego łuku.
+- Osobny deterministyczny strumień RNG wybiera po każdym opadzie naturalną
+  kurtynę wilgoci nad jeziorem, łąką albo północnym parkiem. Pozorny początek
+  i koniec łuku wynikają z kamery, Słońca, objętości kropel oraz głębokości
+  sceny, a nie z zapisanych punktów świata.
+- Wilgoć optyczna została oddzielona od mokrości nawierzchni. Kurtyna zachowuje
+  tłumienie Beer–Lamberta również po zasłonięciu Słońca, nie raportując wtedy
+  kolorowej tęczy, i otrzymała szybką ścieżkę shadera bez obliczeń widmowych.
 - Minimalne `ExperienceDirector`, `CameraDirector` i współdzielony,
   bezalokacyjny `FrameContext`; `main.ts` pozostaje composition rootem zamiast
   zmieniać się w nowy framework dla samego refaktoru.
@@ -131,14 +149,17 @@ a wersjonowanie projektu docelowo stosuje [Semantic Versioning](https://semver.o
   sześciokrotnie bez zmiany układu dróg, chodników i trawy.
 - Odległościowy LOD ogranicza w panoramie SSAO, bloom, lampy punktowe, DPR i
   rozdzielczość cieni; bliskie ujęcia zachowują pełny detal.
-- Trzy czyste, sekwencyjne serie M1 Pro przechodzą aktualny gate we wszystkich
-  pięciu scenariuszach: minimum 58,67 FPS, najgorsze p95 17,7 ms oraz TTI
-  1,56–1,62 s.
+- Historyczne trzy czyste, sekwencyjne serie M1 Pro dla pięciu scenariuszy
+  poprzedniego wydania osiągnęły minimum 58,67 FPS, najgorsze p95 17,7 ms oraz
+  TTI 1,56–1,62 s.
 
 ### Validation
 
-- 131 testów w 23 plikach testowych.
+- 159 testów w 26 plikach testowych.
 - Przechodzą `npm run typecheck`, `npm test` i `npm run build`.
+- Pełny benchmark obejmuje siedem stanów, w tym pięć naprzemiennych par
+  tęczy OFF/ON. Finalna seria na M1 Pro utrzymuje około 120 FPS bez hitchy,
+  z medianą delty p95 +0,2 ms, CPU +0,1 pp i timera GPU +0,4 ms.
 - Smoke test sprawdza desktop/mobile, monotoniczny preloader kończący na 100%,
   totalność i warstwy zaćmienia, canvas, luminancję, kolizje, oświetlenie, rytm
   miasta, aktorów i budżety renderera. Dodatkowo wykonuje rzeczywisty pierwszy

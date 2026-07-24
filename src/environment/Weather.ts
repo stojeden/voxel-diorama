@@ -88,6 +88,11 @@ export class Weather {
   private snowCover = 0;
   /** 0..1 — how wet the roads are (builds in rain, dries afterwards). */
   private wetness = 0;
+  /**
+   * 0..1 — optically useful drops in a receding local rain curtain. This is
+   * separate from road wetness: wet asphalt cannot create a rainbow.
+   */
+  private airborneMoisture = 0;
 
   private readonly values: WeatherTargets = { ...TARGETS.clear };
 
@@ -276,6 +281,16 @@ export class Weather {
     return this.values.wind;
   }
 
+  /** 0..1 current precipitation intensity after weather cross-fading. */
+  getRainIntensity(): number {
+    return this.values.rain;
+  }
+
+  /** 0..1 drops remaining in a local curtain after the foreground shower. */
+  getAirborneMoisture(): number {
+    return this.airborneMoisture;
+  }
+
   /** 0..1 snow lying on roofs/grass — builds up while it snows, then melts. */
   getSnowCover(): number {
     return this.snowCover;
@@ -283,6 +298,13 @@ export class Weather {
 
   debugSetSnowCover(cover: number): void {
     this.snowCover = THREE.MathUtils.clamp(cover, 0, 1);
+  }
+
+  /** Deterministic post-rain state for checkpoints and browser validation. */
+  debugSetAirborneMoisture(moisture: number): void {
+    this.airborneMoisture = Number.isFinite(moisture)
+      ? THREE.MathUtils.clamp(moisture, 0, 1)
+      : 0;
   }
 
   /** 0..1 road wetness — mirror-like asphalt right after rain. */
@@ -307,6 +329,7 @@ export class Weather {
     Object.assign(this.values, TARGETS[kind]);
     this.snowCover = kind === 'snow' ? 1 : 0;
     this.wetness = kind === 'rain' ? 1 : 0;
+    if (kind === 'rain') this.airborneMoisture = 1;
   }
 
   /**
@@ -349,6 +372,17 @@ export class Weather {
     this.wetness = Math.min(
       1,
       Math.max(0, this.wetness + (raining ? realDelta * 0.09 : -realDelta * 0.016))
+    );
+
+    // A local curtain can outlive the foreground shower over the lake or park.
+    // Wind moves/clears it faster, but never introduces randomness here.
+    const moistureDelta = raining
+      ? realDelta * (0.055 + this.values.rain * 0.08)
+      : -realDelta * (0.012 + this.values.wind * 0.012);
+    this.airborneMoisture = THREE.MathUtils.clamp(
+      this.airborneMoisture + moistureDelta,
+      0,
+      1
     );
 
     // ── Fog density (colour is owned by DayNightCycle) ──

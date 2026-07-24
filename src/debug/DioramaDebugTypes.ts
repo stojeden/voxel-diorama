@@ -34,7 +34,11 @@ export interface DioramaDebugHandle {
   clearWeather: () => void;
   loadCheckpoint: (id: CheckpointId) => void;
   releaseCheckpoint: () => void;
-  captureFrame: (width?: number, jpegQuality?: number) => string;
+  captureFrame: (
+    width?: number,
+    jpegQuality?: number,
+    format?: 'jpeg' | 'png'
+  ) => string;
   [key: string]: unknown;
 }
 

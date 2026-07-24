@@ -10,10 +10,23 @@ const PORT = 4174;
 const URL = `http://${HOST}:${PORT}`;
 const HEADFUL = process.env.BENCH_HEADFUL === '1';
 const REQUIRED_FPS = Number(process.env.BENCH_MIN_FPS ?? 58);
-const MAX_TTI_MS = Number(process.env.BENCH_MAX_TTI_MS ?? 20_000);
+const MAX_TTI_MS = Number(process.env.BENCH_MAX_TTI_MS ?? 1_800);
 const QUALITY = process.env.BENCH_QUALITY ?? 'high';
 const SIMULATION_SEED = Number(process.env.BENCH_SEED ?? 20260722);
-const SCENARIO_FILTER = process.env.BENCH_SCENARIO;
+const GPU_SAMPLE_COUNT = Number(process.env.BENCH_GPU_SAMPLES ?? 15);
+const requestedScenarioFilters = process.env.BENCH_SCENARIO
+  ?.split(',')
+  .map((value) => value.trim())
+  .filter(Boolean);
+const rainbowPair = ['post-rain-clear-lake', 'post-rain-rainbow-lake'];
+const scenarioFilterSet = new Set(requestedScenarioFilters);
+if (rainbowPair.some((name) => scenarioFilterSet.has(name))) {
+  for (const name of rainbowPair) scenarioFilterSet.add(name);
+}
+const SCENARIO_FILTERS = [...scenarioFilterSet];
+const RAINBOW_REPETITIONS = Number(
+  process.env.BENCH_REPETITIONS ?? 5
+);
 const DISABLE_SHADOWS = process.env.BENCH_DISABLE_SHADOWS === '1';
 const DISABLE_LOCAL_LIGHTS = process.env.BENCH_DISABLE_LOCAL_LIGHTS === '1';
 const LOCK_PATH = join(tmpdir(), 'voxel-diorama-performance-benchmark.lock');
@@ -56,6 +69,14 @@ async function releaseBenchmarkLock(handle) {
 function round(value, precision = 1) {
   const scale = 10 ** precision;
   return Math.round(value * scale) / scale;
+}
+
+function median(values) {
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2
+    ? sorted[middle]
+    : (sorted[middle - 1] + sorted[middle]) * 0.5;
 }
 
 function metricValue(metrics, name) {
@@ -107,6 +128,26 @@ async function applyDiagnosticOverrides(page) {
   return state;
 }
 
+async function readMeasuredState(page) {
+  return page.evaluate(() => {
+    const state = window.__diorama.getState();
+    return {
+      t01: state.t01,
+      theme: state.theme,
+      weather: state.weather,
+      cloud: state.cloud,
+      wind: state.wind,
+      rain: state.rain,
+      eclipse: state.eclipse,
+      trainProgress: state.trainProgress,
+      busProgress: state.busProgress,
+      camera: window.__diorama.cameraPose(),
+      rainbow: state.rainbow,
+      quality: window.__diorama.getMetrics().quality.level,
+    };
+  });
+}
+
 async function measureFrames(page, seconds = 3) {
   return page.evaluate(async (durationSeconds) => {
     const deltas = [];
@@ -137,8 +178,8 @@ async function measureFrames(page, seconds = 3) {
   }, seconds);
 }
 
-async function measureGpuFrame(page, sampleCount = 3) {
-  return page.evaluate(async (count) => {
+async function measureGpuFrame(page, sampleCount = GPU_SAMPLE_COUNT) {
+  return page.evaluate(async ({ count, percentile }) => {
     const renderer = window.__diorama?.renderer;
     const gl = renderer?.getContext();
     const extension = gl?.getExtension('EXT_disjoint_timer_query_webgl2');
@@ -179,28 +220,76 @@ async function measureGpuFrame(page, sampleCount = 3) {
       gl.deleteQuery(query);
     }
     samples.sort((a, b) => a - b);
+    const middle = Math.floor(samples.length / 2);
+    const medianRenderMsRaw = samples.length % 2 === 0
+      ? (samples[middle - 1] + samples[middle]) / 2
+      : samples[middle];
+    const nearestRankIndex = Math.max(
+      0,
+      Math.min(
+        samples.length - 1,
+        Math.ceil(samples.length * percentile) - 1
+      )
+    );
+    const p90RenderMsRaw = samples[nearestRankIndex];
     return {
       available: true,
       method: 'EXT_disjoint_timer_query_webgl2 around an explicit composer frame',
       sampleCount: samples.length,
-      medianRenderMs: Math.round(samples[Math.floor(samples.length / 2)] * 10) / 10,
+      medianRenderMsRaw,
+      p90RenderMsRaw,
+      medianRenderMs: Math.round(medianRenderMsRaw * 10) / 10,
+      p90RenderMs: Math.round(p90RenderMsRaw * 10) / 10,
       minRenderMs: Math.round(samples[0] * 10) / 10,
       maxRenderMs: Math.round(samples.at(-1) * 10) / 10,
     };
-  }, sampleCount);
+  }, { count: sampleCount, percentile: 0.9 });
 }
 
 const allScenarios = [
   { name: 'golden-clear-overview', checkpoint: 'golden-clear-overview', camera: 'overview' },
   { name: 'noon-rain-overview', checkpoint: 'noon-rain-overview', camera: 'overview' },
+  { name: 'post-rain-clear-lake', checkpoint: 'post-rain-clear-lake', camera: 'checkpoint' },
+  { name: 'post-rain-rainbow-lake', checkpoint: 'post-rain-rainbow-lake', camera: 'checkpoint' },
   { name: 'night-snow-train', checkpoint: 'night-snow-train', camera: 'train' },
   { name: 'evening-rain-bus', checkpoint: 'evening-rain-bus', camera: 'bus' },
   { name: 'eclipse-totality-overview', checkpoint: 'eclipse-totality-overview', camera: 'overview' },
 ];
-const scenarios = SCENARIO_FILTER
-  ? allScenarios.filter((scenario) => scenario.name === SCENARIO_FILTER)
+const filteredScenarios = SCENARIO_FILTERS.length
+  ? allScenarios.filter((scenario) => SCENARIO_FILTERS.includes(scenario.name))
   : allScenarios;
-assert.ok(scenarios.length > 0, `unknown benchmark scenario: ${SCENARIO_FILTER}`);
+assert.equal(
+  filteredScenarios.length,
+  SCENARIO_FILTERS.length || allScenarios.length,
+  `unknown or duplicate benchmark scenario: ${SCENARIO_FILTERS?.join(',')}`
+);
+assert.ok(
+  Number.isInteger(RAINBOW_REPETITIONS) &&
+  RAINBOW_REPETITIONS >= 1 &&
+  RAINBOW_REPETITIONS <= 10,
+  `BENCH_REPETITIONS must be an integer in 1..10, received ${RAINBOW_REPETITIONS}`
+);
+assert.ok(
+  Number.isInteger(GPU_SAMPLE_COUNT) && GPU_SAMPLE_COUNT >= 3 && GPU_SAMPLE_COUNT <= 31,
+  `BENCH_GPU_SAMPLES must be an integer in 3..31, received ${GPU_SAMPLE_COUNT}`
+);
+const nonRainbowScenarios = filteredScenarios.filter(
+  (scenario) => !rainbowPair.includes(scenario.name)
+);
+const rainbowScenarios = rainbowPair
+  .map((name) => filteredScenarios.find((scenario) => scenario.name === name))
+  .filter(Boolean);
+const scenarios = [...nonRainbowScenarios];
+if (rainbowScenarios.length === 2) {
+  for (let repetition = 0; repetition < RAINBOW_REPETITIONS; repetition++) {
+    const ordered = repetition % 2 === 0
+      ? rainbowScenarios
+      : [...rainbowScenarios].reverse();
+    for (const scenario of ordered) scenarios.push({ ...scenario, repetition });
+  }
+} else {
+  scenarios.push(...rainbowScenarios);
+}
 assert.ok(['low', 'medium', 'high'].includes(QUALITY), `unknown benchmark quality: ${QUALITY}`);
 
 const benchmarkLock = await acquireBenchmarkLock();
@@ -283,13 +372,22 @@ try {
     assert.equal(checkpointState.simulationSeed, SIMULATION_SEED);
     assert.equal(checkpointState.checkpoint?.id, scenario.checkpoint);
     assert.equal(qualityLevel, QUALITY, `checkpoint ${scenario.checkpoint} ignored BENCH_QUALITY`);
-    await page.evaluate(() => window.__diorama.releaseCheckpoint());
-    if (scenario.camera === 'train') await page.keyboard.press('t');
-    else if (scenario.camera === 'bus') await page.keyboard.press('b');
-    else {
-      await page.evaluate(() => window.__diorama.controls.setLookAt(70, 48, 80, 0, 6, 0, false));
+    if (scenario.camera !== 'checkpoint') {
+      await page.evaluate(() => window.__diorama.releaseCheckpoint());
+      if (scenario.camera === 'train') await page.keyboard.press('t');
+      else if (scenario.camera === 'bus') await page.keyboard.press('b');
+      else {
+        await page.evaluate(() => window.__diorama.controls.setLookAt(70, 48, 80, 0, 6, 0, false));
+      }
     }
     await page.waitForTimeout(2_000);
+    const measuredState = await readMeasuredState(page);
+    if (scenario.name === 'post-rain-clear-lake') {
+      assert.equal(measuredState.rainbow.visible, false, 'OFF checkpoint rendered a rainbow');
+    } else if (scenario.name === 'post-rain-rainbow-lake') {
+      assert.equal(measuredState.rainbow.visible, true, 'ON checkpoint did not render a rainbow');
+      assert.ok(measuredState.rainbow.strength > 0.05, 'ON checkpoint has negligible rainbow strength');
+    }
     // Discard a short state-local sample so lazy shader variants, shadow maps,
     // and post-processing targets are not counted as sustained animation cost.
     await measureFrames(page, 1);
@@ -308,6 +406,62 @@ try {
       layoutMs: round(layoutSeconds * 1_000),
     };
     const gpu = await measureGpuFrame(page);
+    const finalState = await readMeasuredState(page);
+    if (scenario.camera === 'checkpoint') {
+      assert.deepEqual(
+        finalState,
+        measuredState,
+        `${scenario.name}: frozen checkpoint drifted during measurement`
+      );
+    } else {
+      for (const field of ['theme', 'weather', 'quality']) {
+        assert.equal(
+          finalState[field],
+          measuredState[field],
+          `${scenario.name}: dynamic scenario changed invariant ${field}`
+        );
+      }
+      for (const field of ['t01', 'trainProgress', 'busProgress']) {
+        assert.ok(
+          Number.isFinite(finalState[field]) &&
+          finalState[field] >= 0 &&
+          finalState[field] <= 1,
+          `${scenario.name}: invalid dynamic ${field}`
+        );
+      }
+      const cyclicDistance = (a, b) => {
+        const distance = Math.abs(a - b);
+        return Math.min(distance, 1 - distance);
+      };
+      assert.ok(
+        cyclicDistance(finalState.t01, measuredState.t01) > 1e-7,
+        `${scenario.name}: simulation time did not advance`
+      );
+      if (scenario.camera === 'train') {
+        assert.ok(
+          cyclicDistance(
+            finalState.trainProgress,
+            measuredState.trainProgress
+          ) > 1e-7,
+          `${scenario.name}: tracked train did not advance`
+        );
+      } else if (scenario.camera === 'bus') {
+        assert.ok(
+          cyclicDistance(
+            finalState.busProgress,
+            measuredState.busProgress
+          ) > 1e-7,
+          `${scenario.name}: tracked bus did not advance`
+        );
+      }
+      for (const value of [
+        ...finalState.camera.position,
+        ...finalState.camera.target,
+        finalState.camera.distance,
+      ]) {
+        assert.ok(Number.isFinite(value), `${scenario.name}: non-finite dynamic camera`);
+      }
+    }
     const metrics = await page.evaluate(() => window.__diorama.getMetrics());
     results.push({
       ...scenario,
@@ -318,6 +472,8 @@ try {
       timing,
       cpu,
       gpu,
+      measuredState,
+      finalState,
       renderer: metrics.renderer,
     });
     if (scenario.camera === 'train') await page.keyboard.press('t');
@@ -352,6 +508,109 @@ try {
       `${result.name}: ${result.timing.averageFps.toFixed(1)} FPS, required ${REQUIRED_FPS}`
     );
     assert.ok(result.timing.p95FrameMs <= 20.5, `${result.name}: p95 ${result.timing.p95FrameMs.toFixed(1)} ms`);
+    assert.ok(result.timing.p99FrameMs <= 20.5, `${result.name}: p99 ${result.timing.p99FrameMs.toFixed(1)} ms`);
+    assert.equal(result.timing.hitchCount, 0, `${result.name}: animation hitch detected`);
+  }
+  const rainbowOffResults = results.filter(
+    (result) => result.name === 'post-rain-clear-lake'
+  );
+  const rainbowOnResults = results.filter(
+    (result) => result.name === 'post-rain-rainbow-lake'
+  );
+  if (rainbowOffResults.length || rainbowOnResults.length) {
+    assert.equal(
+      rainbowOffResults.length,
+      rainbowOnResults.length,
+      'rainbow benchmark requires an equal number of OFF and ON samples'
+    );
+    const pairDeltas = [];
+    for (let repetition = 0; repetition < rainbowOffResults.length; repetition++) {
+      const rainbowOff = rainbowOffResults.find(
+        (result) => (result.repetition ?? 0) === repetition
+      );
+      const rainbowOn = rainbowOnResults.find(
+        (result) => (result.repetition ?? 0) === repetition
+      );
+      assert.ok(rainbowOff && rainbowOn, `missing rainbow pair repetition ${repetition}`);
+      const comparableState = (result) => ({
+        t01: result.measuredState.t01,
+        theme: result.measuredState.theme,
+        weather: result.measuredState.weather,
+        cloud: result.measuredState.cloud,
+        wind: result.measuredState.wind,
+        rain: result.measuredState.rain,
+        eclipse: result.measuredState.eclipse,
+        trainProgress: result.measuredState.trainProgress,
+        busProgress: result.measuredState.busProgress,
+        camera: result.measuredState.camera,
+        sourceCenter: result.measuredState.rainbow.sourceCenter,
+        sourceRadii: result.measuredState.rainbow.sourceRadii,
+        quality: result.measuredState.quality,
+        pixelRatio: result.renderer.pixelRatio,
+        canvasWidth: result.renderer.canvasWidth,
+        canvasHeight: result.renderer.canvasHeight,
+      });
+      assert.deepEqual(
+        comparableState(rainbowOn),
+        comparableState(rainbowOff),
+        `rainbow OFF/ON repetition ${repetition} differs outside atmospheric state`
+      );
+      assert.equal(
+        rainbowOn.renderer.calls - rainbowOff.renderer.calls,
+        1,
+        `rainbow repetition ${repetition} must cost exactly one draw call`
+      );
+      assert.equal(
+        rainbowOn.renderer.triangles - rainbowOff.renderer.triangles,
+        1,
+        `rainbow repetition ${repetition} must cost exactly one fullscreen triangle`
+      );
+      for (const field of ['geometries', 'textures', 'programs']) {
+        assert.equal(
+          rainbowOn.renderer[field] - rainbowOff.renderer[field],
+          0,
+          `rainbow repetition ${repetition} changed renderer ${field}`
+        );
+      }
+      assert.equal(rainbowOff.gpu.available, true, 'OFF GPU timer query is required');
+      assert.equal(rainbowOn.gpu.available, true, 'ON GPU timer query is required');
+      assert.ok(
+        rainbowOn.gpu.medianRenderMsRaw < 16.7,
+        `rainbow repetition ${repetition} GPU median ${rainbowOn.gpu.medianRenderMs} ms lacks 60 Hz headroom`
+      );
+      assert.ok(
+        rainbowOn.gpu.p90RenderMsRaw <= 20.5,
+        `rainbow repetition ${repetition} GPU p90 ${rainbowOn.gpu.p90RenderMs} ms exceeds frame budget`
+      );
+      pairDeltas.push({
+        repetition,
+        order: repetition % 2 === 0 ? 'AB' : 'BA',
+        p95FrameMs: rainbowOn.timing.p95FrameMs - rainbowOff.timing.p95FrameMs,
+        cpuBusyPercent: rainbowOn.cpu.busyPercent - rainbowOff.cpu.busyPercent,
+        gpuMedianMs: rainbowOn.gpu.medianRenderMsRaw - rainbowOff.gpu.medianRenderMsRaw,
+      });
+    }
+    const medianP95Delta = median(pairDeltas.map((pair) => pair.p95FrameMs));
+    const medianCpuDelta = median(pairDeltas.map((pair) => pair.cpuBusyPercent));
+    const medianGpuDelta = median(pairDeltas.map((pair) => pair.gpuMedianMs));
+    assert.ok(medianP95Delta <= 2, `rainbow median p95 regression ${medianP95Delta.toFixed(1)} ms`);
+    assert.ok(medianCpuDelta <= 5, `rainbow median CPU regression ${medianCpuDelta.toFixed(1)} pp`);
+    assert.ok(medianGpuDelta <= 2, `rainbow median GPU regression ${medianGpuDelta.toFixed(1)} ms`);
+    console.log(JSON.stringify({
+      rainbowPairSummary: {
+        repetitions: pairDeltas.length,
+        order: pairDeltas.map((pair) => pair.order),
+        medianP95DeltaMs: round(medianP95Delta),
+        medianCpuDeltaPercentagePoints: round(medianCpuDelta),
+        medianGpuDeltaMs: round(medianGpuDelta),
+        pairs: pairDeltas.map((pair) => ({
+          ...pair,
+          p95FrameMs: round(pair.p95FrameMs),
+          cpuBusyPercent: round(pair.cpuBusyPercent),
+          gpuMedianMs: round(pair.gpuMedianMs),
+        })),
+      },
+    }, null, 2));
   }
 } catch (error) {
   console.error(previewLog);
