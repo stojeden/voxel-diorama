@@ -217,8 +217,22 @@ function poseDistance(first, second) {
   );
 }
 
+/**
+ * `waitForSelector` polls from inside the renderer and inherits Playwright's
+ * 30 s default, which a starved software renderer can blow through even while
+ * the button is plainly visible. The button's visibility is HUD-latched, so
+ * wait for the latch on the generous budget like everything else here.
+ */
+async function waitForAmbientAction(page) {
+  await waitForHudLatch(
+    page,
+    () => document.querySelector('#ambient-action').hidden === false,
+    '"Pokaż" never became available'
+  );
+}
+
 async function pointAtAmbientAction(page) {
-  await page.waitForSelector('#ambient-action', { state: 'visible' });
+  await waitForAmbientAction(page);
   return page.evaluate(() => {
     const box = document.querySelector('#ambient-action').getBoundingClientRect();
     const x = box.x + box.width / 2;
@@ -670,7 +684,7 @@ try {
   });
 
   // Keyboard parity: the action is reachable and activatable without a mouse.
-  await page.waitForSelector('#ambient-action', { state: 'visible' });
+  await waitForAmbientAction(page);
   const focusedAction = await page.evaluate(() => {
     document.querySelector('#ambient-action').focus();
     return document.activeElement?.id ?? null;
@@ -689,7 +703,7 @@ try {
   await page.mouse.wheel(0, 150);
   const releasedByWheel = await page.evaluate(() => window.__diorama.getState().cameraAutomation);
   assert.equal(releasedByWheel, null, 'the first wheel must release the camera');
-  await page.waitForSelector('#ambient-action', { state: 'visible' });
+  await waitForAmbientAction(page);
   await page.evaluate(() => document.querySelector('#ambient-action').focus());
   await page.keyboard.press('Space');
   await page.waitForFunction(
