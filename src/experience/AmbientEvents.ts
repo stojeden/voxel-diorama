@@ -155,6 +155,11 @@ export class AmbientEventProjection {
     return this.write(winner, world);
   }
 
+  /** Introspection for diagnostics: which kinds have been seen absent, and what is on screen. */
+  getDebugState(): { current: AmbientEventKind | null; entered: Record<AmbientEventKind, boolean> } {
+    return { current: this.current, entered: { ...this.entered } };
+  }
+
   private isReportable(kind: AmbientEventKind, world: AmbientWorldSnapshot): boolean {
     return this.entered[kind] && isActive(kind, world);
   }

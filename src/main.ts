@@ -207,6 +207,8 @@ const ambientWorld: AmbientWorldSnapshot = {
   cameraAutomation: null,
 };
 let ambientEvent: AmbientEvent | null = null;
+/** How many times the HUD block has latched the projection. */
+let ambientTicks = 0;
 
 const experience = new ExperienceDirector({
   daySeconds: DAY_SECONDS,
@@ -857,6 +859,7 @@ function animate(timestamp?: number) {
     ambientWorld.busStopLabel = busStop.dwelling ? busStop.label : null;
     ambientWorld.cameraAutomation = cameraDirector.getAutomation();
     ambientEvent = ambientEvents.select(ambientWorld, frame.timestampMs * 0.001);
+    ambientTicks++;
     ui.setAmbientEvent(ambientEvent);
   }
 
@@ -895,6 +898,9 @@ const debugHandle: DioramaDebugHandle = {
     tourChapter: experience.getState().tour?.chapter.id ?? null,
     /** Live projection snapshot; the object is reused between updates. */
     ambient: ambientEvent,
+    ambientTicks,
+    ambientProjection: ambientEvents.getDebugState(),
+    ambientWorld,
     theme: currentTheme.id,
     cyberFactor,
     weather: weather.getKind(),
