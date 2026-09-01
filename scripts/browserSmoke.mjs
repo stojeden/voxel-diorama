@@ -508,11 +508,35 @@ try {
   // ── A live event: the message appears and the camera stays put ──
   const beforeScheduledEclipse = await page.evaluate(() => window.__diorama.cameraPose());
   await page.evaluate(() => window.__diorama.setEclipseProgress(0.5));
-  await page.waitForFunction(
-    () => window.__diorama.getState().ambient?.kind === 'eclipse',
-    null,
-    { timeout: SIMULATION_TIMEOUT_MS }
-  );
+  await page
+    .waitForFunction(
+      () => window.__diorama.getState().ambient?.kind === 'eclipse',
+      null,
+      { timeout: SIMULATION_TIMEOUT_MS }
+    )
+    .catch(async (error) => {
+      const diagnosis = await page.evaluate(() => {
+        const state = window.__diorama.getState();
+        return {
+          frameIndex: state.frameIndex,
+          t01: state.t01,
+          eclipse: state.eclipse,
+          ambient: state.ambient,
+          quality: window.__diorama.getMetrics().quality,
+          statusHidden: document.querySelector('#ambient-status').hidden,
+          title: document.querySelector('#ambient-title').textContent,
+          detail: document.querySelector('#ambient-detail').textContent,
+          eclipseStatusHidden: document.querySelector('#eclipse-status').hidden,
+          eclipseTitle: document.querySelector('#eclipse-title').textContent,
+          stationHidden: document.querySelector('#station-status').hidden,
+          stationLabel: document.querySelector('#station-label').textContent,
+          documentHidden: document.hidden,
+        };
+      });
+      throw new Error(
+        `${error.message}\nambient status never reported the eclipse: ${JSON.stringify(diagnosis, null, 1)}`
+      );
+    });
   const scheduledEclipse = await page.evaluate(() => {
     const state = window.__diorama.getState();
     return {
