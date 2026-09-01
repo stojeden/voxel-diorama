@@ -142,6 +142,14 @@ a wersjonowanie projektu docelowo stosuje [Semantic Versioning](https://semver.o
 
 ### Fixed
 
+- Przerwanie touru w rozdziale totalności nie zostawia już miasta w wiecznym
+  zaćmieniu całkowitym. `endTourOverrides` wywoływał `eclipseTimeline.stop()`,
+  co czyściło wyłącznie `running` i pozostawiało linię czasu zaparkowaną na
+  postępie rozdziału, więc pokrycie 100%, otwarty HUD zaćmienia i biegnący zegar
+  utrzymywały się bez końca. Inscenizowane zaćmienie touru jest teraz cofane.
+- Przycisk „Zaćmienie" wciśnięty w trakcie touru faktycznie uruchamia zjawisko.
+  Wcześniej `startEclipse` startowało linię czasu, a następnie `focusEclipseView`
+  wywoływało `endTourOverrides`, które to zjawisko natychmiast zatrzymywało.
 - HMR anuluje własny `requestAnimationFrame`, dzięki czemu nie zostawia drugiej
   pętli renderującej. Zakończenie i przerwanie touru sprząta blokady zegara,
   pogodę, totalność i stan kamery w jednym miejscu.

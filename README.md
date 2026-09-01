@@ -135,6 +135,9 @@ sekwencyjnie, przy zamkniętych ręcznych kartach aplikacji.
   pierwszym `pointerdown`, scrollu, dotyku i klawiszu sterowania, obsługa
   `Enter` i spacji na sfokusowanym przycisku, layout mobilny poza centrum sceny
   i minimalny cel dotykowy 24 px, brak komunikatu po zakończeniu wydarzenia.
+- Bramka interakcji tour ↔ zaćmienie: przerwanie rozdziału totalności cofa
+  inscenizowane zjawisko i zamyka HUD zaćmienia, a żądanie zaćmienia w trakcie
+  touru rzeczywiście je uruchamia.
 - Ostatni izolowany przebieg Metal/High na M1 Pro przechodzi wszystkie siedem
   wersjonowanych stanów przy około 120 FPS, p95 9,0–9,2 ms, bez hitchy
   i z TTI około 1,16 s. Historyczna bramka pozostaje niezmieniona: minimum
