@@ -11,6 +11,33 @@ a wersjonowanie projektu docelowo stosuje [Semantic Versioning](https://semver.o
 
 ### Added
 
+- Dyskretne „Co dzieje się teraz" w prawym dolnym rogu HUD-u: czysta, testowalna
+  projekcja `AmbientEvents` wybiera najwyżej jedno rzeczywiście trwające
+  wydarzenie (aktywne zaćmienie → rozdział touru uruchomiony przez użytkownika →
+  widoczna tęcza → postój pociągu → postój autobusu). Kiedy nic się nie dzieje,
+  komponent nie wyświetla niczego — bez tekstów zastępczych i bez podpowiedzi.
+- Projekcja raportuje wyłącznie wydarzenia, w które świat *wszedł*: stan prawdziwy
+  już przy pierwszym odczycie (np. pociąg stojący na peronie startowym) jest
+  warunkiem początkowym, nie wydarzeniem, więc diorama otwiera się pustym statusem.
+- Stabilizacja 2,5 s dla rodzaju komunikatu chroni przed migotaniem między
+  równoczesnymi zdarzeniami, ale nigdy nie utrzymuje komunikatu po faktycznym
+  zakończeniu wydarzenia.
+- Opcjonalny przycisk „Pokaż" przy trwającym wydarzeniu. Dopiero świadome
+  kliknięcie prosi `CameraDirector` o miękki kadr (zaćmienie, tęcza po
+  antysłonecznym azymucie, stojący pociąg lub autobus); samo pojawienie się
+  komunikatu nigdy nie rusza kamerą, a wydarzenie w świecie pozostaje nietknięte.
+  Przycisk nie pojawia się, gdy kamera i tak już kadruje dane wydarzenie.
+- Bramki akceptacyjne kontraktu wejścia P1 w smoke teście: brak panelu startowego
+  i jego zamienników, brak stanu pierwszej wizyty w `localStorage`/`sessionStorage`,
+  odsłonięte centrum sceny, wolna i włączona kamera oraz pusty status natychmiast
+  po preloaderze, brak automatycznego touru, zaćmienia i ruchu kamery przy
+  przejściu przez godzinę zjawiska, dokładnie jeden canvas i dokładnie jedno
+  `requestAnimationFrame` na wyrenderowaną klatkę.
+- Bramki dostępności i wejścia dla statusu: „Pokaż" jako prawdziwy przycisk
+  osiągalny klawiaturą (`Enter` i spacja), `role="status"` zamiast `role="alert"`,
+  brak przechwytywania fokusu, kadr dopiero po kliknięciu, oddanie kamery przy
+  pierwszym `pointerdown`, scrollu, dotyku i klawiszu sterowania, layout mobilny
+  poza centrum sceny i cel dotykowy co najmniej 24 px.
 - Tęcza po deszczu oparta na optyce geometrycznej jako pojedynczy efekt
   postprocessingu: obserwatorowa oś antysłoneczna, dyspersja Snella 400–700 nm,
   D65/CIE/Fresnel, histogram rodzin promieni pierwszego i drugiego rzędu
@@ -66,6 +93,23 @@ a wersjonowanie projektu docelowo stosuje [Semantic Versioning](https://semver.o
 
 ### Changed
 
+- Spacja nie przechwytuje już aktywacji sfokusowanego przycisku: globalny skrót
+  pauzy ustępuje, gdy fokus jest na `<button>`.
+- Suwak prędkości i klawisze `←`/`→` oddają kamerę użytkownikowi tak samo jak
+  pozostałe elementy sterowania.
+- Wygaszany preloader dostał `pointer-events: none`, więc 420 ms cross-fade nie
+  połyka już pierwszego gestu użytkownika.
+- Zaplanowane zaćmienie dobowe zostało usunięte razem z całą obsługą
+  `eclipseDay` / `eclipseDoneToday` / `previousDayProgress`. Wyzwalacz nigdy nie
+  działał, ale wyłącznie przez inny błąd: pierwsza klatka miała ujemną deltę,
+  która cofała zegar poniżej progu startowego i gałąź przełomu dnia zerowała
+  `eclipseDay`. Po naprawieniu delty zjawisko zaczęło startować samo — bramka
+  akceptacyjna wychwyciła to natychmiast. P1 zabrania zaćmienia i ruchu kamery
+  bez decyzji użytkownika, więc wyzwalacz zniknął zamiast zostać odblokowany.
+  Zaćmienie uruchamia przycisk „Zaćmienie", klawisz `E` albo — dla trwającego
+  już zjawiska — „Pokaż" w statusie.
+- `startEclipse` nie ma już opcjonalnego kadrowania: skoro zjawisko uruchamia
+  wyłącznie świadoma decyzja, kadr nie jest opcjonalny.
 - `CameraDirector` jest jedynym produkcyjnym właścicielem automatycznych ujęć;
   `pointerdown`, dotyk i kółko przerywają tour, kamery pojazdów, panoramę lub
   kadr zaćmienia w fazie capture, nie połykając pierwszego gestu.
@@ -103,6 +147,21 @@ a wersjonowanie projektu docelowo stosuje [Semantic Versioning](https://semver.o
 
 ### Fixed
 
+- Delta klatki nie może być ujemna. `timer.reset()` wykonuje się synchronicznie
+  bezpośrednio przed pierwszym `animate()`, a pierwszy znacznik czasu z `rAF`
+  może wtedy poprzedzać ten reset nawet o pełny okres klatki. Przy 60 Hz to
+  −16 ms i jedna klatka na wyrównanie, ale przy renderze programowym delta
+  wynosiła około −2 s i cofała zegar symulacji, pogodę, wygaszanie kamery oraz
+  kadencję HUD-u na kilkanaście klatek — zegar, status stacji, etykieta pogody
+  i status zaćmienia zamierały wtedy na kilka sekund po preloaderze.
+- Przerwanie touru w rozdziale totalności nie zostawia już miasta w wiecznym
+  zaćmieniu całkowitym. `endTourOverrides` wywoływał `eclipseTimeline.stop()`,
+  co czyściło wyłącznie `running` i pozostawiało linię czasu zaparkowaną na
+  postępie rozdziału, więc pokrycie 100%, otwarty HUD zaćmienia i biegnący zegar
+  utrzymywały się bez końca. Inscenizowane zaćmienie touru jest teraz cofane.
+- Przycisk „Zaćmienie" wciśnięty w trakcie touru faktycznie uruchamia zjawisko.
+  Wcześniej `startEclipse` startowało linię czasu, a następnie `focusEclipseView`
+  wywoływało `endTourOverrides`, które to zjawisko natychmiast zatrzymywało.
 - HMR anuluje własny `requestAnimationFrame`, dzięki czemu nie zostawia drugiej
   pętli renderującej. Zakończenie i przerwanie touru sprząta blokady zegara,
   pogodę, totalność i stan kamery w jednym miejscu.

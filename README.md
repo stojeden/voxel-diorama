@@ -50,6 +50,27 @@
 - 🎈 **Balon** na ogrzane powietrze przelatuje w pogodne dni i o zmierzchu, pięknie podświetlony ogniem palnika.
 - 🕊️ **Mewy** szybują i bankują w zakrętach. Przy narastającym zaćmieniu od 85% pokrycia wybierają najbliższe dachy i kolejno na nich siadają; po totalności wzlatują, gdy pokrycie spadnie do 65%. Nocą również śpią na dachach.
 
+## 👀 Co dzieje się teraz
+
+Diorama startuje bezpośrednio od miasta. Po preloaderze kamera jest od razu wolna,
+a scena interaktywna — nie ma panelu startowego, revealu, touru ani ruchu kamery,
+o który użytkownik nie poprosił. To świadoma decyzja produktowa, nie luka UX.
+
+Zamiast onboardingu w prawym dolnym rogu HUD-u działa dyskretny status, który
+pokazuje **najwyżej jedno rzeczywiście trwające wydarzenie** — w kolejności:
+aktywne zaćmienie, rozdział touru (tylko jeśli użytkownik sam go uruchomił),
+widoczna tęcza, postój pociągu, postój autobusu. Kiedy nic się nie dzieje, status
+nie wyświetla niczego: żadnych podpowiedzi, zachęt ani tekstów zastępczych.
+Stan świata pozostaje jedynym źródłem prawdy — status nic nie przewiduje i nie
+zgaduje z upływu czasu.
+
+Przy trwającym wydarzeniu obok statusu pojawia się przycisk „Pokaż". Dopiero
+świadome kliknięcie (mysz, dotyk, `Enter` lub spacja na sfokusowanym przycisku)
+prosi `CameraDirector` o miękki kadr. Samo pojawienie się komunikatu nigdy nie
+rusza kamerą, a pierwszy `pointerdown`, drag, dotyk, scroll albo klawisz
+sterowania natychmiast oddaje kamerę użytkownikowi i zachowuje ten pierwszy gest.
+Wydarzenie w świecie pozostaje przy tym nietknięte.
+
 ## 🎮 Sterowanie
 
 | Akcja | Klawisz / UI |
@@ -58,6 +79,7 @@
 | Kamera TPP za pociągiem | `T` lub 🚆 |
 | Kamera TPP za autobusem | `B` lub 🚌 |
 | Filmowy tour: pociąg → autobus → jezioro → mieszkańcy → golden hour → totalność → Cyberpunk | „Pokaż dioramę" |
+| Kadr na trwające wydarzenie („Co dzieje się teraz") | „Pokaż" w statusie — tylko gdy wydarzenie faktycznie trwa |
 | Prędkość zegara | `1` `2` `3` |
 | Tryb czasu rzeczywistego | `R` lub ⏱ REAL TIME |
 | Zaćmienie Słońca / szeroki widok zjawiska | `E` lub „Zaćmienie” |
@@ -75,8 +97,8 @@ npm run dev      # http://localhost:5173 — bez automatycznego otwierania kolej
 ```
 
 ```bash
-npm test         # 159 testów (vitest): geometria, światło, optyka, rytm miasta,
-                 # deterministyczność, kamera, tour, aktorzy i pojazdy
+npm test         # 172 testy (vitest): geometria, światło, optyka, rytm miasta,
+                 # deterministyczność, kamera, tour, status wydarzeń, aktorzy i pojazdy
 npm run typecheck # typy
 npm run build    # produkcja → dist/
 npm run validate # typy + unit + build + Chrome/WebGL + budżety wydajności
@@ -97,12 +119,28 @@ sekwencyjnie, przy zamkniętych ręcznych kartach aplikacji.
 
 ### Stan walidacji
 
-- 159/159 testów jednostkowych w 26 plikach testowych.
+- 172/172 testów jednostkowych w 27 plikach testowych.
 - `npm run typecheck` i produkcyjny `npm run build` przechodzą.
 - Smoke test obejmuje desktop/mobile, fazę częściową i totalność, zjawiska
   optyczne, reakcje mieszkańców, kompletną sylwetkę listonosza, niepusty canvas,
   luminancję, ochronę przed przepaleniami, kolizje pieszych, rytm miasta i
   budżety renderera.
+- Bramka kontraktu wejścia P1: brak panelu startowego i jego zamienników, brak
+  stanu pierwszej wizyty w `localStorage`/`sessionStorage`, odsłonięte centrum
+  sceny, wolna kamera i pusty status natychmiast po preloaderze, brak
+  automatycznego touru, zaćmienia i ruchu kamery po przejściu przez godzinę
+  zjawiska, dokładnie jeden canvas i dokładnie jedno `requestAnimationFrame`
+  na wyrenderowaną klatkę.
+- Bramka statusu wydarzeń: kadr wyłącznie po kliknięciu, oddanie kamery przy
+  pierwszym `pointerdown`, scrollu, dotyku i klawiszu sterowania, obsługa
+  `Enter` i spacji na sfokusowanym przycisku, layout mobilny poza centrum sceny
+  i minimalny cel dotykowy 24 px, brak komunikatu po zakończeniu wydarzenia.
+- Bramka interakcji tour ↔ zaćmienie: przerwanie rozdziału totalności cofa
+  inscenizowane zjawisko i zamyka HUD zaćmienia, a żądanie zaćmienia w trakcie
+  touru rzeczywiście je uruchamia.
+- Bramka kadencji HUD-u: projekcja statusu musi zdążyć się wykonać przed
+  sprawdzeniem pustego stanu, dzięki czemu zamarły HUD nie przechodzi testu
+  jako „pusty status".
 - Ostatni izolowany przebieg Metal/High na M1 Pro przechodzi wszystkie siedem
   wersjonowanych stanów przy około 120 FPS, p95 9,0–9,2 ms, bez hitchy
   i z TTI około 1,16 s. Historyczna bramka pozostaje niezmieniona: minimum
@@ -141,6 +179,7 @@ src/
 │   ├── FrameContext.ts      # współdzielony kontekst klatki bez alokacji
 │   ├── ExperienceDirector.ts # zegar symulacji, checkpointy i tour
 │   ├── CameraDirector.ts    # automatyczne kadry i natychmiastowe przerwanie
+│   ├── AmbientEvents.ts     # projekcja „co dzieje się teraz" (czysta, testowalna)
 │   ├── Checkpoints.ts       # narracyjne i benchmarkowe stany startowe
 │   ├── ShotDefinitions.ts   # jedno źródło prawdy dla stałych ujęć
 │   ├── RendererWarmup.ts    # deterministyczny warm-up shaderów

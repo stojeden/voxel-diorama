@@ -32,6 +32,11 @@ import { createWorldRandom } from './core/Random';
 import { createFrameContext } from './experience/FrameContext';
 import { ExperienceDirector } from './experience/ExperienceDirector';
 import { CameraDirector, type CameraMode } from './experience/CameraDirector';
+import {
+  AmbientEventProjection,
+  type AmbientEvent,
+  type AmbientWorldSnapshot,
+} from './experience/AmbientEvents';
 import { warmRenderer } from './experience/RendererWarmup';
 import { formatClock, updateEclipseHud } from './experience/Hud';
 import {
@@ -160,8 +165,6 @@ let eclipseState = eclipseTimeline.getState();
 let eclipseReaction = eclipseWorldReactionAt(0, 0);
 let eclipseDebugStrength: number | null = null;
 let eclipseCheckpointLocked = false;
-let eclipseDay = true;
-let eclipseDoneToday = false;
 const eclipseViewSun = new THREE.Vector3();
 const eclipseViewCamera = new THREE.Vector3();
 const eclipseViewTarget = new THREE.Vector3(0, 36, 0);
@@ -180,8 +183,29 @@ const rainbowFrame: RainbowFrameInput = {
   realDelta: 0,
   elapsed: 0,
 };
-let previousDayProgress = 0.262;
 let activeCheckpoint: CheckpointDefinition | null = null;
+/**
+ * Nothing in the runtime starts the tour on its own. This flag keeps that an
+ * invariant rather than an audit: only the two explicit entry points set it, so
+ * the ambient status can never report a chapter the user did not ask for.
+ */
+let tourRequestedExplicitly = false;
+
+// ─── "Co dzieje się teraz": one reusable snapshot, one reusable projection ───
+const ambientEvents = new AmbientEventProjection();
+const ambientWorld: AmbientWorldSnapshot = {
+  eclipseActive: false,
+  tourChapterLabel: null,
+  rainbowVisible: false,
+  rainbowZone: 'lake',
+  trainStopLabel: null,
+  trainStopSecondsLeft: 0,
+  busStopLabel: null,
+  cameraAutomation: null,
+};
+let ambientEvent: AmbientEvent | null = null;
+/** How many times the HUD block has latched the projection. */
+let ambientTicks = 0;
 
 const experience = new ExperienceDirector({
   daySeconds: DAY_SECONDS,
@@ -199,11 +223,17 @@ const cameraDirector = new CameraDirector({
 });
 
 function endTourOverrides(): void {
+  tourRequestedExplicitly = false;
   experience.stopTour();
   cameraDirector.stopTour();
   experience.setClockLocked(false);
   eclipseCheckpointLocked = false;
-  eclipseState = eclipseTimeline.stop();
+  // A tour chapter's eclipse is staged presentation, not a real event. `stop()`
+  // alone only clears `running` and leaves the timeline parked at the chapter's
+  // progress, so interrupting the totality chapter used to leave the city in
+  // permanent total eclipse. Rewind so the world — and the status that reports
+  // it — return to no eclipse.
+  eclipseState = eclipseTimeline.seek(0, false);
   weather.setExternal(null);
   ui.setTourActive(false);
   ui.setInfoText('PRZECIĄGNIJ — OBRÓT • PRAWY PRZYCISK — PRZESUŃ • SCROLL — ZOOM');
@@ -236,6 +266,7 @@ function setCameraMode(mode: 'train' | 'bus'): void {
 }
 
 ui.onCameraMode(setCameraMode);
+ui.onSpeedChange(() => interruptCameraForUi());
 
 // ─── Diorama themes ───
 let currentTheme: DioramaTheme = themeById('classic');
@@ -289,7 +320,6 @@ function applyTourChapter(frame: TourFrame): void {
     experience.setClockLocked(true);
     eclipseState = eclipseTimeline.seek(chapter.eclipseProgress, false);
     eclipseCheckpointLocked = true;
-    eclipseDoneToday = true;
   }
   ui.setChapter(`TOUR · ${chapter.label}`);
 }
@@ -305,6 +335,7 @@ ui.onTourButton(() => {
     }
     activeCheckpoint = null;
     experience.releaseCheckpoint();
+    tourRequestedExplicitly = true;
     const first = experience.startTour(() => endTourOverrides());
     applyTourChapter(first);
     cameraDirector.startTour(first);
@@ -408,7 +439,10 @@ function focusEclipseView(): void {
   cameraDirector.focusEclipse(eclipseViewCamera, eclipseViewTarget);
 }
 
-function startEclipse(focusView = true): void {
+function startEclipse(): void {
+  // End the tour before the timeline starts: `endTourOverrides` rewinds the
+  // eclipse, so running it afterwards would cancel the eclipse being requested.
+  if (experience.isTourActive()) endTourOverrides();
   if (realTime?.isActive()) {
     realTime.disable();
     weather.setExternal(null);
@@ -419,14 +453,73 @@ function startEclipse(focusView = true): void {
   eclipseState = eclipseTimeline.start();
   eclipseDebugStrength = null;
   eclipseCheckpointLocked = false;
-  eclipseDoneToday = true;
-  if (focusView) focusEclipseView();
+  focusEclipseView();
   ui.showToast('ZAĆMIENIE SŁOŃCA · CZAS ZJAWISKA SKOMPRESOWANY');
 }
 
 ui.onEclipseStart(() => {
   interruptCameraForUi();
-  startEclipse(true);
+  startEclipse();
+});
+
+// ─── "Pokaż": a deliberate click hands one live event to CameraDirector. ───
+// The world event itself is never touched, started or restarted here.
+const ambientShowcasePosition = new THREE.Vector3();
+const ambientShowcaseTarget = new THREE.Vector3();
+const ambientShowcaseOffset = new THREE.Vector3();
+
+/** Frames a halted vehicle from outside its district, looking back inwards. */
+function frameVehicleStop(subject: 'train' | 'bus'): void {
+  if (subject === 'train') train.getPosition(ambientShowcaseTarget);
+  else bus.getPosition(ambientShowcaseTarget);
+  ambientShowcaseTarget.y += 2.4;
+  ambientShowcaseOffset.set(ambientShowcaseTarget.x, 0, ambientShowcaseTarget.z);
+  if (ambientShowcaseOffset.lengthSq() < 1e-6) ambientShowcaseOffset.set(1, 0, 1);
+  ambientShowcaseOffset.normalize();
+  ambientShowcasePosition
+    .copy(ambientShowcaseTarget)
+    .addScaledVector(ambientShowcaseOffset, 19);
+  ambientShowcasePosition.y += 11;
+  cameraDirector.frameAbsolute(ambientShowcasePosition, ambientShowcaseTarget, true, 'overview');
+}
+
+/**
+ * A rainbow is observer-relative, so the shot is the antisolar azimuth: stand on
+ * the Sun side of the moisture curtain and look through it.
+ */
+function frameRainbowView(): void {
+  rainbow.getSourceCenter(ambientShowcaseTarget);
+  sunDirectionAt(experience.getState().t01, ambientShowcaseOffset);
+  ambientShowcaseOffset.y = 0;
+  if (ambientShowcaseOffset.lengthSq() < 1e-6) ambientShowcaseOffset.set(0, 0, 1);
+  ambientShowcaseOffset.normalize();
+  ambientShowcasePosition
+    .copy(ambientShowcaseTarget)
+    .addScaledVector(ambientShowcaseOffset, 74);
+  ambientShowcasePosition.y = 30;
+  ambientShowcaseTarget.y += 10;
+  cameraDirector.frameAbsolute(ambientShowcasePosition, ambientShowcaseTarget, true, 'overview');
+}
+
+ui.onAmbientAction((kind) => {
+  // A tour owns the camera by design; the status never hijacks it mid-shot.
+  if (experience.isTourActive()) return;
+  switch (kind) {
+    case 'eclipse':
+      focusEclipseView();
+      break;
+    case 'rainbow':
+      frameRainbowView();
+      break;
+    case 'train-stop':
+      frameVehicleStop('train');
+      break;
+    case 'bus-stop':
+      frameVehicleStop('bus');
+      break;
+    default:
+      break;
+  }
 });
 
 if (import.meta.env.DEV && !requestedCheckpoint) {
@@ -443,7 +536,6 @@ if (import.meta.env.DEV && !requestedCheckpoint) {
     experience.setTime(ECLIPSE_VIEW_TIME);
     eclipseState = eclipseTimeline.seek(checkpoint, false);
     eclipseCheckpointLocked = true;
-    eclipseDoneToday = true;
     focusEclipseView();
   }
 }
@@ -475,7 +567,6 @@ function applyBootCheckpoint(checkpoint: CheckpointDefinition): void {
   } else {
     eclipseState = eclipseTimeline.seek(checkpoint.eclipseProgress, false);
     eclipseCheckpointLocked = true;
-    eclipseDoneToday = true;
   }
   experience.setClockLocked(checkpoint.eclipseProgress !== null);
   checkpointCameraPosition.fromArray(checkpoint.camera.position);
@@ -515,7 +606,12 @@ function animate(timestamp?: number) {
   rafId = requestAnimationFrame(animate);
   timer.update(timestamp);
   const measuredDelta = timer.getDelta();
-  const rawDelta = Math.min(measuredDelta, 0.1);
+  // A frame delta is never negative. `timer.reset()` runs synchronously just
+  // before the first `animate()`, and the first rAF timestamp afterwards can
+  // predate that reset by up to one frame period — harmless at 60 Hz, but a
+  // software renderer produces a delta near -2 s, which then ran the clock,
+  // weather, camera damping and the HUD cadence backwards for many frames.
+  const rawDelta = Math.min(Math.max(measuredDelta, 0), 0.1);
   if (!document.hidden) quality.sampleFrame(measuredDelta);
   const presentationDelta = experience.isCheckpointLocked() ? 0 : rawDelta;
   const delta = experience.isPaused() ? 0 : presentationDelta;
@@ -544,11 +640,6 @@ function animate(timestamp?: number) {
     experienceState = experience.getState();
   }
   const t01 = experienceState.t01;
-  if (!realTime?.isActive() && t01 < previousDayProgress && !experience.isCheckpointLocked()) {
-    eclipseDay = false;
-    eclipseDoneToday = false;
-  }
-  previousDayProgress = t01;
   if (experienceState.tour?.entered) applyTourChapter(experienceState.tour);
 
   // ── Moon & aurora ──
@@ -561,15 +652,14 @@ function animate(timestamp?: number) {
   dayNight.setAuroraStrength(experienceState.auroraEnabled && weather.isClearNight() ? 0.85 : 0);
 
   // ── Eclipse 2.0: deterministic, compressed event with explicit phases ──
-  if (
-    !eclipseState.running &&
-    !eclipseCheckpointLocked &&
-    eclipseDay &&
-    !eclipseDoneToday &&
-    Math.abs(t01 - ECLIPSE_VIEW_TIME) < 0.008
-  ) {
-    startEclipse(true);
-  }
+  // There is deliberately no scheduled daily eclipse. One used to be wired here
+  // behind an `eclipseDay` flag, but it never fired: the day-rollover branch
+  // cleared that flag on frame one, because the first frame delta was negative
+  // and pushed the clock below its own starting progress. Clamping that delta
+  // would have brought an unrequested eclipse — and an unrequested camera move —
+  // back to life, which P1 forbids, so the trigger and its bookkeeping are gone.
+  // The eclipse is started by the user: the „Zaćmienie" button, `E`, or the
+  // ambient status once an eclipse is genuinely running.
   eclipseState = eclipseTimeline.update(eclipseState.running ? delta : 0);
   if (eclipseState.phase === 'complete' && !activeCheckpoint) {
     experience.setClockLocked(false);
@@ -740,6 +830,24 @@ function animate(timestamp?: number) {
     }
     ui.setStation(stationState);
     updateEclipseHud(ui, eclipseState, eclipseActive);
+
+    // Rewrite the shared snapshot from the systems that already own each truth,
+    // then let the projection pick at most one entered event.
+    ambientWorld.eclipseActive = eclipseActive;
+    ambientWorld.tourChapterLabel = tourRequestedExplicitly && experienceState.tour
+      ? experienceState.tour.chapter.label
+      : null;
+    ambientWorld.rainbowVisible = rainbow.isVisible();
+    ambientWorld.rainbowZone = rainbow.getSourceId();
+    ambientWorld.trainStopLabel =
+      stationState.kind === 'dwelling' ? stationState.stationLabel : null;
+    ambientWorld.trainStopSecondsLeft = stationState.dwellRemaining;
+    const busStop = bus.getStopState();
+    ambientWorld.busStopLabel = busStop.dwelling ? busStop.label : null;
+    ambientWorld.cameraAutomation = cameraDirector.getAutomation();
+    ambientEvent = ambientEvents.select(ambientWorld, frame.timestampMs * 0.001);
+    ambientTicks++;
+    ui.setAmbientEvent(ambientEvent);
   }
 
   env.renderer.info.reset();
@@ -765,6 +873,8 @@ const debugHandle: DioramaDebugHandle = {
   setTime: (t01: number) => experience.setTime(t01),
   getState: () => ({
     t01: experience.getState().t01,
+    /** Rendered frames of the single RAF loop — one loop, one counter. */
+    frameIndex: frame.frameIndex,
     simulationSeed: worldRandom.seed,
     layoutSeed: WORLD_LAYOUT_SEED,
     checkpoint: activeCheckpoint
@@ -773,6 +883,11 @@ const debugHandle: DioramaDebugHandle = {
     cameraMode: cameraDirector.getMode(),
     cameraAutomation: cameraDirector.getAutomation(),
     tourChapter: experience.getState().tour?.chapter.id ?? null,
+    /** Live projection snapshot; the object is reused between updates. */
+    ambient: ambientEvent,
+    ambientTicks,
+    ambientProjection: ambientEvents.getDebugState(),
+    ambientWorld,
     theme: currentTheme.id,
     cyberFactor,
     weather: weather.getKind(),
@@ -879,7 +994,7 @@ const debugHandle: DioramaDebugHandle = {
   postmanState: () => postman.getDebugState(),
   applyTheme,
   startEclipse: () => {
-    startEclipse(true);
+    startEclipse();
   },
   setEclipseProgress: (progress: number, running = false) => {
     experience.setTime(ECLIPSE_VIEW_TIME);
@@ -891,6 +1006,7 @@ const debugHandle: DioramaDebugHandle = {
   focusEclipseView,
   startTour: () => {
     if (experience.isTourActive()) return;
+    tourRequestedExplicitly = true;
     const first = experience.startTour(() => endTourOverrides());
     applyTourChapter(first);
     cameraDirector.startTour(first);
@@ -900,6 +1016,7 @@ const debugHandle: DioramaDebugHandle = {
     endTourOverrides();
   },
   seekTourChapter: (id: Parameters<ExperienceDirector['seekTour']>[0], progress = 0) => {
+    tourRequestedExplicitly = true;
     const tourFrame = experience.seekTour(id, progress);
     applyTourChapter(tourFrame);
     cameraDirector.startTour(tourFrame);
