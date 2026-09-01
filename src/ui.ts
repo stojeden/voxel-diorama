@@ -4,6 +4,7 @@
 
 import type { TrainPublicState } from './world/Train';
 import type { QualityMode, QualitySnapshot } from './performance/QualityManager';
+import type { AmbientEvent, AmbientEventKind } from './experience/AmbientEvents';
 
 export type CameraMode = 'free' | 'train' | 'bus';
 
@@ -24,6 +25,7 @@ export interface UiHandle {
   setRealTime: (active: boolean, label?: string) => void;
   setQuality: (snapshot: QualitySnapshot) => void;
   setEclipseStatus: (visible: boolean, title?: string, detail?: string, progress?: number) => void;
+  setAmbientEvent: (event: AmbientEvent | null) => void;
   showToast: (text: string) => void;
   setCameraMode: (mode: CameraMode) => void;
   onCameraMode: (handler: (mode: 'train' | 'bus') => void) => void;
@@ -37,6 +39,8 @@ export interface UiHandle {
   onQualityCycle: (handler: () => void) => void;
   onProfilerToggle: (handler: () => void) => void;
   onEclipseStart: (handler: () => void) => void;
+  onAmbientAction: (handler: (kind: AmbientEventKind) => void) => void;
+  onSpeedChange: (handler: () => void) => void;
   dispose: () => void;
 }
 
@@ -77,6 +81,10 @@ export function mountUi(): UiHandle {
   const eclipseTitleEl = requireEl<HTMLDivElement>('eclipse-title');
   const eclipseDetailEl = requireEl<HTMLDivElement>('eclipse-detail');
   const eclipseProgressEl = requireEl<HTMLDivElement>('eclipse-progress');
+  const ambientStatusEl = requireEl<HTMLDivElement>('ambient-status');
+  const ambientTitleEl = requireEl<HTMLSpanElement>('ambient-title');
+  const ambientDetailEl = requireEl<HTMLSpanElement>('ambient-detail');
+  const ambientActionEl = requireEl<HTMLButtonElement>('ambient-action');
 
   const togglePanel = () => {
     const collapsed = panelEl.classList.toggle('is-collapsed');
@@ -86,6 +94,8 @@ export function mountUi(): UiHandle {
 
   let toastTimer: number | null = null;
   let loadingProgress = 0;
+  let ambientKind: AmbientEventKind | null = null;
+  let ambientSignature = '';
 
   const handle: UiHandle = {
     speedSetting: Number(speedControlEl.value) / 100,
@@ -175,6 +185,23 @@ export function mountUi(): UiHandle {
       eclipseDetailEl.textContent = detail;
       eclipseProgressEl.style.transform = `scaleX(${Math.min(1, Math.max(0, progress))})`;
     },
+    /** Writes to the DOM only when the projected event actually changed. */
+    setAmbientEvent(event) {
+      const signature = event
+        ? `${event.kind}|${event.title}|${event.detail}|${event.canFrame}`
+        : '';
+      if (signature === ambientSignature) return;
+      ambientSignature = signature;
+      ambientKind = event?.kind ?? null;
+      if (!event) {
+        ambientStatusEl.hidden = true;
+        return;
+      }
+      ambientTitleEl.textContent = event.title;
+      ambientDetailEl.textContent = event.detail;
+      ambientActionEl.hidden = !event.canFrame;
+      ambientStatusEl.hidden = false;
+    },
     showToast(text) {
       weatherToastEl.textContent = text;
       weatherToastEl.hidden = false;
@@ -253,6 +280,14 @@ export function mountUi(): UiHandle {
       keyHandlers.eclipse = handler;
       eclipseButtonEl.addEventListener('click', handler);
     },
+    onAmbientAction(handler) {
+      ambientActionEl.addEventListener('click', () => {
+        if (ambientKind !== null) handler(ambientKind);
+      });
+    },
+    onSpeedChange(handler) {
+      speedHandler = handler;
+    },
     dispose() {
       speedControlEl.removeEventListener('input', onSpeed);
       window.removeEventListener('keydown', onKey);
@@ -271,8 +306,11 @@ export function mountUi(): UiHandle {
     eclipse?: () => void;
   } = {};
 
+  let speedHandler: (() => void) | undefined;
+
   const onSpeed = () => {
     handle.speedSetting = Number(speedControlEl.value) / 100;
+    speedHandler?.();
   };
 
   const onKey = (e: KeyboardEvent) => {
@@ -296,6 +334,8 @@ export function mountUi(): UiHandle {
     } else if (e.key === '1' || e.key === '2' || e.key === '3') {
       keyHandlers.timeScale?.(Number(e.key));
     } else if (e.key === ' ' || e.code === 'Space') {
+      // A focused button owns Space; pausing here would swallow its activation.
+      if (target?.tagName === 'BUTTON') return;
       e.preventDefault();
       keyHandlers.pause?.();
     } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
@@ -304,6 +344,7 @@ export function mountUi(): UiHandle {
       const newVal = Math.min(100, Math.max(0, Number(speedControlEl.value) + dir));
       speedControlEl.value = String(newVal);
       handle.speedSetting = newVal / 100;
+      speedHandler?.();
     }
   };
 

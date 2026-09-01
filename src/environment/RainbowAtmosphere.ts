@@ -656,6 +656,16 @@ export class RainbowAtmosphere {
     );
   }
 
+  /** Non-allocating read of the active moisture-curtain centre. */
+  getSourceCenter(target: THREE.Vector3): THREE.Vector3 {
+    return target.copy(this.sourceCenter);
+  }
+
+  /** Id of the moisture zone the current arc is reconstructed from. */
+  getSourceId(): string {
+    return RAINBOW_MOISTURE_ZONES[this.sourceIndex].id;
+  }
+
   /** Freeze only the natural source selection; irradiance remains physical. */
   debugSetSource(index: number): void {
     this.debugLocked = true;

@@ -164,6 +164,38 @@
     #station-status[hidden] { display: none; }
     #station-status .station-label { font-weight: 700; }
     #station-status .station-dwell { color: rgba(255,255,255,0.7); font-size: 9.5px; }
+    #ambient-status {
+      position: fixed; right: 20px; bottom: 92px;
+      max-width: min(250px, calc(100vw - 40px));
+      display: flex; align-items: center; gap: 9px;
+      font-family: 'Courier New', monospace;
+      background: rgba(3, 5, 12, 0.66);
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 4px; padding: 7px 9px; z-index: 11;
+      /* Secondary to the city: the text never eats a camera drag. */
+      pointer-events: none;
+    }
+    #ambient-status[hidden] { display: none; }
+    #ambient-text { min-width: 0; }
+    #ambient-title {
+      display: block; color: #cfe2f5; font-size: 9.5px;
+      font-weight: 700; letter-spacing: 1.2px;
+    }
+    #ambient-detail {
+      display: block; margin-top: 2px; font-size: 9px;
+      color: rgba(255,255,255,0.72); letter-spacing: 0.4px;
+    }
+    #ambient-detail:empty { display: none; }
+    #ambient-action {
+      pointer-events: auto; flex: none; cursor: pointer;
+      min-height: 24px; padding: 4px 9px;
+      border: 1px solid rgba(255,255,255,0.18); border-radius: 3px;
+      background: rgba(255,255,255,0.07); color: #fff;
+      font-family: inherit; font-size: 9.5px; letter-spacing: 0.6px;
+    }
+    #ambient-action[hidden] { display: none; }
+    #ambient-action:hover { background: rgba(255,255,255,0.14); }
+    #ambient-action:focus-visible { outline: 2px solid #ffdd88; outline-offset: 2px; }
     .scene-label {
       color: #f7f1dc; font-family: 'Courier New', monospace; font-size: 11px;
       background: rgba(0,0,0,0.42); border: 1px solid rgba(255,255,255,0.12);
@@ -175,7 +207,8 @@
       color: #fff; background: #050607; font-family: 'Courier New', monospace;
       transition: opacity 420ms ease, visibility 420ms ease;
     }
-    #loading-screen.is-hidden { opacity: 0; visibility: hidden; }
+    /* Released means released: the fading overlay must not swallow the first gesture. */
+    #loading-screen.is-hidden { opacity: 0; visibility: hidden; pointer-events: none; }
     .loader-box {
       width: min(360px, calc(100vw - 40px));
       border: 1px solid rgba(255,255,255,0.18); border-radius: 6px;
@@ -207,6 +240,10 @@
       }
       #eclipse-title { font-size: 9px; }
       #eclipse-detail { font-size: 8px; }
+      #ambient-status {
+        right: 8px; bottom: 92px; max-width: calc(100vw - 16px);
+      }
+      #ambient-action { min-height: 32px; padding: 7px 12px; }
     }
   </style>
 </head>
@@ -281,6 +318,13 @@
   <div id="info">PRZECIĄGNIJ — OBRÓT &bull; PRAWY PRZYCISK — PRZESUŃ &bull; SCROLL — ZOOM</div>
   <div id="time-display"></div>
   <div id="weather-toast" hidden></div>
+  <div id="ambient-status" hidden aria-label="Co dzieje się teraz">
+    <div id="ambient-text" role="status">
+      <span id="ambient-title"></span>
+      <span id="ambient-detail"></span>
+    </div>
+    <button id="ambient-action" type="button" hidden>Pokaż</button>
+  </div>
   <div id="eclipse-status" hidden role="status" aria-live="polite">
     <div id="eclipse-title"></div>
     <div id="eclipse-detail"></div>

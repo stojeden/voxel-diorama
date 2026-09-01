@@ -191,25 +191,54 @@ async function compareCapturedFrames(page, before, after) {
   }, { beforeUrl: before, afterUrl: after });
 }
 
+async function waitForCameraMove(page, fromPose, minDistance = 5) {
+  await page.waitForFunction(
+    ([origin, threshold]) => {
+      const position = window.__diorama.cameraPose().position;
+      return Math.hypot(
+        position[0] - origin[0],
+        position[1] - origin[1],
+        position[2] - origin[2]
+      ) > threshold;
+    },
+    [fromPose.position, minDistance],
+    { timeout: 10_000 }
+  );
+}
+
+function poseDistance(first, second) {
+  return Math.hypot(
+    first.position[0] - second.position[0],
+    first.position[1] - second.position[1],
+    first.position[2] - second.position[2]
+  );
+}
+
 async function assertMobileLayout(page) {
   const layout = await page.evaluate(() => {
-    const panel = document.querySelector('#control-panel').getBoundingClientRect();
-    const eclipse = document.querySelector('#eclipse-status').getBoundingClientRect();
-    const clock = document.querySelector('#time-display').getBoundingClientRect();
-    const info = document.querySelector('#info').getBoundingClientRect();
+    const rect = (selector) => {
+      const element = document.querySelector(selector);
+      if (element.hidden || getComputedStyle(element).display === 'none') return null;
+      const box = element.getBoundingClientRect();
+      return { left: box.left, right: box.right, top: box.top, bottom: box.bottom };
+    };
+    const action = document.querySelector('#ambient-action').getBoundingClientRect();
     return {
-      panel: { left: panel.left, right: panel.right, top: panel.top, bottom: panel.bottom },
-      eclipse: { left: eclipse.left, right: eclipse.right, top: eclipse.top, bottom: eclipse.bottom },
-      clock: { left: clock.left, right: clock.right, top: clock.top, bottom: clock.bottom },
-      info: { left: info.left, right: info.right, top: info.top, bottom: info.bottom },
+      panel: rect('#control-panel'),
+      eclipse: rect('#eclipse-status'),
+      clock: rect('#time-display'),
+      info: rect('#info'),
+      ambient: rect('#ambient-status'),
+      ambientActionHeight: action.height,
       viewport: { width: innerWidth, height: innerHeight },
     };
   });
-  for (const rect of [layout.panel, layout.eclipse, layout.clock, layout.info]) {
+  for (const rect of [layout.panel, layout.eclipse, layout.clock, layout.info, layout.ambient]) {
+    if (!rect) continue;
     assert.ok(rect.left >= -1 && rect.right <= layout.viewport.width + 1, 'mobile UI exceeds viewport width');
     assert.ok(rect.top >= -1 && rect.bottom <= layout.viewport.height + 1, 'mobile UI exceeds viewport height');
   }
-  const overlaps = (first, second) => !(
+  const overlaps = (first, second) => Boolean(first) && Boolean(second) && !(
     first.right <= second.left ||
     second.right <= first.left ||
     first.bottom <= second.top ||
@@ -217,6 +246,18 @@ async function assertMobileLayout(page) {
   );
   assert.equal(overlaps(layout.panel, layout.clock), false, 'mobile panel overlaps the clock');
   assert.equal(overlaps(layout.eclipse, layout.clock), false, 'mobile eclipse status overlaps the clock');
+  assert.ok(layout.ambient, 'the ambient status must be laid out while an event is active');
+  assert.equal(overlaps(layout.ambient, layout.panel), false, 'ambient status overlaps the control panel');
+  assert.equal(overlaps(layout.ambient, layout.info), false, 'ambient status overlaps the controls hint');
+  assert.equal(overlaps(layout.ambient, layout.clock), false, 'ambient status overlaps the clock');
+  assert.ok(
+    layout.ambient.top > layout.viewport.height * 0.5,
+    'ambient status must stay clear of the centre of the scene on mobile'
+  );
+  assert.ok(
+    layout.ambientActionHeight >= 24,
+    `ambient action is below the minimum touch target: ${layout.ambientActionHeight}px`
+  );
 }
 
 const preview = spawn(process.execPath, ['node_modules/vite/bin/vite.js', 'preview', '--host', HOST, '--port', String(PORT), '--strictPort'], {
@@ -257,6 +298,14 @@ try {
   });
   page.on('pageerror', (error) => consoleErrors.push(error.message));
   await page.addInitScript(() => {
+    // Exactly one requestAnimationFrame per rendered frame proves there is no
+    // second render loop hiding behind the HUD.
+    window.__rafCalls = 0;
+    const nativeRaf = window.requestAnimationFrame.bind(window);
+    window.requestAnimationFrame = (callback) => {
+      window.__rafCalls++;
+      return nativeRaf(callback);
+    };
     window.__loadingSamples = [];
     const collectLoadingProgress = () => {
       const value = Number.parseInt(document.querySelector('#loading-progress')?.textContent ?? '', 10);
@@ -274,7 +323,104 @@ try {
 
   await page.goto(`${URL}/?profile=1&seed=20260722`, { waitUntil: 'networkidle' });
   await page.waitForFunction(() => window.__diorama?.ready === true, null, { timeout: READY_TIMEOUT_MS });
+
+  // ── P1 entry contract: the preloader hands over straight to the live city ──
+  const readEntry = () => page.evaluate(() => {
+    const state = window.__diorama.getState();
+    const centre = document.elementFromPoint(innerWidth / 2, innerHeight / 2);
+    const startPanelSelectors = [
+      '[role="dialog"]',
+      '[role="alertdialog"]',
+      '[role="alert"]',
+      '[aria-modal="true"]',
+      '#welcome',
+      '#intro',
+      '#onboarding',
+      '#onboarding-panel',
+      '#start-panel',
+      '#start-overlay',
+      '#experience-picker',
+      '#coach-mark',
+      '#first-run',
+      '#reveal',
+      '#tooltip-first-run',
+    ];
+    return {
+      startPanels: startPanelSelectors.filter((selector) => document.querySelector(selector) !== null),
+      storageKeys: Object.keys(localStorage),
+      sessionStorageKeys: Object.keys(sessionStorage),
+      loadingVisibility: getComputedStyle(document.querySelector('#loading-screen')).visibility,
+      centreElement: centre ? centre.tagName : null,
+      canvasCount: document.querySelectorAll('canvas').length,
+      activeElement: document.activeElement ? document.activeElement.tagName : null,
+      controlsEnabled: window.__diorama.controls.enabled === true,
+      cameraMode: state.cameraMode,
+      cameraAutomation: state.cameraAutomation,
+      tourChapter: state.tourChapter,
+      eclipseProgress: state.eclipse.progress,
+      ambient: state.ambient,
+      ambientHidden: document.querySelector('#ambient-status').hidden,
+      pose: window.__diorama.cameraPose(),
+      frameIndex: state.frameIndex,
+      rafCalls: window.__rafCalls,
+    };
+  });
+
+  // The overlay is released synchronously with `ready`; only its cross-fade is
+  // still on screen, and it must already be transparent to input.
+  const handoverOverlay = await page.evaluate(() => {
+    const overlay = document.querySelector('#loading-screen');
+    return {
+      released: overlay.classList.contains('is-hidden'),
+      pointerEvents: getComputedStyle(overlay).pointerEvents,
+    };
+  });
+  assert.equal(handoverOverlay.released, true, 'the preloader must be released as soon as the diorama is ready');
+  assert.equal(
+    handoverOverlay.pointerEvents,
+    'none',
+    'the fading preloader must not swallow the first user gesture'
+  );
+  await page.waitForFunction(
+    () => getComputedStyle(document.querySelector('#loading-screen')).visibility === 'hidden',
+    null,
+    { timeout: READY_TIMEOUT_MS }
+  );
+
+  const atHandover = await readEntry();
+  assert.deepEqual(atHandover.startPanels, [], `a start panel or its stand-in is present: ${atHandover.startPanels}`);
+  assert.deepEqual(atHandover.storageKeys, [], `first-visit state was persisted: ${atHandover.storageKeys}`);
+  assert.deepEqual(atHandover.sessionStorageKeys, [], 'no session state may gate the first visit');
+  assert.equal(atHandover.loadingVisibility, 'hidden', 'the preloader must be gone once the diorama is ready');
+  assert.equal(atHandover.centreElement, 'CANVAS', 'nothing may cover the centre of the scene');
+  assert.equal(atHandover.canvasCount, 1, 'exactly one renderer canvas may exist');
+  assert.equal(atHandover.activeElement, 'BODY', 'no UI element may take focus after the preloader');
+  assert.equal(atHandover.controlsEnabled, true, 'the camera must be interactive immediately');
+  assert.equal(atHandover.cameraMode, 'free', 'the diorama must open on the free camera');
+  assert.equal(atHandover.cameraAutomation, null, 'no automatic framing may own the camera at handover');
+  assert.equal(atHandover.tourChapter, null, 'no tour may start on its own');
+  assert.equal(atHandover.eclipseProgress, 0, 'no eclipse may start on its own');
+  assert.equal(atHandover.ambient, null, 'the ambient status must stay empty while nothing has happened yet');
+  assert.equal(atHandover.ambientHidden, true, 'the ambient status must render nothing in its empty state');
+
   await page.waitForTimeout(4_500);
+
+  // Left completely alone, the diorama must not move the camera or start anything.
+  const afterIdle = await readEntry();
+  assert.ok(
+    poseDistance(afterIdle.pose, atHandover.pose) < 0.001,
+    `the camera moved without a user decision (${poseDistance(afterIdle.pose, atHandover.pose)})`
+  );
+  assert.equal(afterIdle.cameraAutomation, null, 'idle time may not hand the camera to automation');
+  assert.equal(afterIdle.tourChapter, null, 'idle time may not start a tour');
+  assert.equal(afterIdle.eclipseProgress, 0, 'idle time may not start an eclipse');
+  assert.equal(afterIdle.startPanels.length, 0, 'no delayed panel may appear after the preloader');
+  assert.ok(afterIdle.frameIndex > atHandover.frameIndex, 'the render loop must keep running');
+  assert.equal(
+    afterIdle.rafCalls - atHandover.rafCalls,
+    afterIdle.frameIndex - atHandover.frameIndex,
+    'exactly one requestAnimationFrame per rendered frame — no second render loop'
+  );
 
   const initial = await page.evaluate(() => ({
     documentLanguage: document.documentElement.lang,
@@ -310,6 +456,177 @@ try {
     'desktop scene highlights are overexposed'
   );
   await saveScreenshot(page, '/tmp/voxel-diorama-desktop.png');
+
+  // ── Crossing the eclipse hour on its own must start nothing at all ──
+  const beforeEclipseHour = await page.evaluate(() => window.__diorama.cameraPose());
+  await page.evaluate(() => window.__diorama.setTime(0.7));
+  await page.waitForTimeout(6_500);
+  const acrossEclipseHour = await page.evaluate(() => {
+    const state = window.__diorama.getState();
+    return {
+      t01: state.t01,
+      pose: window.__diorama.cameraPose(),
+      automation: state.cameraAutomation,
+      eclipseProgress: state.eclipse.progress,
+      tourChapter: state.tourChapter,
+      ambient: state.ambient,
+    };
+  });
+  assert.ok(acrossEclipseHour.t01 > 0.724, `the clock must cross the eclipse hour: ${acrossEclipseHour.t01}`);
+  assert.equal(acrossEclipseHour.eclipseProgress, 0, 'no eclipse may start without a user decision');
+  assert.equal(acrossEclipseHour.tourChapter, null, 'no tour may start without a user decision');
+  assert.equal(acrossEclipseHour.automation, null, 'passing time may not hand the camera to automation');
+  assert.ok(
+    poseDistance(acrossEclipseHour.pose, beforeEclipseHour) < 0.001,
+    `passing time moved the camera by itself (${poseDistance(acrossEclipseHour.pose, beforeEclipseHour)})`
+  );
+  assert.notEqual(acrossEclipseHour.ambient?.kind, 'eclipse', 'no eclipse message without an eclipse');
+
+  // ── A live event: the message appears and the camera stays put ──
+  const beforeScheduledEclipse = await page.evaluate(() => window.__diorama.cameraPose());
+  await page.evaluate(() => window.__diorama.setEclipseProgress(0.5));
+  await page.waitForFunction(
+    () => window.__diorama.getState().ambient?.kind === 'eclipse',
+    null,
+    { timeout: SIMULATION_TIMEOUT_MS }
+  );
+  const scheduledEclipse = await page.evaluate(() => {
+    const state = window.__diorama.getState();
+    return {
+      pose: window.__diorama.cameraPose(),
+      automation: state.cameraAutomation,
+      eclipseProgress: state.eclipse.progress,
+      ambient: state.ambient,
+      statusHidden: document.querySelector('#ambient-status').hidden,
+      actionHidden: document.querySelector('#ambient-action').hidden,
+      actionTag: document.querySelector('#ambient-action').tagName,
+      textRole: document.querySelector('#ambient-text').getAttribute('role'),
+      activeElement: document.activeElement.tagName,
+      title: document.querySelector('#ambient-title').textContent,
+      canvasCount: document.querySelectorAll('canvas').length,
+    };
+  });
+  assert.ok(scheduledEclipse.eclipseProgress > 0, 'the eclipse must actually be running in the world');
+  assert.ok(
+    poseDistance(scheduledEclipse.pose, beforeScheduledEclipse) < 0.001,
+    `the ambient message framed the event without being asked (${poseDistance(scheduledEclipse.pose, beforeScheduledEclipse)})`
+  );
+  assert.equal(scheduledEclipse.automation, null, 'an appearing message may not claim automatic framing');
+  assert.equal(scheduledEclipse.ambient.kind, 'eclipse', 'an active eclipse outranks every other event');
+  assert.equal(scheduledEclipse.ambient.canFrame, true, 'a real active event may offer "Pokaż"');
+  assert.equal(scheduledEclipse.statusHidden, false, 'the ambient status must appear for a real event');
+  assert.equal(scheduledEclipse.actionHidden, false, '"Pokaż" must be available for a real event');
+  assert.equal(scheduledEclipse.actionTag, 'BUTTON', '"Pokaż" must be a real keyboard-reachable button');
+  assert.equal(scheduledEclipse.textRole, 'status', 'cyclic status changes must not use role="alert"');
+  assert.equal(scheduledEclipse.activeElement, 'BODY', 'the ambient status must never take focus');
+  assert.equal(scheduledEclipse.title, 'ZAĆMIENIE SŁOŃCA');
+  assert.equal(scheduledEclipse.canvasCount, 1, 'no second renderer may appear with the ambient status');
+
+  await page.waitForSelector('#ambient-action', { state: 'visible' });
+  await page.click('#ambient-action');
+  await page.waitForFunction(
+    () => window.__diorama.getState().cameraAutomation === 'eclipse',
+    null,
+    { timeout: SIMULATION_TIMEOUT_MS }
+  );
+  await waitForCameraMove(page, beforeScheduledEclipse);
+  await page.waitForTimeout(200);
+  const framedByClick = await page.evaluate(() => {
+    const state = window.__diorama.getState();
+    return {
+      pose: window.__diorama.cameraPose(),
+      automation: state.cameraAutomation,
+      ambient: state.ambient,
+      actionHidden: document.querySelector('#ambient-action').hidden,
+    };
+  });
+  assert.equal(framedByClick.automation, 'eclipse', 'clicking "Pokaż" must hand the shot to CameraDirector');
+  assert.ok(
+    poseDistance(framedByClick.pose, beforeScheduledEclipse) > 5,
+    `the requested framing must actually move the camera: ${JSON.stringify(beforeScheduledEclipse.position)} -> ${JSON.stringify(framedByClick.pose.position)}`
+  );
+  assert.equal(framedByClick.ambient.kind, 'eclipse', 'framing must not change the world event');
+  assert.equal(framedByClick.actionHidden, true, '"Pokaż" must retire once the camera already frames the event');
+
+  // The first real gesture takes the camera back, and keeps that gesture.
+  await page.mouse.move(720, 450);
+  await page.mouse.down();
+  const releasedByPointer = await page.evaluate(() => window.__diorama.getState().cameraAutomation);
+  assert.equal(releasedByPointer, null, 'the first pointerdown must release the camera synchronously');
+  const poseBeforeAmbientDrag = await page.evaluate(() => window.__diorama.cameraPose());
+  await page.mouse.move(775, 425, { steps: 3 });
+  await page.mouse.up();
+  await page.waitForTimeout(60);
+  const poseAfterAmbientDrag = await page.evaluate(() => window.__diorama.cameraPose());
+  assert.ok(
+    poseDistance(poseAfterAmbientDrag, poseBeforeAmbientDrag) > 0,
+    'the gesture that released the camera must also be the gesture that moves it'
+  );
+
+  // Keyboard parity: the action is reachable and activatable without a mouse.
+  await page.waitForSelector('#ambient-action', { state: 'visible' });
+  await page.focus('#ambient-action');
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(
+    () => window.__diorama.getState().cameraAutomation === 'eclipse',
+    null,
+    { timeout: SIMULATION_TIMEOUT_MS }
+  );
+  const framedByEnter = await page.evaluate(() => window.__diorama.getState().cameraAutomation);
+  assert.equal(framedByEnter, 'eclipse', 'Enter on the focused action must frame the event');
+
+  await page.mouse.move(720, 450);
+  await page.mouse.wheel(0, 150);
+  await page.waitForTimeout(250);
+  const releasedByWheel = await page.evaluate(() => window.__diorama.getState().cameraAutomation);
+  assert.equal(releasedByWheel, null, 'the first wheel must release the camera');
+  await page.waitForSelector('#ambient-action', { state: 'visible' });
+  await page.focus('#ambient-action');
+  await page.keyboard.press('Space');
+  await page.waitForFunction(
+    () => window.__diorama.getState().cameraAutomation === 'eclipse',
+    null,
+    { timeout: SIMULATION_TIMEOUT_MS }
+  ).catch(() => {
+    throw new Error('Space was swallowed by the pause shortcut instead of activating the focused action');
+  });
+  const framedBySpace = await page.evaluate(() => window.__diorama.getState().cameraAutomation);
+  assert.equal(framedBySpace, 'eclipse', 'Space must activate the focused ambient action');
+  await page.evaluate(() => document.activeElement.blur());
+
+  // A control key is user input too: it must hand the camera back at once.
+  const releasedByKey = await page.evaluate(() => {
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    return window.__diorama.getState().cameraAutomation;
+  });
+  assert.equal(releasedByKey, null, 'a control key must release automatic framing synchronously');
+
+  // A finished event must not leave its message behind.
+  await page.evaluate(() => window.__diorama.setEclipseProgress(1));
+  await page.waitForFunction(
+    () => window.__diorama.getState().ambient?.kind !== 'eclipse',
+    null,
+    { timeout: SIMULATION_TIMEOUT_MS }
+  );
+  const afterEclipseEnded = await page.evaluate(() => ({
+    ambient: window.__diorama.getState().ambient,
+    statusHidden: document.querySelector('#ambient-status').hidden,
+    eclipseStatusHidden: document.querySelector('#eclipse-status').hidden,
+  }));
+  assert.notEqual(
+    afterEclipseEnded.ambient?.kind,
+    'eclipse',
+    'the ambient status must not outlive the event it describes'
+  );
+  assert.equal(afterEclipseEnded.eclipseStatusHidden, true, 'the eclipse HUD must close with the event');
+  if (afterEclipseEnded.ambient === null) {
+    assert.equal(afterEclipseEnded.statusHidden, true, 'the empty state must render nothing at all');
+  } else {
+    assert.ok(
+      ['tour', 'rainbow', 'train-stop', 'bus-stop'].includes(afterEclipseEnded.ambient.kind),
+      `unexpected ambient event after the eclipse: ${afterEclipseEnded.ambient.kind}`
+    );
+  }
 
   await page.goto(
     `${URL}/?profile=1&seed=20260724&checkpoint=post-rain-clear-lake&quality=high`,
@@ -926,7 +1243,12 @@ try {
   assert.deepEqual(consoleErrors, [], `browser errors:\n${consoleErrors.join('\n')}`);
   await page.close();
 
-  const mobile = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
+  const mobile = await browser.newPage({
+    viewport: { width: 390, height: 844 },
+    deviceScaleFactor: 2,
+    hasTouch: true,
+    isMobile: true,
+  });
   const mobileErrors = [];
   mobile.on('console', (message) => {
     if (message.type() === 'error') mobileErrors.push(message.text());
@@ -934,12 +1256,49 @@ try {
   mobile.on('pageerror', (error) => mobileErrors.push(error.message));
   await mobile.goto(URL, { waitUntil: 'networkidle' });
   await mobile.waitForFunction(() => window.__diorama?.ready === true, null, { timeout: READY_TIMEOUT_MS });
+  const mobileAtHandover = await mobile.evaluate(() => ({
+    ambient: window.__diorama.getState().ambient,
+    ambientHidden: document.querySelector('#ambient-status').hidden,
+    centreElement: document.elementFromPoint(innerWidth / 2, innerHeight / 2)?.tagName ?? null,
+    cameraAutomation: window.__diorama.getState().cameraAutomation,
+    storageKeys: Object.keys(localStorage),
+  }));
+  assert.equal(mobileAtHandover.ambient, null, 'mobile must also open with an empty ambient status');
+  assert.equal(mobileAtHandover.ambientHidden, true, 'mobile empty state must render nothing');
+  assert.equal(mobileAtHandover.centreElement, 'CANVAS', 'nothing may cover the centre of the mobile scene');
+  assert.equal(mobileAtHandover.cameraAutomation, null, 'mobile must open on a free camera');
+  assert.deepEqual(mobileAtHandover.storageKeys, [], 'mobile must not persist first-visit state');
+
   await mobile.evaluate(() => window.__diorama.setEclipseProgress(0.5));
   await mobile.waitForTimeout(300);
   const mobilePixels = await sampleRenderedFrame(mobile);
   assert.ok(mobilePixels.visibleSamples > 200, 'mobile canvas is blank');
   assert.ok(mobilePixels.maxLuminance - mobilePixels.minLuminance > 25, 'mobile canvas lacks visual contrast');
   await assertMobileLayout(mobile);
+
+  // Touch parity: tap frames the event, and the next touch gives the camera back.
+  const mobilePoseBefore = await mobile.evaluate(() => window.__diorama.cameraPose());
+  const actionBox = await mobile.locator('#ambient-action').boundingBox();
+  assert.ok(actionBox, 'the mobile ambient action must be laid out');
+  await mobile.touchscreen.tap(actionBox.x + actionBox.width / 2, actionBox.y + actionBox.height / 2);
+  await mobile.waitForFunction(
+    () => window.__diorama.getState().cameraAutomation === 'eclipse',
+    null,
+    { timeout: SIMULATION_TIMEOUT_MS }
+  );
+  await waitForCameraMove(mobile, mobilePoseBefore);
+  const mobileFramed = await mobile.evaluate(() => ({
+    automation: window.__diorama.getState().cameraAutomation,
+    pose: window.__diorama.cameraPose(),
+  }));
+  assert.equal(mobileFramed.automation, 'eclipse', 'a tap on "Pokaż" must frame the event on touch devices');
+  assert.ok(
+    poseDistance(mobileFramed.pose, mobilePoseBefore) > 5,
+    'the requested framing must move the mobile camera'
+  );
+  await mobile.touchscreen.tap(195, 400);
+  const mobileReleased = await mobile.evaluate(() => window.__diorama.getState().cameraAutomation);
+  assert.equal(mobileReleased, null, 'the first touch on the scene must release the camera');
   await saveScreenshot(mobile, '/tmp/voxel-diorama-mobile.png');
   await mobile.close();
   assert.deepEqual(mobileErrors, [], `mobile browser errors:\n${mobileErrors.join('\n')}`);
