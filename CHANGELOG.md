@@ -99,12 +99,17 @@ a wersjonowanie projektu docelowo stosuje [Semantic Versioning](https://semver.o
   pozostałe elementy sterowania.
 - Wygaszany preloader dostał `pointer-events: none`, więc 420 ms cross-fade nie
   połyka już pierwszego gestu użytkownika.
-- Zaplanowane zaćmienie dobowe, jeżeli kiedykolwiek zostanie przywrócone, nie
-  przejmie kamery — uruchamia wyłącznie wydarzenie w świecie. Ścieżka pozostaje
-  nieosiągalna: `previousDayProgress` jest inicjowany literałem `0.262`, a
-  pierwsza klatka raportuje `0.262 * 240 / 240`, więc gałąź przełomu dnia zeruje
-  `eclipseDay` już w pierwszej klatce. P1 zabrania zaćmienia startującego bez
-  użytkownika, dlatego zachowanie zostało zabezpieczone, a nie odblokowane.
+- Zaplanowane zaćmienie dobowe zostało usunięte razem z całą obsługą
+  `eclipseDay` / `eclipseDoneToday` / `previousDayProgress`. Wyzwalacz nigdy nie
+  działał, ale wyłącznie przez inny błąd: pierwsza klatka miała ujemną deltę,
+  która cofała zegar poniżej progu startowego i gałąź przełomu dnia zerowała
+  `eclipseDay`. Po naprawieniu delty zjawisko zaczęło startować samo — bramka
+  akceptacyjna wychwyciła to natychmiast. P1 zabrania zaćmienia i ruchu kamery
+  bez decyzji użytkownika, więc wyzwalacz zniknął zamiast zostać odblokowany.
+  Zaćmienie uruchamia przycisk „Zaćmienie", klawisz `E` albo — dla trwającego
+  już zjawiska — „Pokaż" w statusie.
+- `startEclipse` nie ma już opcjonalnego kadrowania: skoro zjawisko uruchamia
+  wyłącznie świadoma decyzja, kadr nie jest opcjonalny.
 - `CameraDirector` jest jedynym produkcyjnym właścicielem automatycznych ujęć;
   `pointerdown`, dotyk i kółko przerywają tour, kamery pojazdów, panoramę lub
   kadr zaćmienia w fazie capture, nie połykając pierwszego gestu.
@@ -142,6 +147,13 @@ a wersjonowanie projektu docelowo stosuje [Semantic Versioning](https://semver.o
 
 ### Fixed
 
+- Delta klatki nie może być ujemna. `timer.reset()` wykonuje się synchronicznie
+  bezpośrednio przed pierwszym `animate()`, a pierwszy znacznik czasu z `rAF`
+  może wtedy poprzedzać ten reset nawet o pełny okres klatki. Przy 60 Hz to
+  −16 ms i jedna klatka na wyrównanie, ale przy renderze programowym delta
+  wynosiła około −2 s i cofała zegar symulacji, pogodę, wygaszanie kamery oraz
+  kadencję HUD-u na kilkanaście klatek — zegar, status stacji, etykieta pogody
+  i status zaćmienia zamierały wtedy na kilka sekund po preloaderze.
 - Przerwanie touru w rozdziale totalności nie zostawia już miasta w wiecznym
   zaćmieniu całkowitym. `endTourOverrides` wywoływał `eclipseTimeline.stop()`,
   co czyściło wyłącznie `running` i pozostawiało linię czasu zaparkowaną na

@@ -423,6 +423,8 @@ try {
       tourChapter: state.tourChapter,
       eclipseProgress: state.eclipse.progress,
       ambient: state.ambient,
+      ambientTicks: state.ambientTicks,
+      ambientEntered: state.ambientProjection.entered,
       ambientHidden: document.querySelector('#ambient-status').hidden,
       pose: window.__diorama.cameraPose(),
       frameIndex: state.frameIndex,
@@ -451,6 +453,19 @@ try {
     { timeout: READY_TIMEOUT_MS }
   );
 
+  // The HUD must actually have latched, or "the status is empty" would pass
+  // simply because the projection had never run — which is how a negative first
+  // frame delta once hid a stalled HUD for tens of frames.
+  await page.waitForFunction(
+    () => window.__diorama.getState().ambientTicks > 0,
+    null,
+    { timeout: SLOW_RUNNER_TIMEOUT_MS }
+  ).catch(async () => {
+    throw new Error(
+      `the HUD never latched the ambient projection: ${JSON.stringify(await readAmbientDiagnosis(page), null, 1)}`
+    );
+  });
+
   const atHandover = await readEntry();
   assert.deepEqual(atHandover.startPanels, [], `a start panel or its stand-in is present: ${atHandover.startPanels}`);
   assert.deepEqual(atHandover.storageKeys, [], `first-visit state was persisted: ${atHandover.storageKeys}`);
@@ -466,6 +481,12 @@ try {
   assert.equal(atHandover.eclipseProgress, 0, 'no eclipse may start on its own');
   assert.equal(atHandover.ambient, null, 'the ambient status must stay empty while nothing has happened yet');
   assert.equal(atHandover.ambientHidden, true, 'the ambient status must render nothing in its empty state');
+  assert.ok(atHandover.ambientTicks > 0, 'the ambient projection must have run before its empty state is trusted');
+  assert.equal(
+    atHandover.ambientEntered.eclipse,
+    true,
+    'a frame delta that runs the HUD cadence backwards would leave events unobserved'
+  );
 
   await page.waitForTimeout(4_500);
 

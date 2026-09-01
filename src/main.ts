@@ -165,8 +165,6 @@ let eclipseState = eclipseTimeline.getState();
 let eclipseReaction = eclipseWorldReactionAt(0, 0);
 let eclipseDebugStrength: number | null = null;
 let eclipseCheckpointLocked = false;
-let eclipseDay = true;
-let eclipseDoneToday = false;
 const eclipseViewSun = new THREE.Vector3();
 const eclipseViewCamera = new THREE.Vector3();
 const eclipseViewTarget = new THREE.Vector3(0, 36, 0);
@@ -185,7 +183,6 @@ const rainbowFrame: RainbowFrameInput = {
   realDelta: 0,
   elapsed: 0,
 };
-let previousDayProgress = 0.262;
 let activeCheckpoint: CheckpointDefinition | null = null;
 /**
  * Nothing in the runtime starts the tour on its own. This flag keeps that an
@@ -323,7 +320,6 @@ function applyTourChapter(frame: TourFrame): void {
     experience.setClockLocked(true);
     eclipseState = eclipseTimeline.seek(chapter.eclipseProgress, false);
     eclipseCheckpointLocked = true;
-    eclipseDoneToday = true;
   }
   ui.setChapter(`TOUR · ${chapter.label}`);
 }
@@ -443,7 +439,7 @@ function focusEclipseView(): void {
   cameraDirector.focusEclipse(eclipseViewCamera, eclipseViewTarget);
 }
 
-function startEclipse(focusView = true): void {
+function startEclipse(): void {
   // End the tour before the timeline starts: `endTourOverrides` rewinds the
   // eclipse, so running it afterwards would cancel the eclipse being requested.
   if (experience.isTourActive()) endTourOverrides();
@@ -457,14 +453,13 @@ function startEclipse(focusView = true): void {
   eclipseState = eclipseTimeline.start();
   eclipseDebugStrength = null;
   eclipseCheckpointLocked = false;
-  eclipseDoneToday = true;
-  if (focusView) focusEclipseView();
+  focusEclipseView();
   ui.showToast('ZAĆMIENIE SŁOŃCA · CZAS ZJAWISKA SKOMPRESOWANY');
 }
 
 ui.onEclipseStart(() => {
   interruptCameraForUi();
-  startEclipse(true);
+  startEclipse();
 });
 
 // ─── "Pokaż": a deliberate click hands one live event to CameraDirector. ───
@@ -541,7 +536,6 @@ if (import.meta.env.DEV && !requestedCheckpoint) {
     experience.setTime(ECLIPSE_VIEW_TIME);
     eclipseState = eclipseTimeline.seek(checkpoint, false);
     eclipseCheckpointLocked = true;
-    eclipseDoneToday = true;
     focusEclipseView();
   }
 }
@@ -573,7 +567,6 @@ function applyBootCheckpoint(checkpoint: CheckpointDefinition): void {
   } else {
     eclipseState = eclipseTimeline.seek(checkpoint.eclipseProgress, false);
     eclipseCheckpointLocked = true;
-    eclipseDoneToday = true;
   }
   experience.setClockLocked(checkpoint.eclipseProgress !== null);
   checkpointCameraPosition.fromArray(checkpoint.camera.position);
@@ -613,7 +606,12 @@ function animate(timestamp?: number) {
   rafId = requestAnimationFrame(animate);
   timer.update(timestamp);
   const measuredDelta = timer.getDelta();
-  const rawDelta = Math.min(measuredDelta, 0.1);
+  // A frame delta is never negative. `timer.reset()` runs synchronously just
+  // before the first `animate()`, and the first rAF timestamp afterwards can
+  // predate that reset by up to one frame period — harmless at 60 Hz, but a
+  // software renderer produces a delta near -2 s, which then ran the clock,
+  // weather, camera damping and the HUD cadence backwards for many frames.
+  const rawDelta = Math.min(Math.max(measuredDelta, 0), 0.1);
   if (!document.hidden) quality.sampleFrame(measuredDelta);
   const presentationDelta = experience.isCheckpointLocked() ? 0 : rawDelta;
   const delta = experience.isPaused() ? 0 : presentationDelta;
@@ -642,11 +640,6 @@ function animate(timestamp?: number) {
     experienceState = experience.getState();
   }
   const t01 = experienceState.t01;
-  if (!realTime?.isActive() && t01 < previousDayProgress && !experience.isCheckpointLocked()) {
-    eclipseDay = false;
-    eclipseDoneToday = false;
-  }
-  previousDayProgress = t01;
   if (experienceState.tour?.entered) applyTourChapter(experienceState.tour);
 
   // ── Moon & aurora ──
@@ -659,20 +652,14 @@ function animate(timestamp?: number) {
   dayNight.setAuroraStrength(experienceState.auroraEnabled && weather.isClearNight() ? 0.85 : 0);
 
   // ── Eclipse 2.0: deterministic, compressed event with explicit phases ──
-  if (
-    !eclipseState.running &&
-    !eclipseCheckpointLocked &&
-    eclipseDay &&
-    !eclipseDoneToday &&
-    Math.abs(t01 - ECLIPSE_VIEW_TIME) < 0.008
-  ) {
-    // Currently unreachable: `previousDayProgress` is seeded with the literal
-    // 0.262 while the first frame reports 0.262 * 240 / 240, so the rollover
-    // branch above clears `eclipseDay` on frame one. Left in place because P1
-    // forbids an eclipse that starts without the user, and hardened for the day
-    // someone revives it: a world event may run, but it never takes the camera.
-    startEclipse(false);
-  }
+  // There is deliberately no scheduled daily eclipse. One used to be wired here
+  // behind an `eclipseDay` flag, but it never fired: the day-rollover branch
+  // cleared that flag on frame one, because the first frame delta was negative
+  // and pushed the clock below its own starting progress. Clamping that delta
+  // would have brought an unrequested eclipse — and an unrequested camera move —
+  // back to life, which P1 forbids, so the trigger and its bookkeeping are gone.
+  // The eclipse is started by the user: the „Zaćmienie" button, `E`, or the
+  // ambient status once an eclipse is genuinely running.
   eclipseState = eclipseTimeline.update(eclipseState.running ? delta : 0);
   if (eclipseState.phase === 'complete' && !activeCheckpoint) {
     experience.setClockLocked(false);
@@ -1007,7 +994,7 @@ const debugHandle: DioramaDebugHandle = {
   postmanState: () => postman.getDebugState(),
   applyTheme,
   startEclipse: () => {
-    startEclipse(true);
+    startEclipse();
   },
   setEclipseProgress: (progress: number, running = false) => {
     experience.setTime(ECLIPSE_VIEW_TIME);

@@ -138,6 +138,9 @@ sekwencyjnie, przy zamkniętych ręcznych kartach aplikacji.
 - Bramka interakcji tour ↔ zaćmienie: przerwanie rozdziału totalności cofa
   inscenizowane zjawisko i zamyka HUD zaćmienia, a żądanie zaćmienia w trakcie
   touru rzeczywiście je uruchamia.
+- Bramka kadencji HUD-u: projekcja statusu musi zdążyć się wykonać przed
+  sprawdzeniem pustego stanu, dzięki czemu zamarły HUD nie przechodzi testu
+  jako „pusty status".
 - Ostatni izolowany przebieg Metal/High na M1 Pro przechodzi wszystkie siedem
   wersjonowanych stanów przy około 120 FPS, p95 9,0–9,2 ms, bez hitchy
   i z TTI około 1,16 s. Historyczna bramka pozostaje niezmieniona: minimum
