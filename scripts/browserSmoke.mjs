@@ -242,6 +242,20 @@ async function settleFrames(page, frames = 2) {
   );
 }
 
+/**
+ * The HUD — and with it the ambient projection — is latched every 0.1 s of
+ * accumulated frame delta, which is about six frames at 60 fps and one frame on
+ * a software renderer. Counting frames therefore cannot prove a tick happened;
+ * wait for the latched result itself, after confirming frames are arriving.
+ */
+async function waitForHudLatch(page, predicate, label) {
+  await settleFrames(page, 2);
+  await page.waitForFunction(predicate, null, { timeout: SLOW_RUNNER_TIMEOUT_MS }).catch(async () => {
+    throw new Error(`${label}: ${JSON.stringify(await readAmbientDiagnosis(page), null, 1)}`);
+  });
+  return readAmbientDiagnosis(page);
+}
+
 async function readAmbientDiagnosis(page) {
   return page.evaluate(() => {
     const state = window.__diorama.getState();
@@ -535,14 +549,10 @@ try {
   // ── A live event: the message appears and the camera stays put ──
   const beforeScheduledEclipse = await page.evaluate(() => window.__diorama.cameraPose());
   await page.evaluate(() => window.__diorama.setEclipseProgress(0.5));
-  // The projection is latched by the HUD block, so three frames are enough and
-  // no amount of wall-clock waiting would help if frames are not arriving.
-  await settleFrames(page, 3);
-  const ambientDiagnosis = await readAmbientDiagnosis(page);
-  assert.equal(
-    ambientDiagnosis.ambient?.kind,
-    'eclipse',
-    `ambient status did not report the live eclipse: ${JSON.stringify(ambientDiagnosis, null, 1)}`
+  await waitForHudLatch(
+    page,
+    () => window.__diorama.getState().ambient?.kind === 'eclipse',
+    'ambient status never reported the live eclipse'
   );
   const scheduledEclipse = await page.evaluate(() => {
     const state = window.__diorama.getState();
@@ -594,7 +604,11 @@ try {
     { timeout: SLOW_RUNNER_TIMEOUT_MS }
   );
   await waitForCameraMove(page, beforeScheduledEclipse);
-  await settleFrames(page, 3);
+  await waitForHudLatch(
+    page,
+    () => document.querySelector('#ambient-action').hidden === true,
+    '"Pokaż" never retired after the camera framed the event'
+  );
   const framedByClick = await page.evaluate(() => {
     const state = window.__diorama.getState();
     return {
@@ -674,8 +688,11 @@ try {
 
   // A finished event must not leave its message behind.
   await page.evaluate(() => window.__diorama.setEclipseProgress(1));
-  await settleFrames(page, 3);
-  const afterEclipseEnded = await readAmbientDiagnosis(page);
+  const afterEclipseEnded = await waitForHudLatch(
+    page,
+    () => window.__diorama.getState().ambient?.kind !== 'eclipse',
+    'the ambient status outlived the event it describes'
+  );
   assert.notEqual(
     afterEclipseEnded.ambient?.kind,
     'eclipse',
@@ -1391,7 +1408,11 @@ try {
   assert.deepEqual(mobileAtHandover.storageKeys, [], 'mobile must not persist first-visit state');
 
   await mobile.evaluate(() => window.__diorama.setEclipseProgress(0.5));
-  await mobile.waitForTimeout(300);
+  await waitForHudLatch(
+    mobile,
+    () => window.__diorama.getState().ambient?.kind === 'eclipse',
+    'the mobile ambient status never reported the live eclipse'
+  );
   const mobilePixels = await sampleRenderedFrame(mobile);
   assert.ok(mobilePixels.visibleSamples > 200, 'mobile canvas is blank');
   assert.ok(mobilePixels.maxLuminance - mobilePixels.minLuminance > 25, 'mobile canvas lacks visual contrast');
