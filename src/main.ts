@@ -229,7 +229,12 @@ function endTourOverrides(): void {
   cameraDirector.stopTour();
   experience.setClockLocked(false);
   eclipseCheckpointLocked = false;
-  eclipseState = eclipseTimeline.stop();
+  // A tour chapter's eclipse is staged presentation, not a real event. `stop()`
+  // alone only clears `running` and leaves the timeline parked at the chapter's
+  // progress, so interrupting the totality chapter used to leave the city in
+  // permanent total eclipse. Rewind so the world — and the status that reports
+  // it — return to no eclipse.
+  eclipseState = eclipseTimeline.seek(0, false);
   weather.setExternal(null);
   ui.setTourActive(false);
   ui.setInfoText('PRZECIĄGNIJ — OBRÓT • PRAWY PRZYCISK — PRZESUŃ • SCROLL — ZOOM');
@@ -437,6 +442,9 @@ function focusEclipseView(): void {
 }
 
 function startEclipse(focusView = true): void {
+  // End the tour before the timeline starts: `endTourOverrides` rewinds the
+  // eclipse, so running it afterwards would cancel the eclipse being requested.
+  if (experience.isTourActive()) endTourOverrides();
   if (realTime?.isActive()) {
     realTime.disable();
     weather.setExternal(null);

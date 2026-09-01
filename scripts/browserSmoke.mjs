@@ -202,7 +202,7 @@ async function waitForCameraMove(page, fromPose, minDistance = 5) {
       ) > threshold;
     },
     [fromPose.position, minDistance],
-    { timeout: 10_000 }
+    { timeout: 60_000 }
   );
 }
 
@@ -211,6 +211,15 @@ function poseDistance(first, second) {
     first.position[0] - second.position[0],
     first.position[1] - second.position[1],
     first.position[2] - second.position[2]
+  );
+}
+
+async function settleFrames(page, frames = 2) {
+  const before = await page.evaluate(() => window.__diorama.getState().frameIndex);
+  await page.waitForFunction(
+    ([start, count]) => window.__diorama.getState().frameIndex >= start + count,
+    [before, frames],
+    { timeout: 60_000 }
   );
 }
 
@@ -457,30 +466,33 @@ try {
   );
   await saveScreenshot(page, '/tmp/voxel-diorama-desktop.png');
 
-  // ── Crossing the eclipse hour on its own must start nothing at all ──
+  // ── Stepping the clock across the eclipse hour must start nothing at all ──
+  // The clock is stepped frame by frame rather than by wall clock: a software
+  // renderer advances the simulation tens of times slower than real time.
   const beforeEclipseHour = await page.evaluate(() => window.__diorama.cameraPose());
-  await page.evaluate(() => window.__diorama.setTime(0.7));
-  await page.waitForTimeout(6_500);
-  const acrossEclipseHour = await page.evaluate(() => {
-    const state = window.__diorama.getState();
-    return {
-      t01: state.t01,
-      pose: window.__diorama.cameraPose(),
-      automation: state.cameraAutomation,
-      eclipseProgress: state.eclipse.progress,
-      tourChapter: state.tourChapter,
-      ambient: state.ambient,
-    };
-  });
-  assert.ok(acrossEclipseHour.t01 > 0.724, `the clock must cross the eclipse hour: ${acrossEclipseHour.t01}`);
-  assert.equal(acrossEclipseHour.eclipseProgress, 0, 'no eclipse may start without a user decision');
-  assert.equal(acrossEclipseHour.tourChapter, null, 'no tour may start without a user decision');
-  assert.equal(acrossEclipseHour.automation, null, 'passing time may not hand the camera to automation');
-  assert.ok(
-    poseDistance(acrossEclipseHour.pose, beforeEclipseHour) < 0.001,
-    `passing time moved the camera by itself (${poseDistance(acrossEclipseHour.pose, beforeEclipseHour)})`
-  );
-  assert.notEqual(acrossEclipseHour.ambient?.kind, 'eclipse', 'no eclipse message without an eclipse');
+  for (const timeOfDay of [0.704, 0.708, 0.712, 0.715, 0.718, 0.722, 0.726]) {
+    await page.evaluate((value) => window.__diorama.setTime(value), timeOfDay);
+    await settleFrames(page);
+    const step = await page.evaluate(() => {
+      const state = window.__diorama.getState();
+      return {
+        t01: state.t01,
+        pose: window.__diorama.cameraPose(),
+        automation: state.cameraAutomation,
+        eclipseProgress: state.eclipse.progress,
+        tourChapter: state.tourChapter,
+        ambient: state.ambient,
+      };
+    });
+    assert.equal(step.eclipseProgress, 0, `an eclipse started on its own at ${step.t01}`);
+    assert.equal(step.tourChapter, null, `a tour started on its own at ${step.t01}`);
+    assert.equal(step.automation, null, `automation claimed the camera on its own at ${step.t01}`);
+    assert.ok(
+      poseDistance(step.pose, beforeEclipseHour) < 0.001,
+      `passing time moved the camera by itself at ${step.t01} (${poseDistance(step.pose, beforeEclipseHour)})`
+    );
+    assert.notEqual(step.ambient?.kind, 'eclipse', `an eclipse message appeared without an eclipse at ${step.t01}`);
+  }
 
   // ── A live event: the message appears and the camera stays put ──
   const beforeScheduledEclipse = await page.evaluate(() => window.__diorama.cameraPose());
@@ -530,7 +542,11 @@ try {
     { timeout: SIMULATION_TIMEOUT_MS }
   );
   await waitForCameraMove(page, beforeScheduledEclipse);
-  await page.waitForTimeout(200);
+  await page.waitForFunction(
+    () => document.querySelector('#ambient-action').hidden === true,
+    null,
+    { timeout: 60_000 }
+  );
   const framedByClick = await page.evaluate(() => {
     const state = window.__diorama.getState();
     return {
@@ -556,12 +572,16 @@ try {
   const poseBeforeAmbientDrag = await page.evaluate(() => window.__diorama.cameraPose());
   await page.mouse.move(775, 425, { steps: 3 });
   await page.mouse.up();
-  await page.waitForTimeout(60);
-  const poseAfterAmbientDrag = await page.evaluate(() => window.__diorama.cameraPose());
-  assert.ok(
-    poseDistance(poseAfterAmbientDrag, poseBeforeAmbientDrag) > 0,
-    'the gesture that released the camera must also be the gesture that moves it'
-  );
+  await page.waitForFunction(
+    (origin) => {
+      const position = window.__diorama.cameraPose().position;
+      return position[0] !== origin[0] || position[1] !== origin[1] || position[2] !== origin[2];
+    },
+    poseBeforeAmbientDrag.position,
+    { timeout: 60_000 }
+  ).catch(() => {
+    throw new Error('the gesture that released the camera must also be the gesture that moves it');
+  });
 
   // Keyboard parity: the action is reachable and activatable without a mouse.
   await page.waitForSelector('#ambient-action', { state: 'visible' });
@@ -577,7 +597,6 @@ try {
 
   await page.mouse.move(720, 450);
   await page.mouse.wheel(0, 150);
-  await page.waitForTimeout(250);
   const releasedByWheel = await page.evaluate(() => window.__diorama.getState().cameraAutomation);
   assert.equal(releasedByWheel, null, 'the first wheel must release the camera');
   await page.waitForSelector('#ambient-action', { state: 'visible' });
@@ -1215,6 +1234,64 @@ try {
   }));
   assert.equal(wheelState.interrupted, true, 'first wheel must interrupt the tour synchronously');
   assert.notEqual(wheelState.distance, distanceBeforeWheel, 'the first wheel must zoom the released camera');
+
+  // Interrupting the staged totality chapter must not leave the city eclipsed,
+  // and must not leave the ambient status reporting an eclipse that is over.
+  await page.evaluate(() => {
+    window.__diorama.startTour();
+    window.__diorama.seekTourChapter('totality', 0.3);
+  });
+  await page.waitForFunction(
+    () => window.__diorama.getState().eclipse.coverage > 0.99,
+    null,
+    { timeout: SIMULATION_TIMEOUT_MS }
+  );
+  await page.mouse.move(720, 450);
+  await page.mouse.down();
+  await page.mouse.move(756, 432, { steps: 3 });
+  await page.mouse.up();
+  await page.waitForFunction(
+    () => document.querySelector('#eclipse-status').hidden === true,
+    null,
+    { timeout: 60_000 }
+  );
+  const afterTourInterrupt = await page.evaluate(() => {
+    const state = window.__diorama.getState();
+    return {
+      tourChapter: state.tourChapter,
+      eclipseProgress: state.eclipse.progress,
+      eclipseCoverage: state.eclipse.coverage,
+      ambient: state.ambient,
+      eclipseStatusHidden: document.querySelector('#eclipse-status').hidden,
+    };
+  });
+  assert.equal(afterTourInterrupt.tourChapter, null, 'the first gesture must end the tour');
+  assert.equal(afterTourInterrupt.eclipseProgress, 0, 'an interrupted tour must not leave the city eclipsed');
+  assert.equal(afterTourInterrupt.eclipseCoverage, 0, 'an interrupted tour must clear solar coverage');
+  assert.equal(afterTourInterrupt.eclipseStatusHidden, true, 'the eclipse HUD must close with the staged eclipse');
+  assert.notEqual(
+    afterTourInterrupt.ambient?.kind,
+    'eclipse',
+    'the ambient status must not report an eclipse the tour took with it'
+  );
+
+  // Requesting the eclipse while a tour runs must actually start the eclipse.
+  await page.evaluate(() => {
+    window.__diorama.startTour();
+    window.__diorama.startEclipse();
+  });
+  await page.waitForFunction(
+    () => window.__diorama.getState().eclipse.running === true,
+    null,
+    { timeout: SIMULATION_TIMEOUT_MS }
+  );
+  const eclipseOverTour = await page.evaluate(() => {
+    const state = window.__diorama.getState();
+    return { running: state.eclipse.running, tourChapter: state.tourChapter };
+  });
+  assert.equal(eclipseOverTour.running, true, 'the eclipse request must win over a running tour');
+  assert.equal(eclipseOverTour.tourChapter, null, 'requesting the eclipse must end the tour');
+  await page.evaluate(() => window.__diorama.setEclipseProgress(1));
 
   const checkpointUrl = `${URL}/?seed=20260722&checkpoint=totality&quality=high`;
   const loadCheckpointState = async () => {
