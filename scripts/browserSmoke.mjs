@@ -10,6 +10,9 @@ const IS_CI = process.env.CI === 'true';
 const WRITE_SCREENSHOTS = !IS_CI;
 const READY_TIMEOUT_MS = WRITE_SCREENSHOTS ? 60_000 : 180_000;
 const SIMULATION_TIMEOUT_MS = IS_CI ? 60_000 : 12_000;
+// Waiting on a loaded runner, not on the simulation: a CI page can stall for
+// tens of seconds between frames while the software renderer catches up.
+const SLOW_RUNNER_TIMEOUT_MS = IS_CI ? 180_000 : 20_000;
 
 async function saveScreenshot(page, path) {
   if (WRITE_SCREENSHOTS) await page.screenshot({ path });
@@ -202,7 +205,7 @@ async function waitForCameraMove(page, fromPose, minDistance = 5) {
       ) > threshold;
     },
     [fromPose.position, minDistance],
-    { timeout: 60_000 }
+    { timeout: SLOW_RUNNER_TIMEOUT_MS }
   );
 }
 
@@ -225,13 +228,37 @@ async function pointAtAmbientAction(page) {
   });
 }
 
+/**
+ * Waits for rendered frames rather than wall-clock time. Everything the HUD
+ * latches — the ambient projection included — advances per frame, and a loaded
+ * CI runner can starve the page for tens of seconds at a stretch.
+ */
 async function settleFrames(page, frames = 2) {
   const before = await page.evaluate(() => window.__diorama.getState().frameIndex);
   await page.waitForFunction(
     ([start, count]) => window.__diorama.getState().frameIndex >= start + count,
     [before, frames],
-    { timeout: 60_000 }
+    { timeout: SLOW_RUNNER_TIMEOUT_MS }
   );
+}
+
+async function readAmbientDiagnosis(page) {
+  return page.evaluate(() => {
+    const state = window.__diorama.getState();
+    return {
+      frameIndex: state.frameIndex,
+      t01: state.t01,
+      eclipse: state.eclipse,
+      ambient: state.ambient,
+      quality: window.__diorama.getMetrics().quality,
+      statusHidden: document.querySelector('#ambient-status').hidden,
+      actionHidden: document.querySelector('#ambient-action').hidden,
+      title: document.querySelector('#ambient-title').textContent,
+      detail: document.querySelector('#ambient-detail').textContent,
+      eclipseStatusHidden: document.querySelector('#eclipse-status').hidden,
+      documentHidden: document.hidden,
+    };
+  });
 }
 
 async function assertMobileLayout(page) {
@@ -508,35 +535,15 @@ try {
   // ── A live event: the message appears and the camera stays put ──
   const beforeScheduledEclipse = await page.evaluate(() => window.__diorama.cameraPose());
   await page.evaluate(() => window.__diorama.setEclipseProgress(0.5));
-  await page
-    .waitForFunction(
-      () => window.__diorama.getState().ambient?.kind === 'eclipse',
-      null,
-      { timeout: SIMULATION_TIMEOUT_MS }
-    )
-    .catch(async (error) => {
-      const diagnosis = await page.evaluate(() => {
-        const state = window.__diorama.getState();
-        return {
-          frameIndex: state.frameIndex,
-          t01: state.t01,
-          eclipse: state.eclipse,
-          ambient: state.ambient,
-          quality: window.__diorama.getMetrics().quality,
-          statusHidden: document.querySelector('#ambient-status').hidden,
-          title: document.querySelector('#ambient-title').textContent,
-          detail: document.querySelector('#ambient-detail').textContent,
-          eclipseStatusHidden: document.querySelector('#eclipse-status').hidden,
-          eclipseTitle: document.querySelector('#eclipse-title').textContent,
-          stationHidden: document.querySelector('#station-status').hidden,
-          stationLabel: document.querySelector('#station-label').textContent,
-          documentHidden: document.hidden,
-        };
-      });
-      throw new Error(
-        `${error.message}\nambient status never reported the eclipse: ${JSON.stringify(diagnosis, null, 1)}`
-      );
-    });
+  // The projection is latched by the HUD block, so three frames are enough and
+  // no amount of wall-clock waiting would help if frames are not arriving.
+  await settleFrames(page, 3);
+  const ambientDiagnosis = await readAmbientDiagnosis(page);
+  assert.equal(
+    ambientDiagnosis.ambient?.kind,
+    'eclipse',
+    `ambient status did not report the live eclipse: ${JSON.stringify(ambientDiagnosis, null, 1)}`
+  );
   const scheduledEclipse = await page.evaluate(() => {
     const state = window.__diorama.getState();
     return {
@@ -584,14 +591,10 @@ try {
   await page.waitForFunction(
     () => window.__diorama.getState().cameraAutomation === 'eclipse',
     null,
-    { timeout: SIMULATION_TIMEOUT_MS }
+    { timeout: SLOW_RUNNER_TIMEOUT_MS }
   );
   await waitForCameraMove(page, beforeScheduledEclipse);
-  await page.waitForFunction(
-    () => document.querySelector('#ambient-action').hidden === true,
-    null,
-    { timeout: 60_000 }
-  );
+  await settleFrames(page, 3);
   const framedByClick = await page.evaluate(() => {
     const state = window.__diorama.getState();
     return {
@@ -623,7 +626,7 @@ try {
       return position[0] !== origin[0] || position[1] !== origin[1] || position[2] !== origin[2];
     },
     poseBeforeAmbientDrag.position,
-    { timeout: 60_000 }
+    { timeout: SLOW_RUNNER_TIMEOUT_MS }
   ).catch(() => {
     throw new Error('the gesture that released the camera must also be the gesture that moves it');
   });
@@ -639,7 +642,7 @@ try {
   await page.waitForFunction(
     () => window.__diorama.getState().cameraAutomation === 'eclipse',
     null,
-    { timeout: SIMULATION_TIMEOUT_MS }
+    { timeout: SLOW_RUNNER_TIMEOUT_MS }
   );
   const framedByEnter = await page.evaluate(() => window.__diorama.getState().cameraAutomation);
   assert.equal(framedByEnter, 'eclipse', 'Enter on the focused action must frame the event');
@@ -654,7 +657,7 @@ try {
   await page.waitForFunction(
     () => window.__diorama.getState().cameraAutomation === 'eclipse',
     null,
-    { timeout: SIMULATION_TIMEOUT_MS }
+    { timeout: SLOW_RUNNER_TIMEOUT_MS }
   ).catch(() => {
     throw new Error('Space was swallowed by the pause shortcut instead of activating the focused action');
   });
@@ -671,16 +674,8 @@ try {
 
   // A finished event must not leave its message behind.
   await page.evaluate(() => window.__diorama.setEclipseProgress(1));
-  await page.waitForFunction(
-    () => window.__diorama.getState().ambient?.kind !== 'eclipse',
-    null,
-    { timeout: SIMULATION_TIMEOUT_MS }
-  );
-  const afterEclipseEnded = await page.evaluate(() => ({
-    ambient: window.__diorama.getState().ambient,
-    statusHidden: document.querySelector('#ambient-status').hidden,
-    eclipseStatusHidden: document.querySelector('#eclipse-status').hidden,
-  }));
+  await settleFrames(page, 3);
+  const afterEclipseEnded = await readAmbientDiagnosis(page);
   assert.notEqual(
     afterEclipseEnded.ambient?.kind,
     'eclipse',
@@ -1302,7 +1297,7 @@ try {
   await page.waitForFunction(
     () => document.querySelector('#eclipse-status').hidden === true,
     null,
-    { timeout: 60_000 }
+    { timeout: SLOW_RUNNER_TIMEOUT_MS }
   );
   const afterTourInterrupt = await page.evaluate(() => {
     const state = window.__diorama.getState();
