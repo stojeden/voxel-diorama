@@ -214,6 +214,17 @@ function poseDistance(first, second) {
   );
 }
 
+async function pointAtAmbientAction(page) {
+  await page.waitForSelector('#ambient-action', { state: 'visible' });
+  return page.evaluate(() => {
+    const box = document.querySelector('#ambient-action').getBoundingClientRect();
+    const x = box.x + box.width / 2;
+    const y = box.y + box.height / 2;
+    const hit = document.elementFromPoint(x, y);
+    return { x, y, hitId: hit ? hit.id : null, height: box.height };
+  });
+}
+
 async function settleFrames(page, frames = 2) {
   const before = await page.evaluate(() => window.__diorama.getState().frameIndex);
   await page.waitForFunction(
@@ -534,8 +545,18 @@ try {
   assert.equal(scheduledEclipse.title, 'ZAĆMIENIE SŁOŃCA');
   assert.equal(scheduledEclipse.canvasCount, 1, 'no second renderer may appear with the ambient status');
 
-  await page.waitForSelector('#ambient-action', { state: 'visible' });
-  await page.click('#ambient-action');
+  // A raw mouse click at a verified hit target. `page.click` additionally waits
+  // for an input acknowledgement from the renderer, which a software renderer
+  // blocked on WebGL work cannot deliver inside its timeout. Asserting the hit
+  // target here also proves the status wrapper's `pointer-events: none` leaves
+  // the button itself clickable.
+  const ambientActionPoint = await pointAtAmbientAction(page);
+  assert.equal(
+    ambientActionPoint.hitId,
+    'ambient-action',
+    `the ambient action must be its own hit target, found: ${ambientActionPoint.hitId}`
+  );
+  await page.mouse.click(ambientActionPoint.x, ambientActionPoint.y);
   await page.waitForFunction(
     () => window.__diorama.getState().cameraAutomation === 'eclipse',
     null,
@@ -585,7 +606,11 @@ try {
 
   // Keyboard parity: the action is reachable and activatable without a mouse.
   await page.waitForSelector('#ambient-action', { state: 'visible' });
-  await page.focus('#ambient-action');
+  const focusedAction = await page.evaluate(() => {
+    document.querySelector('#ambient-action').focus();
+    return document.activeElement?.id ?? null;
+  });
+  assert.equal(focusedAction, 'ambient-action', 'the ambient action must be focusable');
   await page.keyboard.press('Enter');
   await page.waitForFunction(
     () => window.__diorama.getState().cameraAutomation === 'eclipse',
@@ -600,7 +625,7 @@ try {
   const releasedByWheel = await page.evaluate(() => window.__diorama.getState().cameraAutomation);
   assert.equal(releasedByWheel, null, 'the first wheel must release the camera');
   await page.waitForSelector('#ambient-action', { state: 'visible' });
-  await page.focus('#ambient-action');
+  await page.evaluate(() => document.querySelector('#ambient-action').focus());
   await page.keyboard.press('Space');
   await page.waitForFunction(
     () => window.__diorama.getState().cameraAutomation === 'eclipse',
@@ -1355,9 +1380,13 @@ try {
 
   // Touch parity: tap frames the event, and the next touch gives the camera back.
   const mobilePoseBefore = await mobile.evaluate(() => window.__diorama.cameraPose());
-  const actionBox = await mobile.locator('#ambient-action').boundingBox();
-  assert.ok(actionBox, 'the mobile ambient action must be laid out');
-  await mobile.touchscreen.tap(actionBox.x + actionBox.width / 2, actionBox.y + actionBox.height / 2);
+  const mobileActionPoint = await pointAtAmbientAction(mobile);
+  assert.equal(
+    mobileActionPoint.hitId,
+    'ambient-action',
+    `the mobile ambient action must be its own hit target, found: ${mobileActionPoint.hitId}`
+  );
+  await mobile.touchscreen.tap(mobileActionPoint.x, mobileActionPoint.y);
   await mobile.waitForFunction(
     () => window.__diorama.getState().cameraAutomation === 'eclipse',
     null,
