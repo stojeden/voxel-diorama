@@ -5,6 +5,8 @@
  *
  * Usage: npm run build && node scripts/spikeSmoke.mjs
  *   SPIKE_WORLDS=hybrid-direct,hybrid-greedy   SPIKE_QUALITIES=high,low
+ *   SPIKE_WORLDS=voxel renders the same frames without the fragment as the visual baseline
+ *   (summary goes to spike-smoke-<worlds>.json unless SPIKE_SUMMARY overrides it).
  */
 import assert from 'node:assert/strict';
 import { access, mkdir, readdir, stat, writeFile } from 'node:fs/promises';
@@ -20,6 +22,9 @@ const QUALITIES = (process.env.SPIKE_QUALITIES ?? 'high,low').split(',').map((s)
 const CHECKPOINTS = ['spike-overview', 'spike-street', 'spike-golden', 'spike-night-street'];
 const OUT_DIR = 'docs/superpowers/spike';
 const FRAME_DIR = `${OUT_DIR}/frames`;
+/** `voxel` renders the same four frames without attaching the fragment, so the spike has a visual baseline. */
+const SUMMARY = process.env.SPIKE_SUMMARY
+  ?? (WORLDS.join(',') === 'hybrid-direct,hybrid-greedy' ? 'spike-smoke.json' : `spike-smoke-${WORLDS.join('-')}.json`);
 
 async function firstExisting(paths) {
   for (const path of paths) {
@@ -95,25 +100,32 @@ try {
         const sample = await page.evaluate(() => ({
           metrics: window.__diorama.getMetrics(),
           state: window.__diorama.getState(),
-          contact: window.__diorama.hybridGroundContact(),
+          contact: window.__diorama.hybridGroundContact?.() ?? null,
         }));
         const { metrics, state, contact } = sample;
+        const hybrid = world !== 'voxel';
         assert.equal(state.world, world, `${world}/${checkpoint}: world flag not applied`);
         assert.equal(state.checkpoint?.id, checkpoint, `${world}/${checkpoint}: checkpoint not applied`);
         assert.equal(metrics.quality.level, quality, `${world}/${checkpoint}: quality ${metrics.quality.level}`);
-        assert.ok(metrics.hybrid, `${world}/${checkpoint}: hybrid metrics missing`);
-        assert.equal(metrics.hybrid.strategy, world.replace('hybrid-', ''));
         assert.ok(!/swiftshader|software|llvmpipe/i.test(metrics.renderer.gpu), `software renderer: ${metrics.renderer.gpu}`);
         assert.ok(metrics.renderer.calls <= 1_400, `${world}/${checkpoint}: draw calls ${metrics.renderer.calls}`);
         assert.ok(metrics.renderer.geometries <= 500, `${world}/${checkpoint}: geometries ${metrics.renderer.geometries}`);
         assert.ok(metrics.renderer.textures <= 80, `${world}/${checkpoint}: textures ${metrics.renderer.textures}`);
-        assert.ok(contact && contact.ok, `${world}/${checkpoint}: ground contact violations ${JSON.stringify(contact?.violations)}`);
-        const levels = Object.values(metrics.hybrid.lodLevels);
-        if (checkpoint === 'spike-street' || checkpoint === 'spike-night-street') {
-          const expectedMax = quality === 'low' ? 1 : 2;
-          assert.ok(levels.some((level) => level === expectedMax), `${world}/${checkpoint}: no cluster reached LOD ${expectedMax}: ${levels.join(',')}`);
+        let levels = [];
+        if (hybrid) {
+          assert.ok(metrics.hybrid, `${world}/${checkpoint}: hybrid metrics missing`);
+          assert.equal(metrics.hybrid.strategy, world.replace('hybrid-', ''));
+          assert.ok(contact && contact.ok, `${world}/${checkpoint}: ground contact violations ${JSON.stringify(contact?.violations)}`);
+          levels = Object.values(metrics.hybrid.lodLevels);
+          if (checkpoint === 'spike-street' || checkpoint === 'spike-night-street') {
+            const expectedMax = quality === 'low' ? 1 : 2;
+            assert.ok(levels.some((level) => level === expectedMax), `${world}/${checkpoint}: no cluster reached LOD ${expectedMax}: ${levels.join(',')}`);
+          } else {
+            assert.ok(levels.every((level) => level <= 1), `${world}/${checkpoint}: overview reached LOD 2: ${levels.join(',')}`);
+          }
         } else {
-          assert.ok(levels.every((level) => level <= 1), `${world}/${checkpoint}: overview reached LOD 2: ${levels.join(',')}`);
+          assert.ok(!metrics.hybrid, `${world}/${checkpoint}: hybrid attached in the baseline world`);
+          assert.ok(!contact, `${world}/${checkpoint}: ground contact reported without a fragment`);
         }
         assert.deepEqual(consoleErrors, [], `${world}/${checkpoint}: console errors ${JSON.stringify(consoleErrors)}`);
         const frame = `${FRAME_DIR}/${world}-${quality}-${checkpoint}.jpg`;
@@ -130,17 +142,20 @@ try {
           programs: metrics.renderer.programs,
           geometries: metrics.renderer.geometries,
           textures: metrics.renderer.textures,
-          hybrid: metrics.hybrid,
-          contactChecked: contact.checked,
-          lodLevels: metrics.hybrid.lodLevels,
+          hybrid: metrics.hybrid ?? null,
+          contactChecked: contact?.checked ?? 0,
+          lodLevels: metrics.hybrid?.lodLevels ?? null,
         });
-        console.log(`${world.padEnd(14)} ${quality.padEnd(5)} ${checkpoint.padEnd(19)} calls ${String(metrics.renderer.calls).padStart(4)}  tris ${String(metrics.renderer.triangles).padStart(7)}  primary ${String(metrics.renderer.primaryTriangles).padStart(7)}  hybrid tris ${metrics.hybrid.triangles.join('/')}  gen ${metrics.hybrid.generationMs.toFixed(0)} ms  LOD ${levels.join('')}`);
+        const hybridColumns = hybrid
+          ? `hybrid tris ${metrics.hybrid.triangles.join('/')}  gen ${metrics.hybrid.generationMs.toFixed(0)} ms  LOD ${levels.join('')}`
+          : 'baseline, no fragment attached';
+        console.log(`${world.padEnd(14)} ${quality.padEnd(5)} ${checkpoint.padEnd(19)} calls ${String(metrics.renderer.calls).padStart(4)}  tris ${String(metrics.renderer.triangles).padStart(7)}  primary ${String(metrics.renderer.primaryTriangles).padStart(7)}  ${hybridColumns}`);
       }
     }
   }
-  await writeFile(`${OUT_DIR}/spike-smoke.json`, JSON.stringify({ generatedAt: new Date().toISOString(), bundles, results }, null, 2));
+  await writeFile(`${OUT_DIR}/${SUMMARY}`, JSON.stringify({ generatedAt: new Date().toISOString(), bundles, results }, null, 2));
   console.log(`\nbundles: entry ${bundles.entry} B, main ${bundles.main} B, hybrid-spike ${bundles.spike} B`);
-  console.log(`frames + summary written to ${OUT_DIR}/`);
+  console.log(`frames + ${SUMMARY} written to ${OUT_DIR}/`);
 } finally {
   await browser?.close();
   if (process.platform !== 'win32' && preview.pid) {
