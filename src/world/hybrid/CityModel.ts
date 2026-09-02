@@ -179,8 +179,12 @@ export function buildCityModel(): CityModel {
     prop('bike-b', 'bicycle', -1.7, 29.3, Math.PI / 2, bicycleProbes(-1.7, 29.3, Math.PI / 2), 0.25, 0.9),
     prop('bike-lean', 'bicycleLeaning', 4.75, 30.7, 0.15, bicycleProbes(4.75, 30.7, 0.15), 0.9, 0.3),
     prop('bin', 'bin', -3.6, 28.4, 0, [{ x: -3.6, y: GROUND, z: 28.4 }], 0.3, 0.3),
-    prop('planter', 'planter', 1.6, 31.1, 0, [{ x: 1.2, y: GROUND, z: 31.1 }, { x: 2.0, y: GROUND, z: 31.1 }], 0.45, 0.25),
-    prop('board', 'noticeBoard', 2.4, 31.25, 0, [{ x: 2.4, y: GROUND, z: 31.25 }], 0.5, 0.1),
+    // On the forecourt east of the doorway, not against the wall: at z ~= 31.1 the
+    // planter sat 0.8 m inside the entrance steps and the board 3 cm inside the shop
+    // glass, and at x ~= 1.6 both stood in the building's access corridor. The facade
+    // already carries its own notice board beside the door.
+    prop('planter', 'planter', 2.6, 30.3, 0, [{ x: 2.2, y: GROUND, z: 30.3 }, { x: 3.0, y: GROUND, z: 30.3 }], 0.45, 0.25),
+    prop('board', 'noticeBoard', 3.4, 29.3, 0, [{ x: 3.4, y: GROUND, z: 29.3 }], 0.5, 0.1),
   ];
 
   return {
