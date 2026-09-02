@@ -31,30 +31,30 @@ def strip(name, tiles, target_w, quality=74, gap=6):
 strip('hero', [(f'{F}/hybrid-direct-high-spike-street.jpg', (0, 60, 1440, 830), None, 1)], 1180, 76)
 strip('lod0', [
     (f'{F}/voxel-high-spike-overview.jpg', (500, 320, 660, 500), 'produkt (voxel)', 1),
-    (f'{F}/hybrid-direct-high-spike-overview.jpg', (500, 320, 660, 500), 'direct', 1),
-    (f'{F}/hybrid-greedy-high-spike-overview.jpg', (500, 320, 660, 500), 'greedy', 1),
+    (f'{F}/hybrid-direct-high-spike-overview.jpg', (500, 320, 660, 500), 'direct (po poprawkach)', 1),
+    (f'{F}/hybrid-greedy-high-spike-overview.jpg', (500, 320, 660, 500), 'greedy (usunieta)', 1),
 ], 1100, 78)
-strip('greedyhole', [(f'{F}/hybrid-greedy-high-spike-overview.jpg', (556, 336, 644, 484), 'greedy, LOD 0', 4)], 620, 80)
+strip('greedyhole', [(f'{F}/hybrid-greedy-high-spike-overview.jpg', (556, 336, 644, 484), 'greedy (usunieta), LOD 0', 4)], 620, 80)
 strip('markings', [
     (f'{F}/voxel-high-spike-street.jpg', (520, 520, 1260, 820), 'produkt (voxel)', 1),
-    (f'{F}/hybrid-direct-high-spike-street.jpg', (520, 520, 1260, 820), 'direct', 1),
-    (f'{F}/hybrid-greedy-high-spike-street.jpg', (520, 520, 1260, 820), 'greedy', 1),
+    (f'{F}/hybrid-direct-high-spike-street.jpg', (520, 520, 1260, 820), 'direct (po poprawkach)', 1),
+    (f'{F}/hybrid-greedy-high-spike-street.jpg', (520, 520, 1260, 820), 'greedy (usunieta)', 1),
 ], 1180, 76)
 strip('props', [
-    (f'{F}/hybrid-direct-high-spike-street.jpg', (380, 520, 680, 670), 'direct', 2),
-    (f'{F}/hybrid-greedy-high-spike-street.jpg', (380, 520, 680, 670), 'greedy', 2),
+    (f'{F}/hybrid-direct-high-spike-street.jpg', (380, 520, 680, 670), 'direct (po poprawkach)', 2),
+    (f'{F}/hybrid-greedy-high-spike-street.jpg', (380, 520, 680, 670), 'greedy (usunieta)', 2),
 ], 1100, 78)
 strip('glass', [
-    (f'{F}/hybrid-direct-high-spike-street.jpg', (60, 330, 470, 620), 'direct', 1.6),
-    (f'{F}/hybrid-greedy-high-spike-street.jpg', (60, 330, 470, 620), 'greedy', 1.6),
+    (f'{F}/hybrid-direct-high-spike-street.jpg', (60, 330, 470, 620), 'direct (po poprawkach)', 1.6),
+    (f'{F}/hybrid-greedy-high-spike-street.jpg', (60, 330, 470, 620), 'greedy (usunieta)', 1.6),
 ], 1100, 78)
 strip('golden', [
     (f'{F}/voxel-high-spike-golden.jpg', (280, 380, 800, 700), 'produkt (voxel)', 1),
-    (f'{F}/hybrid-direct-high-spike-golden.jpg', (280, 380, 800, 700), 'direct', 1),
+    (f'{F}/hybrid-direct-high-spike-golden.jpg', (280, 380, 800, 700), 'direct (po poprawkach)', 1),
 ], 1100, 76)
 strip('night', [
     (f'{F}/voxel-high-spike-night-street.jpg', (380, 340, 1120, 780), 'produkt (voxel)', 1),
-    (f'{F}/hybrid-direct-high-spike-night-street.jpg', (380, 340, 1120, 780), 'direct', 1),
+    (f'{F}/hybrid-direct-high-spike-night-street.jpg', (380, 340, 1120, 780), 'direct (po poprawkach)', 1),
 ], 1100, 76)
 strip('lowshop', [
     (f'{F}/hybrid-direct-high-spike-street.jpg', (270, 370, 480, 600), 'direct, High', 2),

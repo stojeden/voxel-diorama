@@ -1,8 +1,13 @@
 # Raport ze spike'u hybrydy — Osiedle Centralne
 
-Gałąź `worktree-spike-hybrid-osiedle-centralne`, stan na 2 września 2026.
+Gałąź `worktree-spike-hybrid-osiedle-centralne`, **rewizja 2** z 2 września 2026.
 Spike miał się skończyć renderami, pomiarami i **jedną rekomendacją**. Rekomendacja jest
-w rozdziale 8. Decyzja należy do właściciela; żadna strategia nie została usunięta.
+w rozdziale 8.
+
+Rewizja 2 powstała po decyzjach właściciela: asercja TTI zaostrzona, trzy defekty naprawione,
+nocny koszt GPU wyjaśniony, `GreedyVoxelStrategy` usunięta, Streetscape 2.0 wydzielony jako
+osobna naprawa. Zawiera też erratę do dwóch błędnych twierdzeń rewizji 1 — rozdział 0.
+Gałąź nie jest zmergowana; czysty zestaw do merge'a jest jeszcze do przygotowania (10.3).
 
 Sprzęt i warunki wszystkich pomiarów: MacBook M1 Pro, systemowy Chrome przez Playwrighta,
 ANGLE Metal, viewport 1440×900, `deviceScaleFactor` 1, seed symulacji 20260722, seed layoutu

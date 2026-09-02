@@ -342,40 +342,77 @@
   </header>
 
   <p class="dek">
-    Cztery bramki zamknięte, sześć uruchomień benchmarku, dwanaście kadrów hybrydy i sześć
-    kadrów bazowych produktu do porównania. Poniżej jedna rekomendacja i dowody pod nią.
+    Rewizja 2, po Twoich decyzjach: bramka TTI zaostrzona, trzy defekty naprawione, nocny koszt
+    GPU wyjaśniony, greedy usunięta, Streetscape 2.0 wydzielony. Zawiera też erratę do dwóch
+    twierdzeń, które podałem źle w rewizji 1.
   </p>
 
   <div class="thesis">
   <div class="verdict">
-    <p class="eyebrow">Rekomendacja</p>
+    <p class="eyebrow">Stan</p>
     <p class="lead">
-      Kierunek zostaje. Zostaje strategia bezpośrednia. Do usunięcia jest
-      <code>GreedyVoxelStrategy</code>.
+      Kierunek zostaje, strategią bezpośrednią. <code>GreedyVoxelStrategy</code> usunięta.
+      Trzy defekty naprawione.
     </p>
     <p>
-      Direct mieści się we wszystkich progach, generuje fragment w 24 ms i oszczędza 27 tys.
-      trójkątów względem voxeli, które zastępuje. Greedy przekracza budżet TTI w każdym kadrze
-      na High, a na najniższym poziomie LOD przez jego budynki widać świat na wylot.
+      Direct mieści się we wszystkich progach — w tym w zaostrzonym TTI, z zapasem 638 ms —
+      generuje fragment w 24 ms i oszczędza 26 942 trójkąty względem voxeli, które zastępuje.
+      Greedy przekraczała budżet TTI w siedmiu z ośmiu kadrów i na najniższym poziomie LOD przez
+      jej budynki widać było świat na wylot; chunk spike'u schudł po jej usunięciu o 17%.
     </p>
     <p>
-      Ale kierunek <span class="serif-em">nie jest gotowy do wdrożenia w tym stanie</span> —
-      trzy rzeczy do naprawy po naszej stronie i trzy odziedziczone z produktu, wymienione na
-      końcu. Spike kończy się tu; drugi fragment ma sens dopiero po tych trzech pierwszych.
+      Zostaje po naszej stronie jedno mniejsze: <strong>towar w witrynie to warstwa 2, więc na
+      Low go nie ma</strong>. Plus wskazany pomiarem cel optymalizacji: szum proceduralny
+      materiału kosztuje 9,6–11,3 ms GPU w kadrach dziennych.
+      <strong>Streetscape 2.0</strong> — chodnik, wiata, pasażer, krawężniki, bryły świateł —
+      jest opisany i czeka; przed drugim fragmentem.
     </p>
     <p class="note">
-      Przegranej strategii nie usunąłem. Budżetów nie podniosłem. Zakresu nie rozszerzyłem.
+      Budżetów nie podniosłem. Zakresu nie rozszerzyłem. Gałąź nie jest zmergowana i czystego
+      zestawu do merge'a jeszcze nie ma.
+    </p>
+  </div>
+
+  <div class="verdict" style="border-left-color: var(--fail)">
+    <p class="eyebrow" style="color: var(--fail)">Errata rewizji 1</p>
+    <p>
+      Dwa twierdzenia, na których oparłeś decyzje, były błędne. Oba wycofuję.
+    </p>
+    <p>
+      <strong>Raz:</strong> <code>metalness</code> szkła to <strong>0,7</strong>, nie 0,85 —
+      wziąłem tę liczbę z dokumentu planu, a nie z kodu. Produkt daje niezapalonemu oknu
+      0,08 / 0,65, więc hybryda była praktycznie identyczna z produktem, nie „fizycznie
+      podejrzana" wobec niego.
+    </p>
+    <p>
+      <strong>Dwa:</strong> wniosek, że materiał zjada czytelność zapalonych okien, nie
+      utrzymuje się w pomiarze. Przy nieruchomej kamerze, zmieniając <span class="serif-em">tylko</span>
+      aktywność kohort, liczba pikseli zmieniających luminancję o więcej niż 12 wynosi: produkt
+      27 454, hybryda przed korektą 29 722, po korekcie 29 810. Kohorty reagowały już wcześniej
+      na większej liczbie pikseli niż produkt. Ciemny wygląd o świcie brał się w całości
+      z <strong>pustego LOD 0</strong>. Pierwszy pomiar mnie zmylił, bo liczyłem średnią
+      całej elewacji, w której okna to kilka procent pikseli.
+    </p>
+    <p>
+      Dlatego korekta materiału została w połowie: wyrównanie palety do produktu zostaje,
+      interpolacja do zapalonego końca wypadła po pomiarze — kosztowała 11 FPS nocą przy zysku
+      poniżej 1%.
+    </p>
+    <p class="note">
+      Trzecia poprawka: nocna delta GPU +15,2 ms była artefaktem przyrządu, który mierzył
+      zrzut ekranu, nie klatkę. Prawdziwa delta to +5,7 ms i nie jest widoczna.
     </p>
   </div>
 
   <div class="scores">
     <div class="score"><span class="k">Klatka, oba światy</span><span class="v ok">60,0 <span class="u">FPS</span></span></div>
     <div class="score"><span class="k">p95 / p99</span><span class="v ok">16,8 <span class="u">ms</span></span></div>
-    <div class="score"><span class="k">TTI direct</span><span class="v ok">1266 <span class="u">ms max</span></span></div>
-    <div class="score"><span class="k">TTI greedy</span><span class="v no">2176 <span class="u">ms max</span></span></div>
+    <div class="score"><span class="k">TTI direct</span><span class="v ok">1162 <span class="u">ms max</span></span></div>
+    <div class="score"><span class="k">TTI greedy, przed usunięciem</span><span class="v no">2245 <span class="u">ms max</span></span></div>
     <div class="score"><span class="k">Generacja direct</span><span class="v ok">24 <span class="u">ms</span></span></div>
-    <div class="score"><span class="k">Generacja greedy</span><span class="v no">1033 <span class="u">ms</span></span></div>
+    <div class="score"><span class="k">Chunk spike'u</span><span class="v ok">34 111 <span class="u">B, −17%</span></span></div>
   </div>
+
   <p class="note">
     Progi: ≥ 58 FPS, p95 i p99 ≤ 20,5 ms, TTI ≤ 1800 ms, ≤ 1400 draw calli, ≤ 500 geometrii,
     ≤ 80 tekstur. M1 Pro, systemowy Chrome, Metal, 1440×900, jeden świat na uruchomienie.
@@ -485,9 +522,9 @@
           <tr><th>Świat</th><th>High</th><th>Low</th><th>Generacja</th><th>Pamięć GPU</th><th>Dylatacje</th></tr>
         </thead>
         <tbody>
-          <tr><td>voxel (produkt)</td><td>890–1029</td><td>644–961</td><td>—</td><td>—</td><td>—</td></tr>
-          <tr><td>hybrid-direct</td><td class="ok">988–1266</td><td class="ok">710–1094</td><td class="ok">23–26 ms</td><td>2,99 MB</td><td class="ok">0</td></tr>
-          <tr class="hi"><td>hybrid-greedy</td><td class="no">1970–2176</td><td class="no">1726–2028</td><td class="no">919–1033 ms</td><td class="no">4,12 MB</td><td class="no">2957</td></tr>
+          <tr><td>voxel (produkt)</td><td>893–1084</td><td>708–993</td><td>—</td><td>—</td><td>—</td></tr>
+          <tr><td>hybrid-direct</td><td class="ok">1028–1162</td><td class="ok">759–1143</td><td class="ok">23–29 ms</td><td>2,99 MB</td><td class="ok">0</td></tr>
+          <tr class="hi"><td>hybrid-greedy <span class="serif-em">(usunięta)</span></td><td class="no">2061–2245</td><td class="no">1724–2166</td><td class="no">919–1113 ms</td><td class="no">4,12 MB</td><td class="no">2957</td></tr>
         </tbody>
       </table>
     </div>
@@ -586,22 +623,23 @@ if (here === EMPTY || neighbour !== EMPTY) { mask[n] = EMPTY; maskAo[n] = 0; n++
       kulling ścianek nie zna warstw, i to on łamie kontrakt.
     </p>
 
-    <h3>Rozjazd, który trzeba zgłosić</h3>
+    <h3>Kohorty okien — zgodne, i były zgodne</h3>
     <p>
-      Kohorty okien liczą się identycznie: hybryda woła <code>residentialWindowActivityAt</code>,
+      Kohorty liczą się identycznie: hybryda woła <code>residentialWindowActivityAt</code>,
       tę samą funkcję co <code>DayNightCycle</code>. O 06:43 aktywność to
       <code>[0,00; 0,03; 1,00; 1,00; 1,00]</code> — trzy z pięciu kohort zapalone — a emisja w obu
       światach wynosi 0,02, bo <code>night</code> jest o tej porze bliskie zeru.
     </p>
 
     <figure>
-      <img src="{{IMG_GOLDEN}}" alt="Kadr o 06:43 w produkcie i w hybrydzie: voxelowe bloki mają wiele jasnych, zapalonych okien, kamienice hybrydy mają okna ciemne.">
+      <img src="{{IMG_GOLDEN}}" alt="Kadr o 06:43 w produkcie i w hybrydzie: w obu widać zapalone okna, kamienice hybrydy mają jasne szyby na kilku piętrach.">
       <figcaption>
-        <b>06:43, produkt i hybryda.</b> Ta sama krzywa kohort, ten sam mnożnik emisji, inny
-        materiał. Voxelowe okno nosi stan zapalenia w kolorze rozproszonym przy
-        <code>metalness 0.4</code> (60% udziału diffuse); szkło hybrydy ma
-        <code>metalness 0.85</code> (15%). W całym pasie dziennym i świtowym cały efekt
-        &bdquo;zapalone&rdquo; niesie diffuse — i hybryda gubi go czterokrotnie.
+        <b>06:43, produkt i hybryda po naprawie LOD 0.</b> Rewizja 1 pokazywała tu ciemne
+        kamienice i winiła materiał. Winą był poziom 0, który nie miał wtedy ani jednej szyby;
+        pomiar pikselowy potwierdza, że sama odpowiedź kohort hybrydy była już wcześniej na
+        poziomie produktu. Test pilnuje teraz, że ta sama kohorta obowiązuje na każdym poziomie
+        LOD — przy przenoszeniu szyb do warstwy 0 wyłapał dwa oszklenia, które zapalałyby się
+        na poziomie 0, a wyżej nie.
       </figcaption>
     </figure>
 
@@ -718,26 +756,46 @@ if (here === EMPTY || neighbour !== EMPTY) { mask[n] = EMPTY; maskAo[n] = 0; n++
 
     <div class="todo">
       <div>
-        <h3>Po naszej stronie</h3>
+        <h3>Po naszej stronie — zrobione</h3>
         <ol>
           <li>
-            <strong>Wypełnić LOD 0.</strong> Gładka bryła czyta się jak niedokończony model obok
-            voxelowych bloków, które na tej odległości okna mają. Najtaniej: wypiekany pas okien
-            w warstwie 0.
+            <strong>LOD 0 ma rytm okien.</strong> Szyba przeniesiona do warstwy 0 — szyba
+            <span class="serif-em">jest</span> uproszczonym rytmem, a uproszczeniem na poziomie 0
+            jest brak wszystkiego wokół niej. Geometria bit w bit jak przedtem. Pierwsza próba
+            (zapasowa szyba za prawdziwą) kosztowała 11 FPS nocą i została odrzucona przez
+            pomiar, nie przez opinię.
           </li>
           <li>
-            <strong>Obrócić zebrę o 90°.</strong> Aleja Południowa biegnie wzdłuż x, a pasy
-            leżą 2,4 m wzdłuż jezdni i 0,5 m w poprzek, powtarzane w poprzek — czyli równolegle
-            do ruchu, i wystają 0,5 m poza chodnik z każdej strony.
+            <strong>Zebra obrócona i przycięta.</strong> Pasy biegną w poprzek jezdni i
+            powtarzają się wzdłuż niej, szerokość pasa i przerwy wyliczana z prostokąta
+            przejścia. Przejście przesunięte w lukę osiowej linii produktu, żeby kreska nie
+            leżała na pasach.
           </li>
           <li>
-            <strong>Zdjąć metalness ze szkła</strong> albo dołożyć diffuse do stanu zapalenia,
-            żeby fragment nie był ciemny w pasie dziennym i świtowym.
+            <strong>Materiał szkła wyrównany do produktu</strong> (<code>metalness</code> 0,65 =
+            niezapalone okno produktu). Interpolacja do zapalonego końca usunięta po pomiarze.
           </li>
         </ol>
+        <h3>Po naszej stronie — zostaje</h3>
+        <ul>
+          <li>
+            <strong>Towar w witrynie to warstwa 2</strong>, więc na Low go nie ma. Do
+            rozstrzygnięcia razem z pytaniem, czy Low ma pokazywać treść witryn.
+          </li>
+          <li>
+            <strong>Szum proceduralny materiału</strong> — 24 wywołania hasza na fragment,
+            9,6–11,3 ms GPU w kadrach dziennych. Dominujący koszt GPU hybrydy i najlepszy cel
+            optymalizacji.
+          </li>
+          <li>
+            <strong>Czysty, direct-only zestaw do merge'a.</strong> Gałąź ma 24 commity nad
+            <code>main</code>, w tym całą narrację spike'u. Dobry zapis pracy, zły materiał do
+            merge'a.
+          </li>
+        </ul>
       </div>
       <div>
-        <h3>Odziedziczone z produktu</h3>
+        <h3>Streetscape 2.0 — wydzielone</h3>
         <ul>
           <li>
             <strong>Chodnik przy przystanku ma metr szerokości.</strong>
