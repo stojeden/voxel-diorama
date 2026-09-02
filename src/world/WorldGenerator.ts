@@ -123,11 +123,12 @@ function isRoadMarking(x: number, z: number): boolean {
   return false;
 }
 
-function generateGround(size: number): VoxelData[] {
+function generateGround(size: number, exclude?: (x: number, z: number) => boolean): VoxelData[] {
   const voxels: VoxelData[] = [];
 
   for (let x = -size; x <= size; x++) {
     for (let z = -size; z <= size; z++) {
+      if (exclude?.(x, z)) continue;
       let color: ColorHex;
       if (isOnRoad(x, z)) {
         color = isRoadMarking(x, z) ? COLORS.roadMarking : COLORS.road;
@@ -1307,9 +1308,10 @@ const SNOW_TINTS: Partial<Record<number, number>> = {
 };
 
 /** Build the static list of "snow cap" slab positions (roofs + tree crowns). */
-function buildSnowCapPositions(): THREE.Vector3[] {
+function buildSnowCapPositions(excludeBlocks?: ReadonlySet<number>): THREE.Vector3[] {
   const positions: THREE.Vector3[] = [];
-  for (const block of BLOCK_CONFIGS) {
+  for (const [index, block] of BLOCK_CONFIGS.entries()) {
+    if (excludeBlocks?.has(index)) continue;
     for (let bx = 0; bx < block.w; bx++) {
       for (let bz = 0; bz < block.d; bz++) {
         positions.push(new THREE.Vector3(block.x + bx, block.h - 0.38, block.z + bz));
@@ -1350,16 +1352,28 @@ function materialParamsFor(color: ColorHex): Partial<THREE.MeshStandardMaterialP
   }
 }
 
-export function createWorld(scene: THREE.Scene, windUniforms: WindUniforms): WorldHandle {
+export interface WorldGeneratorOptions {
+  /** BLOCK_CONFIGS indices rendered by another system (hybrid spike). */
+  excludeBlocks?: ReadonlySet<number>;
+  /** Ground cells rendered by another system. */
+  excludeGroundCell?: (x: number, z: number) => boolean;
+}
+
+export function createWorld(
+  scene: THREE.Scene,
+  windUniforms: WindUniforms,
+  options: WorldGeneratorOptions = {}
+): WorldHandle {
   const allVoxels: VoxelData[] = [];
   const lakeSurface = new LakeSurface(scene);
 
-  allVoxels.push(...generateGround(WORLD_HALF_SIZE));
+  allVoxels.push(...generateGround(WORLD_HALF_SIZE, options.excludeGroundCell));
   allVoxels.push(...generateViaduct());
   allVoxels.push(...generateTunnel(-1));
   allVoxels.push(...generateTunnel(1));
 
-  for (const block of BLOCK_CONFIGS) {
+  for (const [index, block] of BLOCK_CONFIGS.entries()) {
+    if (options.excludeBlocks?.has(index)) continue;
     allVoxels.push(...generateBlockBuilding(block));
   }
 
@@ -1526,7 +1540,7 @@ export function createWorld(scene: THREE.Scene, windUniforms: WindUniforms): Wor
   };
 
   // ── Snow caps (hidden until it actually snows) ──
-  const snowCapPositions = buildSnowCapPositions();
+  const snowCapPositions = buildSnowCapPositions(options.excludeBlocks);
   const snowCapGeo = new THREE.BoxGeometry(1, 0.26, 1);
   const snowCapMat = new THREE.MeshStandardMaterial({ color: 0xf4f8fc, roughness: 0.85 });
   snowCapMat.envMapIntensity = 0.4;
