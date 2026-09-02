@@ -85,10 +85,10 @@ function chimney(E: Emitter, spec: DominantSpec, low: boolean): void {
 /**
  * Slender brutalist RTV tower: tapered concrete shaft with four vertical fins,
  * a technical platform with railing, equipment and two dishes, a small upper
- * platform and a lattice mast. Total 62 m at the recommended site.
+ * platform and a lattice mast. Total 56 m at the recommended site.
  */
 function rtvTower(E: Emitter, spec: DominantSpec, low: boolean): void {
-  const shaftH = 44;
+  const shaftH = 40;
   const mastTop = spec.height;
   const y0 = GROUND;
   E.cylinder(P.concrete, spec.x, y0 + shaftH / 2, spec.z, 1.5, 2.6, shaftH, low ? 8 : 12, { layer: 0, style: STYLE.seams });
@@ -101,7 +101,7 @@ function rtvTower(E: Emitter, spec: DominantSpec, low: boolean): void {
     }
   }
   // technical platform
-  const platY = y0 + 34;
+  const platY = y0 + 31;
   E.cylinder(P.concrete, spec.x, platY, spec.z, 5.2, 5.2, 0.8, 8, { layer: 0, ao: 0.9 });
   E.cylinder(P.plinth, spec.x, platY - 0.7, spec.z, 2.2, 4.6, 0.6, 8, { layer: 1, ao: 0.75 });
   if (!low) {
@@ -124,7 +124,7 @@ function rtvTower(E: Emitter, spec: DominantSpec, low: boolean): void {
     light(E, spec.x + Math.cos(a) * 5.0, platY + 1.9, spec.z + Math.sin(a) * 5.0);
   }
   // upper platform
-  const upY = y0 + 41;
+  const upY = y0 + 37;
   E.cylinder(P.concrete, spec.x, upY, spec.z, 3.2, 3.2, 0.5, 8, { layer: 0, ao: 0.92 });
   if (!low) {
     for (let k = 0; k < 4; k++) {

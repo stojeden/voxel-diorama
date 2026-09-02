@@ -191,7 +191,7 @@ export function buildCityModel(): CityModel {
     props,
     dominants: [
       { kind: 'chimney', x: CHIMNEY_SITE.x, z: CHIMNEY_SITE.z, height: 46 },
-      { kind: 'rtvTower', x: RTV_SITES.recommended.x, z: RTV_SITES.recommended.z, height: 62 },
+      { kind: 'rtvTower', x: RTV_SITES.recommended.x, z: RTV_SITES.recommended.z, height: 56 },
     ],
   };
 }

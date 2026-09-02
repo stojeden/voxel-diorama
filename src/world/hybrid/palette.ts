@@ -49,7 +49,7 @@ export const PALETTE: readonly PaletteEntry[] = [
   M('roofFlat', 0x44474c, { origin: COLORS.roof, roughness: 0.96, snow: SNOW_ROOF }),
   M('roofTile', 0x8d4b39, { roughness: 0.9, snow: SNOW_ROOF }),
   M('roofSheet', 0x3a444c, { roughness: 0.6, metalness: 0.3, snow: SNOW_ROOF }),
-  M('glass', 0x3a5266, { origin: COLORS.window, roughness: 0.06, metalness: 0.85 }),
+  M('glass', 0x3a5266, { origin: COLORS.window, roughness: 0.08, metalness: 0.7 }),
   M('glassWarm', 0x4a3f37, { roughness: 0.1, metalness: 0.6 }),
   M('curtain', 0x7a7466, { roughness: 0.9 }),
   M('accentGold', 0xc98a3a, { origin: COLORS.accent, roughness: 0.75 }),

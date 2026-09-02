@@ -1103,16 +1103,21 @@ const debugHandle: DioramaDebugHandle = {
 
 window.__diorama = debugHandle;
 // The spike chunk loads on demand; the renderer warms up only once its meshes exist.
-const hybridReady: Promise<void> = hybridStrategy
+const wantsSpikeFrame = !requestedCheckpoint && (query.get('checkpoint') ?? '').startsWith('spike-');
+const hybridReady: Promise<void> = hybridStrategy || wantsSpikeFrame
   ? import('./world/hybrid/HybridSpike').then((spike) => {
-      hybrid = spike.attachHybridSpike({
-        scene: env.scene,
-        strategy: hybridStrategy,
-        quality: quality.getProfile(),
-        themePalette: currentTheme.palette,
-      });
-      env.setBloomSelection([...bloomTargets, ...hybrid.getBloomObjects()]);
-      const spikeCheckpoint = requestedCheckpoint ? null : spike.getSpikeCheckpoint(query.get('checkpoint'));
+      if (hybridStrategy) {
+        hybrid = spike.attachHybridSpike({
+          scene: env.scene,
+          strategy: hybridStrategy,
+          quality: quality.getProfile(),
+          themePalette: currentTheme.palette,
+        });
+        env.setBloomSelection([...bloomTargets, ...hybrid.getBloomObjects()]);
+      }
+      // The spike frames are the same cameras for the voxel baseline, so the
+      // benchmark can compare like with like.
+      const spikeCheckpoint = wantsSpikeFrame ? spike.getSpikeCheckpoint(query.get('checkpoint')) : null;
       if (spikeCheckpoint) applyBootCheckpoint(spikeCheckpoint);
     })
   : Promise.resolve();

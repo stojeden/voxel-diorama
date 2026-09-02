@@ -192,7 +192,15 @@ function voxelise(prims: SurfacePrimitive[], startCell: number, maxCells: number
     if (nx * ny * nz <= maxCells) break;
     cell *= 2;
   }
-  const minX = b.minX - cell, minY = b.minY - cell, minZ = b.minZ - cell;
+  // Snap the grid to the world lattice so flat surfaces that sit on multiples of
+  // the cell (the ground at -0.5, kerb tops, floors) land exactly on cell faces
+  // instead of being quantised up to half a cell — ground contact depends on it.
+  const minX = Math.floor((b.minX - cell) / cell) * cell;
+  const minY = Math.floor((b.minY - cell) / cell) * cell;
+  const minZ = Math.floor((b.minZ - cell) / cell) * cell;
+  nx = Math.ceil((b.maxX - minX) / cell) + 1;
+  ny = Math.ceil((b.maxY - minY) / cell) + 1;
+  nz = Math.ceil((b.maxZ - minZ) / cell) + 1;
   const keys = new Int32Array(nx * ny * nz).fill(EMPTY);
   let dilated = 0;
   // Later primitives win ties (openings are emitted after walls) — but a

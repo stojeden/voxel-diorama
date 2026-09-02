@@ -12,6 +12,8 @@ const HEADFUL = process.env.BENCH_HEADFUL === '1';
 const REQUIRED_FPS = Number(process.env.BENCH_MIN_FPS ?? 58);
 const MAX_TTI_MS = Number(process.env.BENCH_MAX_TTI_MS ?? 1_800);
 const QUALITY = process.env.BENCH_QUALITY ?? 'high';
+// Reversible hybrid spike: `voxel` is the product; hybrid modes add the spike frames.
+const WORLD = process.env.BENCH_WORLD ?? 'voxel';
 const SIMULATION_SEED = Number(process.env.BENCH_SEED ?? 20260722);
 const GPU_SAMPLE_COUNT = Number(process.env.BENCH_GPU_SAMPLES ?? 15);
 const requestedScenarioFilters = process.env.BENCH_SCENARIO
@@ -255,6 +257,14 @@ const allScenarios = [
   { name: 'evening-rain-bus', checkpoint: 'evening-rain-bus', camera: 'bus' },
   { name: 'eclipse-totality-overview', checkpoint: 'eclipse-totality-overview', camera: 'overview' },
 ];
+if (WORLD !== 'voxel' || SCENARIO_FILTERS.some((name) => name.startsWith('spike-'))) {
+  allScenarios.push(
+    { name: 'spike-overview', checkpoint: 'spike-overview', camera: 'checkpoint' },
+    { name: 'spike-street', checkpoint: 'spike-street', camera: 'checkpoint' },
+    { name: 'spike-golden', checkpoint: 'spike-golden', camera: 'checkpoint' },
+    { name: 'spike-night-street', checkpoint: 'spike-night-street', camera: 'checkpoint' }
+  );
+}
 const filteredScenarios = SCENARIO_FILTERS.length
   ? allScenarios.filter((scenario) => SCENARIO_FILTERS.includes(scenario.name))
   : allScenarios;
@@ -360,7 +370,7 @@ try {
   const results = [];
   for (const scenario of scenarios) {
     await page.goto(
-      `${URL}/?seed=${SIMULATION_SEED}&checkpoint=${scenario.checkpoint}&quality=${QUALITY}`,
+      `${URL}/?seed=${SIMULATION_SEED}&checkpoint=${scenario.checkpoint}&quality=${QUALITY}&world=${WORLD}`,
       { waitUntil: 'networkidle' }
     );
     await page.waitForFunction(() => window.__diorama?.ready === true, null, { timeout: MAX_TTI_MS });
@@ -463,8 +473,12 @@ try {
       }
     }
     const metrics = await page.evaluate(() => window.__diorama.getMetrics());
+    const jsHeapBytes = await page.evaluate(() => performance.memory?.usedJSHeapSize ?? null);
     results.push({
       ...scenario,
+      world: metrics.world ?? 'voxel',
+      hybrid: metrics.hybrid ?? null,
+      jsHeapBytes,
       simulationSeed: metrics.simulationSeed,
       layoutSeed: metrics.layoutSeed,
       checkpointRevision: checkpointState.checkpoint.revision,
@@ -483,6 +497,7 @@ try {
   console.log(JSON.stringify({
     headful: HEADFUL,
     quality: QUALITY,
+    world: WORLD,
     simulationSeed: SIMULATION_SEED,
     isolation: 'exclusive process lock, one browser context, one page',
     diagnosticShadowsDisabled: DISABLE_SHADOWS,
