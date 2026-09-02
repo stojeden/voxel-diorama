@@ -40,6 +40,8 @@ export interface RuntimeEnv {
   setCinematicFocus: (active: boolean, target: THREE.Vector3) => void;
   setCameraFocusDistance: (distance: number) => void;
   setCameraPerformanceMode: (mode: 'free' | 'train' | 'bus') => void;
+  /** Draw calls and triangles of the scene render alone, before post-processing passes. */
+  getPrimaryPassInfo: () => { triangles: number; calls: number };
   setQuality: (profile: QualityProfile) => void;
   syncSize: () => void;
   dispose: () => void;
@@ -97,6 +99,13 @@ export function bootstrap(
     frameBufferType: THREE.HalfFloatType,
   });
   composer.addPass(new RenderPass(scene, camera));
+  // renderer.info accumulates every pass of the frame; snapshot it right after the
+  // scene render so metrics can split primary from multipass work.
+  const primaryPass = { triangles: 0, calls: 0 };
+  composer.addPass(new LambdaPass(() => {
+    primaryPass.triangles = renderer.info.render.triangles;
+    primaryPass.calls = renderer.info.render.calls;
+  }));
 
   let occlusionExclusions: THREE.Object3D[] = [];
   let occlusionVisibility: boolean[] = [];
@@ -289,6 +298,7 @@ export function bootstrap(
     setCinematicFocus,
     setCameraFocusDistance,
     setCameraPerformanceMode,
+    getPrimaryPassInfo: () => primaryPass,
     setQuality,
     syncSize,
     dispose,

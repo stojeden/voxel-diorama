@@ -48,6 +48,15 @@ export default defineConfig({
               includeDependenciesRecursively: false,
             },
             {
+              // Reversible hybrid spike: loaded only behind `?world=hybrid-*`, so the
+              // experiment never spends the entry-chunk budget. `spikeFlag.ts` stays
+              // with its importer (main) on purpose.
+              name: 'hybrid-spike',
+              test: /src[\\/]world[\\/]hybrid[\\/](?!spikeFlag\.ts$)/,
+              priority: 15,
+              includeDependenciesRecursively: false,
+            },
+            {
               // Small, cohesive and independently cacheable world-signal logic.
               // Keeping it out of the near-limit entry chunk leaves room for the
               // UI redesign without hiding growth behind a larger budget.

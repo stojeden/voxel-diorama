@@ -59,9 +59,14 @@ import {
 } from './performance/QualityManager';
 import type { DevStatsHandle } from './performance/DevStats';
 import type { DioramaDebugHandle } from './debug/DioramaDebugTypes';
+import { isSpikeGroundCell, parseWorldMode, SPIKE_BLOCK_SET, strategyOf } from './world/hybrid/spikeFlag';
+import type { HybridHandle } from './world/hybrid/HybridSpike';
 
 const query = new URLSearchParams(window.location.search);
 const requestedCheckpoint = getCheckpoint(query.get('checkpoint'));
+// Reversible hybrid spike: `?world=hybrid-direct|hybrid-greedy` swaps one fragment.
+const worldMode = parseWorldMode(query.get('world'));
+const hybridStrategy = strategyOf(worldMode);
 const worldRandom = createWorldRandom(query.get('seed') ?? undefined);
 const qualityParam = query.get('quality');
 const requestedQuality = qualityParam === 'low' || qualityParam === 'medium' || qualityParam === 'high'
@@ -79,7 +84,12 @@ ui.setLoadingProgress(4, 'RENDERER GOTOWY');
 const windUniforms: WindUniforms = { uTime: { value: 0 }, uWind: { value: 0 } };
 
 // ─── World ───
-const world = createWorld(env.scene, windUniforms);
+const world = createWorld(
+  env.scene,
+  windUniforms,
+  hybridStrategy ? { excludeBlocks: SPIKE_BLOCK_SET, excludeGroundCell: isSpikeGroundCell } : {}
+);
+let hybrid: HybridHandle | null = null;
 ui.setLoadingProgress(10, 'MIASTO I KRAJOBRAZ');
 const train = createTrain(env.scene);
 const bus = createBus(env.scene, worldRandom.stream('bus'));
@@ -141,6 +151,7 @@ const unsubscribeQuality = quality.subscribe((profile, snapshot) => {
   weather.setQuality(profile);
   rainbow.setQuality(profile.level);
   world.setQuality(profile);
+  hybrid?.setQuality(profile);
   birds.setDensity(profile.actorDensity);
   passengerCrowd.setDensity(profile.actorDensity);
   eclipseCrowdProps.setQuality(profile.level);
@@ -284,6 +295,7 @@ let cyberActorsOn = false;
 function applyTheme(id: string): void {
   currentTheme = themeById(id);
   world.setTheme(currentTheme.palette, currentTheme.foliage);
+  hybrid?.setTheme(currentTheme.palette);
   train.setLivery(currentTheme.livery ?? 'modern');
   env.setThemeGrade(currentTheme.id, currentTheme.sepia, currentTheme.saturation);
   ui.setThemeActive(id);
@@ -762,6 +774,11 @@ function animate(timestamp?: number) {
   bus.setHeadlightsEnabled(cameraMode !== 'train');
   world.setSnowCover(weather.getSnowCover());
   world.setWetness(weather.getWetness());
+  if (hybrid) {
+    hybrid.setSnowCover(weather.getSnowCover());
+    hybrid.setWetness(weather.getWetness());
+    hybrid.update(env.camera, env.renderer.domElement.clientHeight || window.innerHeight, t01, light.night, presentationDelta);
+  }
   world.setEclipseReflection(
     eclipseState.corona * (0.45 + eclipseState.totality * 0.55),
     eclipseReflectionSun
@@ -910,6 +927,7 @@ const debugHandle: DioramaDebugHandle = {
     frameIndex: frame.frameIndex,
     simulationSeed: worldRandom.seed,
     layoutSeed: WORLD_LAYOUT_SEED,
+    world: worldMode,
     checkpoint: activeCheckpoint
       ? { id: activeCheckpoint.id, revision: activeCheckpoint.revision }
       : null,
@@ -944,6 +962,8 @@ const debugHandle: DioramaDebugHandle = {
       quality: quality.getSnapshot(),
       simulationSeed: worldRandom.seed,
       layoutSeed: WORLD_LAYOUT_SEED,
+      world: worldMode,
+      hybrid: hybrid?.getMetrics() ?? null,
       checkpoint: activeCheckpoint
         ? { id: activeCheckpoint.id, revision: activeCheckpoint.revision }
         : null,
@@ -964,6 +984,8 @@ const debugHandle: DioramaDebugHandle = {
         pixelRatio: env.renderer.getPixelRatio(),
         canvasWidth: env.renderer.domElement.width,
         canvasHeight: env.renderer.domElement.height,
+        primaryTriangles: env.getPrimaryPassInfo().triangles,
+        primaryCalls: env.getPrimaryPassInfo().calls,
       },
     };
   },
@@ -990,6 +1012,7 @@ const debugHandle: DioramaDebugHandle = {
     window.location.assign(url);
   },
   releaseCheckpoint,
+  hybridGroundContact: () => hybrid?.checkGroundContact() ?? null,
   scene: env.scene,
   renderer: env.renderer,
   controls: env.controls,
@@ -1079,7 +1102,21 @@ const debugHandle: DioramaDebugHandle = {
 };
 
 window.__diorama = debugHandle;
-void warmRenderer({
+// The spike chunk loads on demand; the renderer warms up only once its meshes exist.
+const hybridReady: Promise<void> = hybridStrategy
+  ? import('./world/hybrid/HybridSpike').then((spike) => {
+      hybrid = spike.attachHybridSpike({
+        scene: env.scene,
+        strategy: hybridStrategy,
+        quality: quality.getProfile(),
+        themePalette: currentTheme.palette,
+      });
+      env.setBloomSelection([...bloomTargets, ...hybrid.getBloomObjects()]);
+      const spikeCheckpoint = requestedCheckpoint ? null : spike.getSpikeCheckpoint(query.get('checkpoint'));
+      if (spikeCheckpoint) applyBootCheckpoint(spikeCheckpoint);
+    })
+  : Promise.resolve();
+void hybridReady.then(() => warmRenderer({
   env,
   ui,
   dayNight,
@@ -1089,7 +1126,7 @@ void warmRenderer({
   getTheme: () => currentTheme,
   getDayProgress: () => experience.getState().t01,
   getEclipseState: () => eclipseState,
-}).finally(() => {
+})).finally(() => {
   rendererWarm = true;
   timer.reset();
   animate();
@@ -1118,6 +1155,7 @@ if (import.meta.hot) {
     portalGlow.dispose();
     dayNight.dispose();
     world.dispose();
+    hybrid?.dispose();
     weather.dispose();
     realTime?.dispose();
     ui.dispose();

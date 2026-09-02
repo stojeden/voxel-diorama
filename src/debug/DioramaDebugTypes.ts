@@ -6,6 +6,9 @@ export interface DioramaMetrics {
   quality: QualitySnapshot;
   simulationSeed: number;
   layoutSeed: number;
+  /** `voxel` (product) or a hybrid spike strategy. */
+  world?: string;
+  hybrid?: unknown;
   checkpoint: { id: CheckpointId; revision: number } | null;
   renderer: {
     gpu: string;
@@ -20,6 +23,8 @@ export interface DioramaMetrics {
     pixelRatio: number;
     canvasWidth: number;
     canvasHeight: number;
+    primaryTriangles?: number;
+    primaryCalls?: number;
   };
 }
 
