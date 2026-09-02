@@ -373,7 +373,10 @@ try {
       `${URL}/?seed=${SIMULATION_SEED}&checkpoint=${scenario.checkpoint}&quality=${QUALITY}&world=${WORLD}`,
       { waitUntil: 'networkidle' }
     );
-    await page.waitForFunction(() => window.__diorama?.ready === true, null, { timeout: MAX_TTI_MS });
+    // Waiting exactly MAX_TTI_MS turned a marginal load into an aborted run with no
+    // JSON at all. The wait is generous; the budget is enforced by the assertion below,
+    // which needs the measurement to exist in order to fail on it.
+    await page.waitForFunction(() => window.__diorama?.ready === true, null, { timeout: MAX_TTI_MS * 5 });
     const diagnostics = await applyDiagnosticOverrides(page);
     const { checkpointState, qualityLevel, scenarioReadyAtMs } = await page.evaluate(() => ({
       checkpointState: window.__diorama.getState(),

@@ -9,8 +9,16 @@ import { Emitter, gableRoofPositions, hipRoofPositions, type Cluster, type PrimO
  * sketch: metre heights from the layout, real floors, glass windows flush with
  * the wall and a baked shadow that reads as a recess, living ground floors.
  *
- * Layers: 0 massing, roofs, plinths · 1 openings, loggias, balconies, shop bays,
- * canopies · 2 frames, mullions, sills, goods, small trim.
+ * Layers: 0 massing, roofs, plinths and the glazing itself · 1 reveals, sills,
+ * lintels, loggias, balconies, shop bays, canopies · 2 frames, mullions, goods,
+ * small trim.
+ *
+ * The pane lives in layer 0 on purpose. It is what makes a distant cluster read as
+ * a building rather than a blank box, and it costs nothing extra: the simplification
+ * at level 0 is the absence of everything around the pane, not the absence of the
+ * pane. Drawing a separate level 0 stand-in behind the real pane was measured at
+ * -11 FPS in the night street frame, because it doubles the glass area every local
+ * light has to shade.
  */
 
 const SIDES: Record<Side, { nx: number; nz: number; ry: number }> = {
@@ -69,35 +77,12 @@ function windowLook(b: BuildingSpec, s: Side, bay: number, floor: number): { pal
   return { palette, cohort };
 }
 
-/**
- * Layer 0 keeps a simplified window rhythm: one flat pane per opening, no frame,
- * no sill, no reveal, sized just inside the real opening and set behind it. A
- * cluster at LOD 0 therefore still reads as a building with windows -- and still
- * lights up with its cohort at night -- instead of a blank tinted box, and at
- * LOD 1 the real pane sits 2 cm in front and covers it exactly.
- */
-const GHOST_OUT = 0.012;
-const GLASS_OUT = 0.032;
-
-function windowGhost(
-  E: Emitter, b: BuildingSpec, F: Frame, s: Side, bay: number, floor: number,
-  along: number, yc: number, ww: number, wh: number,
-  /** Pass -1 for glazing that never lights, so both levels agree on the cohort. */
-  cohort?: number
-): void {
-  const look = windowLook(b, s, bay, floor);
-  sidePlane(E, look.palette, F, s, along, yc, GHOST_OUT, ww - 0.05, wh - 0.05, {
-    layer: 0, cls: 'glass', style: STYLE.glass, cohort: cohort ?? look.cohort,
-  });
-}
-
 /** Flush glass + baked shadow strips (reads as a recess) + protruding frame + sill. */
 function windowAt(E: Emitter, b: BuildingSpec, F: Frame, s: Side, bay: number, floor: number, along: number, yc: number, ww: number, wh: number, lintel: boolean): void {
   const look = windowLook(b, s, bay, floor);
-  windowGhost(E, b, F, s, bay, floor, along, yc, ww, wh);
-  sidePlane(E, look.palette, F, s, along, yc, GLASS_OUT, ww, wh, { layer: 1, cls: 'glass', style: STYLE.glass, cohort: look.cohort });
-  sidePlane(E, P.interior, F, s, along, yc + wh / 2 - 0.09, GLASS_OUT + 0.015, ww, 0.18, { layer: 1, ao: 0.55 });
-  sidePlane(E, P.interior, F, s, along - ww / 2 + 0.05, yc, GLASS_OUT + 0.015, 0.1, wh, { layer: 1, ao: 0.6 });
+  sidePlane(E, look.palette, F, s, along, yc, 0.015, ww, wh, { layer: 0, cls: 'glass', style: STYLE.glass, cohort: look.cohort });
+  sidePlane(E, P.interior, F, s, along, yc + wh / 2 - 0.09, 0.03, ww, 0.18, { layer: 1, ao: 0.55 });
+  sidePlane(E, P.interior, F, s, along - ww / 2 + 0.05, yc, 0.03, 0.1, wh, { layer: 1, ao: 0.6 });
   sideBox(E, P.frame, F, s, along, yc + wh / 2 + 0.035, 0.04, ww + 0.14, 0.07, 0.08, { layer: 2 });
   sideBox(E, P.frame, F, s, along - ww / 2 - 0.035, yc, 0.04, 0.07, wh + 0.07, 0.08, { layer: 2 });
   sideBox(E, P.frame, F, s, along + ww / 2 + 0.035, yc, 0.04, 0.07, wh + 0.07, 0.08, { layer: 2 });
@@ -108,7 +93,7 @@ function windowAt(E: Emitter, b: BuildingSpec, F: Frame, s: Side, bay: number, f
 }
 
 function doorAt(E: Emitter, F: Frame, s: Side, along: number, y0: number, dw: number, dh: number, canopy: number | null, board: boolean): void {
-  sidePlane(E, P.glassWarm, F, s, along, y0 + dh / 2, 0.015, dw, dh, { layer: 1, cls: 'glass', style: STYLE.glass });
+  sidePlane(E, P.glassWarm, F, s, along, y0 + dh / 2, 0.015, dw, dh, { layer: 0, cls: 'glass', style: STYLE.glass });
   sideBox(E, P.wood, F, s, along, y0 + dh / 2 + 0.3, 0.02, 0.06, dh - 0.6, 0.03, { layer: 2 });
   sideBox(E, P.frame, F, s, along - dw / 2 - 0.04, y0 + dh / 2, 0.04, 0.08, dh, 0.1, { layer: 2 });
   sideBox(E, P.frame, F, s, along + dw / 2 + 0.04, y0 + dh / 2, 0.04, 0.08, dh, 0.1, { layer: 2 });
@@ -130,9 +115,8 @@ function loggiaAt(E: Emitter, b: BuildingSpec, F: Frame, s: Side, bay: number, f
   sideBox(E, b.tint, F, s, along + w / 2 - 0.07, y0 + floorH / 2, 0.65, 0.14, floorH, 1.3, { layer: 1, ao: 0.92 });
   sideBox(E, accent, F, s, along, y0 + 0.16 + 0.52, 1.26, w - 0.28, 1.04, 0.08, { layer: 1 });
   sideBox(E, P.steel, F, s, along, y0 + 1.24, 1.26, w - 0.28, 0.05, 0.05, { layer: 2 });
-  windowGhost(E, b, F, s, bay, floor, along, y0 + 1.15, 1.05, 2.15);
   const look = windowLook(b, s, bay, floor);
-  sidePlane(E, look.palette, F, s, along, y0 + 1.15, 0.015, 1.05, 2.15, { layer: 1, cls: 'glass', style: STYLE.glass, cohort: look.cohort });
+  sidePlane(E, look.palette, F, s, along, y0 + 1.15, 0.015, 1.05, 2.15, { layer: 0, cls: 'glass', style: STYLE.glass, cohort: look.cohort });
   if (top) sideBox(E, P.trim, F, s, along, y0 + floorH + 0.08, 0.65, w, 0.16, 1.3, { layer: 1 });
 }
 
@@ -203,9 +187,7 @@ function tower(E: Emitter, b: BuildingSpec): void {
       }
     }
   }
-  // The stairwell strip is not a dwelling window and carries no cohort.
-  windowGhost(E, b, F, '-x', 99, 0, 0, GROUND + H / 2, 1.3, H - 0.6, -1);
-  sideBox(E, P.glass, F, '-x', 0, GROUND + H / 2, 0.02, 1.3, H - 0.6, 0.12, { layer: 1, cls: 'glass', style: STYLE.glass });
+  sideBox(E, P.glass, F, '-x', 0, GROUND + H / 2, 0.02, 1.3, H - 0.6, 0.12, { layer: 0, cls: 'glass', style: STYLE.glass });
   sideBox(E, P.frame, F, '-x', -0.72, GROUND + H / 2, 0.04, 0.1, H - 0.6, 0.16, { layer: 2 });
   sideBox(E, P.frame, F, '-x', 0.72, GROUND + H / 2, 0.04, 0.1, H - 0.6, 0.16, { layer: 2 });
   for (const [sx, sz] of [[1, 1], [-1, -1]] as const) {
@@ -271,9 +253,8 @@ function tenement(E: Emitter, b: BuildingSpec): void {
           sideBox(E, P.steel, F, s, along, y0 + 0.62, 0.82, 1.8, 0.04, 0.04, { layer: 2 });
           sideBox(E, P.steel, F, s, along, y0 + 1.12, 0.82, 1.8, 0.04, 0.04, { layer: 2 });
           for (const k of [-0.86, -0.29, 0.29, 0.86]) sideBox(E, P.steel, F, s, along + k, y0 + 0.62, 0.82, 0.04, 1.0, 0.04, { layer: 2 });
-          windowGhost(E, b, F, s, i, f + 1, along, y0 + 1.15, 1.05, 2.15);
           const look = windowLook(b, s, i, f + 1);
-          sidePlane(E, look.palette, F, s, along, y0 + 1.15, 0.015, 1.05, 2.15, { layer: 1, cls: 'glass', style: STYLE.glass, cohort: look.cohort });
+          sidePlane(E, look.palette, F, s, along, y0 + 1.15, 0.015, 1.05, 2.15, { layer: 0, cls: 'glass', style: STYLE.glass, cohort: look.cohort });
           sideBox(E, P.trim, F, s, along, y0 + 2.3, 0.04, 1.35, 0.16, 0.14, { layer: 1 });
         } else {
           windowAt(E, b, F, s, i, f + 1, along, y0 + 0.95 + 0.92, 1.05, 1.85, true);
@@ -294,7 +275,7 @@ function shopBay(E: Emitter, b: BuildingSpec, F: Frame, s: Side, i: number, alon
   const gh = 2.3;
   const gy = GROUND + 0.5 + gh / 2;
   const out = 0.26;
-  sideBox(E, P.interior, F, s, along, gy, 0.02, gw, gh, 0.03, { layer: 1, ao: 0.85 });
+  sideBox(E, P.interior, F, s, along, gy, 0.02, gw, gh, 0.03, { layer: 0, ao: 0.85 });
   const goods = [P.goodsA, P.goodsB, P.accentRose];
   for (let g = 0; g < 3; g++) {
     const gx = along - gw / 2 + 0.35 + (g * (gw - 0.7)) / 2;
@@ -305,9 +286,6 @@ function shopBay(E: Emitter, b: BuildingSpec, F: Frame, s: Side, i: number, alon
   sideBox(E, b.tint, F, s, along - gw / 2 - 0.04, gy, out / 2, 0.08, gh, out, { layer: 1, ao: 0.8 });
   sideBox(E, b.tint, F, s, along + gw / 2 + 0.04, gy, out / 2, 0.08, gh, out, { layer: 1, ao: 0.8 });
   sideBox(E, b.tint, F, s, along, gy + gh / 2 + 0.04, out / 2, gw + 0.16, 0.08, out, { layer: 1, ao: 0.7 });
-  // A shop window is not a dwelling: the display glass carries no cohort, so its
-  // layer 0 stand-in must not carry one either.
-  windowGhost(E, b, F, s, i, 0, along, gy, gw, gh, -1);
   sideBox(E, P.glass, F, s, along, gy, out - 0.02, gw, gh, 0.03, { layer: 1, cls: 'glassClear', style: STYLE.glass });
   sideBox(E, P.frame, F, s, along - gw / 2 - 0.04, gy, out, 0.08, gh, 0.06, { layer: 2 });
   sideBox(E, P.frame, F, s, along + gw / 2 + 0.04, gy, out, 0.08, gh, 0.06, { layer: 2 });

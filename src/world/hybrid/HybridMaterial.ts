@@ -126,22 +126,13 @@ export function createHybridMaterial(
         }
         diffuseColor.rgb = hbCol * vAo;`
       )
-      // A lit pane has to read as lit, and a metallic surface has almost no diffuse
-      // to read it with. The product solves this by swapping the window material
-      // outright (COLORS.window 0.08/0.65 -> COLORS.windowLit 0.18/0.40); one shared
-      // material cannot swap, so it interpolates to the same two ends by activity.
-      // Glassiness therefore comes from colour, reflection and roughness, and stops
-      // competing with legibility.
-      .replace(
-        '#include <roughnessmap_fragment>',
-        /* glsl */ `float hbRough = vStyle > 3.5 ? mix(hbPrm.x, 0.18, hbActivity) : hbPrm.x;
-        float roughnessFactor = mix(hbRough, 0.12, uWet * hbPrm.z);`
-      )
-      .replace(
-        '#include <metalnessmap_fragment>',
-        /* glsl */ `float hbMetal = vStyle > 3.5 ? mix(hbPrm.y, 0.40, hbActivity) : hbPrm.y;
-        float metalnessFactor = mix(hbMetal, 0.45, uWet * hbPrm.z);`
-      )
+      // Interpolating glass roughness and metalness toward the product's lit window
+      // (0.18 / 0.40) by cohort activity was measured at -11 FPS in the night street
+      // frame (60.0 -> 49.1, p95 16.8 -> 33.4) for under 1% change in the lit-window
+      // signal, so it is not here. The palette carries the product's unlit values and
+      // the lit state is read from colour and emissive, which is enough.
+      .replace('#include <roughnessmap_fragment>', 'float roughnessFactor = mix(hbPrm.x, 0.12, uWet * hbPrm.z);')
+      .replace('#include <metalnessmap_fragment>', 'float metalnessFactor = mix(hbPrm.y, 0.45, uWet * hbPrm.z);')
       .replace(
         '#include <emissivemap_fragment>',
         /* glsl */ `#include <emissivemap_fragment>

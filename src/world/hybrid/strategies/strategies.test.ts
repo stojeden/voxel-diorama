@@ -25,7 +25,9 @@ for (const [name, build] of [['direct', buildDirect], ['greedy', buildGreedy]] a
         for (const attribute of ATTRIBUTES) expect(geometry.getAttribute(attribute).count).toBe(count);
       }
       expect(result.geometries.has('opaque:0')).toBe(true);
-      expect(result.geometries.has('glass:1')).toBe(true);
+      // Glazing sits in layer 0 with the massing: it is what makes a distant
+      // cluster read as a building, and the detail layers add only what frames it.
+      expect(result.geometries.has('glass:0')).toBe(true);
     });
 
     test('is deterministic', () => {

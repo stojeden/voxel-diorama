@@ -7,10 +7,10 @@
   "diagnosticShadowsDisabled": false,
   "diagnosticLocalLightsDisabled": false,
   "readiness": {
-    "timeToInteractiveMs": 1192.5,
+    "timeToInteractiveMs": 1064.1,
     "definition": "diorama-ready after preload, shader warm-up, first interactive animation frame and loader dismissal",
-    "domContentLoadedMs": 360.6,
-    "firstContentfulPaintMs": 76
+    "domContentLoadedMs": 276.4,
+    "firstContentfulPaintMs": 64
   },
   "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Pro, Unspecified Version)",
   "vendor": "Google Inc. (Apple)",
@@ -21,20 +21,20 @@
       "camera": "checkpoint",
       "world": "voxel",
       "hybrid": null,
-      "jsHeapBytes": 52657892,
+      "jsHeapBytes": 52517141,
       "simulationSeed": 20260722,
       "layoutSeed": 20260610,
       "checkpointRevision": 2,
-      "timeToInteractiveMs": 957.2,
+      "timeToInteractiveMs": 952.4,
       "diagnostics": {
         "shadowsEnabled": true,
         "visibleLocalLights": 6
       },
       "timing": {
         "frames": 180,
-        "averageFps": 60.00200006666888,
-        "averageFrameMs": 16.666111111111114,
-        "p95FrameMs": 16.799999999999272,
+        "averageFps": 60.002000066668884,
+        "averageFrameMs": 16.66611111111111,
+        "p95FrameMs": 16.700000000000728,
         "p99FrameMs": 16.800000000000182,
         "maxFrameMs": 16.800000000000182,
         "hitchCount": 0,
@@ -42,21 +42,21 @@
       },
       "cpu": {
         "scope": "Chromium renderer main thread; not total system CPU",
-        "taskMs": 643.9,
-        "busyPercent": 21.5,
-        "scriptMs": 602.6,
-        "layoutMs": 4.7
+        "taskMs": 643,
+        "busyPercent": 21.4,
+        "scriptMs": 602.8,
+        "layoutMs": 4.5
       },
       "gpu": {
         "available": true,
         "method": "EXT_disjoint_timer_query_webgl2 around an explicit composer frame",
         "sampleCount": 15,
-        "medianRenderMsRaw": 14.872666,
-        "p90RenderMsRaw": 22.261833,
-        "medianRenderMs": 14.9,
-        "p90RenderMs": 22.3,
-        "minRenderMs": 10.2,
-        "maxRenderMs": 28.2
+        "medianRenderMsRaw": 11.831583,
+        "p90RenderMsRaw": 12.819041,
+        "medianRenderMs": 11.8,
+        "p90RenderMs": 12.8,
+        "minRenderMs": 8.5,
+        "maxRenderMs": 15.8
       },
       "measuredState": {
         "t01": 0.5,
@@ -191,20 +191,20 @@
       "camera": "checkpoint",
       "world": "voxel",
       "hybrid": null,
-      "jsHeapBytes": 47732480,
+      "jsHeapBytes": 54007229,
       "simulationSeed": 20260722,
       "layoutSeed": 20260610,
       "checkpointRevision": 2,
-      "timeToInteractiveMs": 890.4,
+      "timeToInteractiveMs": 895.3,
       "diagnostics": {
         "shadowsEnabled": true,
         "visibleLocalLights": 6
       },
       "timing": {
         "frames": 180,
-        "averageFps": 60.00400026668446,
-        "averageFrameMs": 16.665555555555553,
-        "p95FrameMs": 16.700000000000728,
+        "averageFps": 60.00200006666889,
+        "averageFrameMs": 16.66611111111111,
+        "p95FrameMs": 16.799999999999272,
         "p99FrameMs": 16.800000000000182,
         "maxFrameMs": 16.800000000000182,
         "hitchCount": 0,
@@ -212,21 +212,21 @@
       },
       "cpu": {
         "scope": "Chromium renderer main thread; not total system CPU",
-        "taskMs": 715,
-        "busyPercent": 23.8,
-        "scriptMs": 676.2,
-        "layoutMs": 4.2
+        "taskMs": 642,
+        "busyPercent": 21.4,
+        "scriptMs": 605,
+        "layoutMs": 3.9
       },
       "gpu": {
         "available": true,
         "method": "EXT_disjoint_timer_query_webgl2 around an explicit composer frame",
         "sampleCount": 15,
-        "medianRenderMsRaw": 15.971875,
-        "p90RenderMsRaw": 21.350708,
-        "medianRenderMs": 16,
-        "p90RenderMs": 21.4,
-        "minRenderMs": 8,
-        "maxRenderMs": 22.5
+        "medianRenderMsRaw": 15.625499,
+        "p90RenderMsRaw": 20.136041,
+        "medianRenderMs": 15.6,
+        "p90RenderMs": 20.1,
+        "minRenderMs": 11.4,
+        "maxRenderMs": 29.2
       },
       "measuredState": {
         "t01": 0.5,
@@ -361,11 +361,11 @@
       "camera": "checkpoint",
       "world": "voxel",
       "hybrid": null,
-      "jsHeapBytes": 42427796,
+      "jsHeapBytes": 43174984,
       "simulationSeed": 20260722,
       "layoutSeed": 20260610,
       "checkpointRevision": 2,
-      "timeToInteractiveMs": 1028.6,
+      "timeToInteractiveMs": 1105.8,
       "diagnostics": {
         "shadowsEnabled": true,
         "visibleLocalLights": 6
@@ -382,21 +382,21 @@
       },
       "cpu": {
         "scope": "Chromium renderer main thread; not total system CPU",
-        "taskMs": 641.6,
-        "busyPercent": 21.4,
-        "scriptMs": 603.1,
-        "layoutMs": 4.1
+        "taskMs": 649.6,
+        "busyPercent": 21.7,
+        "scriptMs": 612.8,
+        "layoutMs": 3.6
       },
       "gpu": {
         "available": true,
         "method": "EXT_disjoint_timer_query_webgl2 around an explicit composer frame",
         "sampleCount": 15,
-        "medianRenderMsRaw": 17.585166,
-        "p90RenderMsRaw": 20.19825,
-        "medianRenderMs": 17.6,
-        "p90RenderMs": 20.2,
-        "minRenderMs": 12.8,
-        "maxRenderMs": 20.8
+        "medianRenderMsRaw": 13.386958,
+        "p90RenderMsRaw": 14.752124,
+        "medianRenderMs": 13.4,
+        "p90RenderMs": 14.8,
+        "minRenderMs": 10.3,
+        "maxRenderMs": 19.8
       },
       "measuredState": {
         "t01": 0.28,
@@ -531,19 +531,19 @@
       "camera": "checkpoint",
       "world": "voxel",
       "hybrid": null,
-      "jsHeapBytes": 34482809,
+      "jsHeapBytes": 40044185,
       "simulationSeed": 20260722,
       "layoutSeed": 20260610,
       "checkpointRevision": 2,
-      "timeToInteractiveMs": 962.3,
+      "timeToInteractiveMs": 962.6,
       "diagnostics": {
         "shadowsEnabled": true,
         "visibleLocalLights": 18
       },
       "timing": {
         "frames": 180,
-        "averageFps": 60.00200006666888,
-        "averageFrameMs": 16.666111111111114,
+        "averageFps": 60.00400026668446,
+        "averageFrameMs": 16.665555555555553,
         "p95FrameMs": 16.700000000000728,
         "p99FrameMs": 16.800000000000182,
         "maxFrameMs": 16.800000000000182,
@@ -552,21 +552,21 @@
       },
       "cpu": {
         "scope": "Chromium renderer main thread; not total system CPU",
-        "taskMs": 485.4,
-        "busyPercent": 16.2,
-        "scriptMs": 452.4,
-        "layoutMs": 3.3
+        "taskMs": 488,
+        "busyPercent": 16.3,
+        "scriptMs": 455.5,
+        "layoutMs": 3.2
       },
       "gpu": {
         "available": true,
         "method": "EXT_disjoint_timer_query_webgl2 around an explicit composer frame",
         "sampleCount": 15,
-        "medianRenderMsRaw": 37.496208,
-        "p90RenderMsRaw": 48.871749,
-        "medianRenderMs": 37.5,
-        "p90RenderMs": 48.9,
-        "minRenderMs": 35.8,
-        "maxRenderMs": 49.2
+        "medianRenderMsRaw": 46.326291,
+        "p90RenderMsRaw": 52.502083,
+        "medianRenderMs": 46.3,
+        "p90RenderMs": 52.5,
+        "minRenderMs": 30,
+        "maxRenderMs": 52.7
       },
       "measuredState": {
         "t01": 0.8999999999999999,

@@ -37,38 +37,35 @@ describe('architecture emitter', () => {
     }
   });
 
-  test('layer 0 keeps a simplified window rhythm that lights with its cohort', () => {
+  test('layer 0 carries the glazing itself, so a distant cluster still reads as a building', () => {
     for (const spec of model.buildings) {
       const { primitives } = emitBuilding(spec);
-      const ghosts = primitives.filter((p) => p.layer === 0 && p.cls !== 'opaque' && p.cohort >= 0);
-      // One per opening, so a cluster at LOD 0 is never a blank tinted box.
-      expect(ghosts.length, `${spec.index}: no window rhythm in layer 0`).toBeGreaterThanOrEqual(spec.floors * 4);
-      expect(ghosts.every((p) => p.cohort >= 0 && p.cohort < 5)).toBe(true);
-      expect(ghosts.every((p) => p.kind === 'plane')).toBe(true);
+      const glazing = primitives.filter((p) => p.cls === 'glass');
+      expect(glazing.length, `${spec.index}: no glazing`).toBeGreaterThan(0);
+      // Every dwelling pane is in layer 0: the simplification at level 0 is the absence
+      // of the frames, sills and reveals around the pane, not the absence of the pane.
+      // A shopfront is the exception -- its display glass is transparent, so layer 0
+      // carries the dark interior behind it instead and the glass arrives at layer 1.
+      expect(glazing.filter((p) => p.layer !== 0), `${spec.index}: dwelling glazing outside layer 0`).toEqual([]);
+      const clear = primitives.filter((p) => p.cls === 'glassClear');
+      expect(clear.every((p) => p.layer === 1), `${spec.index}: display glass outside layer 1`).toBe(true);
+      const lit = glazing.filter((p) => p.cohort >= 0);
+      expect(lit.length).toBeGreaterThanOrEqual(spec.floors * 4);
+      expect(lit.every((p) => p.cohort < 5)).toBe(true);
     }
   });
 
-  test('every layer 0 pane hides behind a wider layer 1 opening that lights the same way', () => {
+  test('nothing in layer 0 is drawn twice, so a level switch never doubles a surface', () => {
     for (const spec of model.buildings) {
       const { primitives } = emitBuilding(spec);
-      const ghosts = primitives.filter((p) => p.layer === 0 && p.kind === 'plane' && p.cls !== 'opaque');
-      expect(ghosts.length).toBeGreaterThan(0);
-      for (const ghost of ghosts) {
-        if (ghost.kind !== 'plane') continue;
-        const near = primitives.filter(
-          (r) =>
-            r.layer === 1 &&
-            (r.kind === 'plane' || r.kind === 'box') &&
-            Math.hypot(r.x - ghost.x, r.y - ghost.y, r.z - ghost.z) < 0.35
-        );
-        const covers = near.filter((r) => (r.kind === 'plane' || r.kind === 'box') && r.w > ghost.w && r.h > ghost.h);
-        expect(covers.length, `${spec.index}: layer 0 pane at ${ghost.x},${ghost.y},${ghost.z} is not covered at layer 1`).toBeGreaterThan(0);
-        // Gate 3: the same opening must light the same way at either level. A layer 0
-        // pane may only carry a cohort if the glazing over it carries the same one.
-        const glazing = near.filter((r) => r.cls !== 'opaque');
-        const cohorts = new Set(glazing.map((r) => r.cohort));
-        expect(cohorts.has(ghost.cohort), `${spec.index}: cohort ${ghost.cohort} at layer 0 has no match at layer 1`).toBe(true);
+      const seen = new Map<string, number>();
+      for (const p of primitives) {
+        if (p.kind === 'prism') continue;
+        const key = `${p.cls}|${p.x.toFixed(3)}|${p.y.toFixed(3)}|${p.z.toFixed(3)}`;
+        seen.set(key, (seen.get(key) ?? 0) + 1);
       }
+      const doubled = [...seen.entries()].filter(([, n]) => n > 1).map(([k]) => k);
+      expect(doubled, `${spec.index}: coincident surfaces of one class`).toEqual([]);
     }
   });
 
