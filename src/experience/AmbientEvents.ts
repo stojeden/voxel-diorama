@@ -1,3 +1,5 @@
+import type { CameraAutomation } from './CameraDirector';
+
 /**
  * "Co dzieje się teraz" — a projection over world state that is already owned
  * elsewhere. It invents no events, predicts nothing from elapsed time and holds
@@ -8,7 +10,7 @@
 export type AmbientEventKind = 'eclipse' | 'tour' | 'rainbow' | 'train-stop' | 'bus-stop';
 
 /** Automatic framing currently owned by `CameraDirector`. */
-export type AmbientCameraAutomation = 'overview' | 'eclipse' | 'tour' | 'train' | 'bus' | null;
+export type AmbientCameraAutomation = CameraAutomation;
 
 /**
  * Flat and reusable on purpose: the caller keeps one instance and rewrites its
@@ -94,10 +96,10 @@ export function canFrameEvent(
   automation: AmbientCameraAutomation
 ): boolean {
   if (kind === 'tour' || automation === 'tour') return false;
-  if (kind === 'train-stop') return automation !== 'train';
-  if (kind === 'bus-stop') return automation !== 'bus';
+  if (kind === 'train-stop') return automation !== 'train' && automation !== 'train-stop';
+  if (kind === 'bus-stop') return automation !== 'bus' && automation !== 'bus-stop';
   if (kind === 'eclipse') return automation !== 'eclipse';
-  return true;
+  return automation !== 'rainbow';
 }
 
 /**

@@ -11,6 +11,10 @@ a wersjonowanie projektu docelowo stosuje [Semantic Versioning](https://semver.o
 
 ### Added
 
+- Deterministyczny kalendarz naturalnych zaćmień: pierwszy dzień sesji jest
+  zawsze spokojny, pierwsze zjawisko przypada losowo na dzień 2–5, a kolejne po
+  2–6 dniach. Ręczne zaćmienie anuluje automatyczne tego dnia i również wymusza
+  co najmniej jeden pełny dzień przerwy. Naturalne zjawisko nie przejmuje kamery.
 - Dyskretne „Co dzieje się teraz" w prawym dolnym rogu HUD-u: czysta, testowalna
   projekcja `AmbientEvents` wybiera najwyżej jedno rzeczywiście trwające
   wydarzenie (aktywne zaćmienie → rozdział touru uruchomiony przez użytkownika →
@@ -30,8 +34,8 @@ a wersjonowanie projektu docelowo stosuje [Semantic Versioning](https://semver.o
 - Bramki akceptacyjne kontraktu wejścia P1 w smoke teście: brak panelu startowego
   i jego zamienników, brak stanu pierwszej wizyty w `localStorage`/`sessionStorage`,
   odsłonięte centrum sceny, wolna i włączona kamera oraz pusty status natychmiast
-  po preloaderze, brak automatycznego touru, zaćmienia i ruchu kamery przy
-  przejściu przez godzinę zjawiska, dokładnie jeden canvas i dokładnie jedno
+  po preloaderze, brak automatycznego touru, zaćmienia pierwszego dnia i ruchu
+  kamery przy naturalnym zjawisku, dokładnie jeden canvas i dokładnie jedno
   `requestAnimationFrame` na wyrenderowaną klatkę.
 - Bramki dostępności i wejścia dla statusu: „Pokaż" jako prawdziwy przycisk
   osiągalny klawiaturą (`Enter` i spacja), `role="status"` zamiast `role="alert"`,
@@ -93,23 +97,25 @@ a wersjonowanie projektu docelowo stosuje [Semantic Versioning](https://semver.o
 
 ### Changed
 
+- Publiczna nazwa produktu została zmieniona z „Trans City Express” na
+  **„Miasto”** — w tytule strony, nagłówku HUD-u, dostępnej nazwie panelu oraz
+  dokumentacji. Techniczny klucz ustawień jakości pozostaje bez zmian dla
+  zgodności z zapisanymi preferencjami użytkowników.
+- Kadr „Pokaż” ma teraz osobnego właściciela dla tęczy, postoju pociągu i postoju
+  autobusu, więc przycisk znika po wybraniu kadru i nie restartuje przejścia.
+- Wyjście touru z rozdziału totalności zeruje linię zaćmienia przed Cyberpunkiem,
+  zamiast zamrażać ostatni stan całkowitego pokrycia Słońca.
 - Spacja nie przechwytuje już aktywacji sfokusowanego przycisku: globalny skrót
   pauzy ustępuje, gdy fokus jest na `<button>`.
 - Suwak prędkości i klawisze `←`/`→` oddają kamerę użytkownikowi tak samo jak
   pozostałe elementy sterowania.
 - Wygaszany preloader dostał `pointer-events: none`, więc 420 ms cross-fade nie
   połyka już pierwszego gestu użytkownika.
-- Zaplanowane zaćmienie dobowe zostało usunięte razem z całą obsługą
-  `eclipseDay` / `eclipseDoneToday` / `previousDayProgress`. Wyzwalacz nigdy nie
-  działał, ale wyłącznie przez inny błąd: pierwsza klatka miała ujemną deltę,
-  która cofała zegar poniżej progu startowego i gałąź przełomu dnia zerowała
-  `eclipseDay`. Po naprawieniu delty zjawisko zaczęło startować samo — bramka
-  akceptacyjna wychwyciła to natychmiast. P1 zabrania zaćmienia i ruchu kamery
-  bez decyzji użytkownika, więc wyzwalacz zniknął zamiast zostać odblokowany.
-  Zaćmienie uruchamia przycisk „Zaćmienie", klawisz `E` albo — dla trwającego
-  już zjawiska — „Pokaż" w statusie.
-- `startEclipse` nie ma już opcjonalnego kadrowania: skoro zjawisko uruchamia
-  wyłącznie świadoma decyzja, kadr nie jest opcjonalny.
+- Wadliwy, codzienny wyzwalacz zaćmienia został zastąpiony osobnym
+  `EclipseSchedule`, opartym na indeksowanych próbkach seeda świata. Zjawisko
+  może rozpocząć się naturalnie bez decyzji użytkownika, ale tylko ręczne
+  uruchomienie kadruje Słońce; automat pozostawia kamerę dokładnie tam, gdzie
+  ustawił ją użytkownik.
 - `CameraDirector` jest jedynym produkcyjnym właścicielem automatycznych ujęć;
   `pointerdown`, dotyk i kółko przerywają tour, kamery pojazdów, panoramę lub
   kadr zaćmienia w fazie capture, nie połykając pierwszego gestu.

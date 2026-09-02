@@ -161,7 +161,10 @@ describe('AmbientEventProjection', () => {
     expect(canFrameEvent('train-stop', 'tour')).toBe(false);
     expect(canFrameEvent('eclipse', 'eclipse')).toBe(false);
     expect(canFrameEvent('train-stop', 'train')).toBe(false);
+    expect(canFrameEvent('train-stop', 'train-stop')).toBe(false);
     expect(canFrameEvent('bus-stop', 'bus')).toBe(false);
+    expect(canFrameEvent('bus-stop', 'bus-stop')).toBe(false);
+    expect(canFrameEvent('rainbow', 'rainbow')).toBe(false);
 
     expect(canFrameEvent('eclipse', null)).toBe(true);
     expect(canFrameEvent('rainbow', null)).toBe(true);

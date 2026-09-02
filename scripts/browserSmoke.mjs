@@ -25,16 +25,19 @@ async function assertBundleBudgets() {
   const three = assetNames.find((name) => /^three-.*\.js$/.test(name));
   const cameraControls = assetNames.find((name) => /^camera-controls-.*\.js$/.test(name));
   const postprocessing = assetNames.find((name) => /^postprocessing-.*\.js$/.test(name));
+  const experienceSignals = assetNames.find((name) => /^experience-signals-.*\.js$/.test(name));
   assert.ok(entry, 'application entry chunk is missing');
   assert.ok(bootstrap, 'application bootstrap chunk is missing');
   assert.ok(three, 'Three.js vendor chunk is missing');
   assert.ok(cameraControls, 'camera-controls vendor chunk is missing');
   assert.ok(postprocessing, 'postprocessing vendor chunk is missing');
+  assert.ok(experienceSignals, 'experience signals chunk is missing');
   const entryBytes = (await stat(`dist/assets/${entry}`)).size;
   const bootstrapBytes = (await stat(`dist/assets/${bootstrap}`)).size;
   const threeBytes = (await stat(`dist/assets/${three}`)).size;
   const cameraControlsBytes = (await stat(`dist/assets/${cameraControls}`)).size;
   const postprocessingBytes = (await stat(`dist/assets/${postprocessing}`)).size;
+  const experienceSignalsBytes = (await stat(`dist/assets/${experienceSignals}`)).size;
   assert.ok(entryBytes <= 240_000, `application chunk budget exceeded: ${entryBytes} bytes`);
   assert.ok(bootstrapBytes <= 50_000, `application bootstrap budget exceeded: ${bootstrapBytes} bytes`);
   assert.ok(threeBytes <= 800_000, `Three.js chunk budget exceeded: ${threeBytes} bytes`);
@@ -42,6 +45,10 @@ async function assertBundleBudgets() {
   assert.ok(
     postprocessingBytes <= 300_000,
     `postprocessing chunk budget exceeded: ${postprocessingBytes} bytes`
+  );
+  assert.ok(
+    experienceSignalsBytes <= 15_000,
+    `experience signals chunk budget exceeded: ${experienceSignalsBytes} bytes`
   );
 }
 
@@ -443,6 +450,9 @@ try {
       pose: window.__diorama.cameraPose(),
       frameIndex: state.frameIndex,
       rafCalls: window.__rafCalls,
+      documentTitle: document.title,
+      panelTitle: document.querySelector('.panel-title')?.textContent ?? null,
+      panelLabel: document.querySelector('#control-panel')?.getAttribute('aria-label') ?? null,
     };
   });
 
@@ -492,9 +502,12 @@ try {
   assert.equal(atHandover.cameraMode, 'free', 'the diorama must open on the free camera');
   assert.equal(atHandover.cameraAutomation, null, 'no automatic framing may own the camera at handover');
   assert.equal(atHandover.tourChapter, null, 'no tour may start on its own');
-  assert.equal(atHandover.eclipseProgress, 0, 'no eclipse may start on its own');
+  assert.equal(atHandover.eclipseProgress, 0, 'the first simulated day must begin without an eclipse');
   assert.equal(atHandover.ambient, null, 'the ambient status must stay empty while nothing has happened yet');
   assert.equal(atHandover.ambientHidden, true, 'the ambient status must render nothing in its empty state');
+  assert.equal(atHandover.documentTitle, 'Miasto — Voxel Diorama');
+  assert.equal(atHandover.panelTitle, 'MIASTO');
+  assert.equal(atHandover.panelLabel, 'Panel sterowania miastem');
   assert.ok(atHandover.ambientTicks > 0, 'the ambient projection must have run before its empty state is trusted');
   assert.equal(
     atHandover.ambientEntered.eclipse,
@@ -504,7 +517,8 @@ try {
 
   await page.waitForTimeout(4_500);
 
-  // Left completely alone, the diorama must not move the camera or start anything.
+  // Left completely alone at handover, the diorama must not move the camera or
+  // start a first-day event before its deterministic schedule allows one.
   const afterIdle = await readEntry();
   assert.ok(
     poseDistance(afterIdle.pose, atHandover.pose) < 0.001,
@@ -512,7 +526,7 @@ try {
   );
   assert.equal(afterIdle.cameraAutomation, null, 'idle time may not hand the camera to automation');
   assert.equal(afterIdle.tourChapter, null, 'idle time may not start a tour');
-  assert.equal(afterIdle.eclipseProgress, 0, 'idle time may not start an eclipse');
+  assert.equal(afterIdle.eclipseProgress, 0, 'the first simulated day must remain eclipse-free');
   assert.equal(afterIdle.startPanels.length, 0, 'no delayed panel may appear after the preloader');
   assert.ok(afterIdle.frameIndex > atHandover.frameIndex, 'the render loop must keep running');
   assert.equal(
@@ -556,7 +570,7 @@ try {
   );
   await saveScreenshot(page, '/tmp/voxel-diorama-desktop.png');
 
-  // ── Stepping the clock across the eclipse hour must start nothing at all ──
+  // ── The first day must stay quiet even while the clock crosses eclipse hours ──
   // The clock is stepped frame by frame rather than by wall clock: a software
   // renderer advances the simulation tens of times slower than real time.
   const beforeEclipseHour = await page.evaluate(() => window.__diorama.cameraPose());
@@ -574,7 +588,7 @@ try {
         ambient: state.ambient,
       };
     });
-    assert.equal(step.eclipseProgress, 0, `an eclipse started on its own at ${step.t01}`);
+    assert.equal(step.eclipseProgress, 0, `an eclipse started on the first day at ${step.t01}`);
     assert.equal(step.tourChapter, null, `a tour started on its own at ${step.t01}`);
     assert.equal(step.automation, null, `automation claimed the camera on its own at ${step.t01}`);
     assert.ok(
@@ -583,6 +597,72 @@ try {
     );
     assert.notEqual(step.ambient?.kind, 'eclipse', `an eclipse message appeared without an eclipse at ${step.t01}`);
   }
+
+  // ── Later days may start a natural eclipse, but never move the camera ──
+  let naturalSchedule = await page.evaluate(() => window.__diorama.getState().eclipseSchedule);
+  assert.equal(naturalSchedule.dayIndex, 0, 'the session must begin on schedule day zero');
+  assert.equal(naturalSchedule.scheduledToday, false, 'the first day must never schedule an eclipse');
+  while (naturalSchedule.dayIndex < naturalSchedule.nextAutomaticDay) {
+    const previousDayIndex = naturalSchedule.dayIndex;
+    await page.evaluate(() => window.__diorama.setTime(0.9999));
+    await page.waitForFunction(
+      (dayIndex) => window.__diorama.getState().eclipseSchedule.dayIndex > dayIndex,
+      previousDayIndex,
+      { timeout: SLOW_RUNNER_TIMEOUT_MS }
+    );
+    naturalSchedule = await page.evaluate(() => window.__diorama.getState().eclipseSchedule);
+  }
+  assert.equal(naturalSchedule.scheduledToday, true, 'the selected later day must schedule an eclipse');
+  assert.ok(
+    naturalSchedule.dayIndex >= 1 && naturalSchedule.dayIndex <= 4,
+    `first natural eclipse day is outside 1..4: ${naturalSchedule.dayIndex}`
+  );
+  const naturalPoseBefore = await page.evaluate(() => window.__diorama.cameraPose());
+  await page.evaluate(
+    (trigger) => window.__diorama.setTime(Math.max(0, trigger - 0.0002)),
+    naturalSchedule.triggerT01
+  );
+  await page.waitForFunction(
+    () => window.__diorama.getState().eclipse.running === true,
+    null,
+    { timeout: SLOW_RUNNER_TIMEOUT_MS }
+  );
+  await waitForHudLatch(
+    page,
+    () => window.__diorama.getState().ambient?.kind === 'eclipse',
+    'the natural eclipse never reached the ambient status'
+  );
+  const naturalEclipse = await page.evaluate(() => {
+    const state = window.__diorama.getState();
+    return {
+      pose: window.__diorama.cameraPose(),
+      automation: state.cameraAutomation,
+      eclipse: state.eclipse,
+      schedule: state.eclipseSchedule,
+      ambient: state.ambient,
+    };
+  });
+  assert.equal(naturalEclipse.eclipse.running, true, 'the scheduled world event must really start');
+  assert.equal(naturalEclipse.automation, null, 'a natural eclipse may not claim the camera');
+  assert.ok(
+    poseDistance(naturalEclipse.pose, naturalPoseBefore) < 0.001,
+    `a natural eclipse moved the camera (${poseDistance(naturalEclipse.pose, naturalPoseBefore)})`
+  );
+  assert.equal(naturalEclipse.ambient.kind, 'eclipse');
+  assert.equal(naturalEclipse.schedule.occurredToday, true);
+  assert.ok(
+    naturalEclipse.schedule.nextAutomaticDay - naturalEclipse.schedule.dayIndex >= 2,
+    'the next automatic eclipse must leave at least one full quiet day'
+  );
+  await page.evaluate(() => {
+    window.__diorama.setEclipseProgress(1);
+    window.__diorama.releaseCheckpoint();
+  });
+  await waitForHudLatch(
+    page,
+    () => window.__diorama.getState().ambient?.kind !== 'eclipse',
+    'the natural eclipse status never cleared'
+  );
 
   // ── A live event: the message appears and the camera stays put ──
   const beforeScheduledEclipse = await page.evaluate(() => window.__diorama.cameraPose());
@@ -1322,6 +1402,34 @@ try {
   await page.waitForTimeout(50);
   const cameraAfterDrag = await page.evaluate(() => window.__diorama.cameraPose().position);
   assert.notDeepEqual(cameraAfterDrag, cameraBeforeDrag, 'the first drag must move the released camera');
+
+  // A normal totality -> Cyberpunk chapter transition must rewind the staged
+  // eclipse instead of preserving a frozen totality through the final chapter.
+  await page.evaluate(() => window.__diorama.seekTourChapter('totality', 0.99));
+  await page.waitForFunction(
+    () => window.__diorama.getState().tourChapter === 'cyberpunk',
+    null,
+    { timeout: SLOW_RUNNER_TIMEOUT_MS }
+  );
+  await waitForHudLatch(
+    page,
+    () => window.__diorama.getState().ambient?.kind === 'tour',
+    'the Cyberpunk chapter never became the active ambient event'
+  );
+  const cyberpunkHandover = await page.evaluate(() => {
+    const state = window.__diorama.getState();
+    return {
+      tourChapter: state.tourChapter,
+      eclipseProgress: state.eclipse.progress,
+      eclipseCoverage: state.eclipse.coverage,
+      ambient: state.ambient,
+    };
+  });
+  assert.equal(cyberpunkHandover.tourChapter, 'cyberpunk');
+  assert.equal(cyberpunkHandover.eclipseProgress, 0, 'Cyberpunk must not inherit totality progress');
+  assert.equal(cyberpunkHandover.eclipseCoverage, 0, 'Cyberpunk must not remain under a total eclipse');
+  assert.equal(cyberpunkHandover.ambient.kind, 'tour', 'the tour chapter must outrank a cleared eclipse');
+  await page.evaluate(() => window.__diorama.stopTour());
 
   await page.evaluate(() => window.__diorama.startTour());
   const distanceBeforeWheel = await page.evaluate(() => window.__diorama.cameraPose().distance);
