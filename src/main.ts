@@ -24,6 +24,7 @@ import { Fisherman } from './world/Fisherman';
 import { Postman } from './world/Postman';
 import { chapterForProgress } from './experience/RouteChapters';
 import { EclipseTimeline } from './experience/EclipseTimeline';
+import { EclipseSchedule } from './experience/EclipseSchedule';
 import { eclipseWorldReactionAt } from './experience/EclipseWorldReaction';
 import { EclipseCrowdProps } from './effects/EclipseCrowdProps';
 import { themeById, type DioramaTheme } from './experience/Themes';
@@ -165,6 +166,8 @@ let eclipseState = eclipseTimeline.getState();
 let eclipseReaction = eclipseWorldReactionAt(0, 0);
 let eclipseDebugStrength: number | null = null;
 let eclipseCheckpointLocked = false;
+const eclipseSchedule = new EclipseSchedule((index) => worldRandom.sample('eclipse-schedule', index));
+let previousDayProgress = 0.262;
 const eclipseViewSun = new THREE.Vector3();
 const eclipseViewCamera = new THREE.Vector3();
 const eclipseViewTarget = new THREE.Vector3(0, 36, 0);
@@ -210,6 +213,10 @@ let ambientTicks = 0;
 const experience = new ExperienceDirector({
   daySeconds: DAY_SECONDS,
   random: worldRandom.stream('experience'),
+  onNewDay: () => {
+    eclipseSchedule.beginNextDay();
+    previousDayProgress = 0;
+  },
 });
 
 const cameraDirector = new CameraDirector({
@@ -312,7 +319,9 @@ function applyTourChapter(frame: TourFrame): void {
   weather.debugSetImmediate(chapter.weather);
   if (currentTheme.id !== chapter.theme) applyTheme(chapter.theme);
   if (chapter.eclipseProgress === null) {
-    eclipseState = eclipseTimeline.stop();
+    // Leaving the staged totality chapter must clear its preserved timeline
+    // progress; `stop()` alone would freeze Cyberpunk under a total eclipse.
+    eclipseState = eclipseTimeline.seek(0, false);
     eclipseCheckpointLocked = false;
     experience.setClockLocked(false);
   } else {
@@ -439,22 +448,28 @@ function focusEclipseView(): void {
   cameraDirector.focusEclipse(eclipseViewCamera, eclipseViewTarget);
 }
 
-function startEclipse(): void {
+type EclipseStartSource = 'manual' | 'automatic';
+
+function startEclipse(source: EclipseStartSource = 'manual'): void {
+  const manual = source === 'manual';
   // End the tour before the timeline starts: `endTourOverrides` rewinds the
   // eclipse, so running it afterwards would cancel the eclipse being requested.
-  if (experience.isTourActive()) endTourOverrides();
+  if (manual && experience.isTourActive()) endTourOverrides();
   if (realTime?.isActive()) {
     realTime.disable();
     weather.setExternal(null);
     ui.setRealTime(false);
   }
-  experience.setTime(ECLIPSE_VIEW_TIME);
+  if (manual) experience.setTime(ECLIPSE_VIEW_TIME);
   experience.setClockLocked(true);
   eclipseState = eclipseTimeline.start();
+  eclipseSchedule.recordOccurrence();
   eclipseDebugStrength = null;
   eclipseCheckpointLocked = false;
-  focusEclipseView();
-  ui.showToast('ZAĆMIENIE SŁOŃCA · CZAS ZJAWISKA SKOMPRESOWANY');
+  if (manual) {
+    focusEclipseView();
+    ui.showToast('ZAĆMIENIE SŁOŃCA · CZAS ZJAWISKA SKOMPRESOWANY');
+  }
 }
 
 ui.onEclipseStart(() => {
@@ -480,7 +495,12 @@ function frameVehicleStop(subject: 'train' | 'bus'): void {
     .copy(ambientShowcaseTarget)
     .addScaledVector(ambientShowcaseOffset, 19);
   ambientShowcasePosition.y += 11;
-  cameraDirector.frameAbsolute(ambientShowcasePosition, ambientShowcaseTarget, true, 'overview');
+  cameraDirector.frameAbsolute(
+    ambientShowcasePosition,
+    ambientShowcaseTarget,
+    true,
+    subject === 'train' ? 'train-stop' : 'bus-stop'
+  );
 }
 
 /**
@@ -498,7 +518,7 @@ function frameRainbowView(): void {
     .addScaledVector(ambientShowcaseOffset, 74);
   ambientShowcasePosition.y = 30;
   ambientShowcaseTarget.y += 10;
-  cameraDirector.frameAbsolute(ambientShowcasePosition, ambientShowcaseTarget, true, 'overview');
+  cameraDirector.frameAbsolute(ambientShowcasePosition, ambientShowcaseTarget, true, 'rainbow');
 }
 
 ui.onAmbientAction((kind) => {
@@ -640,6 +660,25 @@ function animate(timestamp?: number) {
     experienceState = experience.getState();
   }
   const t01 = experienceState.t01;
+
+  // Natural eclipses are world events, not camera commands. Day zero is quiet;
+  // later days use a deterministic named RNG stream and never occur back-to-back.
+  if (
+    eclipseSchedule.consumeIfDue(
+      previousDayProgress,
+      t01,
+      !realTime?.isActive() &&
+        !activeCheckpoint &&
+        !experience.isCheckpointLocked() &&
+        !experience.isTourActive() &&
+        !eclipseCheckpointLocked &&
+        eclipseDebugStrength === null &&
+        !eclipseState.running
+    )
+  ) {
+    startEclipse('automatic');
+  }
+  previousDayProgress = t01;
   if (experienceState.tour?.entered) applyTourChapter(experienceState.tour);
 
   // ── Moon & aurora ──
@@ -652,14 +691,8 @@ function animate(timestamp?: number) {
   dayNight.setAuroraStrength(experienceState.auroraEnabled && weather.isClearNight() ? 0.85 : 0);
 
   // ── Eclipse 2.0: deterministic, compressed event with explicit phases ──
-  // There is deliberately no scheduled daily eclipse. One used to be wired here
-  // behind an `eclipseDay` flag, but it never fired: the day-rollover branch
-  // cleared that flag on frame one, because the first frame delta was negative
-  // and pushed the clock below its own starting progress. Clamping that delta
-  // would have brought an unrequested eclipse — and an unrequested camera move —
-  // back to life, which P1 forbids, so the trigger and its bookkeeping are gone.
-  // The eclipse is started by the user: the „Zaćmienie" button, `E`, or the
-  // ambient status once an eclipse is genuinely running.
+  // A natural eclipse may start from the deterministic day schedule above, but
+  // never moves the camera. Manual activation still frames it deliberately.
   eclipseState = eclipseTimeline.update(eclipseState.running ? delta : 0);
   if (eclipseState.phase === 'complete' && !activeCheckpoint) {
     experience.setClockLocked(false);
@@ -899,6 +932,7 @@ const debugHandle: DioramaDebugHandle = {
     trainProgress: train.getRouteProgress(),
     busProgress: bus.getRouteProgress(),
     eclipse: eclipseState,
+    eclipseSchedule: eclipseSchedule.getState(),
     eclipseReaction,
   }),
   getMetrics: () => {

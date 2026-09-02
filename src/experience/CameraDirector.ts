@@ -6,7 +6,16 @@ import { TUNNEL_LENGTH, WORLD_HALF_SIZE } from '../world/WorldLayout';
 import { FIXED_TOUR_SHOTS } from './ShotDefinitions';
 
 export type CameraMode = 'free' | 'train' | 'bus';
-export type CameraAutomation = 'overview' | 'eclipse' | 'tour' | 'train' | 'bus' | null;
+export type CameraAutomation =
+  | 'overview'
+  | 'eclipse'
+  | 'tour'
+  | 'train'
+  | 'bus'
+  | 'rainbow'
+  | 'train-stop'
+  | 'bus-stop'
+  | null;
 
 export interface CameraSubjects {
   trainPosition: THREE.Vector3;

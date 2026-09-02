@@ -47,6 +47,15 @@ export default defineConfig({
               priority: 20,
               includeDependenciesRecursively: false,
             },
+            {
+              // Small, cohesive and independently cacheable world-signal logic.
+              // Keeping it out of the near-limit entry chunk leaves room for the
+              // UI redesign without hiding growth behind a larger budget.
+              name: 'experience-signals',
+              test: /src[\\/]experience[\\/](?:AmbientEvents|EclipseSchedule)\.ts$/,
+              priority: 10,
+              includeDependenciesRecursively: false,
+            },
           ],
         },
       },
