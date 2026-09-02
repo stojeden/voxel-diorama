@@ -64,7 +64,7 @@ import type { HybridHandle } from './world/hybrid/HybridSpike';
 
 const query = new URLSearchParams(window.location.search);
 const requestedCheckpoint = getCheckpoint(query.get('checkpoint'));
-// Reversible hybrid spike: `?world=hybrid-direct|hybrid-greedy` swaps one fragment.
+// Reversible hybrid spike: `?world=hybrid-direct` swaps one fragment.
 const worldMode = parseWorldMode(query.get('world'));
 const hybridStrategy = strategyOf(worldMode);
 const worldRandom = createWorldRandom(query.get('seed') ?? undefined);

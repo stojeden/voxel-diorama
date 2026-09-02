@@ -4,7 +4,7 @@
  * writes JPEG frames plus a JSON summary under docs/superpowers/spike/.
  *
  * Usage: npm run build && node scripts/spikeSmoke.mjs
- *   SPIKE_WORLDS=hybrid-direct,hybrid-greedy   SPIKE_QUALITIES=high,low
+ *   SPIKE_WORLDS=hybrid-direct   SPIKE_QUALITIES=high,low
  *   SPIKE_WORLDS=voxel renders the same frames without the fragment as the visual baseline
  *   (summary goes to spike-smoke-<worlds>.json unless SPIKE_SUMMARY overrides it).
  */
@@ -17,7 +17,7 @@ const HOST = '127.0.0.1';
 const PORT = 4176;
 const URL = `http://${HOST}:${PORT}`;
 const SEED = 20260722;
-const WORLDS = (process.env.SPIKE_WORLDS ?? 'hybrid-direct,hybrid-greedy').split(',').map((s) => s.trim()).filter(Boolean);
+const WORLDS = (process.env.SPIKE_WORLDS ?? 'hybrid-direct').split(',').map((s) => s.trim()).filter(Boolean);
 const QUALITIES = (process.env.SPIKE_QUALITIES ?? 'high,low').split(',').map((s) => s.trim()).filter(Boolean);
 const CHECKPOINTS = ['spike-overview', 'spike-street', 'spike-golden', 'spike-night-street'];
 const OUT_DIR = 'docs/superpowers/spike';
@@ -26,7 +26,7 @@ const FRAME_DIR = `${OUT_DIR}/frames`;
 const PHASE = process.env.SPIKE_PHASE ?? 'frames';
 /** `voxel` renders the same four frames without attaching the fragment, so the spike has a visual baseline. */
 const SUMMARY = process.env.SPIKE_SUMMARY
-  ?? (WORLDS.join(',') === 'hybrid-direct,hybrid-greedy' ? 'spike-smoke.json' : `spike-smoke-${WORLDS.join('-')}.json`);
+  ?? (WORLDS.join(',') === 'hybrid-direct' ? 'spike-smoke.json' : `spike-smoke-${WORLDS.join('-')}.json`);
 
 async function firstExisting(paths) {
   for (const path of paths) {
@@ -233,7 +233,7 @@ async function runGate3(page, worlds) {
       await openHybrid(page, world, 'high', 'spike-street');
       runs.push(await page.evaluate(() => {
         const h = window.__diorama.getMetrics().hybrid;
-        return { triangles: h.triangles, bytes: h.bytes, dilated: h.dilated, lodLevels: h.lodLevels };
+        return { triangles: h.triangles, bytes: h.bytes, lodLevels: h.lodLevels };
       }));
     }
     entry.determinism = { runs, identical: JSON.stringify(runs[0]) === JSON.stringify(runs[1]) };

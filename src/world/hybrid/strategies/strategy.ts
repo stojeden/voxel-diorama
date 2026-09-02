@@ -4,7 +4,7 @@ import type { Cluster, Layer, MaterialClass, SurfacePrimitive } from '../surface
 /** Vertex attributes every strategy must emit — the contract of `HybridMaterial`. */
 export const ATTRIBUTES = ['position', 'normal', 'uv', 'aPalette', 'aCohort', 'aAo', 'aStyle'] as const;
 
-export type StrategyName = 'direct' | 'greedy';
+export type StrategyName = 'direct';
 
 export interface StrategyStats {
   name: StrategyName;

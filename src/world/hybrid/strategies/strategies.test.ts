@@ -3,14 +3,13 @@ import { buildCityModel } from '../CityModel';
 import { emitBuilding } from '../architecture';
 import { emitStreetscape } from '../streetscape';
 import { buildDirect } from './DirectSurfaceStrategy';
-import { buildGreedy } from './GreedyVoxelStrategy';
 import { ATTRIBUTES } from './strategy';
 
 const model = buildCityModel();
 const tenement = emitBuilding(model.buildings.find((b) => b.family === 'tenement')!);
 const street = emitStreetscape(model);
 
-for (const [name, build] of [['direct', buildDirect], ['greedy', buildGreedy]] as const) {
+for (const [name, build] of [['direct', buildDirect]] as const) {
   describe(`${name} strategy`, () => {
     const result = build(tenement);
 
@@ -59,20 +58,14 @@ describe('direct strategy', () => {
     const result = buildDirect(tenement);
     expect(result.geometries.get('opaque:2')!.getAttribute('position').count).toBeGreaterThan(0);
   });
-});
 
-describe('greedy strategy', () => {
-  test('reports its grid and how many thin dimensions it had to dilate', () => {
-    const result = buildGreedy(tenement);
-    expect(result.stats.extra.cell).toBe(0.25);
-    expect(result.stats.extra.dilated).toBeGreaterThan(0);
-    expect(result.stats.extra.cells).toBeGreaterThan(1000);
-  });
-
-  test('voxelised walls carry the wall palette and the seams style of the tenement body', () => {
-    const result = buildGreedy(tenement);
+  // Kept from the deleted greedy suite: the attribute plumbing must carry the
+  // building's own wall tint through the merge, whatever produced the geometry.
+  test('merged walls carry the building wall palette', () => {
+    const result = buildDirect(tenement);
     const palette = result.geometries.get('opaque:0')!.getAttribute('aPalette').array as Float32Array;
     const spec = model.buildings.find((b) => b.family === 'tenement')!;
     expect(Array.from(palette)).toContain(spec.tint);
   });
 });
+

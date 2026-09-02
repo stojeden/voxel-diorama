@@ -6,17 +6,15 @@ import { isOnSidewalk } from '../WorldLayout';
  * from the entry code; everything else in `src/world/hybrid/` loads on demand as
  * its own chunk so the entry bundle budget is not spent on an experiment.
  */
-export type WorldMode = 'voxel' | 'hybrid-direct' | 'hybrid-greedy';
-export type HybridStrategyName = 'direct' | 'greedy';
+export type WorldMode = 'voxel' | 'hybrid-direct';
+export type HybridStrategyName = 'direct';
 
 export function parseWorldMode(value: string | null | undefined): WorldMode {
-  return value === 'hybrid-direct' || value === 'hybrid-greedy' ? value : 'voxel';
+  return value === 'hybrid-direct' ? value : 'voxel';
 }
 
 export function strategyOf(mode: WorldMode): HybridStrategyName | null {
-  if (mode === 'hybrid-direct') return 'direct';
-  if (mode === 'hybrid-greedy') return 'greedy';
-  return null;
+  return mode === 'hybrid-direct' ? 'direct' : null;
 }
 
 /** Osiedle Centralne: five blocks around the stop plus the pavement between them. */

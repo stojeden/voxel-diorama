@@ -11,7 +11,6 @@ import { resolvePalette } from './palette';
 import { LodSelector, pixelsPerMetre } from './ScreenSpaceLod';
 import { checkModel, checkProbes, type GroundContactReport, type ProbeInput } from './GroundContact';
 import { buildDirect } from './strategies/DirectSurfaceStrategy';
-import { buildGreedy } from './strategies/GreedyVoxelStrategy';
 import { parseKey, type GeometryStrategy } from './strategies/strategy';
 import type { Cluster, Layer, MaterialClass } from './surface';
 import type { HybridStrategyName } from './spikeFlag';
@@ -36,9 +35,6 @@ export interface HybridMetrics {
   lodLevels: Record<string, Layer>;
   /** Pixels per metre that produced those levels, per cluster. */
   lodPixelsPerMetre: Record<string, number>;
-  /** Greedy only: voxel edge and how many thin dimensions were dilated to one cell. */
-  cell: number | null;
-  dilated: number;
   low: boolean;
 }
 
@@ -83,7 +79,7 @@ export function attachHybridSpike(options: HybridSpikeOptions): HybridHandle {
     glassClear: createHybridMaterial(uniforms, { transparent: true }),
     glow: createHybridMaterial(uniforms),
   };
-  const strategy: GeometryStrategy = options.strategy === 'greedy' ? buildGreedy : buildDirect;
+  const strategy: GeometryStrategy = buildDirect;
   const group = new THREE.Group();
   group.name = 'hybrid-spike';
   options.scene.add(group);
@@ -92,7 +88,7 @@ export function attachHybridSpike(options: HybridSpikeOptions): HybridHandle {
   const lodGroups: LodGroup[] = [];
   const bloom: THREE.Object3D[] = [];
   let streetGround: THREE.Mesh | null = null;
-  const totals = { generationMs: 0, triangles: [0, 0, 0] as [number, number, number], vertices: 0, bytes: 0, meshes: 0, dilated: 0, cell: null as number | null };
+  const totals = { generationMs: 0, triangles: [0, 0, 0] as [number, number, number], vertices: 0, bytes: 0, meshes: 0 };
 
   const disposeMeshes = () => {
     for (const lodGroup of lodGroups) {
@@ -113,8 +109,6 @@ export function attachHybridSpike(options: HybridSpikeOptions): HybridHandle {
     totals.vertices = 0;
     totals.bytes = 0;
     totals.meshes = 0;
-    totals.dilated = 0;
-    totals.cell = null;
     const clusters: Cluster[] = [
       ...model.buildings.map(emitBuilding),
       emitStreetscape(model),
@@ -143,8 +137,6 @@ export function attachHybridSpike(options: HybridSpikeOptions): HybridHandle {
       totals.vertices += result.stats.vertices;
       totals.bytes += result.stats.bytes;
       totals.meshes += meshes.size;
-      totals.dilated += result.stats.extra.dilated ?? 0;
-      if (result.stats.extra.cell !== undefined) totals.cell = result.stats.extra.cell;
     }
   };
   buildAll();
@@ -217,8 +209,6 @@ export function attachHybridSpike(options: HybridSpikeOptions): HybridHandle {
         clusters: lodGroups.length,
         lodLevels: lodLevels(),
         lodPixelsPerMetre: { ...lodPixelsPerMetre },
-        cell: totals.cell,
-        dilated: totals.dilated,
         low,
       };
     },

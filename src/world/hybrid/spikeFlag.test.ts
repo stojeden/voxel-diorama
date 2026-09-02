@@ -14,10 +14,11 @@ describe('spike flag', () => {
     expect(parseWorldMode(undefined)).toBe('voxel');
     expect(parseWorldMode('hybrid')).toBe('voxel');
     expect(parseWorldMode('hybrid-direct')).toBe('hybrid-direct');
-    expect(parseWorldMode('hybrid-greedy')).toBe('hybrid-greedy');
+    // The greedy strategy was compared, lost and removed; the flag no longer names it,
+    // so an old link falls back to the untouched product rather than to a missing world.
+    expect(parseWorldMode('hybrid-greedy')).toBe('voxel');
     expect(strategyOf('voxel')).toBeNull();
     expect(strategyOf('hybrid-direct')).toBe('direct');
-    expect(strategyOf('hybrid-greedy')).toBe('greedy');
   });
 
   test('fragment blocks sit around Osiedle Centralne and the point tower is flagged explicitly', () => {

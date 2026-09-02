@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-02T14:10:32.872Z",
+  "generatedAt": "2026-09-02T14:43:11.774Z",
   "worlds": {
     "hybrid-direct": {
       "approach": [
@@ -25,7 +25,7 @@
             "dominant-chimney": 4.5169994857633995,
             "dominant-rtvTower": 5.984206010687669
           },
-          "triangles": 562581,
+          "triangles": 562681,
           "calls": 601
         },
         {
@@ -50,7 +50,7 @@
             "dominant-chimney": 6.955122513344311,
             "dominant-rtvTower": 11.83055410365012
           },
-          "triangles": 564573,
+          "triangles": 564673,
           "calls": 603
         },
         {
@@ -75,7 +75,7 @@
             "dominant-chimney": 10.62197861446262,
             "dominant-rtvTower": 36.01629616976005
           },
-          "triangles": 564813,
+          "triangles": 564913,
           "calls": 607
         },
         {
@@ -100,1242 +100,10 @@
             "dominant-chimney": 16.694589541790968,
             "dominant-rtvTower": 1930.0562284586028
           },
-          "triangles": 576129,
-          "calls": 568
-        },
-        {
-          "distance": 90,
-          "levels": {
-            "building-3": 1,
-            "building-4": 1,
-            "building-5": 1,
-            "building-24": 1,
-            "building-25": 1,
-            "streetscape": 1,
-            "dominant-chimney": 1,
-            "dominant-rtvTower": 2
-          },
-          "pxPerMetre": {
-            "building-3": 15.693979324737507,
-            "building-4": 16.552068452196366,
-            "building-5": 18.974854881762163,
-            "building-24": 10.57071431352704,
-            "building-25": 11.843362678663215,
-            "streetscape": 16.85310874712041,
-            "dominant-chimney": 22.43423100534947,
-            "dominant-rtvTower": 1930.0562284586028
-          },
-          "triangles": 899467,
-          "calls": 710
-        },
-        {
-          "distance": 70,
-          "levels": {
-            "building-3": 1,
-            "building-4": 1,
-            "building-5": 1,
-            "building-24": 1,
-            "building-25": 1,
-            "streetscape": 1,
-            "dominant-chimney": 1,
-            "dominant-rtvTower": 2
-          },
-          "pxPerMetre": {
-            "building-3": 22.25202325095753,
-            "building-4": 24.977987451076235,
-            "building-5": 30.94164024924804,
-            "building-24": 13.395189460154402,
-            "building-25": 15.665344170265547,
-            "streetscape": 25.709920613930514,
-            "dominant-chimney": 24.901705659858507,
-            "dominant-rtvTower": 1930.0562284586028
-          },
-          "triangles": 892227,
-          "calls": 614
-        },
-        {
-          "distance": 55,
-          "levels": {
-            "building-3": 1,
-            "building-4": 2,
-            "building-5": 2,
-            "building-24": 1,
-            "building-25": 1,
-            "streetscape": 2,
-            "dominant-chimney": 1,
-            "dominant-rtvTower": 2
-          },
-          "pxPerMetre": {
-            "building-3": 31.201136333936596,
-            "building-4": 40.05409876702712,
-            "building-5": 57.965764966727036,
-            "building-24": 16.676172123355965,
-            "building-25": 20.65845131075975,
-            "streetscape": 42.260324999895765,
-            "dominant-chimney": 24.622661263215758,
-            "dominant-rtvTower": 88.7254357121384
-          },
-          "triangles": 901815,
+          "triangles": 575757,
           "calls": 562
         },
         {
-          "distance": 42,
-          "levels": {
-            "building-3": 2,
-            "building-4": 2,
-            "building-5": 2,
-            "building-24": 1,
-            "building-25": 1,
-            "streetscape": 2,
-            "dominant-chimney": 1,
-            "dominant-rtvTower": 2
-          },
-          "pxPerMetre": {
-            "building-3": 43.839895606372664,
-            "building-4": 80.59758134562824,
-            "building-5": 212.05720045878766,
-            "building-24": 21.015393583335815,
-            "building-25": 28.51801636478214,
-            "streetscape": 94.29636097269378,
-            "dominant-chimney": 22.92995807767777,
-            "dominant-rtvTower": 40.51793880946908
-          },
-          "triangles": 899779,
-          "calls": 489
-        },
-        {
-          "distance": 32,
-          "levels": {
-            "building-3": 2,
-            "building-4": 2,
-            "building-5": 2,
-            "building-24": 1,
-            "building-25": 2,
-            "streetscape": 2,
-            "dominant-chimney": 1,
-            "dominant-rtvTower": 1
-          },
-          "pxPerMetre": {
-            "building-3": 54.984311233970786,
-            "building-4": 247.4894783778952,
-            "building-5": 1930.0562284586028,
-            "building-24": 26.00801962884377,
-            "building-25": 40.250533952385084,
-            "streetscape": 1327.314618035322,
-            "dominant-chimney": 21.099106919079485,
-            "dominant-rtvTower": 28.57281035530832
-          },
-          "triangles": 903743,
-          "calls": 391
-        },
-        {
-          "distance": 24,
-          "levels": {
-            "building-3": 2,
-            "building-4": 2,
-            "building-5": 2,
-            "building-24": 1,
-            "building-25": 2,
-            "streetscape": 2,
-            "dominant-chimney": 1,
-            "dominant-rtvTower": 1
-          },
-          "pxPerMetre": {
-            "building-3": 58.932137672960195,
-            "building-4": 1155.2902038891546,
-            "building-5": 1930.0562284586028,
-            "building-24": 31.685952459580868,
-            "building-25": 59.79820980805458,
-            "streetscape": 1930.0562284586028,
-            "dominant-chimney": 19.522254081664926,
-            "dominant-rtvTower": 23.119440654501318
-          },
-          "triangles": 903131,
-          "calls": 368
-        },
-        {
-          "distance": 18,
-          "levels": {
-            "building-3": 2,
-            "building-4": 2,
-            "building-5": 2,
-            "building-24": 2,
-            "building-25": 2,
-            "streetscape": 2,
-            "dominant-chimney": 1,
-            "dominant-rtvTower": 1
-          },
-          "pxPerMetre": {
-            "building-3": 56.353051713502445,
-            "building-4": 366.3047403859818,
-            "building-5": 1930.0562284586028,
-            "building-24": 37.34166359214307,
-            "building-25": 93.4474321550744,
-            "streetscape": 1930.0562284586028,
-            "dominant-chimney": 18.34814856671876,
-            "dominant-rtvTower": 20.224258203745613
-          },
-          "triangles": 900845,
-          "calls": 333
-        },
-        {
-          "distance": 13,
-          "levels": {
-            "building-3": 2,
-            "building-4": 2,
-            "building-5": 2,
-            "building-24": 2,
-            "building-25": 2,
-            "streetscape": 2,
-            "dominant-chimney": 1,
-            "dominant-rtvTower": 1
-          },
-          "pxPerMetre": {
-            "building-3": 51.477685131083064,
-            "building-4": 160.31115030288737,
-            "building-5": 1930.0562284586028,
-            "building-24": 43.15454645275642,
-            "building-25": 172.96177279168998,
-            "streetscape": 1930.0562284586028,
-            "dominant-chimney": 17.40075977252071,
-            "dominant-rtvTower": 18.31309523940816
-          },
-          "triangles": 900305,
-          "calls": 288
-        },
-        {
-          "distance": 9,
-          "levels": {
-            "building-3": 2,
-            "building-4": 2,
-            "building-5": 2,
-            "building-24": 2,
-            "building-25": 2,
-            "streetscape": 2,
-            "dominant-chimney": 1,
-            "dominant-rtvTower": 1
-          },
-          "pxPerMetre": {
-            "building-3": 46.85834858881864,
-            "building-4": 103.87449200470505,
-            "building-5": 305.1470808978827,
-            "building-24": 48.48408666553256,
-            "building-25": 503.4139944651527,
-            "streetscape": 1930.0562284586028,
-            "dominant-chimney": 16.6716182538076,
-            "dominant-rtvTower": 17.025917847154336
-          },
-          "triangles": 890595,
-          "calls": 263
-        },
-        {
-          "distance": 6,
-          "levels": {
-            "building-3": 2,
-            "building-4": 2,
-            "building-5": 2,
-            "building-24": 2,
-            "building-25": 2,
-            "streetscape": 2,
-            "dominant-chimney": 1,
-            "dominant-rtvTower": 1
-          },
-          "pxPerMetre": {
-            "building-3": 43.379495031293175,
-            "building-4": 80.9988479947303,
-            "building-5": 165.7456396414488,
-            "building-24": 52.71993237200651,
-            "building-25": 1930.0562284586028,
-            "streetscape": 1930.0562284586028,
-            "dominant-chimney": 16.14409122310473,
-            "dominant-rtvTower": 16.173317115001712
-          },
-          "triangles": 886995,
-          "calls": 261
-        },
-        {
-          "distance": 4,
-          "levels": {
-            "building-3": 2,
-            "building-4": 2,
-            "building-5": 2,
-            "building-24": 2,
-            "building-25": 2,
-            "streetscape": 2,
-            "dominant-chimney": 1,
-            "dominant-rtvTower": 1
-          },
-          "pxPerMetre": {
-            "building-3": 41.14439793215007,
-            "building-4": 70.36020563673365,
-            "building-5": 126.28508090592676,
-            "building-24": 55.53376880862012,
-            "building-25": 1930.0562284586028,
-            "streetscape": 1930.0562284586028,
-            "dominant-chimney": 15.802203193977645,
-            "dominant-rtvTower": 15.650816805771198
-          },
-          "triangles": 886995,
-          "calls": 261
-        }
-      ],
-      "hysteresis": {
-        "changes": 0,
-        "first": "22222211",
-        "last": "22222211"
-      },
-      "levels": {
-        "low": {
-          "levels": {
-            "building-3": 1,
-            "building-4": 1,
-            "building-5": 1,
-            "building-24": 1,
-            "building-25": 1,
-            "streetscape": 1,
-            "dominant-chimney": 1,
-            "dominant-rtvTower": 1
-          },
-          "triangles": 309773,
-          "hybridTriangles": [
-            2710,
-            8162,
-            8640
-          ],
-          "mean": {
-            "r": 159.82528846153846,
-            "g": 162.303650147929,
-            "b": 130.88844674556213,
-            "luma": 159.50857276775147
-          }
-        },
-        "high": {
-          "levels": {
-            "building-3": 2,
-            "building-4": 2,
-            "building-5": 2,
-            "building-24": 2,
-            "building-25": 2,
-            "streetscape": 2,
-            "dominant-chimney": 1,
-            "dominant-rtvTower": 1
-          },
-          "triangles": 890491,
-          "hybridTriangles": [
-            3254,
-            9158,
-            8640
-          ],
-          "mean": {
-            "r": 161.18430103550295,
-            "g": 164.21488905325444,
-            "b": 134.23916420118343,
-            "luma": 161.40633870636094
-          }
-        }
-      },
-      "semantics": {
-        "reference": {
-          "facade": {
-            "r": 135.6075628698225,
-            "g": 151.42190828402366,
-            "b": 142.45550295857987,
-            "luma": 147.41240398446746
-          },
-          "ground": {
-            "r": 124.55666111111111,
-            "g": 138.0966222222222,
-            "b": 151.7010611111111,
-            "luma": 136.20026697777777
-          },
-          "state": {
-            "t01": 0.5,
-            "theme": "classic",
-            "weather": "clear",
-            "rain": 0,
-            "voxelWindows": [
-              {
-                "cohort": 0,
-                "activity": 0,
-                "emissiveIntensity": 0
-              },
-              {
-                "cohort": 1,
-                "activity": 0,
-                "emissiveIntensity": 0
-              },
-              {
-                "cohort": 2,
-                "activity": 0,
-                "emissiveIntensity": 0
-              },
-              {
-                "cohort": 3,
-                "activity": 0,
-                "emissiveIntensity": 0
-              },
-              {
-                "cohort": 4,
-                "activity": 0,
-                "emissiveIntensity": 0
-              }
-            ]
-          }
-        },
-        "t0.05": {
-          "facade": {
-            "r": 116.25810281065088,
-            "g": 130.46930843195267,
-            "b": 119.52328402366864,
-            "luma": 126.65770315458579
-          },
-          "ground": {
-            "r": 120.88493333333334,
-            "g": 134.63143333333332,
-            "b": 148.92846111111112,
-            "luma": 132.7411728388889
-          },
-          "state": {
-            "t01": 0.050000000000000044,
-            "theme": "classic",
-            "weather": "clear",
-            "rain": 0,
-            "voxelWindows": [
-              {
-                "cohort": 0,
-                "activity": 0,
-                "emissiveIntensity": 0
-              },
-              {
-                "cohort": 1,
-                "activity": 0,
-                "emissiveIntensity": 0
-              },
-              {
-                "cohort": 2,
-                "activity": 1,
-                "emissiveIntensity": 0.02
-              },
-              {
-                "cohort": 3,
-                "activity": 1,
-                "emissiveIntensity": 0.02
-              },
-              {
-                "cohort": 4,
-                "activity": 1,
-                "emissiveIntensity": 0.02
-              }
-            ]
-          }
-        },
-        "t0.2": {
-          "facade": {
-            "r": 123.27508136094674,
-            "g": 134.98791789940827,
-            "b": 120.24484837278106,
-            "luma": 131.43331923150888
-          },
-          "ground": {
-            "r": 122.12866666666666,
-            "g": 135.94743333333332,
-            "b": 150.43278333333333,
-            "luma": 134.05540580999997
-          },
-          "state": {
-            "t01": 0.19999999999999996,
-            "theme": "classic",
-            "weather": "clear",
-            "rain": 0,
-            "voxelWindows": [
-              {
-                "cohort": 0,
-                "activity": 1,
-                "emissiveIntensity": 0.02
-              },
-              {
-                "cohort": 1,
-                "activity": 1,
-                "emissiveIntensity": 0.02
-              },
-              {
-                "cohort": 2,
-                "activity": 1,
-                "emissiveIntensity": 0.02
-              },
-              {
-                "cohort": 3,
-                "activity": 0,
-                "emissiveIntensity": 0
-              },
-              {
-                "cohort": 4,
-                "activity": 0,
-                "emissiveIntensity": 0
-              }
-            ]
-          }
-        },
-        "t0.28": {
-          "facade": {
-            "r": 129.89523298816567,
-            "g": 144.31947115384617,
-            "b": 133.2778550295858,
-            "luma": 140.45567343565088
-          },
-          "ground": {
-            "r": 126.98531666666666,
-            "g": 137.04507222222222,
-            "b": 150.5833888888889,
-            "luma": 135.88383465444443
-          },
-          "state": {
-            "t01": 0.28,
-            "theme": "classic",
-            "weather": "clear",
-            "rain": 0,
-            "voxelWindows": [
-              {
-                "cohort": 0,
-                "activity": 0,
-                "emissiveIntensity": 0
-              },
-              {
-                "cohort": 1,
-                "activity": 0.027999999999996916,
-                "emissiveIntensity": 0.0005599999999999384
-              },
-              {
-                "cohort": 2,
-                "activity": 1,
-                "emissiveIntensity": 0.02
-              },
-              {
-                "cohort": 3,
-                "activity": 1,
-                "emissiveIntensity": 0.02
-              },
-              {
-                "cohort": 4,
-                "activity": 1,
-                "emissiveIntensity": 0.02
-              }
-            ]
-          }
-        },
-        "t0.35": {
-          "facade": {
-            "r": 134.7024075443787,
-            "g": 149.10744082840236,
-            "b": 139.43230399408284,
-            "luma": 145.34638587278104
-          },
-          "ground": {
-            "r": 132.06788333333333,
-            "g": 142.13184444444445,
-            "b": 154.1201388888889,
-            "luma": 140.85780117111108
-          },
-          "state": {
-            "t01": 0.3500000000000001,
-            "theme": "classic",
-            "weather": "clear",
-            "rain": 0,
-            "voxelWindows": [
-              {
-                "cohort": 0,
-                "activity": 0,
-                "emissiveIntensity": 0
-              },
-              {
-                "cohort": 1,
-                "activity": 0,
-                "emissiveIntensity": 0
-              },
-              {
-                "cohort": 2,
-                "activity": 0,
-                "emissiveIntensity": 0
-              },
-              {
-                "cohort": 3,
-                "activity": 0,
-                "emissiveIntensity": 0
-              },
-              {
-                "cohort": 4,
-                "activity": 0,
-                "emissiveIntensity": 0
-              }
-            ]
-          }
-        },
-        "t0.5": {
-          "facade": {
-            "r": 135.60763313609468,
-            "g": 151.4219896449704,
-            "b": 142.45556952662722,
-            "luma": 147.41248191863906
-          },
-          "ground": {
-            "r": 124.91852777777778,
-            "g": 138.99423333333334,
-            "b": 153.20297222222223,
-            "luma": 137.02760927999998
-          },
-          "state": {
-            "t01": 0.5,
-            "theme": "classic",
-            "weather": "clear",
-            "rain": 0,
-            "voxelWindows": [
-              {
-                "cohort": 0,
-                "activity": 0,
-                "emissiveIntensity": 0
-              },
-              {
-                "cohort": 1,
-                "activity": 0,
-                "emissiveIntensity": 0
-              },
-              {
-                "cohort": 2,
-                "activity": 0,
-                "emissiveIntensity": 0
-              },
-              {
-                "cohort": 3,
-                "activity": 0,
-                "emissiveIntensity": 0
-              },
-              {
-                "cohort": 4,
-                "activity": 0,
-                "emissiveIntensity": 0
-              }
-            ]
-          }
-        },
-        "t0.78": {
-          "facade": {
-            "r": 124.136974852071,
-            "g": 135.19579881656804,
-            "b": 120.64928254437869,
-            "luma": 131.7944343668639
-          },
-          "ground": {
-            "r": 122.91571111111111,
-            "g": 136.12559444444443,
-            "b": 150.72385,
-            "luma": 134.3711672988889
-          },
-          "state": {
-            "t01": 0.78,
-            "theme": "classic",
-            "weather": "clear",
-            "rain": 0,
-            "voxelWindows": [
-              {
-                "cohort": 0,
-                "activity": 1,
-                "emissiveIntensity": 0.02
-              },
-              {
-                "cohort": 1,
-                "activity": 1,
-                "emissiveIntensity": 0.02
-              },
-              {
-                "cohort": 2,
-                "activity": 1,
-                "emissiveIntensity": 0.02
-              },
-              {
-                "cohort": 3,
-                "activity": 0.18528125000000678,
-                "emissiveIntensity": 0.003705625000000136
-              },
-              {
-                "cohort": 4,
-                "activity": 0,
-                "emissiveIntensity": 0
-              }
-            ]
-          }
-        },
-        "t0.9": {
-          "facade": {
-            "r": 127.14099112426035,
-            "g": 138.63708949704142,
-            "b": 122.68780695266273,
-            "luma": 135.04148078328402
-          },
-          "ground": {
-            "r": 122.05467222222222,
-            "g": 135.9288388888889,
-            "b": 150.4016777777778,
-            "luma": 134.02413002333333
-          },
-          "state": {
-            "t01": 0.8999999999999999,
-            "theme": "classic",
-            "weather": "clear",
-            "rain": 0,
-            "voxelWindows": [
-              {
-                "cohort": 0,
-                "activity": 1,
-                "emissiveIntensity": 0.02
-              },
-              {
-                "cohort": 1,
-                "activity": 1,
-                "emissiveIntensity": 0.02
-              },
-              {
-                "cohort": 2,
-                "activity": 1,
-                "emissiveIntensity": 0.02
-              },
-              {
-                "cohort": 3,
-                "activity": 1,
-                "emissiveIntensity": 0.02
-              },
-              {
-                "cohort": 4,
-                "activity": 1,
-                "emissiveIntensity": 0.02
-              }
-            ]
-          }
-        },
-        "ref-theme-retro": {
-          "facade": {
-            "r": 135.60763313609468,
-            "g": 151.4219896449704,
-            "b": 142.45556952662722,
-            "luma": 147.41248191863906
-          },
-          "ground": {
-            "r": 123.39675555555556,
-            "g": 137.29366666666667,
-            "b": 151.3295388888889,
-            "luma": 135.35257333888887
-          },
-          "state": {
-            "t01": 0.5,
-            "theme": "classic",
-            "weather": "clear",
-            "rain": 0,
-            "voxelWindows": [
-              {
-                "cohort": 0,
-                "activity": 0,
-                "emissiveIntensity": 0
-              },
-              {
-                "cohort": 1,
-                "activity": 0,
-                "emissiveIntensity": 0
-              },
-              {
-                "cohort": 2,
-                "activity": 0,
-                "emissiveIntensity": 0
-              },
-              {
-                "cohort": 3,
-                "activity": 0,
-                "emissiveIntensity": 0
-              },
-              {
-                "cohort": 4,
-                "activity": 0,
-                "emissiveIntensity": 0
-              }
-            ]
-          }
-        },
-        "theme-retro": {
-          "facade": {
-            "r": 146.1004400887574,
-            "g": 154.14191198224853,
-            "b": 133.61111686390532,
-            "luma": 150.94997165014794
-          },
-          "ground": {
-            "r": 137.54471666666666,
-            "g": 138.1224388888889,
-            "b": 134.22595,
-            "luma": 137.71828864666665
-          },
-          "state": {
-            "t01": 0.5,
-            "theme": "retro",
-            "weather": "clear",
-            "rain": 0,
-            "voxelWindows": [
-              {
-                "cohort": 0,
-                "activity": 0,
-                "emissiveIntensity": 0
-              },
-              {
-                "cohort": 1,
-                "activity": 0,
-                "emissiveIntensity": 0
-              },
-              {
-                "cohort": 2,
-                "activity": 0,
-                "emissiveIntensity": 0
-              },
-              {
-                "cohort": 3,
-                "activity": 0,
-                "emissiveIntensity": 0
-              },
-              {
-                "cohort": 4,
-                "activity": 0,
-                "emissiveIntensity": 0
-              }
-            ]
-          }
-        },
-        "ref-theme-cyberpunk": {
-          "facade": {
-            "r": 135.60763313609468,
-            "g": 151.4219896449704,
-            "b": 142.45556952662722,
-            "luma": 147.41248191863906
-          },
-          "ground": {
-            "r": 123.39675555555556,
-            "g": 137.29366666666667,
-            "b": 151.3295388888889,
-            "luma": 135.35257333888887
-          },
-          "state": {
-            "t01": 0.5,
-            "theme": "classic",
-            "weather": "clear",
-            "rain": 0,
-            "voxelWindows": [
-              {
-                "cohort": 0,
-                "activity": 0,
-                "emissiveIntensity": 0
-              },
-              {
-                "cohort": 1,
-                "activity": 0,
-                "emissiveIntensity": 0
-              },
-              {
-                "cohort": 2,
-                "activity": 0,
-                "emissiveIntensity": 0
-              },
-              {
-                "cohort": 3,
-                "activity": 0,
-                "emissiveIntensity": 0
-              },
-              {
-                "cohort": 4,
-                "activity": 0,
-                "emissiveIntensity": 0
-              }
-            ]
-          }
-        },
-        "theme-cyberpunk": {
-          "facade": {
-            "r": 88.17255177514792,
-            "g": 71.28271449704143,
-            "b": 113.80721523668639,
-            "luma": 77.94376285576921
-          },
-          "ground": {
-            "r": 85.88751666666667,
-            "g": 103.12132222222222,
-            "b": 119.35501111111111,
-            "luma": 100.62948749888889
-          },
-          "state": {
-            "t01": 0.5,
-            "theme": "cyberpunk",
-            "weather": "clear",
-            "rain": 0,
-            "voxelWindows": [
-              {
-                "cohort": 0,
-                "activity": 0,
-                "emissiveIntensity": 0
-              },
-              {
-                "cohort": 1,
-                "activity": 0,
-                "emissiveIntensity": 0
-              },
-              {
-                "cohort": 2,
-                "activity": 0,
-                "emissiveIntensity": 0
-              },
-              {
-                "cohort": 3,
-                "activity": 0,
-                "emissiveIntensity": 0
-              },
-              {
-                "cohort": 4,
-                "activity": 0,
-                "emissiveIntensity": 0
-              }
-            ]
-          }
-        },
-        "ref-snow": {
-          "facade": {
-            "r": 135.60763313609468,
-            "g": 151.4219896449704,
-            "b": 142.45556952662722,
-            "luma": 147.41248191863906
-          },
-          "ground": {
-            "r": 123.39675555555556,
-            "g": 137.29366666666667,
-            "b": 151.3295388888889,
-            "luma": 135.35257333888887
-          },
-          "state": {
-            "t01": 0.5,
-            "theme": "classic",
-            "weather": "clear",
-            "rain": 0,
-            "voxelWindows": [
-              {
-                "cohort": 0,
-                "activity": 0,
-                "emissiveIntensity": 0
-              },
-              {
-                "cohort": 1,
-                "activity": 0,
-                "emissiveIntensity": 0
-              },
-              {
-                "cohort": 2,
-                "activity": 0,
-                "emissiveIntensity": 0
-              },
-              {
-                "cohort": 3,
-                "activity": 0,
-                "emissiveIntensity": 0
-              },
-              {
-                "cohort": 4,
-                "activity": 0,
-                "emissiveIntensity": 0
-              }
-            ]
-          }
-        },
-        "snow": {
-          "facade": {
-            "r": 138.79488905325445,
-            "g": 152.98726701183432,
-            "b": 145.86128698224852,
-            "luma": 149.45547169970413
-          },
-          "ground": {
-            "r": 146.77835555555555,
-            "g": 162.49215,
-            "b": 180.921,
-            "luma": 160.4819602711111
-          },
-          "state": {
-            "t01": 0.5,
-            "theme": "classic",
-            "weather": "clear",
-            "rain": 0,
-            "voxelWindows": [
-              {
-                "cohort": 0,
-                "activity": 0,
-                "emissiveIntensity": 0
-              },
-              {
-                "cohort": 1,
-                "activity": 0,
-                "emissiveIntensity": 0
-              },
-              {
-                "cohort": 2,
-                "activity": 0,
-                "emissiveIntensity": 0
-              },
-              {
-                "cohort": 3,
-                "activity": 0,
-                "emissiveIntensity": 0
-              },
-              {
-                "cohort": 4,
-                "activity": 0,
-                "emissiveIntensity": 0
-              }
-            ]
-          }
-        },
-        "ref-rain": {
-          "facade": {
-            "r": 135.60763313609468,
-            "g": 151.4219896449704,
-            "b": 142.45556952662722,
-            "luma": 147.41248191863906
-          },
-          "ground": {
-            "r": 123.39675555555556,
-            "g": 137.29366666666667,
-            "b": 151.3295388888889,
-            "luma": 135.35257333888887
-          },
-          "state": {
-            "t01": 0.5,
-            "theme": "classic",
-            "weather": "clear",
-            "rain": 0,
-            "voxelWindows": [
-              {
-                "cohort": 0,
-                "activity": 0,
-                "emissiveIntensity": 0
-              },
-              {
-                "cohort": 1,
-                "activity": 0,
-                "emissiveIntensity": 0
-              },
-              {
-                "cohort": 2,
-                "activity": 0,
-                "emissiveIntensity": 0
-              },
-              {
-                "cohort": 3,
-                "activity": 0,
-                "emissiveIntensity": 0
-              },
-              {
-                "cohort": 4,
-                "activity": 0,
-                "emissiveIntensity": 0
-              }
-            ]
-          }
-        },
-        "rain": {
-          "facade": {
-            "r": 135.06856878698224,
-            "g": 151.19924926035503,
-            "b": 142.7513424556213,
-            "luma": 147.1599277204142
-          },
-          "ground": {
-            "r": 124.96693333333333,
-            "g": 167.5212111111111,
-            "b": 189.83702222222223,
-            "luma": 160.08537321777777
-          },
-          "state": {
-            "t01": 0.5,
-            "theme": "classic",
-            "weather": "rain",
-            "rain": 1,
-            "voxelWindows": [
-              {
-                "cohort": 0,
-                "activity": 0,
-                "emissiveIntensity": 0
-              },
-              {
-                "cohort": 1,
-                "activity": 0,
-                "emissiveIntensity": 0
-              },
-              {
-                "cohort": 2,
-                "activity": 0,
-                "emissiveIntensity": 0
-              },
-              {
-                "cohort": 3,
-                "activity": 0,
-                "emissiveIntensity": 0
-              },
-              {
-                "cohort": 4,
-                "activity": 0,
-                "emissiveIntensity": 0
-              }
-            ]
-          }
-        }
-      },
-      "determinism": {
-        "runs": [
-          {
-            "triangles": [
-              3254,
-              9158,
-              8640
-            ],
-            "bytes": 3031488,
-            "dilated": 0,
-            "lodLevels": {
-              "building-3": 2,
-              "building-4": 2,
-              "building-5": 2,
-              "building-24": 2,
-              "building-25": 2,
-              "streetscape": 2,
-              "dominant-chimney": 1,
-              "dominant-rtvTower": 1
-            }
-          },
-          {
-            "triangles": [
-              3254,
-              9158,
-              8640
-            ],
-            "bytes": 3031488,
-            "dilated": 0,
-            "lodLevels": {
-              "building-3": 2,
-              "building-4": 2,
-              "building-5": 2,
-              "building-24": 2,
-              "building-25": 2,
-              "streetscape": 2,
-              "dominant-chimney": 1,
-              "dominant-rtvTower": 1
-            }
-          }
-        ],
-        "identical": true
-      },
-      "consoleErrors": []
-    },
-    "hybrid-greedy": {
-      "approach": [
-        {
-          "distance": 300,
-          "levels": {
-            "building-3": 0,
-            "building-4": 0,
-            "building-5": 0,
-            "building-24": 0,
-            "building-25": 0,
-            "streetscape": 0,
-            "dominant-chimney": 0,
-            "dominant-rtvTower": 0
-          },
-          "pxPerMetre": {
-            "building-3": 3.6114430891943083,
-            "building-4": 3.613576257968313,
-            "building-5": 3.7170512224775205,
-            "building-24": 3.231164435067178,
-            "building-25": 3.3210308843925453,
-            "streetscape": 3.628119769873675,
-            "dominant-chimney": 4.5169994857633995,
-            "dominant-rtvTower": 5.984206010687669
-          },
-          "triangles": 580549,
-          "calls": 600
-        },
-        {
-          "distance": 220,
-          "levels": {
-            "building-3": 0,
-            "building-4": 0,
-            "building-5": 0,
-            "building-24": 0,
-            "building-25": 0,
-            "streetscape": 0,
-            "dominant-chimney": 0,
-            "dominant-rtvTower": 1
-          },
-          "pxPerMetre": {
-            "building-3": 5.133745536507853,
-            "building-4": 5.149129479879657,
-            "building-5": 5.361870152601582,
-            "building-24": 4.401147434965015,
-            "building-25": 4.575777675061992,
-            "streetscape": 5.178249115936094,
-            "dominant-chimney": 6.955122513344311,
-            "dominant-rtvTower": 11.83055410365012
-          },
-          "triangles": 582193,
-          "calls": 602
-        },
-        {
-          "distance": 165,
-          "levels": {
-            "building-3": 0,
-            "building-4": 0,
-            "building-5": 0,
-            "building-24": 0,
-            "building-25": 0,
-            "streetscape": 0,
-            "dominant-chimney": 1,
-            "dominant-rtvTower": 2
-          },
-          "pxPerMetre": {
-            "building-3": 7.2123581943836435,
-            "building-4": 7.272162182036138,
-            "building-5": 7.703982526663697,
-            "building-24": 5.85413962975322,
-            "building-25": 6.181004945640345,
-            "streetscape": 7.329525622613344,
-            "dominant-chimney": 10.62197861446262,
-            "dominant-rtvTower": 36.01629616976005
-          },
-          "triangles": 582757,
-          "calls": 606
-        },
-        {
-          "distance": 120,
-          "levels": {
-            "building-3": 1,
-            "building-4": 1,
-            "building-5": 1,
-            "building-24": 0,
-            "building-25": 0,
-            "streetscape": 1,
-            "dominant-chimney": 1,
-            "dominant-rtvTower": 2
-          },
-          "pxPerMetre": {
-            "building-3": 10.724245174291239,
-            "building-4": 10.965879293135577,
-            "building-5": 11.978753216159777,
-            "building-24": 8.005022490537808,
-            "building-25": 8.668173348451687,
-            "streetscape": 11.095546281717178,
-            "dominant-chimney": 16.694589541790968,
-            "dominant-rtvTower": 1930.0562284586028
-          },
-          "triangles": 591579,
-          "calls": 566
-        },
-        {
           "distance": 90,
           "levels": {
             "building-3": 1,
@@ -1357,8 +125,8 @@
             "dominant-chimney": 22.43423100534947,
             "dominant-rtvTower": 1930.0562284586028
           },
-          "triangles": 920429,
-          "calls": 708
+          "triangles": 898203,
+          "calls": 690
         },
         {
           "distance": 70,
@@ -1382,8 +150,8 @@
             "dominant-chimney": 24.901705659858507,
             "dominant-rtvTower": 1930.0562284586028
           },
-          "triangles": 912089,
-          "calls": 614
+          "triangles": 890963,
+          "calls": 594
         },
         {
           "distance": 55,
@@ -1407,8 +175,8 @@
             "dominant-chimney": 24.622661263215758,
             "dominant-rtvTower": 88.7254357121384
           },
-          "triangles": 919353,
-          "calls": 561
+          "triangles": 900623,
+          "calls": 544
         },
         {
           "distance": 42,
@@ -1432,8 +200,8 @@
             "dominant-chimney": 22.92995807767777,
             "dominant-rtvTower": 40.51793880946908
           },
-          "triangles": 917143,
-          "calls": 491
+          "triangles": 898689,
+          "calls": 472
         },
         {
           "distance": 32,
@@ -1457,8 +225,8 @@
             "dominant-chimney": 21.099106919079485,
             "dominant-rtvTower": 28.57281035530832
           },
-          "triangles": 918679,
-          "calls": 391
+          "triangles": 902653,
+          "calls": 374
         },
         {
           "distance": 24,
@@ -1482,8 +250,8 @@
             "dominant-chimney": 19.522254081664926,
             "dominant-rtvTower": 23.119440654501318
           },
-          "triangles": 918083,
-          "calls": 367
+          "triangles": 902041,
+          "calls": 351
         },
         {
           "distance": 18,
@@ -1507,8 +275,8 @@
             "dominant-chimney": 18.34814856671876,
             "dominant-rtvTower": 20.224258203745613
           },
-          "triangles": 912171,
-          "calls": 338
+          "triangles": 899941,
+          "calls": 319
         },
         {
           "distance": 13,
@@ -1532,8 +300,8 @@
             "dominant-chimney": 17.40075977252071,
             "dominant-rtvTower": 18.31309523940816
           },
-          "triangles": 911535,
-          "calls": 288
+          "triangles": 899401,
+          "calls": 274
         },
         {
           "distance": 9,
@@ -1557,8 +325,8 @@
             "dominant-chimney": 16.6716182538076,
             "dominant-rtvTower": 17.025917847154336
           },
-          "triangles": 890487,
-          "calls": 261
+          "triangles": 890093,
+          "calls": 255
         },
         {
           "distance": 6,
@@ -1582,8 +350,8 @@
             "dominant-chimney": 16.14409122310473,
             "dominant-rtvTower": 16.173317115001712
           },
-          "triangles": 890487,
-          "calls": 261
+          "triangles": 886493,
+          "calls": 253
         },
         {
           "distance": 4,
@@ -1607,8 +375,8 @@
             "dominant-chimney": 15.802203193977645,
             "dominant-rtvTower": 15.650816805771198
           },
-          "triangles": 890487,
-          "calls": 261
+          "triangles": 886493,
+          "calls": 253
         }
       ],
       "hysteresis": {
@@ -1628,17 +396,17 @@
             "dominant-chimney": 1,
             "dominant-rtvTower": 1
           },
-          "triangles": 309265,
+          "triangles": 309677,
           "hybridTriangles": [
-            11828,
-            7506,
-            8314
+            2760,
+            7796,
+            8640
           ],
           "mean": {
-            "r": 163.53371671597634,
-            "g": 165.1602625739645,
-            "b": 133.97041420118344,
-            "luma": 162.5625518720414
+            "r": 159.86518860946745,
+            "g": 162.33924556213017,
+            "b": 130.90587278106509,
+            "luma": 159.54377153920117
           }
         },
         "high": {
@@ -1652,33 +420,33 @@
             "dominant-chimney": 1,
             "dominant-rtvTower": 1
           },
-          "triangles": 895291,
+          "triangles": 889887,
           "hybridTriangles": [
-            12096,
-            8372,
-            8314
+            3304,
+            8792,
+            8640
           ],
           "mean": {
-            "r": 165.92328402366863,
-            "g": 166.1197374260355,
-            "b": 133.12976701183433,
-            "luma": 163.696095568787
+            "r": 161.09519230769232,
+            "g": 164.09825073964498,
+            "b": 134.02643860946745,
+            "luma": 161.288615681213
           }
         }
       },
       "semantics": {
         "reference": {
           "facade": {
-            "r": 145.5673927514793,
-            "g": 158.2257803254438,
-            "b": 152.4288054733728,
-            "luma": 155.1160655428994
+            "r": 135.52302144970415,
+            "g": 151.36761834319526,
+            "b": 142.39004807692308,
+            "luma": 147.3508764704142
           },
           "ground": {
-            "r": 131.87510555555556,
-            "g": 144.52646666666666,
-            "b": 155.79143333333334,
-            "luma": 142.65011788777778
+            "r": 124.55605,
+            "g": 138.0965111111111,
+            "b": 151.70324444444444,
+            "luma": 136.20021522555555
           },
           "state": {
             "t01": 0.5,
@@ -1716,16 +484,16 @@
         },
         "t0.05": {
           "facade": {
-            "r": 123.53985946745563,
-            "g": 134.85870931952664,
-            "b": 127.97938609467455,
-            "luma": 131.955634704142
+            "r": 115.85400147928993,
+            "g": 130.17277366863905,
+            "b": 119.26843195266272,
+            "luma": 126.34130922928992
           },
           "ground": {
-            "r": 128.3563611111111,
-            "g": 141.08254444444444,
-            "b": 152.78025,
-            "luma": 139.2215322088889
+            "r": 120.79862222222222,
+            "g": 134.5358388888889,
+            "b": 148.82255555555557,
+            "luma": 132.64680756888887
           },
           "state": {
             "t01": 0.050000000000000044,
@@ -1763,16 +531,16 @@
         },
         "t0.2": {
           "facade": {
-            "r": 125.52405325443787,
-            "g": 136.10224112426036,
-            "b": 128.23548076923078,
-            "luma": 133.28533828550297
+            "r": 122.19,
+            "g": 134.40241863905325,
+            "b": 119.65387573964497,
+            "luma": 130.74121363905326
           },
           "ground": {
-            "r": 129.81596666666667,
-            "g": 142.63986111111112,
-            "b": 154.55360555555555,
-            "luma": 140.77367350111112
+            "r": 122.1283,
+            "g": 135.9473,
+            "b": 150.4354,
+            "luma": 134.05542142
           },
           "state": {
             "t01": 0.19999999999999996,
@@ -1810,16 +578,16 @@
         },
         "t0.28": {
           "facade": {
-            "r": 137.11139423076924,
-            "g": 148.22289940828404,
-            "b": 141.6173076923077,
-            "luma": 145.38366968565086
+            "r": 129.483324704142,
+            "g": 144.00226331360946,
+            "b": 133.0081619822485,
+            "luma": 140.1217628491124
           },
           "ground": {
-            "r": 134.56281666666666,
-            "g": 143.7280111111111,
-            "b": 154.72914444444444,
-            "luma": 142.57377259888887
+            "r": 126.98477222222222,
+            "g": 137.04378333333332,
+            "b": 150.58462777777777,
+            "luma": 135.88288654
           },
           "state": {
             "t01": 0.28,
@@ -1857,16 +625,16 @@
         },
         "t0.35": {
           "facade": {
-            "r": 144.89392381656805,
-            "g": 156.10445636094676,
-            "b": 149.62745562130178,
-            "luma": 153.25345768860947
+            "r": 134.6342899408284,
+            "g": 149.06557692307692,
+            "b": 139.3786797337278,
+            "luma": 145.2980913335799
           },
           "ground": {
-            "r": 139.14734444444446,
-            "g": 148.45137222222223,
-            "b": 158.20586666666668,
-            "luma": 147.17761041555553
+            "r": 132.06732222222223,
+            "g": 142.13254444444445,
+            "b": 154.1225611111111,
+            "luma": 140.85835740333334
           },
           "state": {
             "t01": 0.3500000000000001,
@@ -1904,16 +672,16 @@
         },
         "t0.5": {
           "facade": {
-            "r": 145.56745192307693,
-            "g": 158.2258173076923,
-            "b": 152.4288572485207,
-            "luma": 155.11610831065087
+            "r": 135.5231397928994,
+            "g": 151.36769600591717,
+            "b": 142.3900924556213,
+            "luma": 147.3509603786982
           },
           "ground": {
-            "r": 132.40523333333334,
-            "g": 145.5393,
-            "b": 157.33507777777777,
-            "luma": 143.59865258222223
+            "r": 124.91704444444444,
+            "g": 138.9931222222222,
+            "b": 153.20495,
+            "luma": 137.0266420522222
           },
           "state": {
             "t01": 0.5,
@@ -1951,16 +719,16 @@
         },
         "t0.78": {
           "facade": {
-            "r": 126.35197855029585,
-            "g": 136.30352810650888,
-            "b": 128.61392381656805,
-            "luma": 133.63263924112425
+            "r": 123.04976331360946,
+            "g": 134.60870562130177,
+            "b": 120.05103550295858,
+            "luma": 131.100210704142
           },
           "ground": {
-            "r": 130.5905611111111,
-            "g": 142.8224,
-            "b": 154.86100555555555,
-            "luma": 141.0910983733333
+            "r": 122.91497222222222,
+            "g": 136.12466666666666,
+            "b": 150.72567777777778,
+            "luma": 134.37047863
           },
           "state": {
             "t01": 0.78,
@@ -1998,16 +766,16 @@
         },
         "t0.9": {
           "facade": {
-            "r": 126.60551405325444,
-            "g": 137.15565828402367,
-            "b": 128.9316531065089,
-            "luma": 134.31892444674554
+            "r": 125.73739275147929,
+            "g": 137.81000369822485,
+            "b": 121.90867973372781,
+            "luma": 134.09529102071005
           },
           "ground": {
-            "r": 129.75003333333333,
-            "g": 142.62865555555555,
-            "b": 154.52870555555555,
-            "luma": 140.74984408111112
+            "r": 122.05386111111112,
+            "g": 135.92843333333334,
+            "b": 150.40436111111111,
+            "luma": 134.02386126444446
           },
           "state": {
             "t01": 0.8999999999999999,
@@ -2045,16 +813,16 @@
         },
         "ref-theme-retro": {
           "facade": {
-            "r": 145.56745192307693,
-            "g": 158.2258173076923,
-            "b": 152.4288572485207,
-            "luma": 155.11610831065087
+            "r": 135.5231397928994,
+            "g": 151.36769600591717,
+            "b": 142.3900924556213,
+            "luma": 147.3509603786982
           },
           "ground": {
-            "r": 130.8834611111111,
-            "g": 143.83873333333332,
-            "b": 155.46164444444443,
-            "luma": 141.9236166411111
+            "r": 123.39527222222222,
+            "g": 137.29255555555557,
+            "b": 151.33151666666666,
+            "luma": 135.3516061111111
           },
           "state": {
             "t01": 0.5,
@@ -2092,16 +860,16 @@
         },
         "theme-retro": {
           "facade": {
-            "r": 155.3957544378698,
-            "g": 160.51019600591715,
-            "b": 141.86295118343196,
-            "luma": 158.07653465236686
+            "r": 146.04987795857988,
+            "g": 154.09326183431952,
+            "b": 133.56120562130178,
+            "luma": 150.9008239637574
           },
           "ground": {
-            "r": 144.96479444444444,
-            "g": 144.8925888888889,
-            "b": 139.31540555555554,
-            "luma": 144.50526715333334
+            "r": 137.5437611111111,
+            "g": 138.1213,
+            "b": 134.22673333333333,
+            "luma": 137.7173275188889
           },
           "state": {
             "t01": 0.5,
@@ -2139,16 +907,16 @@
         },
         "ref-theme-cyberpunk": {
           "facade": {
-            "r": 145.56745192307693,
-            "g": 158.2258173076923,
-            "b": 152.4288572485207,
-            "luma": 155.11610831065087
+            "r": 135.5231397928994,
+            "g": 151.36769600591717,
+            "b": 142.3900924556213,
+            "luma": 147.3509603786982
           },
           "ground": {
-            "r": 130.8834611111111,
-            "g": 143.83873333333332,
-            "b": 155.46164444444443,
-            "luma": 141.9236166411111
+            "r": 123.39527222222222,
+            "g": 137.29255555555557,
+            "b": 151.33151666666666,
+            "luma": 135.3516061111111
           },
           "state": {
             "t01": 0.5,
@@ -2186,16 +954,16 @@
         },
         "theme-cyberpunk": {
           "facade": {
-            "r": 102.41670857988166,
-            "g": 91.1767825443787,
-            "b": 125.31664940828402,
-            "luma": 96.03128920710058
+            "r": 87.96622411242603,
+            "g": 71.13782174556214,
+            "b": 113.66362056213018,
+            "luma": 77.7859027633136
           },
           "ground": {
-            "r": 94.55452777777778,
-            "g": 110.70647222222222,
-            "b": 123.8334611111111,
-            "luma": 108.2203374311111
+            "r": 85.88636111111111,
+            "g": 103.12053888888889,
+            "b": 119.35875555555556,
+            "luma": 100.62895193666667
           },
           "state": {
             "t01": 0.5,
@@ -2233,16 +1001,16 @@
         },
         "ref-snow": {
           "facade": {
-            "r": 145.56745192307693,
-            "g": 158.2258173076923,
-            "b": 152.4288572485207,
-            "luma": 155.11610831065087
+            "r": 135.5231397928994,
+            "g": 151.36769600591717,
+            "b": 142.3900924556213,
+            "luma": 147.3509603786982
           },
           "ground": {
-            "r": 130.8834611111111,
-            "g": 143.83873333333332,
-            "b": 155.46164444444443,
-            "luma": 141.9236166411111
+            "r": 123.39527222222222,
+            "g": 137.29255555555557,
+            "b": 151.33151666666666,
+            "luma": 135.3516061111111
           },
           "state": {
             "t01": 0.5,
@@ -2280,16 +1048,16 @@
         },
         "snow": {
           "facade": {
-            "r": 147.61811390532543,
-            "g": 159.1700073964497,
-            "b": 154.70255177514792,
-            "luma": 156.3915245443787
+            "r": 138.71062869822487,
+            "g": 152.93307692307692,
+            "b": 145.79611686390533,
+            "luma": 149.3940959142012
           },
           "ground": {
-            "r": 150.6523388888889,
-            "g": 165.43134444444445,
-            "b": 181.05256111111112,
-            "luma": 163.41717970666664
+            "r": 146.78032777777779,
+            "g": 162.49254444444443,
+            "b": 180.9220777777778,
+            "luma": 160.48273948777776
           },
           "state": {
             "t01": 0.5,
@@ -2327,16 +1095,16 @@
         },
         "ref-rain": {
           "facade": {
-            "r": 145.56745192307693,
-            "g": 158.2258173076923,
-            "b": 152.4288572485207,
-            "luma": 155.11610831065087
+            "r": 135.5231397928994,
+            "g": 151.36769600591717,
+            "b": 142.3900924556213,
+            "luma": 147.3509603786982
           },
           "ground": {
-            "r": 130.8834611111111,
-            "g": 143.83873333333332,
-            "b": 155.46164444444443,
-            "luma": 141.9236166411111
+            "r": 123.39527222222222,
+            "g": 137.29255555555557,
+            "b": 151.33151666666666,
+            "luma": 135.3516061111111
           },
           "state": {
             "t01": 0.5,
@@ -2374,16 +1142,16 @@
         },
         "rain": {
           "facade": {
-            "r": 144.98386464497042,
-            "g": 157.91069896449704,
-            "b": 152.58938609467455,
-            "luma": 154.77825519896447
+            "r": 134.98353180473373,
+            "g": 151.1414275147929,
+            "b": 142.68416050295858,
+            "luma": 147.09564420857987
           },
           "ground": {
-            "r": 129.2628777777778,
-            "g": 167.54593888888888,
-            "b": 186.3457611111111,
-            "luma": 160.7643072611111
+            "r": 124.96749444444444,
+            "g": 167.52401111111112,
+            "b": 189.83887777777778,
+            "luma": 160.0876290411111
           },
           "state": {
             "t01": 0.5,
@@ -2424,12 +1192,11 @@
         "runs": [
           {
             "triangles": [
-              12096,
-              8372,
-              8314
+              3304,
+              8792,
+              8640
             ],
-            "bytes": 4144608,
-            "dilated": 3115,
+            "bytes": 2985984,
             "lodLevels": {
               "building-3": 2,
               "building-4": 2,
@@ -2443,12 +1210,11 @@
           },
           {
             "triangles": [
-              12096,
-              8372,
-              8314
+              3304,
+              8792,
+              8640
             ],
-            "bytes": 4144608,
-            "dilated": 3115,
+            "bytes": 2985984,
             "lodLevels": {
               "building-3": 2,
               "building-4": 2,

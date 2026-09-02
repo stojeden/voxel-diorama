@@ -26,6 +26,51 @@ Strona dla właściciela (ten sam werdykt, wizualnie, po polsku):
 Źródło strony leży w `verdict-page/page.html` z placeholderami `{{IMG_*}}`; wycinki kadrów
 składa `verdict-page/crops.py`, a potem podstawia się je jako `data:` URI pod te placeholdery.
 
+## 0. Errata rewizji 1 — dwie rzeczy podałem źle
+
+Zanim cokolwiek innego. Rewizja 1 tego raportu zawierała dwa błędne twierdzenia, na których
+oparłeś decyzje. Oba są tu wycofane.
+
+**E1. `metalness` szkła to 0,7, nie 0,85.** Wziąłem tę liczbę z dokumentu planu
+(`docs/superpowers/plans/2026-09-02-hybrid-spike.md`), a nie z kodu. W kodzie było
+`M('glass', 0x3a5266, { roughness: 0.08, metalness: 0.7 })`. Dla porównania produkt daje
+niezapalonemu oknu 0,08 / 0,65, a zapalonemu 0,18 / 0,40 — czyli hybryda była praktycznie
+identyczna z niezapalonym oknem produktu, nie „fizycznie podejrzana" wobec niego.
+
+**E2. Wniosek „metalness zjada czytelność zapalonych okien" był nieprawdziwy.** Zmierzyłem to
+dopiero teraz, poprawnym narzędziem: przy nieruchomej kamerze ulicznej porównuję dwie chwile w
+pasie porannym, między którymi zmienia się **tylko** aktywność kohort (t = 0,28 → 0,30, słońce
+prawie nieruchome), i liczę piksele, które zmieniają luminancję o więcej niż 12.
+
+| | piksele zmieniające się > 12 luma | średnia zmiana | maksimum |
+|---|---|---|---|
+| produkt (voxel) | 27 454 | 59,7 | 152 |
+| hybryda, **przed** korektą materiału | 29 722 | 55,7 | 103 |
+| hybryda, **po** korekcie materiału | 29 810 | 56,2 | 106 |
+
+Kohorty hybrydy reagowały już wcześniej na **większej** liczbie pikseli niż produkt i z
+porównywalną amplitudą. Korekta materiału zmieniła ten sygnał o mniej niż 1%. To, co widziałem
+w kadrze golden i opisałem jako „ciemne okna o świcie", było w całości **pustym LOD 0** —
+poziom 0 nie miał wtedy ani jednej szyby. Zasługa naprawy należy do defektu 1, nie do materiału.
+
+Dlaczego pierwszy pomiar mnie zmylił: liczyłem średnią luminancję całego prostokąta elewacji,
+w którym okna to kilka procent pikseli. Zmiana o 30 jednostek na 4% powierzchni daje 1,2
+jednostki średniej — poniżej szumu. Obraz różnicowy pokazuje to od razu: zmieniają się
+wyłącznie szyby, cała reszta jest czarna.
+
+**Co z korektą materiału.** Została w połowie. Wyrównanie palety do niezapalonego okna produktu
+(`metalness` 0,65) zostaje — jest darmowe i zgodne z produktem. Interpolację `roughness` i
+`metalness` do zapalonego końca produktu (0,18 / 0,40) **usunąłem po pomiarze**: kosztowała
+11 FPS w kadrze nocnym (60,0 → 49,1, p95 16,8 → 33,4 ms) przy zysku czytelności poniżej 1%.
+Rozdzielenie szklistości od czytelności nie jest potrzebne, bo czytelność nigdy nie była zepsuta.
+
+**E3. Nocna delta GPU +15,2 ms była artefaktem przyrządu.** Szczegóły w 3.5; prawdziwa delta to
++5,7 ms i nie jest widoczna dla użytkownika.
+
+Poza tym rewizja 1 twierdziła, że 28 kadrów JPEG nie jest commitowanych, a wszystkie 28 leżały
+w indeksie (wciągnął je `git add docs/superpowers/spike` w commicie `cc5fef8`). Teraz naprawdę
+nie są: katalog jest w `.gitignore`, ale **blobów w historii gałęzi to nie usuwa** — patrz 10.2.
+
 ## 1. Co dodaliśmy w tej rundzie
 
 Poprzedni agent zostawił kadry sprzed poprawki `4c10726`. Odnowione, plus trzy rzeczy,
@@ -49,19 +94,35 @@ bez błędów w konsoli, w budżetach `renderer.info`.
 | Kryterium | Wynik | Dowód |
 |---|---|---|
 | (a) prawdziwy street-eye ~1,7 m | **spełnione** | `STREET_EYE_SHOT.position[1] = 1.2`, `GROUND_SURFACE_Y = -0.5` → dokładnie **1,70 m** nad nawierzchnią. Liczba z kodu, nie z pikseli. |
-| (b) autobus nie stoi na zebrze | **spełnione, z zapasem 6,60 m** | `busDwellEnvelope(BUS_STOPS[0])` = x[−17,80; −9,80], `CROSSWALK` = x[−3,20; −1,80]. Odstęp 6,60 m. Asercja `checkModel` zielona w każdym z 12 kadrów. |
-| (c) mieszkaniec jest czytelny | **niespełnione — ale nie z winy spike'u** | Postać to pionowy pasek ~10 px zasłonięty własną ścianą reklamową wiaty. Identyczny pasek i identyczna zasłona są w kadrze bazowym `voxel-high-spike-street.jpg`. Naprawa jest po stronie kadru albo produktu, nie meshingu. |
-| (d) witryny mają proceduralną treść | **spełnione tylko w `hybrid-direct` na High** | Direct/High: trzy bryły towaru za szybą (zielona, różowa, beżowa). Direct/Low: towar to warstwa 2, więc znika — witryna czyta się jak zabity lokal. Greedy/High: zamiast towaru gęsta ukośna kraciura z-fightingu. |
+| (b) autobus nie stoi na zebrze | **spełnione, z zapasem 6,40 m** | `busDwellEnvelope(BUS_STOPS[0])` = x[−17,80; −9,80], `CROSSWALK` = x[−3,40; −0,60] po przesunięciu (B1-5). Odstęp 6,40 m. Asercja `checkModel` zielona w każdym z 12 kadrów. |
+| (c) mieszkaniec jest czytelny | **niespełnione — ale nie z winy spike'u** | Postać to pionowy pasek ~10 px zasłonięty własną ścianą reklamową wiaty. Identyczny pasek i identyczna zasłona są w kadrze bazowym `voxel-high-spike-street.jpg`. Naprawa jest po stronie kadru albo produktu, nie meshingu. Wydzielone jako Streetscape 2.0 (rozdział 11). |
+| (d) witryny mają proceduralną treść | **nadal tylko w `hybrid-direct` na High** | Direct/High: trzy bryły towaru za szybą (zielona, różowa, beżowa). Direct/Low: szyba i ciemne wnętrze są teraz w warstwie 0, więc witryna czyta się jako oszklona wnęka pod markizą, ale **towar, pilastry i szyld to warstwa 2 i na Low ich nie ma**. Greedy/High: zamiast towaru gęsta ukośna kraciura z-fightingu. To jedyne kryterium bramki 1, które zostaje otwarte po naszej stronie. |
 | (e) ekspozycja nie wypala dalszego planu | **kadr uliczny jest częściowo wypalony — identycznie jak produkt** | W pasie (491,440)–(1371,507) piksele z wszystkimi kanałami ≥250: voxel **6382**, direct **6355**, greedy **6357** z 58 960 (10,8%). Overview, golden i night są czyste. Spike tego nie powoduje i nie pogarsza. |
 
 ### 2.1 Co znaleźliśmy poza listą kryteriów
 
-**B1-1 (direct) — na LOD 0 budynek jest pustym pudełkiem.** Bryła to jedno
-`E.box(b.tint, …, { layer: 0 })` plus cokół; wszystkie otwory są w warstwie ≥ 1
-(`architecture.ts:143-144`). Każdy klaster, który spadnie do poziomu 0, traci więc wszystkie
-okna. W kadrze overview płyta bloku 3 stoi jako gładka szara skrzynia obok voxelowych bloków,
-które na tej samej odległości nadal mają pasy okien. To nie błąd implementacji — to zbyt
-pusty najniższy poziom.
+**B1-1 (direct) — na LOD 0 budynek był pustym pudełkiem. NAPRAWIONE.** Bryła to jedno
+`E.box(b.tint, …, { layer: 0 })` plus cokół, a wszystkie otwory siedziały w warstwie ≥ 1, więc
+każdy klaster spadający do poziomu 0 tracił wszystkie okna: w kadrze overview płyta bloku 3
+stała jako gładka szara skrzynia obok voxelowych bloków, które na tej samej odległości nadal
+mają pasy okien.
+
+Pierwsza próba naprawy dorysowywała zapasową szybę **za** każdą prawdziwą. Zaostrzona bramka
+TTI wyłapała skutek natychmiast: kadr nocny spadł z 60,0 do 49,1 FPS, p95 z 16,8 na 33,4 ms —
+bo zapasowa szyba podwaja powierzchnię szkła, którą osiemnaście świateł lokalnych musi
+cieniować. Powtórzone trzy razy przy niezmienionej bazie produktu.
+
+Właściwa naprawa nie dodaje nic: **szyba przenosi się do warstwy 0**, bo szyba *jest*
+uproszczonym rytmem, a uproszczeniem na poziomie 0 jest brak wszystkiego wokół szyby, nie brak
+szyby. Warstwa 1 dokłada wnęki, parapety i nadproża, warstwa 2 ramy, szprosy i towar. Geometria
+jest bit w bit taka jak przed zmianą (349 draw calli, 639 515 trójkątów w kadrze nocnym), a
+warstwy przesunęły się bez zmiany sumy: [2938, 9158, 8640] → [3304, 8792, 8640]. Wyjątkiem jest
+witryna: jej szkło jest przezroczyste, więc w warstwie 0 leży ciemne wnętrze za nim.
+
+Pisanie testu do tego wyłapało jeszcze dwie niespójności: zapasowa szyba klatki schodowej wieży
+i szyba witryny zapalałyby się, choć prawdziwe oszklenie tych dwóch nie ma kohorty. Test pilnuje
+teraz, że kohorta jest ta sama na każdym poziomie, i że żadna powierzchnia jednej klasy nie jest
+rysowana dwa razy w tym samym miejscu.
 
 **B1-2 (greedy) — na LOD 0 przez ten sam budynek widać świat.** Mechanizm, dosłownie:
 
@@ -89,13 +150,19 @@ leży 1,5 cm przed ścianą, skrzydło drzwi 2 cm. Siatka 0,25 m sprowadza jedno
 płaszczyzny ściany, więc powierzchnie stają się współpłaszczyznowe. Efekt to regularna
 kraciura na szybach, drzwiach i rolecie.
 
-**B1-5 (model, obie strategie) — pasy zebry są obrócone o 90°.** Aleja Południowa to
+**B1-5 (model, obie strategie) — pasy zebry były obrócone o 90°. NAPRAWIONE.** Aleja Południowa to
 `ROAD_RECTS[0]` = x[−64; 64] × z[22; 26], więc ruch idzie wzdłuż x. `CROSSWALK` =
 x[−3,20; −1,80] × z[22; 26] jest poprawne: chodnik szerokości 1,4 m przez jezdnię szerokości
 4 m. Ale `emitStreetscape` kładzie każdy pas jako `2.4 × 0.012 × 0.5` — **2,4 m wzdłuż jezdni
-i 0,5 m w poprzek**, powtarzane w poprzek jezdni. Pasy biegną więc równolegle do ruchu,
-układają się w drabinę przez jezdnię i wystają 0,5 m poza chodnik z każdej strony. Prawdziwa
-zebra ma pasy wzdłuż kierunku przejścia, powtarzane wzdłuż jezdni.
+i 0,5 m w poprzek**, powtarzane w poprzek jezdni. Pasy biegły więc równolegle do ruchu,
+układały się w drabinę przez jezdnię i wystawały 0,5 m poza chodnik z każdej strony.
+
+Po poprawce pas biegnie w poprzek jezdni i powtarza się wzdłuż niej, a szerokość pasa i przerwy
+jest jedna, wyliczana z prostokąta przejścia: `(maxX − minX) / (stripes · 2 − 1)`. Przejście
+przeniosłem też z x[−3,20; −1,80] na **x[−3,40; −0,60]** — w lukę osiowej linii produktu, która
+maluje `x mod 6 < 3` przy z = 24 (`WorldGenerator.isRoadMarking`), więc kreska nie leży już na
+pasach. Zweryfikowane wyliczeniem: żaden malowany voxel osi nie zachodzi na przejście. Test
+`emitters.test.ts` pilnuje orientacji (`bar.d > bar.w`), zawarcia w prostokącie i równych przerw.
 
 **B1-6 (produkt, odziedziczone) — chodnik przy przystanku ma metr szerokości.**
 `isOnSidewalk` zwraca prawdę tylko w promieniu 1 m od prostokąta drogi, więc wokół Alei
@@ -143,21 +210,22 @@ limitów 1400 i 500. Tekstury bez zmian: napisy to jedyne `CanvasTexture`.
 
 TTI mierzone **z podpiętym fragmentem**, per kadr (pole `timeToInteractiveMs` w każdym wyniku):
 
-| Świat | High | Low | Próg |
-|---|---|---|---|
-| voxel | 890–1029 ms | 644–961 ms | 1800 ms |
-| hybrid-direct | **988–1266 ms** | 710–1094 ms | 1800 ms |
-| hybrid-greedy | **1970–2176 ms** | 1726–2028 ms | 1800 ms |
+| Świat | High | Low | Próg | Wynik |
+|---|---|---|---|---|
+| voxel | 910–1096 ms | 708–1042 ms | 1800 ms | przechodzi |
+| hybrid-direct | **1062–1179 ms** | 761–1245 ms | 1800 ms | przechodzi, zapas 555 ms |
+| hybrid-greedy | **2061–2245 ms** | 1724–2166 ms | 1800 ms | **nie przechodzi w 7 z 8 kadrów** |
 
-`hybrid-greedy` przekracza budżet w **każdym** kadrze na High (1970, 2028, 2176, 2130 ms) i w
-dwóch z czterech na Low (golden 2028 ms, night 1995 ms; overview i street mieszczą się o
-włos, 1727 i 1726 ms). Direct dokłada 100–240 ms i najgorszy jego przypadek — golden 1266 ms —
-ma jeszcze 534 ms zapasu.
+**Asercja jest zaostrzona.** Każdy wynik kadru jest teraz sprawdzany przeciw budżetowi w tym
+samym świecie, w którym został zmierzony, i `hybrid-greedy` kończy się kodem 1 na obu jakościach.
+Zgodnie z Twoją uwagą: bramka, która wykrywa przekroczenie i zwraca sukces, jest raportem, nie
+bramką.
 
-Uczciwa uwaga o narzędziu: asercja TTI w `performanceBenchmark.mjs` nadal patrzy na stary,
-bezświatowy pomiar, więc wszystkie sześć uruchomień kończy się kodem 0, mimo że greedy jest
-poza budżetem. Nie zaostrzyłem tej asercji, bo objęłaby też własne kadry produktu, a to
-zmiana zakresu i ryzyko flake'u w CI. Zostawiam to jako jawną decyzję do podjęcia.
+Przy zaostrzaniu wyszła druga wada tego samego miejsca: oczekiwanie na gotowość miało timeout
+równy **dokładnie** budżetowi TTI, więc ładowanie marginalne rzucało `TimeoutError` i przerywało
+uruchomienie **bez zapisania JSON-a**, na którym asercja mogłaby polec. Tak straciłem cztery
+uruchomienia. Oczekiwanie jest teraz hojne (5 × budżet), a budżetu pilnuje asercja, która
+potrzebuje istniejącego pomiaru, żeby na nim polec.
 
 ### 3.4 Generacja i pamięć GPU
 
@@ -169,18 +237,47 @@ zmiana zakresu i ryzyko flake'u w CI. Zostawiam to jako jawną decyzję do podj�
 Greedy jest ~40× wolniejszy w generacji i zajmuje o 38% więcej pamięci GPU. Płaci tym za
 voxelowe AO „za darmo" — którego direct nie potrzebuje, bo wypieka `aAo` na etapie emitera.
 
-### 3.5 Jedna anomalia, którą trzeba nazwać
+### 3.5 Nocny koszt GPU — wyjaśniony
 
-Timer GPU w kadrze nocnym raportuje p90 daleko poza 20,5 ms: voxel 48,9 ms, direct 64,1 ms,
-greedy 67,0 ms — przy klatce 16,8 ms i 60 FPS. Sprzeczność jest pozorna: zapytanie obejmuje
-jedną jawną klatkę kompozytora razem z aktualizacją cieni świateł lokalnych, których w stanie
-ustalonym nie przeliczamy co klatkę. Dwie rzeczy są jednak prawdziwe i warte zapisania:
+Prosiłeś o wyjaśnienie. Zaczyna się od tego, że **przyrząd mierzył coś innego, niż nazwa
+sugerowała**.
 
-- próg 20,5 ms jest już przekroczony **w produkcie** (48,9 ms), więc ta metryka nie jest
-  bramką spike'u i nie była nią wcześniej;
-- delta hybrydy jest realna: **+15,2 ms (direct) i +18,1 ms (greedy)** względem produktu, i nie
-  została wyjaśniona. To pass normalnych SSAO plus światła lokalne w kadrze ulicznym. Przed
-  jakimkolwiek rozszerzeniem na drugi fragment ten pomiar zasługuje na osobne przyjrzenie się.
+Zapytanie timera obejmowało `captureFrame`, które renderuje jedną klatkę kompozytora, a potem
+kopiuje bufor ramki do canvasa 2D i **koduje go do JPEG-a**. Odczyt bufora i kodowanie
+1440×900 leżały więc w mierzonym czasie GL. Dlatego kadr nocny raportował 43–61 ms dla klatki,
+którą to samo uruchomienie mierzy na 16,8 ms — i to w **każdym** świecie, także w nietkniętym
+produkcie. Dodałem hook `renderFrame()`, który renderuje i nic więcej, i zapytanie obejmuje
+teraz tylko jego. Liczby spadły odpowiednio: voxel 43,6 → 34,5 ms, direct 61,1 → 40,2 ms.
+
+Co delta **jest**, po poprawce przyrządu: produkt 34,5 ms, hybrid-direct 40,2 ms, czyli
+**+5,7 ms** — nie +15,2 ms jak w rewizji 1.
+
+Co delta **nie jest**, każde zmierzone osobno przełącznikami diagnostycznymi benchmarku:
+
+| Hipoteza | Pomiar | Wniosek |
+|---|---|---|
+| światła lokalne (18 w kadrze nocnym) | 40,2 → 39,9 ms przy `BENCH_DISABLE_LOCAL_LIGHTS=1` | nie one |
+| cienie | 40,2 → 39,9 ms przy `BENCH_DISABLE_SHADOWS=1` | nie one |
+| selektywny bloom (hybryda wpisuje swoje `glow`) | 40,2 → 41,7 ms po wypisaniu | nie on |
+| szum proceduralny materiału | 40,2 → 40,2 ms po zaślepieniu | nie on, **nocą** |
+
+Te +5,7 ms zostają **nieprzypisane**. Nie są widoczne dla użytkownika: każdy świat, każda jakość
+i każdy kadr trzyma 60,0 FPS przy p95 16,8 ms i zero hitchy. Reszta bezwzględnej wartości
+(~34 ms dla klatki 16,8 ms) to nadal właściwość przyrządu — jedna wymuszona klatka poza pętlą
+RAF, z `delta = 0`, nie korzysta z tego, co pętla amortyzuje między klatkami.
+
+**Prawdziwe znalezisko GPU jest w dzień**, gdzie ten sam przyrząd jest miarodajny. Trzy oktawy
+szumu wartościowego w materiale — **24 wywołania hasza na każdy nieprzezroczysty fragment** —
+kosztują:
+
+| Kadr | z szumem | z zaślepionym szumem | koszt szumu |
+|---|---|---|---|
+| overview | 16,5 ms | 5,2 ms | **11,3 ms** |
+| street | 20,6 ms | 11,0 ms | **9,6 ms** |
+
+To dominujący koszt GPU hybrydy i oczywisty cel optymalizacji: mniej oktaw, tańszy hasz albo
+wypieczenie szumu do małej tekstury 3D. Nie ruszam tego w tej rundzie — to zmiana wyglądu, a
+nie naprawa defektu.
 
 `jsHeapBytes` waha się między 28 i 86 MB niezależnie od świata — to chwilowa próbka sterty
 przed GC i nie nadaje się na wniosek. Nie wyciągam z niej żadnego.
@@ -258,14 +355,15 @@ funkcję, z której korzysta `DayNightCycle`. Zmierzone o 06:43 (t01 = 0,28): ak
 voxelowych okien to 0,02, bo formuła to `activity × (0.02 + night × 1.23)` i `night` jest o tej
 porze bliskie zeru. Hybryda używa tej samej formuły.
 
-Mimo tego **fragment czyta się o świcie jako niezamieszkany**, a miasto wokół niego jest
-zapalone. Powód nie jest w kohortach, jest w materiale: voxelowe okno nosi stan zapalenia w
-kolorze rozproszonym na materiale o `metalness 0.4` (60% udziału diffuse), a szkło hybrydy ma
-`metalness 0.85` (15%). W całym pasie dziennym i świtowym, gdzie emisja jest znikoma, cały
-efekt „zapalone" niesie diffuse — i hybryda gubi go czterokrotnie.
+Rewizja 1 twierdziła dalej, że fragment czyta się o świcie jako niezamieszkany, i przypisywała
+to `metalness` szkła. **To twierdzenie jest wycofane — patrz errata E1 i E2.** Wartość była
+0,7, nie 0,85, a zmierzona odpowiedź kohort hybrydy była już wtedy na poziomie produktu
+(29 722 piksele wobec 27 454 w produkcie, przy porównywalnej amplitudzie). Ciemny wygląd o
+świcie brał się w całości z pustego LOD 0 (B1-1), naprawionego w tej rundzie.
 
-Poprawka to jedna liczba, ale jest zmianą art directionu, więc jej **nie wprowadziłem**.
-Zostaje jako pozycja do decyzji.
+Semantyka kohort jest zatem zgodna i była zgodna. Test `emitters.test.ts` pilnuje teraz
+dodatkowo, że ta sama kohorta obowiązuje na każdym poziomie LOD — przy przenoszeniu szyb do
+warstwy 0 wyłapał dwa oszklenia, które zapalałyby się na poziomie 0, a na wyższych nie.
 
 ## 5. Bramka 4 — wysokości i kolizje
 
@@ -332,12 +430,12 @@ wieża po prawej i cięższy, pasiasty komin po lewej.
 
 | Chunk | Rozmiar | Limit | Zapas |
 |---|---|---|---|
-| `index-*.js` | **238 673 B** | 240 000 B | 1 327 B |
+| `index-*.js` | **238 712 B** | 240 000 B | 1 288 B |
 | `main-*.js` | **33 311 B** | 50 000 B | 16 689 B |
-| `hybrid-spike-*.js` | 41 008 B | — (dynamic import) | — |
+| `hybrid-spike-*.js` | 41 024 B | — (dynamic import) | — |
 
-Dodatek do chunku wejściowego względem stanu przekazania: +84 B. `lodPixelsPerMetre` wpadło
-do chunku spike'u (40 953 → 41 008 B), nie do wejściowego. Żaden budżet nie został podniesiony.
+Dodatek do chunku wejściowego względem stanu przekazania: +123 B (`lodPixelsPerMetre` wpadło do
+chunku spike'u, a hook `renderFrame` do wejściowego, +39 B). Żaden budżet nie został podniesiony.
 
 ## 8. Rekomendacja
 
@@ -346,40 +444,47 @@ do chunku spike'u (40 953 → 41 008 B), nie do wejściowego. Żaden budżet nie
 
 Za direct:
 
-- mieści się we wszystkich progach bramki 2, w tym w TTI z zapasem ≥ 530 ms;
-- generuje fragment w 23–26 ms, czyli poniżej dwóch klatek;
-- oszczędza 27 tys. trójkątów względem voxeli, które zastępuje;
-- dotrzymuje kontraktu addytywnych warstw: bryła jest zamknięta na każdym poziomie;
+- mieści się we wszystkich progach bramki 2, w tym w **zaostrzonym** TTI, z zapasem 555 ms;
+- generuje fragment w 24–28 ms, czyli poniżej dwóch klatek;
+- oszczędza 26 942 trójkąty względem voxeli, które zastępuje (576 009 wobec 602 951 w overview);
+- dotrzymuje kontraktu warstw: bryła jest zamknięta na każdym poziomie, a szyba jest w warstwie 0,
+  więc poziom 0 czyta się jako budynek z oknami;
 - daje czytelne rowery, balustrady, szprosy i towar w witrynie — dokładnie to, za co
   zatwierdzono ten kierunek.
 
 Przeciw greedy — każdy punkt osobno wystarczy:
 
-- **przekracza budżet TTI** (1970–2176 ms wobec 1800) w każdym kadrze na High;
+- **przekracza budżet TTI** (1724–2245 ms wobec 1800) w siedmiu z ośmiu kadrów, i od teraz
+  benchmark się na tym wywala;
 - **łamie kontrakt LOD**: na poziomie 0 przez budynek widać świat, i to nie jest do
   poprawienia bez przepisania kullingu ścianek na świadomy warstw;
 - **niszczy wszystko cieńsze niż 25 cm**: 2957 zdylatowanych wymiarów, rowery jako stos
   klocków, pasy zebry jako bloki na jezdni;
 - **z-fightuje** na każdej płaszczyźnie opartej o mały offset (szyby, drzwi, rolety);
-- 40× dłuższa generacja i +38% pamięci GPU;
+- ~40× dłuższa generacja i +38% pamięci GPU;
 - jedyna korzyść — voxelowe AO — jest już dostępna w direct jako wypiekany atrybut `aAo`.
 
-Ale kierunek **nie jest gotowy do wdrożenia w tym stanie**. Trzy rzeczy po naszej stronie do
-zrobienia przed drugim fragmentem, w tej kolejności:
+### 8.1 Trzy defekty po naszej stronie — zrobione w tej rundzie
 
-1. **Wypełnić LOD 0.** Bryła bez okien czyta się jak niedokończony model obok voxelowych
-   bloków, które na tej odległości okna mają. Najtaniej: wypiekany pas okien w warstwie 0.
-2. **Obrócić zebrę o 90°** i zawęzić pasy do szerokości przejścia (B1-5).
-3. **Zdjąć metalness ze szkła** albo dołożyć diffuse do stanu zapalenia, żeby fragment nie był
-   ciemny w pasie dziennym i świtowym (4.1).
+1. **LOD 0 zachowuje rytm okien.** Szyba przeniesiona do warstwy 0; geometria bit w bit jak
+   przedtem. Pierwsza próba (zapasowa szyba za prawdziwą) kosztowała 11 FPS nocą i została
+   odrzucona przez pomiar, nie przez opinię. (B1-1)
+2. **Zebra obrócona i przycięta**, plus przeniesiona w lukę osiowej linii produktu. (B1-5)
+3. **Materiał szkła wyrównany do produktu** (`metalness` 0,65 = niezapalone okno produktu).
+   Interpolacja do zapalonego końca usunięta po pomiarze: −11 FPS nocą, < 1% zysku. (errata E2)
 
-I trzy rzeczy odziedziczone z produktu, które spike wyciągnął na wierzch, a których nie może
-naprawić z wnętrza fragmentu — do osobnej decyzji:
+Zostaje po naszej stronie jedno, mniejsze: **towar w witrynie to warstwa 2, więc na Low go nie
+ma** (kryterium d). Do rozstrzygnięcia razem z pytaniem, czy Low ma w ogóle pokazywać treść
+witryn.
 
-4. Chodnik przy Osiedlu Centralnym ma metr szerokości; wiata, ławka i pasażerowie stoją na
-   trawie (B1-6).
-5. Pasażer jest zasłonięty ścianą reklamową własnej wiaty w każdym kadrze ulicznym (kryterium c).
-6. Horyzont w kadrze ulicznym jest wypalony na 10,8% pasa (kryterium e).
+I jedno techniczne, wskazane pomiarem: **szum proceduralny materiału kosztuje 9,6–11,3 ms GPU
+w kadrach dziennych** (3.5). To dominujący koszt GPU hybrydy i najlepszy cel optymalizacji.
+
+### 8.2 Streetscape 2.0 — wydzielone, nie porzucone
+
+Trzy rzeczy odziedziczone z produktu, które spike wyciągnął na wierzch, nie są błędem strategii
+direct, ale uderzają dokładnie w cel „zamieszkanego miasta". Zgodnie z Twoją decyzją idą jako
+osobna naprawa **Streetscape 2.0**, przed drugim fragmentem — zakres w rozdziale 11.
 
 ## 9. Czego świadomie nie zrobiliśmy
 

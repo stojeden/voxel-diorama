@@ -1,9 +1,9 @@
 {
-  "generatedAt": "2026-09-02T14:21:20.633Z",
+  "generatedAt": "2026-09-02T14:42:20.598Z",
   "bundles": {
-    "entry": 238673,
+    "entry": 238662,
     "main": 33311,
-    "spike": 41024
+    "spike": 34111
   },
   "results": [
     {
@@ -20,7 +20,7 @@
       "textures": 37,
       "hybrid": {
         "strategy": "direct",
-        "generationMs": 28.100000023841858,
+        "generationMs": 28.799999952316284,
         "triangles": [
           3304,
           8792,
@@ -50,8 +50,6 @@
           "dominant-chimney": 6.596359950345023,
           "dominant-rtvTower": 7.974756823777319
         },
-        "cell": null,
-        "dilated": 0,
         "low": false
       },
       "contactChecked": 40,
@@ -80,7 +78,7 @@
       "textures": 37,
       "hybrid": {
         "strategy": "direct",
-        "generationMs": 25,
+        "generationMs": 24.700000047683716,
         "triangles": [
           3304,
           8792,
@@ -110,8 +108,6 @@
           "dominant-chimney": 16.004873186384458,
           "dominant-rtvTower": 17.42447664856634
         },
-        "cell": null,
-        "dilated": 0,
         "low": false
       },
       "contactChecked": 40,
@@ -140,7 +136,7 @@
       "textures": 37,
       "hybrid": {
         "strategy": "direct",
-        "generationMs": 23.5,
+        "generationMs": 24.100000262260437,
         "triangles": [
           3304,
           8792,
@@ -170,8 +166,6 @@
           "dominant-chimney": 6.596359950345023,
           "dominant-rtvTower": 7.974756823777319
         },
-        "cell": null,
-        "dilated": 0,
         "low": false
       },
       "contactChecked": 40,
@@ -200,7 +194,7 @@
       "textures": 35,
       "hybrid": {
         "strategy": "direct",
-        "generationMs": 23.700000047683716,
+        "generationMs": 24.100000023841858,
         "triangles": [
           3304,
           8792,
@@ -230,8 +224,6 @@
           "dominant-chimney": 16.004873186384458,
           "dominant-rtvTower": 17.42447664856634
         },
-        "cell": null,
-        "dilated": 0,
         "low": false
       },
       "contactChecked": 40,
@@ -260,7 +252,7 @@
       "textures": 20,
       "hybrid": {
         "strategy": "direct",
-        "generationMs": 24.49999988079071,
+        "generationMs": 25.799999833106995,
         "triangles": [
           2760,
           7796,
@@ -290,8 +282,6 @@
           "dominant-chimney": 16.004873186384458,
           "dominant-rtvTower": 17.42447664856634
         },
-        "cell": null,
-        "dilated": 0,
         "low": true
       },
       "contactChecked": 40,
@@ -320,7 +310,7 @@
       "textures": 20,
       "hybrid": {
         "strategy": "direct",
-        "generationMs": 24.300000071525574,
+        "generationMs": 22.799999952316284,
         "triangles": [
           2760,
           7796,
@@ -350,368 +340,6 @@
           "dominant-chimney": 6.596359950345023,
           "dominant-rtvTower": 7.974756823777319
         },
-        "cell": null,
-        "dilated": 0,
-        "low": true
-      },
-      "contactChecked": 40,
-      "lodLevels": {
-        "building-3": 0,
-        "building-4": 1,
-        "building-5": 1,
-        "building-24": 1,
-        "building-25": 1,
-        "streetscape": 1,
-        "dominant-chimney": 0,
-        "dominant-rtvTower": 0
-      }
-    },
-    {
-      "world": "hybrid-greedy",
-      "quality": "high",
-      "checkpoint": "spike-overview",
-      "frame": "docs/superpowers/spike/frames/hybrid-greedy-high-spike-overview.jpg",
-      "calls": 605,
-      "triangles": 591325,
-      "primaryTriangles": 591322,
-      "primaryCalls": 602,
-      "programs": 156,
-      "geometries": 433,
-      "textures": 37,
-      "hybrid": {
-        "strategy": "greedy",
-        "generationMs": 1038,
-        "triangles": [
-          12208,
-          8044,
-          8314
-        ],
-        "vertices": 85698,
-        "bytes": 4113504,
-        "meshes": 32,
-        "clusters": 8,
-        "lodLevels": {
-          "building-3": 0,
-          "building-4": 1,
-          "building-5": 1,
-          "building-24": 1,
-          "building-25": 1,
-          "streetscape": 1,
-          "dominant-chimney": 0,
-          "dominant-rtvTower": 0
-        },
-        "lodPixelsPerMetre": {
-          "building-3": 8.30461176964735,
-          "building-4": 9.246661099695881,
-          "building-5": 11.66073684816779,
-          "building-24": 9.426080654714486,
-          "building-25": 11.766321511870878,
-          "streetscape": 12.990272018940315,
-          "dominant-chimney": 6.596359950345023,
-          "dominant-rtvTower": 7.974756823777319
-        },
-        "cell": 0.5,
-        "dilated": 2957,
-        "low": false
-      },
-      "contactChecked": 40,
-      "lodLevels": {
-        "building-3": 0,
-        "building-4": 1,
-        "building-5": 1,
-        "building-24": 1,
-        "building-25": 1,
-        "streetscape": 1,
-        "dominant-chimney": 0,
-        "dominant-rtvTower": 0
-      }
-    },
-    {
-      "world": "hybrid-greedy",
-      "quality": "high",
-      "checkpoint": "spike-street",
-      "frame": "docs/superpowers/spike/frames/hybrid-greedy-high-spike-street.jpg",
-      "calls": 473,
-      "triangles": 903521,
-      "primaryTriangles": 580572,
-      "primaryCalls": 285,
-      "programs": 152,
-      "geometries": 432,
-      "textures": 37,
-      "hybrid": {
-        "strategy": "greedy",
-        "generationMs": 1028.8999999761581,
-        "triangles": [
-          12208,
-          8044,
-          8314
-        ],
-        "vertices": 85698,
-        "bytes": 4113504,
-        "meshes": 32,
-        "clusters": 8,
-        "lodLevels": {
-          "building-3": 2,
-          "building-4": 2,
-          "building-5": 2,
-          "building-24": 2,
-          "building-25": 2,
-          "streetscape": 2,
-          "dominant-chimney": 1,
-          "dominant-rtvTower": 1
-        },
-        "lodPixelsPerMetre": {
-          "building-3": 41.527964200586545,
-          "building-4": 96.92972095035118,
-          "building-5": 390.88749884531086,
-          "building-24": 38.907622693188685,
-          "building-25": 160.94176945418937,
-          "streetscape": 1930.0562284586028,
-          "dominant-chimney": 16.004873186384458,
-          "dominant-rtvTower": 17.42447664856634
-        },
-        "cell": 0.5,
-        "dilated": 2957,
-        "low": false
-      },
-      "contactChecked": 40,
-      "lodLevels": {
-        "building-3": 2,
-        "building-4": 2,
-        "building-5": 2,
-        "building-24": 2,
-        "building-25": 2,
-        "streetscape": 2,
-        "dominant-chimney": 1,
-        "dominant-rtvTower": 1
-      }
-    },
-    {
-      "world": "hybrid-greedy",
-      "quality": "high",
-      "checkpoint": "spike-golden",
-      "frame": "docs/superpowers/spike/frames/hybrid-greedy-high-spike-golden.jpg",
-      "calls": 607,
-      "triangles": 591359,
-      "primaryTriangles": 591356,
-      "primaryCalls": 604,
-      "programs": 217,
-      "geometries": 435,
-      "textures": 37,
-      "hybrid": {
-        "strategy": "greedy",
-        "generationMs": 1045.4999998807907,
-        "triangles": [
-          12208,
-          8044,
-          8314
-        ],
-        "vertices": 85698,
-        "bytes": 4113504,
-        "meshes": 32,
-        "clusters": 8,
-        "lodLevels": {
-          "building-3": 0,
-          "building-4": 1,
-          "building-5": 1,
-          "building-24": 1,
-          "building-25": 1,
-          "streetscape": 1,
-          "dominant-chimney": 0,
-          "dominant-rtvTower": 0
-        },
-        "lodPixelsPerMetre": {
-          "building-3": 8.30461176964735,
-          "building-4": 9.246661099695881,
-          "building-5": 11.66073684816779,
-          "building-24": 9.426080654714486,
-          "building-25": 11.766321511870878,
-          "streetscape": 12.990272018940315,
-          "dominant-chimney": 6.596359950345023,
-          "dominant-rtvTower": 7.974756823777319
-        },
-        "cell": 0.5,
-        "dilated": 2957,
-        "low": false
-      },
-      "contactChecked": 40,
-      "lodLevels": {
-        "building-3": 0,
-        "building-4": 1,
-        "building-5": 1,
-        "building-24": 1,
-        "building-25": 1,
-        "streetscape": 1,
-        "dominant-chimney": 0,
-        "dominant-rtvTower": 0
-      }
-    },
-    {
-      "world": "hybrid-greedy",
-      "quality": "high",
-      "checkpoint": "spike-night-street",
-      "frame": "docs/superpowers/spike/frames/hybrid-greedy-high-spike-night-street.jpg",
-      "calls": 349,
-      "triangles": 638773,
-      "primaryTriangles": 315756,
-      "primaryCalls": 156,
-      "programs": 194,
-      "geometries": 434,
-      "textures": 35,
-      "hybrid": {
-        "strategy": "greedy",
-        "generationMs": 1030.8999998569489,
-        "triangles": [
-          12208,
-          8044,
-          8314
-        ],
-        "vertices": 85698,
-        "bytes": 4113504,
-        "meshes": 32,
-        "clusters": 8,
-        "lodLevels": {
-          "building-3": 2,
-          "building-4": 2,
-          "building-5": 2,
-          "building-24": 2,
-          "building-25": 2,
-          "streetscape": 2,
-          "dominant-chimney": 1,
-          "dominant-rtvTower": 1
-        },
-        "lodPixelsPerMetre": {
-          "building-3": 41.527964200586545,
-          "building-4": 96.92972095035118,
-          "building-5": 390.88749884531086,
-          "building-24": 38.907622693188685,
-          "building-25": 160.94176945418937,
-          "streetscape": 1930.0562284586028,
-          "dominant-chimney": 16.004873186384458,
-          "dominant-rtvTower": 17.42447664856634
-        },
-        "cell": 0.5,
-        "dilated": 2957,
-        "low": false
-      },
-      "contactChecked": 40,
-      "lodLevels": {
-        "building-3": 2,
-        "building-4": 2,
-        "building-5": 2,
-        "building-24": 2,
-        "building-25": 2,
-        "streetscape": 2,
-        "dominant-chimney": 1,
-        "dominant-rtvTower": 1
-      }
-    },
-    {
-      "world": "hybrid-greedy",
-      "quality": "low",
-      "checkpoint": "spike-street",
-      "frame": "docs/superpowers/spike/frames/hybrid-greedy-low-spike-street.jpg",
-      "calls": 153,
-      "triangles": 310227,
-      "primaryTriangles": 310224,
-      "primaryCalls": 150,
-      "programs": 75,
-      "geometries": 431,
-      "textures": 20,
-      "hybrid": {
-        "strategy": "greedy",
-        "generationMs": 930.3999999761581,
-        "triangles": [
-          11940,
-          7178,
-          8314
-        ],
-        "vertices": 82296,
-        "bytes": 3950208,
-        "meshes": 31,
-        "clusters": 8,
-        "lodLevels": {
-          "building-3": 1,
-          "building-4": 1,
-          "building-5": 1,
-          "building-24": 1,
-          "building-25": 1,
-          "streetscape": 1,
-          "dominant-chimney": 1,
-          "dominant-rtvTower": 1
-        },
-        "lodPixelsPerMetre": {
-          "building-3": 41.527964200586545,
-          "building-4": 96.92972095035118,
-          "building-5": 390.88749884531086,
-          "building-24": 38.907622693188685,
-          "building-25": 160.94176945418937,
-          "streetscape": 1930.0562284586028,
-          "dominant-chimney": 16.004873186384458,
-          "dominant-rtvTower": 17.42447664856634
-        },
-        "cell": 0.5,
-        "dilated": 2871,
-        "low": true
-      },
-      "contactChecked": 40,
-      "lodLevels": {
-        "building-3": 1,
-        "building-4": 1,
-        "building-5": 1,
-        "building-24": 1,
-        "building-25": 1,
-        "streetscape": 1,
-        "dominant-chimney": 1,
-        "dominant-rtvTower": 1
-      }
-    },
-    {
-      "world": "hybrid-greedy",
-      "quality": "low",
-      "checkpoint": "spike-overview",
-      "frame": "docs/superpowers/spike/frames/hybrid-greedy-low-spike-overview.jpg",
-      "calls": 438,
-      "triangles": 333145,
-      "primaryTriangles": 333142,
-      "primaryCalls": 435,
-      "programs": 76,
-      "geometries": 432,
-      "textures": 20,
-      "hybrid": {
-        "strategy": "greedy",
-        "generationMs": 1027.0999999046326,
-        "triangles": [
-          11940,
-          7178,
-          8314
-        ],
-        "vertices": 82296,
-        "bytes": 3950208,
-        "meshes": 31,
-        "clusters": 8,
-        "lodLevels": {
-          "building-3": 0,
-          "building-4": 1,
-          "building-5": 1,
-          "building-24": 1,
-          "building-25": 1,
-          "streetscape": 1,
-          "dominant-chimney": 0,
-          "dominant-rtvTower": 0
-        },
-        "lodPixelsPerMetre": {
-          "building-3": 8.30461176964735,
-          "building-4": 9.246661099695881,
-          "building-5": 11.66073684816779,
-          "building-24": 9.426080654714486,
-          "building-25": 11.766321511870878,
-          "streetscape": 12.990272018940315,
-          "dominant-chimney": 6.596359950345023,
-          "dominant-rtvTower": 7.974756823777319
-        },
-        "cell": 0.5,
-        "dilated": 2871,
         "low": true
       },
       "contactChecked": 40,

@@ -7,10 +7,10 @@
   "diagnosticShadowsDisabled": false,
   "diagnosticLocalLightsDisabled": false,
   "readiness": {
-    "timeToInteractiveMs": 1121.2,
+    "timeToInteractiveMs": 1169.8,
     "definition": "diorama-ready after preload, shader warm-up, first interactive animation frame and loader dismissal",
-    "domContentLoadedMs": 299.2,
-    "firstContentfulPaintMs": 72
+    "domContentLoadedMs": 303.5,
+    "firstContentfulPaintMs": 68
   },
   "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Pro, Unspecified Version)",
   "vendor": "Google Inc. (Apple)",
@@ -22,7 +22,7 @@
       "world": "hybrid-direct",
       "hybrid": {
         "strategy": "direct",
-        "generationMs": 25.799999952316284,
+        "generationMs": 25.800000071525574,
         "triangles": [
           2760,
           7796,
@@ -52,24 +52,22 @@
           "dominant-chimney": 6.596359950345023,
           "dominant-rtvTower": 7.974756823777319
         },
-        "cell": null,
-        "dilated": 0,
         "low": true
       },
-      "jsHeapBytes": 42076748,
+      "jsHeapBytes": 25747181,
       "simulationSeed": 20260722,
       "layoutSeed": 20260610,
       "checkpointRevision": 2,
-      "timeToInteractiveMs": 761.1,
+      "timeToInteractiveMs": 777.6,
       "diagnostics": {
         "shadowsEnabled": false,
         "visibleLocalLights": 6
       },
       "timing": {
         "frames": 180,
-        "averageFps": 60.00400026668446,
-        "averageFrameMs": 16.665555555555553,
-        "p95FrameMs": 16.799999999999272,
+        "averageFps": 60.00400026668444,
+        "averageFrameMs": 16.665555555555557,
+        "p95FrameMs": 16.800000000000182,
         "p99FrameMs": 16.800000000000182,
         "maxFrameMs": 16.800000000000182,
         "hitchCount": 0,
@@ -77,21 +75,21 @@
       },
       "cpu": {
         "scope": "Chromium renderer main thread; not total system CPU",
-        "taskMs": 511.4,
-        "busyPercent": 17,
-        "scriptMs": 471.6,
-        "layoutMs": 4.2
+        "taskMs": 559.4,
+        "busyPercent": 18.6,
+        "scriptMs": 513.4,
+        "layoutMs": 4.9
       },
       "gpu": {
         "available": true,
         "method": "EXT_disjoint_timer_query_webgl2 around an explicit composer frame",
         "sampleCount": 15,
-        "medianRenderMsRaw": 10.427291,
-        "p90RenderMsRaw": 11.539874,
-        "medianRenderMs": 10.4,
-        "p90RenderMs": 11.5,
-        "minRenderMs": 7.1,
-        "maxRenderMs": 11.7
+        "medianRenderMsRaw": 8.5925,
+        "p90RenderMsRaw": 10.520125,
+        "medianRenderMs": 8.6,
+        "p90RenderMs": 10.5,
+        "minRenderMs": 6.5,
+        "maxRenderMs": 14.5
       },
       "measuredState": {
         "t01": 0.5,
@@ -227,7 +225,7 @@
       "world": "hybrid-direct",
       "hybrid": {
         "strategy": "direct",
-        "generationMs": 24.700000047683716,
+        "generationMs": 24.800000190734863,
         "triangles": [
           2760,
           7796,
@@ -257,46 +255,44 @@
           "dominant-chimney": 16.004873186384458,
           "dominant-rtvTower": 17.42447664856634
         },
-        "cell": null,
-        "dilated": 0,
         "low": true
       },
-      "jsHeapBytes": 79881637,
+      "jsHeapBytes": 60722979,
       "simulationSeed": 20260722,
       "layoutSeed": 20260610,
       "checkpointRevision": 2,
-      "timeToInteractiveMs": 843,
+      "timeToInteractiveMs": 759.4,
       "diagnostics": {
         "shadowsEnabled": false,
         "visibleLocalLights": 6
       },
       "timing": {
-        "frames": 180,
-        "averageFps": 60.00400026668446,
-        "averageFrameMs": 16.665555555555553,
-        "p95FrameMs": 16.700000000000728,
+        "frames": 179,
+        "averageFps": 59.67064470964732,
+        "averageFrameMs": 16.758659217877092,
+        "p95FrameMs": 16.800000000000182,
         "p99FrameMs": 16.800000000000182,
-        "maxFrameMs": 16.800000000000182,
+        "maxFrameMs": 33.30000000000018,
         "hitchCount": 0,
-        "slowFrameRatio": 0
+        "slowFrameRatio": 0.00558659217877095
       },
       "cpu": {
         "scope": "Chromium renderer main thread; not total system CPU",
-        "taskMs": 365.8,
-        "busyPercent": 12.2,
-        "scriptMs": 322.8,
-        "layoutMs": 4.6
+        "taskMs": 474.5,
+        "busyPercent": 15.8,
+        "scriptMs": 422.7,
+        "layoutMs": 6
       },
       "gpu": {
         "available": true,
         "method": "EXT_disjoint_timer_query_webgl2 around an explicit composer frame",
         "sampleCount": 15,
-        "medianRenderMsRaw": 6.451166,
-        "p90RenderMsRaw": 7.602,
-        "medianRenderMs": 6.5,
-        "p90RenderMs": 7.6,
-        "minRenderMs": 5.2,
-        "maxRenderMs": 9.4
+        "medianRenderMsRaw": 7.459625,
+        "p90RenderMsRaw": 11.243875,
+        "medianRenderMs": 7.5,
+        "p90RenderMs": 11.2,
+        "minRenderMs": 4.5,
+        "maxRenderMs": 11.4
       },
       "measuredState": {
         "t01": 0.5,
@@ -432,7 +428,7 @@
       "world": "hybrid-direct",
       "hybrid": {
         "strategy": "direct",
-        "generationMs": 23.800000071525574,
+        "generationMs": 24.699999928474426,
         "triangles": [
           2760,
           7796,
@@ -462,24 +458,22 @@
           "dominant-chimney": 6.596359950345023,
           "dominant-rtvTower": 7.974756823777319
         },
-        "cell": null,
-        "dilated": 0,
         "low": true
       },
-      "jsHeapBytes": 95825458,
+      "jsHeapBytes": 46806933,
       "simulationSeed": 20260722,
       "layoutSeed": 20260610,
       "checkpointRevision": 2,
-      "timeToInteractiveMs": 1244.9,
+      "timeToInteractiveMs": 1143,
       "diagnostics": {
         "shadowsEnabled": false,
         "visibleLocalLights": 6
       },
       "timing": {
         "frames": 180,
-        "averageFps": 60.00400026668444,
-        "averageFrameMs": 16.665555555555557,
-        "p95FrameMs": 16.700000000000728,
+        "averageFps": 60.00200006666889,
+        "averageFrameMs": 16.66611111111111,
+        "p95FrameMs": 16.800000000000182,
         "p99FrameMs": 16.800000000000182,
         "maxFrameMs": 16.800000000000182,
         "hitchCount": 0,
@@ -487,21 +481,21 @@
       },
       "cpu": {
         "scope": "Chromium renderer main thread; not total system CPU",
-        "taskMs": 521.9,
-        "busyPercent": 17.4,
-        "scriptMs": 480.6,
-        "layoutMs": 4.4
+        "taskMs": 552.6,
+        "busyPercent": 18.4,
+        "scriptMs": 508.6,
+        "layoutMs": 4.5
       },
       "gpu": {
         "available": true,
         "method": "EXT_disjoint_timer_query_webgl2 around an explicit composer frame",
         "sampleCount": 15,
-        "medianRenderMsRaw": 9.734958,
-        "p90RenderMsRaw": 14.112749,
-        "medianRenderMs": 9.7,
-        "p90RenderMs": 14.1,
-        "minRenderMs": 6.1,
-        "maxRenderMs": 14.9
+        "medianRenderMsRaw": 9.170833,
+        "p90RenderMsRaw": 10.838749,
+        "medianRenderMs": 9.2,
+        "p90RenderMs": 10.8,
+        "minRenderMs": 5.5,
+        "maxRenderMs": 11.6
       },
       "measuredState": {
         "t01": 0.28,
@@ -637,7 +631,7 @@
       "world": "hybrid-direct",
       "hybrid": {
         "strategy": "direct",
-        "generationMs": 25.200000047683716,
+        "generationMs": 27.299999952316284,
         "triangles": [
           2760,
           7796,
@@ -667,24 +661,22 @@
           "dominant-chimney": 16.004873186384458,
           "dominant-rtvTower": 17.42447664856634
         },
-        "cell": null,
-        "dilated": 0,
         "low": true
       },
-      "jsHeapBytes": 68626584,
+      "jsHeapBytes": 49857646,
       "simulationSeed": 20260722,
       "layoutSeed": 20260610,
       "checkpointRevision": 2,
-      "timeToInteractiveMs": 1143.5,
+      "timeToInteractiveMs": 1126.5,
       "diagnostics": {
         "shadowsEnabled": false,
         "visibleLocalLights": 14
       },
       "timing": {
         "frames": 180,
-        "averageFps": 60.00200006666888,
-        "averageFrameMs": 16.666111111111114,
-        "p95FrameMs": 16.700000000000728,
+        "averageFps": 60.00400026668444,
+        "averageFrameMs": 16.665555555555557,
+        "p95FrameMs": 16.799999999999272,
         "p99FrameMs": 16.800000000000182,
         "maxFrameMs": 16.800000000000182,
         "hitchCount": 0,
@@ -692,21 +684,21 @@
       },
       "cpu": {
         "scope": "Chromium renderer main thread; not total system CPU",
-        "taskMs": 453.4,
-        "busyPercent": 15.1,
-        "scriptMs": 410.4,
-        "layoutMs": 3.8
+        "taskMs": 468.4,
+        "busyPercent": 15.6,
+        "scriptMs": 411.2,
+        "layoutMs": 5.7
       },
       "gpu": {
         "available": true,
         "method": "EXT_disjoint_timer_query_webgl2 around an explicit composer frame",
         "sampleCount": 15,
-        "medianRenderMsRaw": 8.808749,
-        "p90RenderMsRaw": 9.477083,
+        "medianRenderMsRaw": 8.822041,
+        "p90RenderMsRaw": 9.265,
         "medianRenderMs": 8.8,
-        "p90RenderMs": 9.5,
-        "minRenderMs": 6.5,
-        "maxRenderMs": 9.9
+        "p90RenderMs": 9.3,
+        "minRenderMs": 8.4,
+        "maxRenderMs": 9.7
       },
       "measuredState": {
         "t01": 0.8999999999999999,
