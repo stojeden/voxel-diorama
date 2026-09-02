@@ -1,5 +1,11 @@
 # Przekazanie spike'u hybrydy — instrukcja dla następnego agenta
 
+> **Nieaktualne od 2 września 2026, 15:15.** Rozdział 5 („Co zostało do zrobienia") jest
+> wykonany w całości. Aktualny stan, wyniki i jedna rekomendacja są w
+> `docs/superpowers/spike/2026-09-02-hybrid-spike-report.md`. Ten dokument zostaje jako zapis
+> zasad nienegocjowalnych (rozdział 2), środowiska (3), mapy kodu (4) i pułapek (7), które
+> nadal obowiązują.
+
 Stan na 2 września 2026, po commicie `4c10726` na gałęzi `worktree-spike-hybrid-osiedle-centralne`.
 Właściciel projektu (Piotr) zatrzymał pracę po tym commicie i przekazuje ją dalej. Ten dokument
 ma wystarczyć do wznowienia bez czytania historii rozmowy.
