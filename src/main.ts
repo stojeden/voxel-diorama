@@ -1087,6 +1087,15 @@ const debugHandle: DioramaDebugHandle = {
   },
   /** Render one frame synchronously and return it as a JPEG data URL
    * (the WebGL buffer isn't preserved, so render+read must share a tick). */
+  /**
+   * One composer frame and nothing else. `captureFrame` also copies the framebuffer
+   * into a 2D canvas and JPEG-encodes it, so a GPU timer query around it measures the
+   * readback and the encode as well as the render -- which is why it reported ~44 ms
+   * for a 16.8 ms frame.
+   */
+  renderFrame: () => {
+    env.composer.render(0);
+  },
   captureFrame: (width = 960, jpegQuality = 0.82, format: 'jpeg' | 'png' = 'jpeg') => {
     env.composer.render(0);
     const source = env.renderer.domElement;

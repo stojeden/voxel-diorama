@@ -199,8 +199,11 @@ async function measureGpuFrame(page, sampleCount = GPU_SAMPLE_COUNT) {
       if (!query) {
         return { available: false, method: 'EXT_disjoint_timer_query_webgl2', reason: 'Could not allocate GPU query' };
       }
+      // Bracket the composer frame only. Using captureFrame here folded a full-surface
+      // readback and a JPEG encode into the number, which is why the night scenario
+      // reported four to six times the frame time in every world.
       gl.beginQuery(extension.TIME_ELAPSED_EXT, query);
-      window.__diorama.captureFrame(320, 0.5);
+      window.__diorama.renderFrame();
       gl.endQuery(extension.TIME_ELAPSED_EXT);
 
       const deadline = performance.now() + 2_000;

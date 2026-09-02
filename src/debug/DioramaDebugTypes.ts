@@ -39,6 +39,8 @@ export interface DioramaDebugHandle {
   clearWeather: () => void;
   loadCheckpoint: (id: CheckpointId) => void;
   releaseCheckpoint: () => void;
+  /** One composer frame, with no readback and no encode: the GPU timer brackets this. */
+  renderFrame: () => void;
   captureFrame: (
     width?: number,
     jpegQuality?: number,
