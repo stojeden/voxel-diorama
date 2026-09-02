@@ -106,7 +106,11 @@ const TINTS: Record<Family, string[]> = {
 /** Paved forecourt in front of the corner tenement (block 25); excluded from the voxel ground too. */
 export const FORECOURT: Rect = SPIKE_FRAGMENT.forecourt;
 /** East of the shelter, clear of the dwelling bus (lead at x ≈ −10, body 8 m behind it). */
-export const CROSSWALK: CrosswalkSpec = { minX: -3.2, maxX: -1.8, minZ: 22, maxZ: 26, stripes: 5 };
+/** 3 m wide, so five bars and four gaps of equal width actually fit across it. */
+// Placed in a gap of the product's centre line, which paints x mod 6 < 3 at z = 24
+// (WorldGenerator isRoadMarking): the dash run ends at x = -3.5 and the next starts
+// at x = -0.5, so the crossing sits between them instead of under one.
+export const CROSSWALK: CrosswalkSpec = { minX: -3.4, maxX: -0.6, minZ: 22, maxZ: 26, stripes: 5 };
 export const CHIMNEY_SITE = { x: -58, z: -40 } as const;
 export const RTV_SITES = {
   recommended: { x: 16, z: -66 },

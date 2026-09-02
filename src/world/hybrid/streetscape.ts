@@ -15,12 +15,15 @@ export function emitStreetscape(model: CityModel): Cluster {
     const dz = kerb.side === '+z' ? 0.39 : kerb.side === '-z' ? -0.39 : 0;
     E.box(P.kerb, kerb.x + dx, GROUND + KERB_HEIGHT / 2, kerb.z + dz, alongX ? 1 : 0.22, KERB_HEIGHT, alongX ? 0.22 : 1, { layer: 0 });
   }
+  // Aleja Poludniowa runs along x, so the bars run across it (along z) and repeat
+  // along the road, clipped to the crossing: bars and gaps of one equal width.
   const cw = model.crosswalk;
-  const cx = (cw.minX + cw.maxX) / 2;
-  const width = cw.maxX - cw.minX;
+  const cz = (cw.minZ + cw.maxZ) / 2;
+  const barLength = cw.maxZ - cw.minZ - 0.3;
+  const barWidth = (cw.maxX - cw.minX) / (cw.stripes * 2 - 1);
   for (let k = 0; k < cw.stripes; k++) {
-    const z = cw.minZ + 0.3 + (k * (cw.maxZ - cw.minZ - 0.6)) / Math.max(1, cw.stripes - 1);
-    E.box(P.marking, cx, GROUND + 0.006, z, width + 1.0, 0.012, 0.5, { layer: 0 });
+    const x = cw.minX + barWidth * (2 * k + 0.5);
+    E.box(P.marking, x, GROUND + 0.006, cz, barWidth, 0.012, barLength, { layer: 0 });
   }
   for (const prop of model.props) emitProp(E, prop);
   // clipped hedge along the forecourt edge (planted, so it sits on the ground by construction)

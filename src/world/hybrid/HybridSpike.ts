@@ -75,6 +75,10 @@ export function attachHybridSpike(options: HybridSpikeOptions): HybridHandle {
   resolvePalette(options.themePalette, uniforms.uPalette.value);
   const materials: Record<MaterialClass, THREE.MeshStandardMaterial> = {
     opaque: createHybridMaterial(uniforms),
+    // The product gives an unlit window envIntensity 2.0 and drops it to 1.1 once the
+    // window is lit. One shared material cannot switch, and measurement says the higher
+    // value costs more in lit-window contrast than it buys in glassiness, so the
+    // fragment keeps 1.0 and takes its glassiness from roughness and colour.
     glass: createHybridMaterial(uniforms),
     glassClear: createHybridMaterial(uniforms, { transparent: true }),
     glow: createHybridMaterial(uniforms),

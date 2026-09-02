@@ -37,6 +37,41 @@ describe('architecture emitter', () => {
     }
   });
 
+  test('layer 0 keeps a simplified window rhythm that lights with its cohort', () => {
+    for (const spec of model.buildings) {
+      const { primitives } = emitBuilding(spec);
+      const ghosts = primitives.filter((p) => p.layer === 0 && p.cls !== 'opaque' && p.cohort >= 0);
+      // One per opening, so a cluster at LOD 0 is never a blank tinted box.
+      expect(ghosts.length, `${spec.index}: no window rhythm in layer 0`).toBeGreaterThanOrEqual(spec.floors * 4);
+      expect(ghosts.every((p) => p.cohort >= 0 && p.cohort < 5)).toBe(true);
+      expect(ghosts.every((p) => p.kind === 'plane')).toBe(true);
+    }
+  });
+
+  test('every layer 0 pane hides behind a wider layer 1 opening that lights the same way', () => {
+    for (const spec of model.buildings) {
+      const { primitives } = emitBuilding(spec);
+      const ghosts = primitives.filter((p) => p.layer === 0 && p.kind === 'plane' && p.cls !== 'opaque');
+      expect(ghosts.length).toBeGreaterThan(0);
+      for (const ghost of ghosts) {
+        if (ghost.kind !== 'plane') continue;
+        const near = primitives.filter(
+          (r) =>
+            r.layer === 1 &&
+            (r.kind === 'plane' || r.kind === 'box') &&
+            Math.hypot(r.x - ghost.x, r.y - ghost.y, r.z - ghost.z) < 0.35
+        );
+        const covers = near.filter((r) => (r.kind === 'plane' || r.kind === 'box') && r.w > ghost.w && r.h > ghost.h);
+        expect(covers.length, `${spec.index}: layer 0 pane at ${ghost.x},${ghost.y},${ghost.z} is not covered at layer 1`).toBeGreaterThan(0);
+        // Gate 3: the same opening must light the same way at either level. A layer 0
+        // pane may only carry a cohort if the glazing over it carries the same one.
+        const glazing = near.filter((r) => r.cls !== 'opaque');
+        const cohorts = new Set(glazing.map((r) => r.cohort));
+        expect(cohorts.has(ghost.cohort), `${spec.index}: cohort ${ghost.cohort} at layer 0 has no match at layer 1`).toBe(true);
+      }
+    }
+  });
+
   test('is deterministic', () => {
     const a = emitBuilding(model.buildings[0]).primitives;
     const b = emitBuilding(model.buildings[0]).primitives;
@@ -52,6 +87,26 @@ describe('streetscape emitter', () => {
     expect(primitives.filter((p) => p.kind === 'plane' && p.style === 2).length).toBe(model.pavement.length + model.forecourt.length);
     expect(primitives.filter((p) => p.palette === P.kerb).length).toBe(model.kerbs.length);
     expect(primitives.filter((p) => p.palette === P.marking && p.layer === 0).length).toBe(model.crosswalk.stripes);
+  });
+
+  test('crosswalk bars run across the carriageway and stay inside the crossing', () => {
+    const cw = model.crosswalk;
+    const bars = primitives.filter((p) => p.palette === P.marking && p.layer === 0);
+    expect(bars.length).toBe(cw.stripes);
+    for (const bar of bars) {
+      expect(bar.kind).toBe('box');
+      if (bar.kind !== 'box') continue;
+      // Aleja Poludniowa runs along x, so a bar is long across the road and narrow along it.
+      expect(bar.d).toBeGreaterThan(bar.w);
+      expect(bar.x - bar.w / 2).toBeGreaterThanOrEqual(cw.minX - 1e-9);
+      expect(bar.x + bar.w / 2).toBeLessThanOrEqual(cw.maxX + 1e-9);
+      expect(bar.z - bar.d / 2).toBeGreaterThanOrEqual(cw.minZ);
+      expect(bar.z + bar.d / 2).toBeLessThanOrEqual(cw.maxZ);
+    }
+    // Bars and gaps of one width: consecutive centres are exactly two bar widths apart.
+    const xs = bars.map((b) => (b.kind === 'box' ? b.x : 0)).sort((a, b) => a - b);
+    const width = bars[0].kind === 'box' ? bars[0].w : 0;
+    for (let i = 1; i < xs.length; i++) expect(xs[i] - xs[i - 1]).toBeCloseTo(width * 2, 6);
   });
 
   test('draws three bicycles with six wheels', () => {

@@ -522,6 +522,13 @@ try {
     `TTI ${readiness.timeToInteractiveMs.toFixed(1)} ms exceeds ${MAX_TTI_MS} ms`
   );
   for (const result of results) {
+    // The readiness above is measured on a load without ?world=, so on its own it
+    // cannot fail a world that is slow to attach. Every scenario load is a real
+    // first paint of that world and is held to the same budget.
+    assert.ok(
+      result.timeToInteractiveMs !== null && result.timeToInteractiveMs <= MAX_TTI_MS,
+      `${result.name}: TTI ${result.timeToInteractiveMs} ms exceeds ${MAX_TTI_MS} ms in world ${WORLD}`
+    );
     assert.ok(
       result.timing.averageFps >= REQUIRED_FPS,
       `${result.name}: ${result.timing.averageFps.toFixed(1)} FPS, required ${REQUIRED_FPS}`
