@@ -17,8 +17,8 @@ SPIKE_PHASE=gate3 node scripts/spikeSmoke.mjs                               # br
 node_modules/.bin/vitest run src/world/hybrid/clearance.test.ts             # bramka 4
 ```
 
-Kadry (28 plików JPEG) nie są commitowane, zgodnie z konwencją poprzedniego agenta —
-odtwarza je pierwsze polecenie. Pomiary są w repo: `spike-smoke.json`,
+Kadry nie są commitowane: katalog jest w `.gitignore` i odtwarza go pierwsze polecenie.
+Zastrzeżenie o historii gałęzi — w 10.2. Pomiary są w repo: `spike-smoke.json`,
 `spike-smoke-voxel.json`, `spike-semantics.json`, `bench-<świat>-<jakość>.json`.
 
 Strona dla właściciela (ten sam werdykt, wizualnie, po polsku):
@@ -430,17 +430,23 @@ wieża po prawej i cięższy, pasiasty komin po lewej.
 
 | Chunk | Rozmiar | Limit | Zapas |
 |---|---|---|---|
-| `index-*.js` | **238 712 B** | 240 000 B | 1 288 B |
+| `index-*.js` | **238 662 B** | 240 000 B | 1 338 B |
 | `main-*.js` | **33 311 B** | 50 000 B | 16 689 B |
-| `hybrid-spike-*.js` | 41 024 B | — (dynamic import) | — |
+| `hybrid-spike-*.js` | 34 111 B | — (dynamic import) | — |
 
-Dodatek do chunku wejściowego względem stanu przekazania: +123 B (`lodPixelsPerMetre` wpadło do
-chunku spike'u, a hook `renderFrame` do wejściowego, +39 B). Żaden budżet nie został podniesiony.
+Dodatek do chunku wejściowego względem stanu przekazania: +73 B (hook `renderFrame` dodał 39 B,
+usunięcie greedy z flagi oddało 50 B). Chunk spike'u schudł o 17% po usunięciu greedy.
+Żaden budżet nie został podniesiony.
 
 ## 8. Rekomendacja
 
-**Kontynuujemy kierunek hybrydowy strategią bezpośrednią. Do usunięcia jest
-`GreedyVoxelStrategy` — ale nie usuwam jej, to decyzja właściciela.**
+**Kontynuujemy kierunek hybrydowy strategią bezpośrednią. `GreedyVoxelStrategy` została
+usunięta** — po Twojej decyzji, w commicie `495ee68`; chunk spike'u spadł z 41 024 na 34 111 B.
+Odzyskanie, gdyby decyzja miała kiedyś wrócić:
+`git show 7f91e35 -- src/world/hybrid/strategies/GreedyVoxelStrategy.ts`.
+
+Poniższe porównanie jest zapisem tego, co uzasadniło usunięcie; liczby greedy pochodzą z
+pomiarów sprzed commita `495ee68`.
 
 Za direct:
 
@@ -491,4 +497,80 @@ osobna naprawa **Streetscape 2.0**, przed drugim fragmentem — zakres w rozdzia
 Fragmentu nie rozszerzaliśmy. Drzew, kiosku i wiaty w nowym języku nie dodawaliśmy — w kadrach
 widać, że zostały voxelowe, i to było w zakresie. Mrugania świateł ani transmisji wieży nie
 implementowaliśmy. Budżetów nie podnieśliśmy. `Checkpoints.ts` i `WorldLayout.ts` nietknięte.
-Przegranej strategii nie usunęliśmy. Asercji TTI w benchmarku nie zaostrzyliśmy — powód w 3.3.
+Szumu proceduralnego nie optymalizowaliśmy, choć pomiar wskazał go jako główny koszt GPU (3.5) —
+to zmiana wyglądu, nie naprawa defektu. Towaru w witrynie nie przenieśliśmy do niższej warstwy,
+więc na Low go nie ma (kryterium d). Streetscape 2.0 jest opisany, nie zrobiony (11). Czystego
+zestawu do merge'a nie przygotowaliśmy (10.3).
+
+Po Twojej decyzji **zaostrzyliśmy** asercję TTI (3.3) i **usunęliśmy** przegraną strategię
+(commit `495ee68`); rewizja 1 mówiła, że nie zrobimy ani jednego, ani drugiego bez Twojego słowa.
+## 10. Higiena gałęzi
+
+### 10.1 Stan drzewa
+
+`git status` jest teraz naprawdę pusty. Wcześniej pokazywał nieśledzony `node_modules` —
+w linkowanym worktree to symlink, a `.gitignore` ma wzorzec `node_modules/`, który dopasowuje
+wyłącznie katalog. Dopisałem `node_modules` do `.git/info/exclude` wspólnego katalogu Gita, czyli
+lokalnie i bez commita, żeby nie ruszać pliku produktu na gałęzi eksperymentu. Rewizja 1
+nazywała to drzewo czystym, choć nie było — to była nieścisłość, nie tylko drobiazg.
+
+### 10.2 Dwadzieścia osiem JPEG-ów
+
+Katalog `docs/superpowers/spike/frames/` jest wypisany z indeksu i dopisany do `.gitignore`,
+więc **na czubku gałęzi nie ma już żadnego kadru**. To przywraca konwencję, którą raport opisywał,
+a której commit `cc5fef8` nie dotrzymał.
+
+Czego to **nie** robi: 3,9 MB blobów zostaje w historii gałęzi, w `cc5fef8`. Wypisanie z indeksu
+nie usuwa obiektów. Do rozstrzygnięcia razem z punktem 5 Twojej kolejności:
+
+| Opcja | Co daje | Co kosztuje |
+|---|---|---|
+| zostawić historię jak jest | zero pracy, pełny ślad audytowy | 3,9 MB binariów wchodzi do `main` przy jakimkolwiek merge'u gałęzi |
+| przebudować gałąź bez blobów | `main` dostaje tylko kod i pomiary | historia gałęzi zmienia hasze; ślad audytowy trzeba odtworzyć w raporcie |
+| zachować wybrane dowody | 4–6 kadrów, na które raport wskazuje wprost, ~0,5 MB | trzeba wybrać i uzasadnić wybór |
+
+**Moja rekomendacja: przebudować.** Punkt 5 Twojej kolejności i tak wymaga świeżego,
+direct-only zestawu do merge'a, a ten zestaw naturalnie powstaje jako nowa gałąź z `main` —
+wtedy bloby po prostu nigdy do niej nie wchodzą. Dowody wizualne żyją na stronie werdyktu
+(wycinki wbudowane jako `data:` URI) i odtwarza je `scripts/spikeSmoke.mjs`; historia Gita nie
+jest na nie właściwym miejscem.
+
+### 10.3 Czego jeszcze nie ma
+
+Punkt 5 — czysty, direct-only zestaw do merge'a — **nie jest zrobiony**. Gałąź ma teraz 24
+commity nad `main`, w tym całą narrację spike'u: dwie strategie, ich porównanie, usunięcie
+przegranej, dwie moje pomyłki i ich korekty. To dobry zapis pracy i zły materiał do merge'a.
+Zestaw do merge'a to osobne zadanie i osobna decyzja o kształcie: jeden squash, kilka
+tematycznych commitów, czy nowa gałąź z `main` z przeniesionym kodem.
+
+## 11. Streetscape 2.0 — zakres
+
+Zgodnie z Twoją decyzją: nie zostawiamy tego, ale wydzielamy. To nie jest błąd strategii direct —
+wszystkie pięć punktów widać identycznie w kadrach bazowych produktu. Uderzają natomiast prosto
+w cel „zamieszkanego miasta": wiata, ławka i pasażerowie stojący na trawie psują wiarygodność
+dokładnie tam, gdzie próbujemy ją zbudować.
+
+Do zrobienia przed drugim fragmentem, z liczbami, które już mamy:
+
+1. **Poszerzyć chodnik.** `isOnSidewalk` zwraca prawdę tylko w promieniu 1 m od prostokąta drogi,
+   więc wokół Alei Południowej chodnikiem jest rząd z = 21 i rząd z = 27, i nic więcej. To
+   funkcja produktu, nie fragmentu — zmiana dotknie całego miasta i trzeba ją przemierzyć
+   testami `WorldLayout.test.ts` (kolizje, trasy, anchory) i budżetem świateł.
+2. **Przenieść wiatę, ławkę i pozycje oczekiwania.** Dziś: wiata z 27,5–28,5, ławka z 26,7–27,3,
+   cztery pozycje oczekiwania na z = 28,65 — wszystkie poza chodnikiem. Po poszerzeniu chodnika
+   trzeba je posadzić na nim, a `busStopWaitingPositions` i `busShelterColliders` przeliczyć.
+3. **Odsłonić pasażera.** Postać to pionowy pasek ~10 px, zasłonięty w dwóch trzecich ścianą
+   reklamową własnej wiaty (`localRect(stop, 'poster-wall', -2, 0.5, 0.1, 0.9, …)`). Albo ściana
+   idzie na drugi koniec wiaty, albo kadr uliczny przesuwa się ~2 m w lewo. Dopóki to trwa,
+   kryterium (c) bramki 1 zostaje niespełnione.
+4. **Poprawić przejście i krawężniki.** Przejście jest już obrócone i wpasowane w lukę osi
+   (B1-5), ale listwy krawężnika w komórkach (−14…−10, 27) przechodzą pod ścianą reklamową,
+   ławką i słupkiem przystanku. Przy podniesionym chodniku krawężnik przestanie być listwą
+   0,12 m i trzeba będzie zdecydować, co robi z obiektami, które produkt tam stawia.
+5. **Sprawdzić nocne bryły świateł.** Duże przezroczyste stożki wokół latarni są w kadrze
+   bazowym produktu tak samo jak w hybrydzie, ale w kadrze ulicznym zalewają całe przejście.
+   To osobna sprawa od kosztu GPU (3.5): tam chodziło o milisekundy, tu o czytelność obrazu.
+
+Czego Streetscape 2.0 **nie** obejmuje: drzew, kiosku i wiaty w nowym języku — one zostają
+voxelowe i były celowo poza zakresem spike'u.
+
