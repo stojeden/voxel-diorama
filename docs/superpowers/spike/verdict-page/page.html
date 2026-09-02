@@ -1,0 +1,770 @@
+<title>Werdykt spike'u hybrydy</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Serif:ital,wght@0,400;0,500;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  :root {
+    --paper: #eef0f2;
+    --card: #f7f8f9;
+    --ink: #1b1f24;
+    --muted: #5c6670;
+    --faint: #8b949c;
+    --rule: #d2d8de;
+    --accent: #2f5670;
+    --pass: #2c6a4d;
+    --fail: #a8231b;
+    --caution: #7d5f16;
+    --wash: #e4e8eb;
+
+    --sans: "IBM Plex Sans Condensed", "Helvetica Neue", Arial, sans-serif;
+    --serif: "IBM Plex Serif", Georgia, "Times New Roman", serif;
+    --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+    --measure: 66ch;
+    --wide: 1180px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #14171b;
+      --card: #1a1e23;
+      --ink: #e4e8ec;
+      --muted: #939ea8;
+      --faint: #6d777f;
+      --rule: #272d34;
+      --accent: #7fb0cd;
+      --pass: #5fae86;
+      --fail: #e2685e;
+      --caution: #c9a34a;
+      --wash: #1e232a;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #14171b;
+    --card: #1a1e23;
+    --ink: #e4e8ec;
+    --muted: #939ea8;
+    --faint: #6d777f;
+    --rule: #272d34;
+    --accent: #7fb0cd;
+    --pass: #5fae86;
+    --fail: #e2685e;
+    --caution: #c9a34a;
+    --wash: #1e232a;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--serif);
+    font-size: 16.5px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+  .sheet {
+    max-width: var(--wide);
+    margin: 0 auto;
+    padding: 0 28px 96px;
+  }
+  .col { max-width: var(--measure); }
+
+  /* ── masthead ─────────────────────────────────────────── */
+  .masthead {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 10px 22px;
+    padding: 40px 0 14px;
+    border-bottom: 2px solid var(--ink);
+  }
+  .masthead h1 {
+    font-family: var(--sans);
+    font-weight: 700;
+    font-size: clamp(30px, 5vw, 46px);
+    letter-spacing: -0.015em;
+    line-height: 1.04;
+    margin: 0;
+    text-wrap: balance;
+  }
+  .stamp {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--muted);
+    letter-spacing: 0.02em;
+    margin-left: auto;
+    text-align: right;
+    line-height: 1.5;
+  }
+  .dek {
+    font-size: 18px;
+    color: var(--muted);
+    margin: 20px 0 0;
+    max-width: 62ch;
+  }
+
+  /* The argument sits in one column; the evidence below breaks out to full width. */
+  .thesis { max-width: 790px; }
+
+  /* ── verdict ──────────────────────────────────────────── */
+  .verdict {
+    margin: 34px 0 8px;
+    border: 1px solid var(--rule);
+    border-left: 4px solid var(--accent);
+    background: var(--card);
+    padding: 26px 28px 22px;
+  }
+  .eyebrow {
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 12px;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 10px;
+  }
+  .verdict p.lead {
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: clamp(20px, 3vw, 26px);
+    line-height: 1.26;
+    margin: 0 0 14px;
+    text-wrap: balance;
+  }
+  .verdict p { margin: 0 0 12px; max-width: var(--measure); }
+  .verdict p:last-child { margin-bottom: 0; }
+  .note {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--muted);
+    border-top: 1px solid var(--rule);
+    padding-top: 12px;
+    margin-top: 16px;
+  }
+
+  /* ── score row ────────────────────────────────────────── */
+  /* Six figures, so the track count always divides them: no empty cells showing the rule. */
+  .scores {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1px;
+    background: var(--rule);
+    border: 1px solid var(--rule);
+    margin: 26px 0 4px;
+  }
+  @media (max-width: 640px) { .scores { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 400px) { .scores { grid-template-columns: 1fr; } }
+  .score { background: var(--card); padding: 15px 16px 16px; }
+  .score .k {
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 11.5px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--faint);
+    display: block;
+  }
+  .score .v {
+    font-family: var(--mono);
+    font-size: 22px;
+    font-weight: 500;
+    display: block;
+    margin-top: 6px;
+    font-variant-numeric: tabular-nums;
+  }
+  .score .u { font-size: 12.5px; color: var(--muted); font-family: var(--mono); }
+  .v.ok { color: var(--pass); }
+  .v.no { color: var(--fail); }
+
+  /* ── gates ────────────────────────────────────────────── */
+  section.gate { margin-top: 60px; }
+  .gate-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 6px 16px;
+    border-bottom: 1px solid var(--ink);
+    padding-bottom: 8px;
+  }
+  .gate-no {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--faint);
+    letter-spacing: 0.06em;
+  }
+  .gate-head h2 {
+    font-family: var(--sans);
+    font-weight: 700;
+    font-size: clamp(21px, 3vw, 27px);
+    letter-spacing: -0.01em;
+    margin: 0;
+  }
+  .tag {
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 11.5px;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    padding: 3px 9px 4px;
+    border: 1px solid currentColor;
+    margin-left: auto;
+    white-space: nowrap;
+  }
+  .tag.ok { color: var(--pass); }
+  .tag.no { color: var(--fail); }
+  .tag.part { color: var(--caution); }
+  section.gate > p, section.gate > ul, section.gate > ol { max-width: var(--measure); }
+  section.gate > p:first-of-type { margin-top: 18px; }
+
+  h3 {
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 16.5px;
+    letter-spacing: 0.01em;
+    margin: 34px 0 8px;
+  }
+
+  /* ── evidence ─────────────────────────────────────────── */
+  figure {
+    margin: 26px 0;
+    border: 1px solid var(--rule);
+    background: var(--wash);
+    padding: 10px 10px 0;
+  }
+  figure img { display: block; width: 100%; height: auto; }
+  figure.narrow { max-width: 640px; }
+  figure.medium { max-width: 840px; }
+  figcaption {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    line-height: 1.55;
+    color: var(--muted);
+    padding: 10px 2px 11px;
+  }
+  figcaption b { color: var(--ink); font-weight: 500; }
+
+  /* ── tables ───────────────────────────────────────────── */
+  .scroll { overflow-x: auto; margin: 24px 0; border: 1px solid var(--rule); }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-family: var(--mono);
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+    background: var(--card);
+  }
+  caption {
+    caption-side: top;
+    text-align: left;
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 12px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--faint);
+    padding: 12px 14px 10px;
+  }
+  th, td { padding: 8px 14px; text-align: right; border-top: 1px solid var(--rule); }
+  th:first-child, td:first-child { text-align: left; }
+  thead th {
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 12px;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    border-top: none;
+    white-space: nowrap;
+  }
+  tbody tr.hi td { background: var(--wash); }
+  td.no { color: var(--fail); }
+  td.ok { color: var(--pass); }
+
+  /* ── lists ────────────────────────────────────────────── */
+  ul, ol { padding-left: 1.15em; }
+  li { margin: 7px 0; }
+  li::marker { color: var(--faint); }
+  code {
+    font-family: var(--mono);
+    font-size: 0.88em;
+    background: var(--wash);
+    padding: 1px 4px;
+    border-radius: 2px;
+    overflow-wrap: anywhere;
+  }
+  pre {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    line-height: 1.55;
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--fail);
+    padding: 13px 15px;
+    overflow-x: auto;
+    margin: 20px 0;
+  }
+  strong { font-weight: 500; color: var(--ink); }
+  .serif-em { font-style: italic; }
+
+  /* ── todo columns ─────────────────────────────────────── */
+  .todo {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 28px;
+    margin-top: 26px;
+  }
+  .todo > div {
+    border-top: 2px solid var(--ink);
+    padding-top: 14px;
+  }
+  .todo h3 { margin-top: 0; }
+  .todo ol, .todo ul { max-width: none; }
+
+  footer {
+    margin-top: 68px;
+    border-top: 1px solid var(--rule);
+    padding-top: 18px;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--muted);
+    max-width: var(--measure);
+  }
+  a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+  a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+</style>
+
+<div class="sheet">
+
+  <header class="masthead">
+    <h1>Werdykt spike&rsquo;u hybrydy</h1>
+    <div class="stamp">
+      Osiedle Centralne<br>
+      2 września 2026<br>
+      gałąź <code>spike-hybrid-osiedle-centralne</code>
+    </div>
+  </header>
+
+  <p class="dek">
+    Cztery bramki zamknięte, sześć uruchomień benchmarku, dwanaście kadrów hybrydy i sześć
+    kadrów bazowych produktu do porównania. Poniżej jedna rekomendacja i dowody pod nią.
+  </p>
+
+  <div class="thesis">
+  <div class="verdict">
+    <p class="eyebrow">Rekomendacja</p>
+    <p class="lead">
+      Kierunek zostaje. Zostaje strategia bezpośrednia. Do usunięcia jest
+      <code>GreedyVoxelStrategy</code>.
+    </p>
+    <p>
+      Direct mieści się we wszystkich progach, generuje fragment w 24 ms i oszczędza 27 tys.
+      trójkątów względem voxeli, które zastępuje. Greedy przekracza budżet TTI w każdym kadrze
+      na High, a na najniższym poziomie LOD przez jego budynki widać świat na wylot.
+    </p>
+    <p>
+      Ale kierunek <span class="serif-em">nie jest gotowy do wdrożenia w tym stanie</span> —
+      trzy rzeczy do naprawy po naszej stronie i trzy odziedziczone z produktu, wymienione na
+      końcu. Spike kończy się tu; drugi fragment ma sens dopiero po tych trzech pierwszych.
+    </p>
+    <p class="note">
+      Przegranej strategii nie usunąłem. Budżetów nie podniosłem. Zakresu nie rozszerzyłem.
+    </p>
+  </div>
+
+  <div class="scores">
+    <div class="score"><span class="k">Klatka, oba światy</span><span class="v ok">60,0 <span class="u">FPS</span></span></div>
+    <div class="score"><span class="k">p95 / p99</span><span class="v ok">16,8 <span class="u">ms</span></span></div>
+    <div class="score"><span class="k">TTI direct</span><span class="v ok">1266 <span class="u">ms max</span></span></div>
+    <div class="score"><span class="k">TTI greedy</span><span class="v no">2176 <span class="u">ms max</span></span></div>
+    <div class="score"><span class="k">Generacja direct</span><span class="v ok">24 <span class="u">ms</span></span></div>
+    <div class="score"><span class="k">Generacja greedy</span><span class="v no">1033 <span class="u">ms</span></span></div>
+  </div>
+  <p class="note">
+    Progi: ≥ 58 FPS, p95 i p99 ≤ 20,5 ms, TTI ≤ 1800 ms, ≤ 1400 draw calli, ≤ 500 geometrii,
+    ≤ 80 tekstur. M1 Pro, systemowy Chrome, Metal, 1440×900, jeden świat na uruchomienie.
+  </p>
+  </div><!-- /.thesis -->
+
+  <!-- ── GATE 1 ─────────────────────────────────────────── -->
+  <section class="gate">
+    <div class="gate-head">
+      <span class="gate-no">Bramka 1</span>
+      <h2>Kadry</h2>
+      <span class="tag part">częściowo</span>
+    </div>
+
+    <p>
+      Kadr uliczny w strategii bezpośredniej robi to, po co ten kierunek zatwierdziliśmy:
+      prawdziwa wysokość oczu, czytelne rowery, balustrada, szprosy, towar za szybą,
+      autobus stojący 6,6 m za przejściem.
+    </p>
+
+    <figure>
+      <img src="{{IMG_HERO}}" alt="Kadr uliczny fragmentu w strategii bezpośredniej: kamienica z witryną i markizą po lewej, rowery przy stojaku, przejście dla pieszych, autobus przy przystanku.">
+      <figcaption>
+        <b>hybrid-direct, High, spike-street.</b> Oko na 1,70 m nad nawierzchnią
+        (<code>STREET_EYE_SHOT.position[1] = 1.2</code>, <code>GROUND_SURFACE_Y = -0.5</code>).
+        Koperta autobusu na postoju to x[−17,80; −9,80], przejście x[−3,20; −1,80] — odstęp
+        6,60 m, sprawdzany asercją w każdym z dwunastu kadrów.
+      </figcaption>
+    </figure>
+
+    <h3>Czego brakuje do pełnego zaliczenia</h3>
+    <div class="scroll">
+      <table>
+        <caption>Kryteria bramki 1</caption>
+        <thead>
+          <tr><th>Kryterium</th><th>Wynik</th><th>Uwaga</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>street-eye ~1,7 m</td><td class="ok">spełnione</td><td>dokładnie 1,70 m</td></tr>
+          <tr><td>autobus nie na zebrze</td><td class="ok">spełnione</td><td>zapas 6,60 m</td></tr>
+          <tr class="hi"><td>mieszkaniec czytelny</td><td class="no">nie</td><td>zasłonięty ścianą wiaty — tak samo w produkcie</td></tr>
+          <tr class="hi"><td>witryny z treścią</td><td class="no">tylko direct/High</td><td>towar to warstwa 2; na Low znika</td></tr>
+          <tr class="hi"><td>dalszy plan nie wypalony</td><td class="no">10,8% pasa</td><td>voxel 6382 px, direct 6355 px — identycznie</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      Dwa z trzech braków są cechą dzisiejszego produktu, nie hybrydy — dlatego renderowałem
+      też sześć kadrów bazowych bez podpiętego fragmentu. Bez nich każdą z tych rzeczy
+      przypisalibyśmy spike&rsquo;owi.
+    </p>
+
+    <figure class="medium">
+      <img src="{{IMG_LOWSHOP}}" alt="Witryna sklepowa w jakości High i Low: na High trzy bryły towaru za szybą, na Low płaska granatowa tafla.">
+      <figcaption>
+        <b>Witryna na High i na Low.</b> Towar, szprosy, pilastry i szyld to warstwa 2. Każdy
+        element osobno znika &bdquo;addytywnie&rdquo;, ale suma czyta się jak zabity lokal.
+      </figcaption>
+    </figure>
+  </section>
+
+  <!-- ── GATE 2 ─────────────────────────────────────────── -->
+  <section class="gate">
+    <div class="gate-head">
+      <span class="gate-no">Bramka 2</span>
+      <h2>Pomiar</h2>
+      <span class="tag ok">direct zdaje</span>
+    </div>
+
+    <p>
+      Wszystkie 24 przypadki (3 światy × 2 jakości × 4 kadry) trafiają w klatkę 16,8 ms przy
+      60,0 FPS, bez ani jednego hitcha. <strong>Koszt klatkowy hybrydy jest
+      nieodczuwalny</strong> — i to dotyczy obu strategii.
+    </p>
+    <p>
+      Zamiana pięciu bloków i chodników na geometrię architektoniczną nie dodaje trójkątów,
+      tylko je <span class="serif-em">odejmuje</span>. Cały fragment to ~20,7 tys. trójkątów
+      wobec ~576 tys. całej scenie.
+    </p>
+
+    <div class="scroll">
+      <table>
+        <caption>Kadr overview, jakość High</caption>
+        <thead>
+          <tr><th>Świat</th><th>Trójkąty</th><th>Δ</th><th>Draw calle</th><th>Geometrie</th><th>Tekstury</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>voxel (produkt)</td><td>602 951</td><td>—</td><td>565</td><td>401</td><td>22</td></tr>
+          <tr><td>hybrid-direct</td><td class="ok">575 889</td><td class="ok">−27 062</td><td>604</td><td>434</td><td>22</td></tr>
+          <tr><td>hybrid-greedy</td><td>590 641</td><td>−12 310</td><td>603</td><td>433</td><td>22</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>TTI — tu greedy przegrywa</h3>
+    <p>
+      Dotychczasowy pomiar TTI był brany na wejściu bez <code>?world=</code>, więc we wszystkich
+      sześciu uruchomieniach raportował TTI produktu, nigdy hybrydy. Benchmark mierzy go teraz
+      per kadr, z podpiętym fragmentem, i obraz się zmienia.
+    </p>
+
+    <div class="scroll">
+      <table>
+        <caption>Time to interactive, z podpiętym fragmentem, próg 1800 ms</caption>
+        <thead>
+          <tr><th>Świat</th><th>High</th><th>Low</th><th>Generacja</th><th>Pamięć GPU</th><th>Dylatacje</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>voxel (produkt)</td><td>890–1029</td><td>644–961</td><td>—</td><td>—</td><td>—</td></tr>
+          <tr><td>hybrid-direct</td><td class="ok">988–1266</td><td class="ok">710–1094</td><td class="ok">23–26 ms</td><td>2,99 MB</td><td class="ok">0</td></tr>
+          <tr class="hi"><td>hybrid-greedy</td><td class="no">1970–2176</td><td class="no">1726–2028</td><td class="no">919–1033 ms</td><td class="no">4,12 MB</td><td class="no">2957</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      Greedy jest poza budżetem w <strong>każdym</strong> kadrze na High i w dwóch z czterech na
+      Low. Direct dokłada 100–240 ms; jego najgorszy przypadek ma jeszcze 534 ms zapasu.
+    </p>
+    <p class="note">
+      Asercja TTI w benchmarku nadal patrzy na stary, bezświatowy pomiar, więc wszystkie
+      uruchomienia kończą się kodem 0, mimo że greedy jest poza budżetem. Nie zaostrzyłem jej —
+      objęłaby też własne kadry produktu, a to zmiana zakresu i ryzyko flake&rsquo;u w CI.
+      Zostawiam jako decyzję do podjęcia.
+    </p>
+    <p class="note">
+      Timer GPU w kadrze nocnym raportuje p90 48,9 ms już <span class="serif-em">w
+      produkcie</span> — przy klatce 16,8 ms i 60 FPS. To zapytanie obejmuje jedną jawną klatkę
+      kompozytora z aktualizacją cieni świateł lokalnych, więc nie jest bramką i nigdy nią nie
+      było. Ale delta hybrydy jest realna: +15,2 ms (direct), +18,1 ms (greedy), i nie została
+      wyjaśniona. Przed drugim fragmentem zasługuje na osobne przyjrzenie się.
+    </p>
+  </section>
+
+  <!-- ── GATE 3 ─────────────────────────────────────────── -->
+  <section class="gate">
+    <div class="gate-head">
+      <span class="gate-no">Bramka 3</span>
+      <h2>LOD i semantyka</h2>
+      <span class="tag part">direct zdaje, greedy nie</span>
+    </div>
+
+    <p>
+      Kamera przejeżdża piętnaście pozycji od 300 m do 4 m. Dla każdego klastra zapisujemy
+      poziom <span class="serif-em">i</span> piksele na metr — miarę, która nim steruje.
+      Monotoniczność sprawdzamy względem px/m, nie względem odległości przejazdu: przejazd
+      zbliża się do fragmentu, ale oddala od komina i wieży, więc po odległości wieża
+      &bdquo;spadałaby&rdquo; o poziom. To był mój pierwszy, błędny wariant asercji.
+    </p>
+
+    <div class="scroll">
+      <table>
+        <caption>Sekwencja poziomów: bloki 3, 4, 5, 24, 25, streetscape, komin, wieża</caption>
+        <thead><tr><th>Sprawdzenie</th><th>Wynik</th></tr></thead>
+        <tbody>
+          <tr><td>przejazd 300 → 4 m</td><td><code>00000000 → 22222211</code>, identycznie w obu strategiach</td></tr>
+          <tr><td>monotoniczność po px/m</td><td class="ok">żaden klaster nie spada przy rosnącym px/m</td></tr>
+          <tr><td>progi 9/7 i 36/30 px/m</td><td class="ok">nigdy 0 powyżej 12, nigdy 2 poniżej 25</td></tr>
+          <tr><td>histereza, 90 klatek bez ruchu</td><td class="ok">0 zmian poziomu</td></tr>
+          <tr><td>addytywność (trójkąty klatki L1 → L2)</td><td class="ok">309 677 → 889 887</td></tr>
+          <tr><td>determinizm, dwa wejścia z tym samym seedem</td><td class="ok">identyczne trójkąty, bajty, dylatacje</td></tr>
+          <tr><td>motyw retro / cyberpunk (elewacje)</td><td class="ok">Δ 25,4 / Δ 225,9</td></tr>
+          <tr><td>śnieg / mokrość (nawierzchnia)</td><td class="ok">Δ 106,1 / Δ 102,8</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      Pierwsza wersja tego pomiaru była wadliwa: wszystko porównywałem z jedną referencją
+      pobraną przed zmianą czasu, a mokrość mierzyłem po dziesięciu klatkach — a ona narasta
+      sekundami. Deszcz wychodził wtedy na 0,2 i asercja przechodziła tylko dzięki nieświeżej
+      bazie. Po poprawce, z referencją per efekt i czterema sekundami na mokrość, deszcz daje
+      102,8.
+    </p>
+
+    <h3>Gdzie greedy łamie kontrakt</h3>
+    <p>
+      Na najniższym poziomie LOD ta sama płyta wygląda w trzech światach tak:
+    </p>
+
+    <figure>
+      <img src="{{IMG_LOD0}}" alt="Ta sama płyta w trzech światach na poziomie LOD 0: voxel ma pasy okien, direct jest gładką szarą skrzynią, greedy ma dziury przez które widać trawę i dalsze budynki.">
+      <figcaption>
+        <b>Kadr overview, blok 3, poziom LOD 0.</b> Produkt ma pasy okien. Direct ma gładką
+        bryłę — bo bryła to jedno <code>E.box(…, layer 0)</code>, a wszystkie otwory są w
+        warstwie ≥ 1. Greedy ma dziury.
+      </figcaption>
+    </figure>
+
+    <figure class="narrow">
+      <img src="{{IMG_HOLE}}" alt="Powiększenie budynku w strategii greedy na poziomie LOD 0: przez ściany i dach widać zieloną trawę i odległe budynki.">
+      <figcaption>
+        <b>To samo, w powiększeniu.</b> Zielone prostokąty to trawa za budynkiem, nie okna.
+        Przez dach też widać.
+      </figcaption>
+    </figure>
+
+    <p>Mechanizm, dosłownie:</p>
+    <pre>// GreedyVoxelStrategy.ts, budowa maski
+if (here === EMPTY || neighbour !== EMPTY) { mask[n] = EMPTY; maskAo[n] = 0; n++; continue; }</pre>
+    <p>
+      Ściankę emitujemy tylko wtedy, gdy sąsiednia komórka jest pusta —
+      <strong>bez patrzenia na warstwę</strong> — a potem wkładamy ją do bufora swojej warstwy.
+      Gdziekolwiek komórka warstwy 1 (rama, loggia, wykusz, balkon) styka się z komórką bryły,
+      bryła nie emituje tam ścianki. Ukrycie warstwy 1 zostawia dziurę. Komentarz w tym samym
+      pliku twierdzi, że warstwy zostają addytywne — reguła nadpisywania faktycznie jest, ale
+      kulling ścianek nie zna warstw, i to on łamie kontrakt.
+    </p>
+
+    <h3>Rozjazd, który trzeba zgłosić</h3>
+    <p>
+      Kohorty okien liczą się identycznie: hybryda woła <code>residentialWindowActivityAt</code>,
+      tę samą funkcję co <code>DayNightCycle</code>. O 06:43 aktywność to
+      <code>[0,00; 0,03; 1,00; 1,00; 1,00]</code> — trzy z pięciu kohort zapalone — a emisja w obu
+      światach wynosi 0,02, bo <code>night</code> jest o tej porze bliskie zeru.
+    </p>
+
+    <figure>
+      <img src="{{IMG_GOLDEN}}" alt="Kadr o 06:43 w produkcie i w hybrydzie: voxelowe bloki mają wiele jasnych, zapalonych okien, kamienice hybrydy mają okna ciemne.">
+      <figcaption>
+        <b>06:43, produkt i hybryda.</b> Ta sama krzywa kohort, ten sam mnożnik emisji, inny
+        materiał. Voxelowe okno nosi stan zapalenia w kolorze rozproszonym przy
+        <code>metalness 0.4</code> (60% udziału diffuse); szkło hybrydy ma
+        <code>metalness 0.85</code> (15%). W całym pasie dziennym i świtowym cały efekt
+        &bdquo;zapalone&rdquo; niesie diffuse — i hybryda gubi go czterokrotnie.
+      </figcaption>
+    </figure>
+
+    <p>
+      Poprawka to jedna liczba, ale jest zmianą art directionu, więc jej nie wprowadziłem.
+      W nocy, gdzie stan niesie emisja, kohorty działają bez zarzutu:
+    </p>
+
+    <figure>
+      <img src="{{IMG_NIGHT}}" alt="Kadr nocny w produkcie i w hybrydzie: część okien hybrydy jest zapalona, część ciemna, przejście dla pieszych jest czytelne.">
+      <figcaption>
+        <b>21:35.</b> Okna hybrydy zapalone w mieszanym układzie, przejście czytelne. Duże
+        przezroczyste stożki wokół latarni są w kadrze bazowym produktu tak samo — to nie
+        artefakt spike&rsquo;u.
+      </figcaption>
+    </figure>
+  </section>
+
+  <!-- ── GATE 4 ─────────────────────────────────────────── -->
+  <section class="gate">
+    <div class="gate-head">
+      <span class="gate-no">Bramka 4</span>
+      <h2>Wysokości i kolizje</h2>
+      <span class="tag ok">zdane, po dwóch poprawkach</span>
+    </div>
+
+    <p>
+      Nowy test <code>clearance.test.ts</code> nie powtarza żadnego wysięgu z kodu architektury.
+      Każda bryła przechodzi przez <code>geometryFor</code> — dokładnie tę funkcję, którą
+      strategia direct podaje rendererowi — a pudełko brzegowe bierzemy z geometrii. Wysokość
+      pieszego też nie jest wpisana: mierzymy figurkę pasażera produktu, 1,9149 m.
+    </p>
+    <p>
+      <strong>1487 bryły wychodzą poza własną działkę.</strong> Test sprawdza je przeciw czterem
+      trasom dojścia do autobusu, kolizjonerom wiaty, footprintom produktu, trasie listonosza
+      (601 próbek), korytarzom dojścia do budynków i pełnym sylwetkom obu dominant w obu
+      wariantach LOD.
+    </p>
+
+    <div class="scroll">
+      <table>
+        <caption>Co test znalazł — i co naprawiłem</caption>
+        <thead><tr><th>Obiekt</th><th>Zderzenie</th><th>Naprawa</th></tr></thead>
+        <tbody>
+          <tr><td>donica (1,6; 31,1)</td><td>0,80 m w środku stopni wejściowych bloku 25</td><td>→ (2,6; 30,3)</td></tr>
+          <tr><td>tablica (2,4; 31,25)</td><td>3 cm w szybie witryny, na 0,78 m szerokości</td><td>→ (3,4; 29,3)</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      Przesunięcie donicy prosto od ściany wstawiło ją w korytarz dojścia do budynku — dlatego
+      test sprawdza teraz i to. Potwierdziłem, że ta asercja nie jest pusta: przy starym
+      położeniu wypada z komunikatem <code>planter blocks access cell 1,30</code>. Elewacja i
+      tak nosiła własną tablicę przy drzwiach; wolnostojąca była w tym miejscu podwójna.
+    </p>
+    <p>
+      Reszta jest czysta i była czysta. Listonosz w ogóle nie wchodzi we fragment — jego pętla
+      to z ≈ −46…−50, fragment to z 0…40.
+    </p>
+  </section>
+
+  <!-- ── DILATION ───────────────────────────────────────── -->
+  <section class="gate">
+    <div class="gate-head">
+      <span class="gate-no">Osobno</span>
+      <h2>Co robi siatka 25 cm</h2>
+      <span class="tag no">2957 dylatacji</span>
+    </div>
+
+    <p>
+      Licznik <code>dilated</code> = 2957 wymiarów podniesionych do pełnej komórki. W direct: 0.
+      Widać to wprost, na tych samych pikselach.
+    </p>
+
+    <figure>
+      <img src="{{IMG_PROPS}}" alt="Rowery przy stojaku w dwóch strategiach: w direct dwa czytelne rowery z okrągłymi kołami, w greedy nieczytelny stos prostopadłościanów.">
+      <figcaption>
+        <b>Rowery i stojak.</b> W greedy nie ma ani jednego okrągłego koła. Pokrywa kosza
+        zwisa poza jego bok.
+      </figcaption>
+    </figure>
+
+    <figure>
+      <img src="{{IMG_MARKINGS}}" alt="Przejście dla pieszych w trzech światach: produkt ma tylko linie osiowe, direct ma płaską farbę, greedy ma bloki o wysokości krawężnika leżące na jezdni.">
+      <figcaption>
+        <b>Przejście dla pieszych.</b> Produkt nie ma tu przejścia — dodaje je fragment. W
+        direct to płaska farba. W greedy to bloki wysokości krawężnika leżące w poprzek
+        jezdni, z widocznymi ściankami bocznymi i własnymi cieniami.
+      </figcaption>
+    </figure>
+
+    <figure>
+      <img src="{{IMG_GLASS}}" alt="Balustrada, okno i witryna w dwóch strategiach: w direct smukła balustrada i czyste szkło, w greedy pełna płyta z dziurami i gęsta ukośna kraciura na szybach.">
+      <figcaption>
+        <b>Balustrada, okno, drzwi, witryna.</b> Szyba witryny leży 1,5 cm przed ścianą,
+        skrzydło drzwi 2 cm. Siatka 0,25 m sprowadza jedno i drugie do płaszczyzny ściany,
+        więc powierzchnie stają się współpłaszczyznowe — stąd kraciura.
+      </figcaption>
+    </figure>
+
+    <p class="note">
+      Jedyna korzyść greedy — voxelowe AO &bdquo;za darmo&rdquo; — jest już dostępna w direct
+      jako wypiekany atrybut <code>aAo</code>, i direct z niego korzysta.
+    </p>
+  </section>
+
+  <!-- ── TODO ───────────────────────────────────────────── -->
+  <section class="gate">
+    <div class="gate-head">
+      <span class="gate-no">Dalej</span>
+      <h2>Co przed drugim fragmentem</h2>
+    </div>
+
+    <div class="todo">
+      <div>
+        <h3>Po naszej stronie</h3>
+        <ol>
+          <li>
+            <strong>Wypełnić LOD 0.</strong> Gładka bryła czyta się jak niedokończony model obok
+            voxelowych bloków, które na tej odległości okna mają. Najtaniej: wypiekany pas okien
+            w warstwie 0.
+          </li>
+          <li>
+            <strong>Obrócić zebrę o 90°.</strong> Aleja Południowa biegnie wzdłuż x, a pasy
+            leżą 2,4 m wzdłuż jezdni i 0,5 m w poprzek, powtarzane w poprzek — czyli równolegle
+            do ruchu, i wystają 0,5 m poza chodnik z każdej strony.
+          </li>
+          <li>
+            <strong>Zdjąć metalness ze szkła</strong> albo dołożyć diffuse do stanu zapalenia,
+            żeby fragment nie był ciemny w pasie dziennym i świtowym.
+          </li>
+        </ol>
+      </div>
+      <div>
+        <h3>Odziedziczone z produktu</h3>
+        <ul>
+          <li>
+            <strong>Chodnik przy przystanku ma metr szerokości.</strong>
+            <code>isOnSidewalk</code> zwraca prawdę tylko w promieniu 1 m od drogi, więc wiata,
+            ławka i wszystkie cztery pozycje oczekiwania stoją na trawie — w produkcie i w
+            spike&rsquo;u jednakowo. Podniesiony chodnik trzeba zrobić razem z przesunięciem
+            obiektów, które produkt tam stawia.
+          </li>
+          <li>
+            <strong>Pasażer jest zasłonięty</strong> ścianą reklamową własnej wiaty w każdym
+            kadrze ulicznym. Naprawa jest po stronie kadru albo produktu.
+          </li>
+          <li>
+            <strong>Horyzont w kadrze ulicznym jest wypalony</strong> na 10,8% pasa —
+            identycznie w produkcie.
+          </li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    Dowody w repo: <code>spike-smoke.json</code>, <code>spike-smoke-voxel.json</code>,
+    <code>spike-semantics.json</code>, <code>bench-&lt;świat&gt;-&lt;jakość&gt;.json</code>,
+    pełny raport w <code>docs/superpowers/spike/2026-09-02-hybrid-spike-report.md</code>.
+    Kadry odtwarza <code>node scripts/spikeSmoke.mjs</code> po zbudowaniu paczki.
+    Chunk wejściowy 238 673 B z limitu 240 000; żaden budżet nie został podniesiony.
+  </footer>
+
+</div>

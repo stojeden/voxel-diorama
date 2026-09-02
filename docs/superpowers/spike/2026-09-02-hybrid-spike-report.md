@@ -21,6 +21,11 @@ Kadry (28 plików JPEG) nie są commitowane, zgodnie z konwencją poprzedniego a
 odtwarza je pierwsze polecenie. Pomiary są w repo: `spike-smoke.json`,
 `spike-smoke-voxel.json`, `spike-semantics.json`, `bench-<świat>-<jakość>.json`.
 
+Strona dla właściciela (ten sam werdykt, wizualnie, po polsku):
+**https://claude.ai/code/artifact/77c565b1-517d-4e7d-b1b4-38e8873b2c9c**
+Źródło strony leży w `verdict-page/page.html` z placeholderami `{{IMG_*}}`; wycinki kadrów
+składa `verdict-page/crops.py`, a potem podstawia się je jako `data:` URI pod te placeholdery.
+
 ## 1. Co dodaliśmy w tej rundzie
 
 Poprzedni agent zostawił kadry sprzed poprawki `4c10726`. Odnowione, plus trzy rzeczy,
