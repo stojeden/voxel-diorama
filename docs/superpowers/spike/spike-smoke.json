@@ -1,9 +1,9 @@
 {
-  "generatedAt": "2026-09-02T12:09:08.981Z",
+  "generatedAt": "2026-09-02T12:38:34.722Z",
   "bundles": {
     "entry": 238673,
     "main": 33311,
-    "spike": 40955
+    "spike": 40953
   },
   "results": [
     {
@@ -20,7 +20,7 @@
       "textures": 37,
       "hybrid": {
         "strategy": "direct",
-        "generationMs": 27.600000023841858,
+        "generationMs": 29.299999952316284,
         "triangles": [
           2938,
           9158,
@@ -70,7 +70,7 @@
       "textures": 37,
       "hybrid": {
         "strategy": "direct",
-        "generationMs": 25.49999988079071,
+        "generationMs": 27.99999988079071,
         "triangles": [
           2938,
           9158,
@@ -120,7 +120,7 @@
       "textures": 37,
       "hybrid": {
         "strategy": "direct",
-        "generationMs": 26.99999988079071,
+        "generationMs": 23.899999976158142,
         "triangles": [
           2938,
           9158,
@@ -170,7 +170,7 @@
       "textures": 35,
       "hybrid": {
         "strategy": "direct",
-        "generationMs": 24.59999990463257,
+        "generationMs": 24.300000071525574,
         "triangles": [
           2938,
           9158,
@@ -220,7 +220,7 @@
       "textures": 20,
       "hybrid": {
         "strategy": "direct",
-        "generationMs": 24.600000023841858,
+        "generationMs": 26.199999928474426,
         "triangles": [
           2394,
           8162,
@@ -270,7 +270,7 @@
       "textures": 20,
       "hybrid": {
         "strategy": "direct",
-        "generationMs": 22.700000047683716,
+        "generationMs": 25.5,
         "triangles": [
           2394,
           8162,
@@ -312,22 +312,22 @@
       "checkpoint": "spike-overview",
       "frame": "docs/superpowers/spike/frames/hybrid-greedy-high-spike-overview.jpg",
       "calls": 603,
-      "triangles": 590613,
-      "primaryTriangles": 590610,
+      "triangles": 590641,
+      "primaryTriangles": 590638,
       "primaryCalls": 600,
       "programs": 156,
       "geometries": 433,
       "textures": 37,
       "hybrid": {
         "strategy": "greedy",
-        "generationMs": 1039.5000001192093,
+        "generationMs": 1079.3999999761581,
         "triangles": [
-          10230,
-          10026,
-          8306
+          10242,
+          10028,
+          8314
         ],
-        "vertices": 85686,
-        "bytes": 4112928,
+        "vertices": 85752,
+        "bytes": 4116096,
         "meshes": 32,
         "clusters": 8,
         "lodLevels": {
@@ -362,22 +362,22 @@
       "checkpoint": "spike-street",
       "frame": "docs/superpowers/spike/frames/hybrid-greedy-high-spike-street.jpg",
       "calls": 473,
-      "triangles": 903509,
-      "primaryTriangles": 580564,
+      "triangles": 903575,
+      "primaryTriangles": 580608,
       "primaryCalls": 285,
       "programs": 152,
       "geometries": 432,
       "textures": 37,
       "hybrid": {
         "strategy": "greedy",
-        "generationMs": 1034.6999998092651,
+        "generationMs": 1066.3999998569489,
         "triangles": [
-          10230,
-          10026,
-          8306
+          10242,
+          10028,
+          8314
         ],
-        "vertices": 85686,
-        "bytes": 4112928,
+        "vertices": 85752,
+        "bytes": 4116096,
         "meshes": 32,
         "clusters": 8,
         "lodLevels": {
@@ -412,22 +412,22 @@
       "checkpoint": "spike-golden",
       "frame": "docs/superpowers/spike/frames/hybrid-greedy-high-spike-golden.jpg",
       "calls": 605,
-      "triangles": 590647,
-      "primaryTriangles": 590644,
+      "triangles": 590675,
+      "primaryTriangles": 590672,
       "primaryCalls": 602,
       "programs": 217,
       "geometries": 435,
       "textures": 37,
       "hybrid": {
         "strategy": "greedy",
-        "generationMs": 1019.0000001192093,
+        "generationMs": 1040.8000000715256,
         "triangles": [
-          10230,
-          10026,
-          8306
+          10242,
+          10028,
+          8314
         ],
-        "vertices": 85686,
-        "bytes": 4112928,
+        "vertices": 85752,
+        "bytes": 4116096,
         "meshes": 32,
         "clusters": 8,
         "lodLevels": {
@@ -462,22 +462,22 @@
       "checkpoint": "spike-night-street",
       "frame": "docs/superpowers/spike/frames/hybrid-greedy-high-spike-night-street.jpg",
       "calls": 349,
-      "triangles": 638765,
-      "primaryTriangles": 315752,
+      "triangles": 638809,
+      "primaryTriangles": 315774,
       "primaryCalls": 156,
       "programs": 194,
       "geometries": 434,
       "textures": 35,
       "hybrid": {
         "strategy": "greedy",
-        "generationMs": 1028.7999999523163,
+        "generationMs": 1048.8999999761581,
         "triangles": [
-          10230,
-          10026,
-          8306
+          10242,
+          10028,
+          8314
         ],
-        "vertices": 85686,
-        "bytes": 4112928,
+        "vertices": 85752,
+        "bytes": 4116096,
         "meshes": 32,
         "clusters": 8,
         "lodLevels": {
@@ -512,22 +512,22 @@
       "checkpoint": "spike-street",
       "frame": "docs/superpowers/spike/frames/hybrid-greedy-low-spike-street.jpg",
       "calls": 153,
-      "triangles": 310231,
-      "primaryTriangles": 310228,
+      "triangles": 310245,
+      "primaryTriangles": 310242,
       "primaryCalls": 150,
       "programs": 75,
       "geometries": 431,
       "textures": 20,
       "hybrid": {
         "strategy": "greedy",
-        "generationMs": 1011.8000000715256,
+        "generationMs": 951.8999999761581,
         "triangles": [
-          9962,
-          9160,
-          8306
+          9974,
+          9162,
+          8314
         ],
-        "vertices": 82284,
-        "bytes": 3949632,
+        "vertices": 82350,
+        "bytes": 3952800,
         "meshes": 31,
         "clusters": 8,
         "lodLevels": {
@@ -562,22 +562,22 @@
       "checkpoint": "spike-overview",
       "frame": "docs/superpowers/spike/frames/hybrid-greedy-low-spike-overview.jpg",
       "calls": 437,
-      "triangles": 332789,
-      "primaryTriangles": 332786,
+      "triangles": 332803,
+      "primaryTriangles": 332800,
       "primaryCalls": 434,
       "programs": 76,
       "geometries": 432,
       "textures": 20,
       "hybrid": {
         "strategy": "greedy",
-        "generationMs": 1005.7999999523163,
+        "generationMs": 947.4000000953674,
         "triangles": [
-          9962,
-          9160,
-          8306
+          9974,
+          9162,
+          8314
         ],
-        "vertices": 82284,
-        "bytes": 3949632,
+        "vertices": 82350,
+        "bytes": 3952800,
         "meshes": 31,
         "clusters": 8,
         "lodLevels": {

@@ -375,9 +375,12 @@ try {
     );
     await page.waitForFunction(() => window.__diorama?.ready === true, null, { timeout: MAX_TTI_MS });
     const diagnostics = await applyDiagnosticOverrides(page);
-    const { checkpointState, qualityLevel } = await page.evaluate(() => ({
+    const { checkpointState, qualityLevel, scenarioReadyAtMs } = await page.evaluate(() => ({
       checkpointState: window.__diorama.getState(),
       qualityLevel: window.__diorama.getMetrics().quality.level,
+      // `readiness` above is measured on a load without ?world=, so it never sees the
+      // hybrid spike attach. This one does, which is what the spike's TTI gate needs.
+      scenarioReadyAtMs: window.__benchmarkReadyAt,
     }));
     assert.equal(checkpointState.simulationSeed, SIMULATION_SEED);
     assert.equal(checkpointState.checkpoint?.id, scenario.checkpoint);
@@ -482,6 +485,7 @@ try {
       simulationSeed: metrics.simulationSeed,
       layoutSeed: metrics.layoutSeed,
       checkpointRevision: checkpointState.checkpoint.revision,
+      timeToInteractiveMs: scenarioReadyAtMs === null ? null : round(scenarioReadyAtMs),
       diagnostics,
       timing,
       cpu,

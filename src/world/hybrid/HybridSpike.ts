@@ -34,6 +34,8 @@ export interface HybridMetrics {
   meshes: number;
   clusters: number;
   lodLevels: Record<string, Layer>;
+  /** Pixels per metre that produced those levels, per cluster. */
+  lodPixelsPerMetre: Record<string, number>;
   /** Greedy only: voxel edge and how many thin dimensions were dilated to one cell. */
   cell: number | null;
   dilated: number;
@@ -159,6 +161,8 @@ export function attachHybridSpike(options: HybridSpikeOptions): HybridHandle {
     for (const lodGroup of lodGroups) levels[lodGroup.cluster.id] = lodGroup.selector.level;
     return levels;
   };
+  /** Last LOD input per cluster: gate 3 has to see the measure, not just the outcome. */
+  const lodPixelsPerMetre: Record<string, number> = {};
 
   return {
     update(camera, viewportHeightPx, t01, night, dt) {
@@ -168,8 +172,10 @@ export function attachHybridSpike(options: HybridSpikeOptions): HybridHandle {
       }
       for (const lodGroup of lodGroups) {
         const distance = Math.max(0.5, camera.position.distanceTo(lodGroup.center) - lodGroup.radius);
+        const measure = pixelsPerMetre(viewportHeightPx, camera.fov, distance);
+        lodPixelsPerMetre[lodGroup.cluster.id] = measure;
         const previous = lodGroup.selector.level;
-        const level = lodGroup.selector.update(pixelsPerMetre(viewportHeightPx, camera.fov, distance), dt);
+        const level = lodGroup.selector.update(measure, dt);
         if (level !== previous) lodGroup.apply(level);
       }
     },
@@ -206,6 +212,7 @@ export function attachHybridSpike(options: HybridSpikeOptions): HybridHandle {
         meshes: totals.meshes,
         clusters: lodGroups.length,
         lodLevels: lodLevels(),
+        lodPixelsPerMetre: { ...lodPixelsPerMetre },
         cell: totals.cell,
         dilated: totals.dilated,
         low,
