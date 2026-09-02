@@ -4,6 +4,7 @@ import {
   GROUND_SURFACE_Y,
   WORLD_LAYOUT_SEED,
   isOnRoad,
+  isOnSidewalk,
   type ColorHex,
 } from '../WorldLayout';
 import { P } from './palette';
@@ -102,8 +103,8 @@ const TINTS: Record<Family, string[]> = {
   walkup: ['plasterSand', 'plasterWarm'],
 };
 
-/** Paved forecourt in front of the corner tenement (block 25). */
-export const FORECOURT: Rect = { minX: -4, maxX: 5, minZ: 28, maxZ: 31 };
+/** Paved forecourt in front of the corner tenement (block 25); excluded from the voxel ground too. */
+export const FORECOURT: Rect = SPIKE_FRAGMENT.forecourt;
 /** East of the shelter, clear of the dwelling bus (lead at x ≈ −10, body 8 m behind it). */
 export const CROSSWALK: CrosswalkSpec = { minX: -3.2, maxX: -1.8, minZ: 22, maxZ: 26, stripes: 5 };
 export const CHIMNEY_SITE = { x: -58, z: -40 } as const;
@@ -156,7 +157,7 @@ export function buildCityModel(): CityModel {
   const kerbs: CityModel['kerbs'] = [];
   for (let x = ground.minX; x <= ground.maxX; x++) {
     for (let z = ground.minZ; z <= ground.maxZ; z++) {
-      if (!isSpikeGroundCell(x, z)) continue;
+      if (!isSpikeGroundCell(x, z) || !isOnSidewalk(x, z)) continue;
       pavement.push({ x, z });
       if (isOnRoad(x + 1, z)) kerbs.push({ x, z, side: '+x' });
       if (isOnRoad(x - 1, z)) kerbs.push({ x, z, side: '-x' });

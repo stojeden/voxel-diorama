@@ -23,6 +23,8 @@ export function strategyOf(mode: WorldMode): HybridStrategyName | null {
 export const SPIKE_FRAGMENT = {
   blocks: [3, 4, 5, 24, 25],
   ground: { minX: -30, maxX: 12, minZ: 0, maxZ: 40 },
+  /** Paved forecourt in front of the corner tenement (block 25). */
+  forecourt: { minX: -4, maxX: 5, minZ: 28, maxZ: 31 },
 } as const;
 
 export const SPIKE_BLOCK_SET: ReadonlySet<number> = new Set(SPIKE_FRAGMENT.blocks);
@@ -30,8 +32,10 @@ export const SPIKE_BLOCK_SET: ReadonlySet<number> = new Set(SPIKE_FRAGMENT.block
 /** Gate 4: only explicitly flagged blocks may grow to 1.8× their metre height. */
 export const SPIKE_POINT_TOWERS: ReadonlySet<number> = new Set([5]);
 
-/** Pavement cells the hybrid fragment draws instead of the voxel ground. */
+const inRect = (r: { minX: number; maxX: number; minZ: number; maxZ: number }, x: number, z: number) =>
+  x >= r.minX && x <= r.maxX && z >= r.minZ && z <= r.maxZ;
+
+/** Ground cells the hybrid fragment draws instead of the voxel ground: pavement and the forecourt. */
 export function isSpikeGroundCell(x: number, z: number): boolean {
-  const g = SPIKE_FRAGMENT.ground;
-  return x >= g.minX && x <= g.maxX && z >= g.minZ && z <= g.maxZ && isOnSidewalk(x, z);
+  return (inRect(SPIKE_FRAGMENT.ground, x, z) && isOnSidewalk(x, z)) || inRect(SPIKE_FRAGMENT.forecourt, x, z);
 }
