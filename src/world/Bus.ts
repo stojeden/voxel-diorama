@@ -111,13 +111,22 @@ function buildBusMesh(): {
   const bodyMat = make(0xc8a536, { roughness: 0.42, metalness: 0.3 }) as THREE.MeshStandardMaterial;
   const roofMat = make(0xe8e2cf, { roughness: 0.6 }) as THREE.MeshStandardMaterial;
   const darkMat = make(0x2a2a2a, { roughness: 0.8 });
-  const windowMat = make(COLORS.windowLit, {
-    roughness: 0.1,
-    metalness: 0.5,
+  // Glass, not a painted panel. The window colour used to be `windowLit` -- the same
+  // warm cream as a lit flat -- with a 0.25 emissive on top in broad daylight, so the
+  // bus carried four flat bright rectangles that barely differed from its yellow body.
+  // Daytime glass is dark and takes its brightness from the sky it reflects; the lit
+  // interior is a night state, so the emissive starts at zero and the day look comes
+  // from the environment map instead.
+  const windowMat = make(BUS_GLASS_DAY, {
+    roughness: 0.16,
+    metalness: 0.35,
     emissive: COLORS.windowLit,
-    emissiveIntensity: 0.25,
+    emissiveIntensity: 0,
   }) as THREE.MeshStandardMaterial;
-  windowMat.envMapIntensity = 1.6;
+  // A mirror-smooth pane at envMapIntensity 2 washes out to flat white wherever the
+  // glass is edge-on to the camera, which on a bus is most of its side. 1.2 keeps the
+  // sky in the glass without erasing the pane.
+  windowMat.envMapIntensity = 1.2;
   const wheelMat = make(0x141414, { roughness: 0.5, metalness: 0.6 });
 
   const floorY = BUS_FLOOR_Y;
@@ -352,7 +361,11 @@ const BUS_BODY_NORMAL = new THREE.Color(0xc8a536);
 const BUS_BODY_CYBER = new THREE.Color(0x14181f);
 const BUS_ROOF_NORMAL = new THREE.Color(0xe8e2cf);
 const BUS_ROOF_CYBER = new THREE.Color(0x20262e);
-const BUS_GLASS_NORMAL = new THREE.Color(COLORS.windowLit);
+/** Daylight bus glazing: dark blue-grey, brightened only by what it reflects. */
+const BUS_GLASS_DAY = 0x36414c;
+const BUS_GLASS_NORMAL = new THREE.Color(BUS_GLASS_DAY);
+/** The lit interior behind that glass, which is a night state. */
+const BUS_INTERIOR_LIT = new THREE.Color(COLORS.windowLit);
 const BUS_GLASS_CYBER = new THREE.Color(0x35e6ff);
 
 export function createBus(scene: THREE.Scene, random = fallbackRandom('bus')): BusHandle {
@@ -697,7 +710,7 @@ export function createBus(scene: THREE.Scene, random = fallbackRandom('bus')): B
       doors[1].position.z = 1.6 + doorOpen * 0.8;
 
       // ── Night interior glow + headlights on the road ──
-      windowMaterial.emissiveIntensity = 0.25 + nightFactor * 0.9;
+      windowMaterial.emissiveIntensity = nightFactor * 1.15;
       const beamStrength = Math.min(1, nightFactor * 1.4);
       for (const lamp of headLights) {
         lamp.visible = headlightsEnabled;
@@ -774,8 +787,11 @@ export function createBus(scene: THREE.Scene, random = fallbackRandom('bus')): B
     setCyberLook(factor) {
       bodyMaterial.color.lerpColors(BUS_BODY_NORMAL, BUS_BODY_CYBER, factor);
       roofMaterial.color.lerpColors(BUS_ROOF_NORMAL, BUS_ROOF_CYBER, factor);
+      // Two different colours: the pane's own dark glass, and the warm interior that
+      // lights up at night. Lerping the emissive from the glass colour made the night
+      // bus glow dark blue instead of showing a lit interior.
       windowMaterial.color.lerpColors(BUS_GLASS_NORMAL, BUS_GLASS_CYBER, factor);
-      windowMaterial.emissive.lerpColors(BUS_GLASS_NORMAL, BUS_GLASS_CYBER, factor);
+      windowMaterial.emissive.lerpColors(BUS_INTERIOR_LIT, BUS_GLASS_CYBER, factor);
     },
     setEclipseReaction(reaction) {
       eclipseReaction = reaction;

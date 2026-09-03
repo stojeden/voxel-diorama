@@ -59,5 +59,23 @@
     "failing_tests": [
       "street furniture is furniture, not architecture"
     ]
+  },
+  {
+    "defect": "window colour back to the lit-flat cream",
+    "failing_tests": [
+      "is dark glass by day and a lit interior by night"
+    ]
+  },
+  {
+    "defect": "daylight emissive back to 0.25",
+    "failing_tests": [
+      "is dark glass by day and a lit interior by night"
+    ]
+  },
+  {
+    "defect": "night interior emissive lerped from the glass colour again",
+    "failing_tests": [
+      "keeps the cyberpunk look on the glass without unlighting the interior"
+    ]
   }
 ]
