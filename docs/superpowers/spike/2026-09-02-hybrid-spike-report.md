@@ -75,8 +75,21 @@ wyłącznie szyby, cała reszta jest czarna.
 11 FPS w kadrze nocnym (60,0 → 49,1, p95 16,8 → 33,4 ms) przy zysku czytelności poniżej 1%.
 Rozdzielenie szklistości od czytelności nie jest potrzebne, bo czytelność nigdy nie była zepsuta.
 
-**E3. Nocna delta GPU +15,2 ms była artefaktem przyrządu.** Szczegóły w 3.5; prawdziwa delta to
-+5,7 ms i nie jest widoczna dla użytkownika.
+**E3. Wszystkie liczby z sondy GPU są niecytowalne.** Nie tylko +15,2 ms z rewizji 1, ale też
++5,7 ms z rewizji 2 i +7,5 ms, które policzyłem w rewizji 4. Sonda mierzy jedną wymuszoną klatkę
+kompozytora i łapie wszystko, co konkuruje o GPU: w kadrze nocnym **piętnaście próbek w jednym
+uruchomieniu rozrzuca się od 25,7 do 60,9 ms**. Rozrzut jest większy niż różnice, które nią
+przypisywałem. Benchmark raportuje teraz `gpu.spreadMs` i `gpu.stable`, i dla kadru nocnego
+`stable` jest fałszywe — czyli tej liczby nie wolno cytować. Wiarygodne są: FPS, p95, p99,
+`slowFrameRatio` (180 prawdziwych klatek) i deterministyczne liczniki draw calli i trójkątów.
+
+**E4. Obrót pasów zebry w rewizji 2 był regresją, nie naprawą.** Pasy zebry biegną **wzdłuż**
+jezdni i powtarzają się **w poprzek** — pieszy przechodzi po kolejnych pasach, a kierowca widzi
+je skierowane ku sobie. Pierwotna implementacja miała to dobrze; jedyną jej wadą było to, że pas
+wystawał 0,5 m poza przejście z każdej strony. Odwróciłem to na podstawie własnego błędnego
+rozumowania i opisałem jako poprawkę B1-5. Rozstrzygnięte renderem prosto z góry, nie arytmetyką.
+Teraz: pas 2,80 m wzdłuż jezdni, 0,41 m w poprzek, pięć pasów i cztery równe przerwy, każdy pas
+dokładnie tak długi, jak szerokie jest przejście.
 
 Poza tym rewizja 1 twierdziła, że 28 kadrów JPEG nie jest commitowanych, a wszystkie 28 leżały
 w indeksie (wciągnął je `git add docs/superpowers/spike` w commicie `cc5fef8`). Teraz naprawdę

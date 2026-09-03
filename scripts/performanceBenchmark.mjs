@@ -254,6 +254,16 @@ async function measureGpuFrame(page, sampleCount = GPU_SAMPLE_COUNT) {
       p90RenderMs: Math.round(p90RenderMsRaw * 10) / 10,
       minRenderMs: Math.round(samples[0] * 10) / 10,
       maxRenderMs: Math.round(samples.at(-1) * 10) / 10,
+      /**
+       * Whether this figure may be quoted at all. The timer brackets one forced
+       * composer frame, so it picks up anything else contending for the GPU: on a
+       * loaded machine the same build measured 9.8, 15.4 and 16.0 ms for one
+       * scenario, a spread wider than any difference it was being used to attribute.
+       * On a quiet machine the same measurement repeats to a tenth of a millisecond.
+       * `stable` false means: do not report this number, re-run on a quiet machine.
+       */
+      spreadMs: Math.round((samples.at(-1) - samples[0]) * 10) / 10,
+      stable: samples.at(-1) - samples[0] <= Math.max(2, medianRenderMsRaw * 0.25),
     };
   }, { count: sampleCount, percentile: 0.9 });
 }

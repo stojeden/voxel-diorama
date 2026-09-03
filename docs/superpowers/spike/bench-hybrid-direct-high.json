@@ -7,10 +7,10 @@
   "diagnosticShadowsDisabled": false,
   "diagnosticLocalLightsDisabled": false,
   "readiness": {
-    "timeToInteractiveMs": 1206.3,
+    "timeToInteractiveMs": 1065.1,
     "definition": "diorama-ready after preload, shader warm-up, first interactive animation frame and loader dismissal",
-    "domContentLoadedMs": 316.7,
-    "firstContentfulPaintMs": 72
+    "domContentLoadedMs": 277.5,
+    "firstContentfulPaintMs": 52
   },
   "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Pro, Unspecified Version)",
   "vendor": "Google Inc. (Apple)",
@@ -22,7 +22,7 @@
       "world": "hybrid-direct",
       "hybrid": {
         "strategy": "direct",
-        "generationMs": 28.799999952316284,
+        "generationMs": 25.90000021457672,
         "triangles": [
           3304,
           10820,
@@ -54,26 +54,26 @@
         },
         "low": false
       },
-      "jsHeapBytes": 104987686,
+      "jsHeapBytes": 108265704,
       "simulationSeed": 20260722,
       "layoutSeed": 20260610,
       "checkpointRevision": 2,
-      "timeToInteractiveMs": 1080.8,
+      "timeToInteractiveMs": 1031,
       "timeToInteractiveSamples": [
-        1178,
-        1080.8,
-        1080.7
+        1066.4,
+        1031,
+        1013.2
       ],
-      "timeToInteractiveWorstMs": 1178,
+      "timeToInteractiveWorstMs": 1066.4,
       "diagnostics": {
         "shadowsEnabled": true,
         "visibleLocalLights": 6
       },
       "timing": {
         "frames": 180,
-        "averageFps": 60.00200006666889,
-        "averageFrameMs": 16.66611111111111,
-        "p95FrameMs": 16.799999999999272,
+        "averageFps": 60.00200006666888,
+        "averageFrameMs": 16.666111111111114,
+        "p95FrameMs": 16.700000000000728,
         "p99FrameMs": 16.800000000000182,
         "maxFrameMs": 16.800000000000182,
         "hitchCount": 0,
@@ -81,21 +81,23 @@
       },
       "cpu": {
         "scope": "Chromium renderer main thread; not total system CPU",
-        "taskMs": 798.6,
-        "busyPercent": 26.6,
-        "scriptMs": 754.6,
-        "layoutMs": 3.7
+        "taskMs": 639.4,
+        "busyPercent": 21.3,
+        "scriptMs": 599.6,
+        "layoutMs": 4.5
       },
       "gpu": {
         "available": true,
         "method": "EXT_disjoint_timer_query_webgl2 around an explicit composer frame",
         "sampleCount": 15,
-        "medianRenderMsRaw": 5.889625,
-        "p90RenderMsRaw": 8.63775,
-        "medianRenderMs": 5.9,
-        "p90RenderMs": 8.6,
-        "minRenderMs": 4.3,
-        "maxRenderMs": 10.8
+        "medianRenderMsRaw": 9.918375,
+        "p90RenderMsRaw": 10.694916,
+        "medianRenderMs": 9.9,
+        "p90RenderMs": 10.7,
+        "minRenderMs": 6.6,
+        "maxRenderMs": 11.1,
+        "spreadMs": 4.6,
+        "stable": false
       },
       "measuredState": {
         "t01": 0.5,
@@ -211,7 +213,7 @@
         "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Pro, Unspecified Version)",
         "vendor": "Google Inc. (Apple)",
         "calls": 604,
-        "triangles": 580117,
+        "triangles": 578677,
         "lines": 0,
         "points": 28,
         "geometries": 434,
@@ -220,7 +222,7 @@
         "pixelRatio": 1,
         "canvasWidth": 1440,
         "canvasHeight": 900,
-        "primaryTriangles": 580114,
+        "primaryTriangles": 578674,
         "primaryCalls": 601
       }
     },
@@ -231,7 +233,7 @@
       "world": "hybrid-direct",
       "hybrid": {
         "strategy": "direct",
-        "generationMs": 26.09999990463257,
+        "generationMs": 26.399999976158142,
         "triangles": [
           3304,
           10820,
@@ -263,25 +265,25 @@
         },
         "low": false
       },
-      "jsHeapBytes": 57089701,
+      "jsHeapBytes": 55456166,
       "simulationSeed": 20260722,
       "layoutSeed": 20260610,
       "checkpointRevision": 2,
-      "timeToInteractiveMs": 1063.7,
+      "timeToInteractiveMs": 998.1,
       "timeToInteractiveSamples": [
-        1058.8,
-        1063.7,
-        1230.6
+        995,
+        1013.7,
+        998.1
       ],
-      "timeToInteractiveWorstMs": 1230.6,
+      "timeToInteractiveWorstMs": 1013.7,
       "diagnostics": {
         "shadowsEnabled": true,
         "visibleLocalLights": 6
       },
       "timing": {
         "frames": 180,
-        "averageFps": 60.00200006666888,
-        "averageFrameMs": 16.666111111111114,
+        "averageFps": 60.00200006666889,
+        "averageFrameMs": 16.66611111111111,
         "p95FrameMs": 16.700000000000728,
         "p99FrameMs": 16.800000000000182,
         "maxFrameMs": 16.800000000000182,
@@ -290,21 +292,23 @@
       },
       "cpu": {
         "scope": "Chromium renderer main thread; not total system CPU",
-        "taskMs": 594.4,
-        "busyPercent": 19.8,
-        "scriptMs": 555.3,
-        "layoutMs": 3.5
+        "taskMs": 689.2,
+        "busyPercent": 23,
+        "scriptMs": 653,
+        "layoutMs": 3.7
       },
       "gpu": {
         "available": true,
         "method": "EXT_disjoint_timer_query_webgl2 around an explicit composer frame",
         "sampleCount": 15,
-        "medianRenderMsRaw": 11.233124,
-        "p90RenderMsRaw": 13.212583,
-        "medianRenderMs": 11.2,
-        "p90RenderMs": 13.2,
-        "minRenderMs": 5.4,
-        "maxRenderMs": 13.7
+        "medianRenderMsRaw": 10.620916,
+        "p90RenderMsRaw": 11.645458,
+        "medianRenderMs": 10.6,
+        "p90RenderMs": 11.6,
+        "minRenderMs": 9,
+        "maxRenderMs": 15.8,
+        "spreadMs": 6.8,
+        "stable": false
       },
       "measuredState": {
         "t01": 0.5,
@@ -420,7 +424,7 @@
         "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Pro, Unspecified Version)",
         "vendor": "Google Inc. (Apple)",
         "calls": 471,
-        "triangles": 902389,
+        "triangles": 900229,
         "lines": 0,
         "points": 84,
         "geometries": 433,
@@ -429,7 +433,7 @@
         "pixelRatio": 1.15,
         "canvasWidth": 1655,
         "canvasHeight": 1035,
-        "primaryTriangles": 577172,
+        "primaryTriangles": 575732,
         "primaryCalls": 283
       }
     },
@@ -440,7 +444,7 @@
       "world": "hybrid-direct",
       "hybrid": {
         "strategy": "direct",
-        "generationMs": 27.299999952316284,
+        "generationMs": 26.899999976158142,
         "triangles": [
           3304,
           10820,
@@ -472,25 +476,25 @@
         },
         "low": false
       },
-      "jsHeapBytes": 64555022,
+      "jsHeapBytes": 64806271,
       "simulationSeed": 20260722,
       "layoutSeed": 20260610,
       "checkpointRevision": 2,
-      "timeToInteractiveMs": 1275.5,
+      "timeToInteractiveMs": 1145,
       "timeToInteractiveSamples": [
-        1275.5,
-        1277.5,
-        1197.3
+        1145,
+        1131.2,
+        1147.8
       ],
-      "timeToInteractiveWorstMs": 1277.5,
+      "timeToInteractiveWorstMs": 1147.8,
       "diagnostics": {
         "shadowsEnabled": true,
         "visibleLocalLights": 6
       },
       "timing": {
         "frames": 180,
-        "averageFps": 60.00200006666889,
-        "averageFrameMs": 16.66611111111111,
+        "averageFps": 60.00400026668444,
+        "averageFrameMs": 16.665555555555557,
         "p95FrameMs": 16.700000000000728,
         "p99FrameMs": 16.800000000000182,
         "maxFrameMs": 16.800000000000182,
@@ -499,21 +503,23 @@
       },
       "cpu": {
         "scope": "Chromium renderer main thread; not total system CPU",
-        "taskMs": 584.8,
-        "busyPercent": 19.5,
-        "scriptMs": 544.7,
-        "layoutMs": 3.5
+        "taskMs": 635,
+        "busyPercent": 21.2,
+        "scriptMs": 595.2,
+        "layoutMs": 4.2
       },
       "gpu": {
         "available": true,
         "method": "EXT_disjoint_timer_query_webgl2 around an explicit composer frame",
         "sampleCount": 15,
-        "medianRenderMsRaw": 8.3105,
-        "p90RenderMsRaw": 10.873875,
-        "medianRenderMs": 8.3,
-        "p90RenderMs": 10.9,
-        "minRenderMs": 5.9,
-        "maxRenderMs": 11.6
+        "medianRenderMsRaw": 7.683624,
+        "p90RenderMsRaw": 10.4485,
+        "medianRenderMs": 7.7,
+        "p90RenderMs": 10.4,
+        "minRenderMs": 6.1,
+        "maxRenderMs": 10.5,
+        "spreadMs": 4.4,
+        "stable": false
       },
       "measuredState": {
         "t01": 0.28,
@@ -629,7 +635,7 @@
         "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Pro, Unspecified Version)",
         "vendor": "Google Inc. (Apple)",
         "calls": 606,
-        "triangles": 580151,
+        "triangles": 578711,
         "lines": 0,
         "points": 28,
         "geometries": 436,
@@ -638,7 +644,7 @@
         "pixelRatio": 1,
         "canvasWidth": 1440,
         "canvasHeight": 900,
-        "primaryTriangles": 580148,
+        "primaryTriangles": 578708,
         "primaryCalls": 603
       }
     },
@@ -649,7 +655,7 @@
       "world": "hybrid-direct",
       "hybrid": {
         "strategy": "direct",
-        "generationMs": 27.09999990463257,
+        "generationMs": 24.700000047683716,
         "triangles": [
           3304,
           10820,
@@ -681,48 +687,50 @@
         },
         "low": false
       },
-      "jsHeapBytes": 69989390,
+      "jsHeapBytes": 70282047,
       "simulationSeed": 20260722,
       "layoutSeed": 20260610,
       "checkpointRevision": 2,
-      "timeToInteractiveMs": 1230.8,
+      "timeToInteractiveMs": 1098.2,
       "timeToInteractiveSamples": [
-        1175.5,
-        1295.3,
-        1230.8
+        1111.8,
+        1098.2,
+        1065.4
       ],
-      "timeToInteractiveWorstMs": 1295.3,
+      "timeToInteractiveWorstMs": 1111.8,
       "diagnostics": {
         "shadowsEnabled": true,
         "visibleLocalLights": 18
       },
       "timing": {
-        "frames": 148,
-        "averageFps": 49.33497783259441,
-        "averageFrameMs": 20.269594594594597,
-        "p95FrameMs": 33.399999999999636,
-        "p99FrameMs": 33.399999999999636,
-        "maxFrameMs": 33.399999999999636,
+        "frames": 180,
+        "averageFps": 60.00200006666888,
+        "averageFrameMs": 16.666111111111114,
+        "p95FrameMs": 16.799999999999272,
+        "p99FrameMs": 16.800000000000182,
+        "maxFrameMs": 16.800000000000182,
         "hitchCount": 0,
-        "slowFrameRatio": 0.21621621621621623
+        "slowFrameRatio": 0
       },
       "cpu": {
         "scope": "Chromium renderer main thread; not total system CPU",
-        "taskMs": 560.9,
-        "busyPercent": 18.7,
-        "scriptMs": 520.1,
-        "layoutMs": 4
+        "taskMs": 720.9,
+        "busyPercent": 24,
+        "scriptMs": 683.4,
+        "layoutMs": 3.8
       },
       "gpu": {
         "available": true,
         "method": "EXT_disjoint_timer_query_webgl2 around an explicit composer frame",
         "sampleCount": 15,
-        "medianRenderMsRaw": 56.554083,
-        "p90RenderMsRaw": 60.677416,
-        "medianRenderMs": 56.6,
-        "p90RenderMs": 60.7,
-        "minRenderMs": 53.8,
-        "maxRenderMs": 61
+        "medianRenderMsRaw": 39.941791,
+        "p90RenderMsRaw": 40.451708,
+        "medianRenderMs": 39.9,
+        "p90RenderMs": 40.5,
+        "minRenderMs": 25.3,
+        "maxRenderMs": 62,
+        "spreadMs": 36.7,
+        "stable": false
       },
       "measuredState": {
         "t01": 0.8999999999999999,
@@ -838,7 +846,7 @@
         "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Pro, Unspecified Version)",
         "vendor": "Google Inc. (Apple)",
         "calls": 347,
-        "triangles": 643727,
+        "triangles": 642287,
         "lines": 0,
         "points": 1484,
         "geometries": 435,
@@ -847,7 +855,7 @@
         "pixelRatio": 1.15,
         "canvasWidth": 1655,
         "canvasHeight": 1035,
-        "primaryTriangles": 318442,
+        "primaryTriangles": 317722,
         "primaryCalls": 154
       }
     }
