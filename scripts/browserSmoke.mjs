@@ -3,6 +3,9 @@ import { access, readdir, stat } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { chromium } from 'playwright';
 
+/** Top of the voxel ground layer: the surface every actor stands or drives on. */
+const ROAD_SURFACE_Y = -0.5;
+
 const HOST = '127.0.0.1';
 const PORT = 4173;
 const URL = `http://${HOST}:${PORT}`;
@@ -940,7 +943,14 @@ try {
   assert.equal(postmanRenderState.state.riderGroupVisible, true, 'active postman rider must be visible');
   assert.equal(postmanRenderState.state.riderHiddenParts, 0, 'postman rider cannot lose individual meshes');
   assert.equal(postmanRenderState.state.riderOpacity, 1, 'postman rider must remain fully opaque');
-  assert.ok(postmanRenderState.state.riderWorldY > 2, 'postman rider cannot flip below the road');
+  // Measured against the road, not against zero: the whole postman rig used to ride
+  // half a metre above the asphalt, which satisfied an absolute `> 2` perfectly well.
+  // A rider sitting on the bicycle has his head above the handlebars and below a bus roof.
+  const riderOverRoad = postmanRenderState.state.riderWorldY - ROAD_SURFACE_Y;
+  assert.ok(
+    riderOverRoad > 1.3 && riderOverRoad < 2.1,
+    `postman rider head ${riderOverRoad.toFixed(2)} m over the road, expected 1.3..2.1`
+  );
   assert.equal(postmanRenderState.uniformColor, 0x2368a2, 'postman uniform must use postal blue');
   assert.equal(postmanRenderState.hasCap, true, 'postman cap is missing');
   assert.equal(postmanRenderState.hasSatchel, true, 'postman satchel is missing');

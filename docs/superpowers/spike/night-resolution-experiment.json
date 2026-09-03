@@ -1,0 +1,190 @@
+{
+  "recordedAt": "2026-09-03T15:13:06+02:00",
+  "question": "Does the hybrid fragment cost the night street its 58 FPS gate, and under what conditions?",
+  "method": "The product benchmark, one scenario (spike-night-street), one world per run, worlds alternating, identical seed, checkpoint, quality and viewport. The only variable between the two blocks is the page's deviceScaleFactor, which decides the renderer's pixel ratio: the High profile asks for 1.15 and the renderer takes min(devicePixelRatio, 1.15 * distanceScale * cameraScale).",
+  "blocks": [
+    {
+      "label": "deviceScaleFactor 2 -> pixel ratio 1.15, canvas 1655x1035",
+      "deviceScaleFactor": 2,
+      "runs": [
+        {
+          "rep": 0,
+          "world": "voxel",
+          "revision": "d3846e0",
+          "averageFps": 60.004000266684464,
+          "p95FrameMs": 16.700000000000728,
+          "p99FrameMs": 16.800000000000182,
+          "slowFrameRatio": 0,
+          "pixelRatio": 1.15,
+          "canvas": "1655x1035",
+          "calls": 319,
+          "triangles": 669577,
+          "animationGpuMedianMs": 30.56,
+          "animationGpuConclusive": false,
+          "animationGpuNote": "inconclusive by the frame-budget spread rule; not used to attribute cost"
+        },
+        {
+          "rep": 0,
+          "world": "hybrid-direct",
+          "revision": "d3846e0",
+          "averageFps": 48.33655577038469,
+          "p95FrameMs": 33.30000000000018,
+          "p99FrameMs": 33.400000000000546,
+          "slowFrameRatio": 0.2413793103448276,
+          "pixelRatio": 1.15,
+          "canvas": "1655x1035",
+          "calls": 347,
+          "triangles": 642287,
+          "animationGpuMedianMs": 54.71,
+          "animationGpuConclusive": false,
+          "animationGpuNote": "inconclusive by the frame-budget spread rule; not used to attribute cost"
+        },
+        {
+          "rep": 1,
+          "world": "voxel",
+          "revision": "d3846e0",
+          "averageFps": 60.00400026668444,
+          "p95FrameMs": 16.800000000000182,
+          "p99FrameMs": 16.800000000000182,
+          "slowFrameRatio": 0,
+          "pixelRatio": 1.15,
+          "canvas": "1655x1035",
+          "calls": 319,
+          "triangles": 669577,
+          "animationGpuMedianMs": 41.88,
+          "animationGpuConclusive": false,
+          "animationGpuNote": "inconclusive by the frame-budget spread rule; not used to attribute cost"
+        },
+        {
+          "rep": 1,
+          "world": "hybrid-direct",
+          "revision": "d3846e0",
+          "averageFps": 48.66991132742183,
+          "p95FrameMs": 33.399999999999636,
+          "p99FrameMs": 33.400000000000546,
+          "slowFrameRatio": 0.2328767123287671,
+          "pixelRatio": 1.15,
+          "canvas": "1655x1035",
+          "calls": 347,
+          "triangles": 642287,
+          "animationGpuMedianMs": 54.86,
+          "animationGpuConclusive": false,
+          "animationGpuNote": "inconclusive by the frame-budget spread rule; not used to attribute cost"
+        },
+        {
+          "rep": 2,
+          "world": "voxel",
+          "revision": "d3846e0",
+          "averageFps": 60.00400026668444,
+          "p95FrameMs": 16.700000000000728,
+          "p99FrameMs": 16.800000000000182,
+          "slowFrameRatio": 0,
+          "pixelRatio": 1.15,
+          "canvas": "1655x1035",
+          "calls": 319,
+          "triangles": 669577,
+          "animationGpuMedianMs": 31.54,
+          "animationGpuConclusive": false,
+          "animationGpuNote": "inconclusive by the frame-budget spread rule; not used to attribute cost"
+        },
+        {
+          "rep": 2,
+          "world": "hybrid-direct",
+          "revision": "d3846e0",
+          "averageFps": 48.66828894296477,
+          "p95FrameMs": 33.399999999999636,
+          "p99FrameMs": 33.400000000000546,
+          "slowFrameRatio": 0.2328767123287671,
+          "pixelRatio": 1.15,
+          "canvas": "1655x1035",
+          "calls": 347,
+          "triangles": 642287,
+          "animationGpuMedianMs": 55.08,
+          "animationGpuConclusive": false,
+          "animationGpuNote": "inconclusive by the frame-budget spread rule; not used to attribute cost"
+        }
+      ]
+    },
+    {
+      "label": "deviceScaleFactor 1 -> pixel ratio 1.00, canvas 1440x900",
+      "deviceScaleFactor": 1,
+      "runs": [
+        {
+          "rep": 0,
+          "world": "voxel",
+          "revision": "d3846e0",
+          "averageFps": 60.00200006666889,
+          "p95FrameMs": 16.700000000000728,
+          "p99FrameMs": 16.800000000000182,
+          "slowFrameRatio": 0,
+          "pixelRatio": 1,
+          "canvas": "1440x900",
+          "calls": 319,
+          "triangles": 669577,
+          "animationGpuMedianMs": 17.66,
+          "animationGpuConclusive": false,
+          "animationGpuNote": "inconclusive by the frame-budget spread rule; not used to attribute cost"
+        },
+        {
+          "rep": 0,
+          "world": "hybrid-direct",
+          "revision": "d3846e0",
+          "averageFps": 60.00200006666889,
+          "p95FrameMs": 16.700000000000728,
+          "p99FrameMs": 16.800000000000182,
+          "slowFrameRatio": 0,
+          "pixelRatio": 1,
+          "canvas": "1440x900",
+          "calls": 347,
+          "triangles": 642287,
+          "animationGpuMedianMs": 34.39,
+          "animationGpuConclusive": false,
+          "animationGpuNote": "inconclusive by the frame-budget spread rule; not used to attribute cost"
+        },
+        {
+          "rep": 1,
+          "world": "voxel",
+          "revision": "d3846e0",
+          "averageFps": 60.00200006666889,
+          "p95FrameMs": 16.799999999999272,
+          "p99FrameMs": 16.800000000000182,
+          "slowFrameRatio": 0,
+          "pixelRatio": 1,
+          "canvas": "1440x900",
+          "calls": 319,
+          "triangles": 669577,
+          "animationGpuMedianMs": 18.95,
+          "animationGpuConclusive": false,
+          "animationGpuNote": "inconclusive by the frame-budget spread rule; not used to attribute cost"
+        },
+        {
+          "rep": 1,
+          "world": "hybrid-direct",
+          "revision": "d3846e0",
+          "averageFps": 60.00200006666889,
+          "p95FrameMs": 16.800000000000182,
+          "p99FrameMs": 16.800000000000182,
+          "slowFrameRatio": 0,
+          "pixelRatio": 1,
+          "canvas": "1440x900",
+          "calls": 347,
+          "triangles": 642287,
+          "animationGpuMedianMs": 40.87,
+          "animationGpuConclusive": false,
+          "animationGpuNote": "inconclusive by the frame-budget spread rule; not used to attribute cost"
+        }
+      ]
+    }
+  ],
+  "findings": [
+    "At pixel ratio 1.15 the product holds 60.0 FPS (3/3) and the hybrid runs 48.3-48.7 FPS with p95 33.3-33.4 ms and 23-24% of frames over 20.5 ms (3/3). The fragment is the cause.",
+    "At pixel ratio 1.00 both worlds hold 60.0 FPS with p95 16.7-16.8 ms and no slow frames (2/2 each). The deficit is resolution-dependent.",
+    "The hybrid draws FEWER triangles than the product it replaces in this frame (642 287 vs 669 577) with 28 more draw calls, so the cost is per pixel, not per vertex or per object.",
+    "Hiding the fragment and detaching it from the scene produce identical per-pass draw counters, so nothing supports the revision-3 hypothesis of a fixed per-frame cost from large bounding volumes. See night-fragment-experiment.json.",
+    "The earlier contradiction -- 9/9 runs at 47-50 FPS in revision 3 against 9/9 runs at 60 FPS in a second harness -- is explained by the harness, not by machine load or temperature: the second harness set deviceScaleFactor 1 and therefore rendered 32% fewer pixels."
+  ],
+  "remainsHypothesis": [
+    "Which part of the per-pixel cost dominates: the three-octave value noise, the glass and glassClear overdraw, or the SSAO normals pass over the fragment. The GPU timer readings under vsync span the wait and were inconclusive by the spread rule in most runs, so they cannot apportion it.",
+    "Whether a targeted pixel-ratio reduction for the night street camera would clear the gate without a visible loss. The product already does exactly this for the bus camera (cameraScale 0.87); the measurement above shows the frame holds 60 FPS at 1.00, but choosing to apply it is a product quality decision, not a spike fix."
+  ]
+}

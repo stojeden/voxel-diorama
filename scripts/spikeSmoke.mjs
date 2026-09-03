@@ -810,6 +810,32 @@ try {
           contactChecked: contact?.checked ?? 0,
           lodLevels: metrics.hybrid?.lodLevels ?? null,
         });
+        // Two more frames from the same load, so the set the fragment is judged on
+        // includes the cameras a visitor actually rides: the bus and the guided tour.
+        // They come from the live cameras, not from a checkpoint, so they are only
+        // taken once per world at High.
+        if (quality === 'high' && checkpoint === 'spike-street') {
+          // 'b' is the bus camera; the guided tour is started from its own HUD button,
+          // not from a key -- 't' is the train camera, which is a different shot.
+          for (const [name, act] of [
+            ['bus-camera', async () => page.keyboard.press('b')],
+            ['tour-camera', async () => page.evaluate(() => document.getElementById('tour-button').click())],
+          ]) {
+            await page.evaluate(() => window.__diorama.releaseCheckpoint());
+            await act();
+            await settle(page, 8);
+            await page.waitForTimeout(2_000);
+            const mode = await page.evaluate(() => ({
+              camera: window.__diorama.getState().cameraMode,
+              automation: window.__diorama.getState().cameraAutomation,
+              chapter: window.__diorama.getState().tourChapter,
+            }));
+            const extra = `${FRAME_DIR}/${world}-high-${name}.jpg`;
+            await page.screenshot({ path: extra, type: 'jpeg', quality: 84 });
+            results.push({ world, quality, checkpoint: name, cameraMode: mode, frame: extra });
+            console.log(`${world.padEnd(14)} high  ${name.padEnd(19)} camera ${mode.camera}/${mode.automation}${mode.chapter ? ` chapter ${mode.chapter}` : ''}`);
+          }
+        }
         const hybridColumns = hybrid
           ? `hybrid tris ${metrics.hybrid.triangles.join('/')}  gen ${metrics.hybrid.generationMs.toFixed(0)} ms  LOD ${levels.join('')}`
           : 'baseline, no fragment attached';

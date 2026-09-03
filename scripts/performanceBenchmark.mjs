@@ -24,6 +24,18 @@ const GPU_SAMPLE_COUNT = Number(process.env.BENCH_GPU_SAMPLES ?? 15);
  * is loaded a few times, every attempt is recorded, and the gate applies to the median.
  */
 const TTI_SAMPLES = Number(process.env.BENCH_TTI_SAMPLES ?? 3);
+/**
+ * The page the product is measured in. `deviceScaleFactor` is not cosmetic: the High
+ * profile asks for a 1.15 pixel ratio and the renderer takes
+ * min(devicePixelRatio, 1.15 * distance * camera), so at 2 the near cameras render
+ * 1655x1035 and at 1 they render 1440x900 -- 32% fewer pixels. Two harnesses that
+ * differed only here reported 48 FPS and 60 FPS for the same night street, which is
+ * why this is one constant, and why it is written into every result file.
+ */
+const PAGE_SETUP = {
+  viewport: { width: 1440, height: 900 },
+  deviceScaleFactor: Number(process.env.BENCH_DEVICE_SCALE ?? 2),
+};
 const requestedScenarioFilters = process.env.BENCH_SCENARIO
   ?.split(',')
   .map((value) => value.trim())
@@ -476,7 +488,7 @@ try {
       '--disable-renderer-backgrounding',
     ],
   });
-  const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2 });
+  const page = await browser.newPage({ viewport: PAGE_SETUP.viewport, deviceScaleFactor: PAGE_SETUP.deviceScaleFactor });
   assert.equal(browser.contexts().length, 1, 'benchmark must use exactly one browser context');
   assert.equal(page.context().pages().length, 1, 'benchmark must use exactly one browser page');
   const cdp = await page.context().newCDPSession(page);
@@ -673,8 +685,8 @@ try {
     revision: process.env.BENCH_REVISION ?? null,
     recordedAt: new Date().toISOString(),
     conditions: {
-      viewport: '1440x900',
-      deviceScaleFactor: 1,
+      viewport: `${PAGE_SETUP.viewport.width}x${PAGE_SETUP.viewport.height}`,
+      deviceScaleFactor: PAGE_SETUP.deviceScaleFactor,
       ttiSamples: TTI_SAMPLES,
       gpuSampleCount: GPU_SAMPLE_COUNT,
       animationFramesTimed: 90,
@@ -786,22 +798,24 @@ try {
           `rainbow repetition ${repetition} changed renderer ${field}`
         );
       }
-      assert.equal(rainbowOff.gpu.available, true, 'OFF GPU timer query is required');
-      assert.equal(rainbowOn.gpu.available, true, 'ON GPU timer query is required');
+      assert.equal(rainbowOff.captureFrameGpu.available, true, 'OFF GPU timer query is required');
+      assert.equal(rainbowOn.captureFrameGpu.available, true, 'ON GPU timer query is required');
       assert.ok(
-        rainbowOn.gpu.medianRenderMsRaw < 16.7,
-        `rainbow repetition ${repetition} GPU median ${rainbowOn.gpu.medianRenderMs} ms lacks 60 Hz headroom`
+        rainbowOn.captureFrameGpu.medianRenderMsRaw < 16.7,
+        `rainbow repetition ${repetition} GPU median ${rainbowOn.captureFrameGpu.medianRenderMs} ms lacks 60 Hz headroom`
       );
       assert.ok(
-        rainbowOn.gpu.p90RenderMsRaw <= 20.5,
-        `rainbow repetition ${repetition} GPU p90 ${rainbowOn.gpu.p90RenderMs} ms exceeds frame budget`
+        rainbowOn.captureFrameGpu.p90RenderMsRaw <= 20.5,
+        `rainbow repetition ${repetition} GPU p90 ${rainbowOn.captureFrameGpu.p90RenderMs} ms exceeds frame budget`
       );
       pairDeltas.push({
         repetition,
         order: repetition % 2 === 0 ? 'AB' : 'BA',
         p95FrameMs: rainbowOn.timing.p95FrameMs - rainbowOff.timing.p95FrameMs,
         cpuBusyPercent: rainbowOn.cpu.busyPercent - rainbowOff.cpu.busyPercent,
-        gpuMedianMs: rainbowOn.gpu.medianRenderMsRaw - rainbowOff.gpu.medianRenderMsRaw,
+        // Both sides come from the forced-capture probe, so this delta is a
+        // comparison of two identical measurements, not an animation-frame cost.
+        gpuMedianMs: rainbowOn.captureFrameGpu.medianRenderMsRaw - rainbowOff.captureFrameGpu.medianRenderMsRaw,
       });
     }
     const medianP95Delta = median(pairDeltas.map((pair) => pair.p95FrameMs));
