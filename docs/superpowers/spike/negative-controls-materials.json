@@ -1,0 +1,12 @@
+[
+  {
+    "defect": "glazing moved out of LOD 0, the revision-2 defect",
+    "outcome": "rejected",
+    "detail": "AssertionError [ERR_ASSERTION]: hybrid-direct: inside its own footprint the fragment adds 6875 of dusk light at LOD 0 against the product's 102161 (ratio 0.07, footprint 46744 px, lit pixels 73 vs 946)"
+  },
+  {
+    "defect": "window cohorts collapsed into one switch",
+    "outcome": "rejected",
+    "detail": "AssertionError [ERR_ASSERTION]: hybrid-direct: the rhythm claims no cohort sleeps between 20:38 and 01:12"
+  }
+]

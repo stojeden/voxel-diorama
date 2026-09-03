@@ -22,7 +22,7 @@ const QUALITIES = (process.env.SPIKE_QUALITIES ?? 'high,low').split(',').map((s)
 const CHECKPOINTS = ['spike-overview', 'spike-street', 'spike-golden', 'spike-night-street'];
 const OUT_DIR = 'docs/superpowers/spike';
 const FRAME_DIR = `${OUT_DIR}/frames`;
-/** `frames` renders the Gate 1 kadry; `gate3` proves LOD, semantics and determinism; `all` does both. */
+/** `frames` renders the Gate 1 kadry; `gate3` proves LOD, semantics and determinism; `materials` runs the LOD x quality material matrix; `all` does all three. */
 const PHASE = process.env.SPIKE_PHASE ?? 'frames';
 /** `voxel` renders the same four frames without attaching the fragment, so the spike has a visual baseline. */
 const SUMMARY = process.env.SPIKE_SUMMARY
@@ -69,6 +69,30 @@ async function assertBundles() {
  * a higher level must draw strictly more triangles and never fewer.
  */
 const FACADE_LOOK = { from: [3.0, 1.7, 26.0], at: [1.0, 3.0, 31.5] };
+/**
+ * Camera distances for the material matrix, chosen for the level they produce on the
+ * facade rather than for round numbers: 300 m is past the LOD 0 exit threshold, 110 m
+ * sits inside the 7..9 px/m band where hysteresis holds level 1, and 40 m and 7 m are
+ * the working distances of the street camera.
+ */
+const DISTANCES = [['far', 300], ['band', 110], ['mid', 40], ['near', 7]];
+/**
+ * LOD 0 measured through the viewport rather than through distance: at 280 px of
+ * height every facade of the fragment falls below the 7 px/m exit threshold while
+ * still filling the frame. The camera distance is the one to the look point, and the
+ * near facades sit closer than that, which is why it takes 110 m and not 55.
+ */
+const LOD0_LOOK = { viewport: { width: 1440, height: 280 }, distance: 110 };
+const LOD0_BOX = { x: 120, y: 0, width: 1100, height: 280 };
+/**
+ * How much of the product's dusk light the fragment has to add inside its own
+ * footprint at LOD 0. Set from measurement, not from taste: as it stands the fragment
+ * adds 0.17 of the product's figure -- it draws fewer, larger, glassier windows than
+ * a wall of lit voxels -- and with the main glazing moved out of the massing layer,
+ * the revision-2 defect, it adds 0.07, the remainder being loggia and door glass that
+ * stayed behind. The floor is the geometric mean of the two.
+ */
+const LOD0_DUSK_FLOOR = 0.11;
 /** Screen box over the fragment's facades in the street shot, for pixel statistics. */
 const FRAGMENT_BOX = { x: 40, y: 90, width: 520, height: 520 };
 /** Screen box over the fragment's pavement, kerb and crosswalk — the wet-reactive surfaces. */
@@ -123,6 +147,390 @@ async function sceneState(page) {
         .map(([cohort, entry]) => ({ cohort, activity: entry.activity, emissiveIntensity: entry.material?.emissiveIntensity ?? entry.emissiveIntensity })),
     };
   });
+}
+
+/** Raw PNG of a region, base64, for comparing two states pixel by pixel. */
+async function captureRegion(page, box) {
+  return (await page.screenshot({ clip: box, type: 'png' })).toString('base64');
+}
+
+/**
+ * Pixels that actually changed between two captures of the same region, split by
+ * direction. With the camera, the weather and the local lights held still and only
+ * the clock moved, the pixels that brighten and warm ARE the lit windows -- which an
+ * absolute "warm and bright" count cannot say, because sunlit plaster is warm and
+ * bright too.
+ */
+async function regionDiff(page, before, after) {
+  return page.evaluate(async ([a, b]) => {
+    const decode = async (base64) => {
+      const blob = await (await fetch(`data:image/png;base64,${base64}`)).blob();
+      const bitmap = await createImageBitmap(blob);
+      const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(bitmap, 0, 0);
+      return ctx.getImageData(0, 0, bitmap.width, bitmap.height).data;
+    };
+    const [x, y] = await Promise.all([decode(a), decode(b)]);
+    let brighter = 0, warmer = 0, darker = 0, changed = 0, total = 0;
+    for (let i = 0; i < x.length; i += 4) {
+      total++;
+      const l0 = 0.2126 * x[i] + 0.7152 * x[i + 1] + 0.0722 * x[i + 2];
+      const l1 = 0.2126 * y[i] + 0.7152 * y[i + 1] + 0.0722 * y[i + 2];
+      const warm0 = x[i] - x[i + 2];
+      const warm1 = y[i] - y[i + 2];
+      if (Math.abs(l1 - l0) > 12) changed++;
+      if (l1 - l0 > 25) brighter++;
+      if (l0 - l1 > 25) darker++;
+      if (l1 - l0 > 20 && warm1 - warm0 > 10) warmer++;
+    }
+    return { brighter, warmer, darker, changed, total };
+  }, [before, after]);
+}
+
+/**
+ * Per-pixel classification of a region, which a region mean cannot do: lit windows are
+ * a few percent of a facade box, so their contribution to a 520x520 average is smaller
+ * than the noise from a passing cloud. Counting the pixels that satisfy a predicate
+ * measures the thing itself.
+ */
+async function pixelCounts(page, box) {
+  const shot = await page.screenshot({ clip: box, type: 'png' });
+  return page.evaluate(async (base64) => {
+    const blob = await (await fetch(`data:image/png;base64,${base64}`)).blob();
+    const bitmap = await createImageBitmap(blob);
+    const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(bitmap, 0, 0);
+    const { data } = ctx.getImageData(0, 0, bitmap.width, bitmap.height);
+    let lit = 0, bright = 0, white = 0, dark = 0, total = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      const r = data[i], g = data[i + 1], b = data[i + 2];
+      const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      total++;
+      // A lit window: warm (red over blue) and clearly brighter than its wall.
+      if (luma > 120 && r > b + 18 && g > b + 6) lit++;
+      // A specular highlight or a lamp: bright whatever its hue.
+      if (luma > 200) bright++;
+      // Snow: bright and neutral.
+      if (luma > 175 && Math.max(r, g, b) - Math.min(r, g, b) < 22) white++;
+      if (luma < 45) dark++;
+    }
+    return { lit, bright, white, dark, total };
+  }, shot.toString('base64'));
+}
+
+/**
+ * Dusk warmth inside the fragment's own footprint. Counting warmed pixels over a box
+ * cannot answer whether the FRAGMENT lit its windows, because the same box contains
+ * the product's blocks in both worlds -- at LOD 0 that was 6415 warmed pixels for the
+ * fragment against 7200 for the baseline, and deleting the fragment's glazing
+ * entirely moved neither figure.
+ *
+ * So the footprint is found by differencing the two worlds at the same camera and the
+ * same hour: the pixels where they disagree are the fragment and its shadow. Inside
+ * that mask, the two dusk transitions are counted separately, and the fragment has to
+ * light windows where the product lights its own.
+ */
+async function fragmentDuskMask(page, shots) {
+  return page.evaluate(async ([vDay, vNight, hDay, hNight]) => {
+    const decode = async (base64) => {
+      const blob = await (await fetch(`data:image/png;base64,${base64}`)).blob();
+      const bitmap = await createImageBitmap(blob);
+      const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(bitmap, 0, 0);
+      return ctx.getImageData(0, 0, bitmap.width, bitmap.height).data;
+    };
+    const [vd, vn, hd, hn] = await Promise.all([decode(vDay), decode(vNight), decode(hDay), decode(hNight)]);
+    const luma = (d, i) => 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2];
+    const warm = (d, i) => d[i] - d[i + 2];
+    const lit = (day, night, i) => luma(night, i) - luma(day, i) > 20 && warm(night, i) - warm(day, i) > 10;
+    let footprint = 0, fragmentLit = 0, productLit = 0, both = 0;
+    let fragmentEnergy = 0, productEnergy = 0;
+    for (let i = 0; i < vd.length; i += 4) {
+      // The fragment's own pixels: where the two worlds disagree, by day or by night.
+      const differs = Math.abs(luma(hn, i) - luma(vn, i)) > 12 || Math.abs(luma(hd, i) - luma(vd, i)) > 12;
+      if (!differs) continue;
+      footprint++;
+      const f = lit(hd, hn, i);
+      const p = lit(vd, vn, i);
+      if (f) fragmentLit++;
+      if (p) productLit++;
+      if (f && p) both++;
+      // Total brightening, which a per-pixel threshold cannot see: at LOD 0 a window
+      // is about one pixel wide, so antialiasing spreads it below any threshold while
+      // the light it adds is still there.
+      fragmentEnergy += Math.max(0, luma(hn, i) - luma(hd, i));
+      productEnergy += Math.max(0, luma(vn, i) - luma(vd, i));
+    }
+    return {
+      footprint, fragmentLit, productLit, both, pixels: vd.length / 4,
+      fragmentEnergy: Math.round(fragmentEnergy), productEnergy: Math.round(productEnergy),
+    };
+  }, shots);
+}
+
+/** Place the camera on the fragment facade at a distance, and report what LOD resulted. */
+async function lookFromDistance(page, distance) {
+  await page.evaluate(({ look, d }) => {
+    const [ax, ay, az] = look.at;
+    window.__diorama.controls.setLookAt(ax + d * 0.15, ay + d * 0.22, az - d * 0.96, ax, ay, az, false);
+  }, { look: FACADE_LOOK, d: distance });
+  // The selector may need several steps to get there: each level change costs a
+  // 0.25 s cooldown, so six frames after a jump from the street camera it has moved
+  // one level, not three. Wait until it stops moving.
+  await page.evaluate(async () => {
+    const levels = () => Object.values(window.__diorama.getMetrics().hybrid?.lodLevels ?? {}).join('');
+    let previous = levels();
+    let stable = 0;
+    for (let i = 0; i < 180 && stable < 24; i++) {
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      const now = levels();
+      stable = now === previous ? stable + 1 : 0;
+      previous = now;
+    }
+  });
+  await settle(page, 3);
+  return page.evaluate(() => {
+    const m = window.__diorama.getMetrics();
+    // The baseline world has no fragment, so there is nothing to report a level for.
+    if (!m.hybrid) return { levels: {}, maxLevel: null, pxPerMetre: null, quality: m.quality.level };
+    return {
+      levels: m.hybrid.lodLevels,
+      maxLevel: Math.max(...Object.values(m.hybrid.lodLevels)),
+      pxPerMetre: m.hybrid.lodPixelsPerMetre,
+      quality: m.quality.level,
+    };
+  });
+}
+
+/**
+ * Gate 3, materials half: an LOD x quality matrix under light we control, with the
+ * window glass, the cohort rhythm, the snow and the wetness each checked directly
+ * rather than inferred from one average.
+ *
+ * Local lights are held off through the whole matrix, so what the facade shows is the
+ * material's own emissive and nothing else, and the gate that holds them off is read
+ * back from the scene rather than assumed.
+ */
+async function runMaterials(page, worlds) {
+  const report = { worlds: {} };
+  for (const world of worlds) {
+    const errors = [];
+    const onError = (message) => { if (message.type() === 'error') errors.push(message.text()); };
+    page.on('console', onError);
+    const entry = { matrix: [], windows: [], lod0: null, cohorts: null, snow: null, wet: null };
+
+    for (const quality of ['high', 'low']) {
+      await openHybrid(page, world, quality, 'spike-street', true);
+      // Controlled light: no street lamps, no bus or train headlamps, for the whole
+      // matrix, verified in the scene and not just requested.
+      await page.evaluate(() => window.__diorama.debugSetLocalLightsEnabled(false));
+      await settle(page, 4);
+      const litLamps = await page.evaluate(() => window.__diorama.debugCountVisibleLocalLights());
+      assert.equal(litLamps, 0, `${world}/${quality}: local lights still on for the material matrix`);
+
+      for (const [label, distance] of DISTANCES) {
+        const placed = await lookFromDistance(page, distance);
+        const shots = {};
+        for (const [phase, t01] of [['day', 0.5], ['night', 0.94]]) {
+          await page.evaluate((t) => window.__diorama.setTime(t), t01);
+          await settle(page, 6);
+          const after = await page.evaluate(() => window.__diorama.debugCountVisibleLocalLights());
+          assert.equal(after, 0, `${world}/${quality}/${label}/${phase}: local lights came back mid-matrix`);
+          shots[phase] = await captureRegion(page, FRAGMENT_BOX);
+          entry.matrix.push({
+            quality,
+            distance: label,
+            lod: placed.levels['building-3'],
+            levels: placed.levels,
+            phase,
+            t01,
+            pixels: await pixelCounts(page, FRAGMENT_BOX),
+          });
+        }
+        // The window rhythm itself: what dusk changed on this facade, at this level.
+        const windows = await regionDiff(page, shots.day, shots.night);
+        entry.windows.push({ quality, distance: label, lod: placed.levels['building-3'], windows });
+      }
+      await page.evaluate(() => window.__diorama.debugSetLocalLightsEnabled(true));
+    }
+
+    // --- Windows: dusk has to light glass at every level and every quality. The
+    // measure is the pixels that brightened AND warmed between the two clock
+    // settings, with nothing else touched, so plaster in sunlight cannot count.
+    // The floor is 60 warmed pixels: at 300 m the whole fragment covers about
+    // 30 000 pixels of the box, so this only demands that the rhythm be visible
+    // at all, not that it hit a particular figure.
+    for (const row of entry.windows) {
+      assert.ok(
+        row.windows.warmer > 60,
+        `${world}: ${row.quality}/${row.distance} (LOD ${row.lod}) lit only ${row.windows.warmer} window pixels at dusk`
+      );
+    }
+    // ...and Low must be the same material, not a cheaper one: at the same distance
+    // the two qualities have to agree on the glass to within a factor of three.
+    for (const [label] of DISTANCES) {
+      const high = entry.windows.find((r) => r.quality === 'high' && r.distance === label);
+      const low = entry.windows.find((r) => r.quality === 'low' && r.distance === label);
+      const ratio = high.windows.warmer / Math.max(1, low.windows.warmer);
+      assert.ok(
+        ratio > 0.33 && ratio < 3,
+        `${world}: ${label} dusk glass high ${high.windows.warmer} vs low ${low.windows.warmer} (ratio ${ratio.toFixed(2)})`
+      );
+    }
+    // ...and LOD 0 has to carry glazing at all: this is the level that shipped empty
+    // in revision 2, when the massing layer had no windows in it. At the distance
+    // that produces LOD 0 the facade box also contains the product's own buildings,
+    // so an absolute count cannot answer this -- 826 warm pixels at 300 m were mostly
+    // blocks outside the fragment. The reference is the same camera and the same two
+    // clock settings in the voxel world, where those blocks are the product's own
+    // lit-window voxels: the fragment has to light up like them, not merely light up.
+    const farLevels = entry.windows.filter((r) => r.distance === 'far');
+    for (const row of farLevels) {
+      assert.equal(row.lod, 0, `${world}: ${row.quality}/far never reached LOD 0 (was ${row.lod})`);
+    }
+    // Pixels per metre is viewport height over distance, so a short viewport reaches
+    // LOD 0 without moving the camera 300 m away, and the fragment still fills the
+    // frame instead of being a smudge among the product's own blocks. That is what
+    // makes this measurable at all: at 300 m the same count was 824 for the fragment
+    // and 827 for the product, because neither number was about the fragment.
+    const duskShotsAt = async (openWorld) => {
+      await openHybrid(page, openWorld, 'high', 'spike-street', true);
+      await page.evaluate(() => window.__diorama.debugSetLocalLightsEnabled(false));
+      await settle(page, 4);
+      const placed = await lookFromDistance(page, LOD0_LOOK.distance);
+      const shots = [];
+      for (const t01 of [0.5, 0.94]) {
+        await page.evaluate((t) => window.__diorama.setTime(t), t01);
+        await settle(page, 6);
+        shots.push(await captureRegion(page, LOD0_BOX));
+      }
+      return { placed, shots };
+    };
+    await page.setViewportSize(LOD0_LOOK.viewport);
+    const baseline = await duskShotsAt('voxel');
+    const fragment = await duskShotsAt(world);
+    const mask = await fragmentDuskMask(page, [...baseline.shots, ...fragment.shots]);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    entry.lod0 = { viewport: LOD0_LOOK.viewport, distance: LOD0_LOOK.distance, mask, levels: fragment.placed.levels };
+    const facadeLevels = Object.entries(fragment.placed.levels).filter(([key]) => key.startsWith('building-'));
+    assert.ok(
+      facadeLevels.every(([, level]) => level === 0),
+      `${world}: the short viewport did not put every facade on LOD 0 (levels ${JSON.stringify(fragment.placed.levels)}, `
+      + `px/m ${JSON.stringify(fragment.placed.pxPerMetre)})`
+    );
+    assert.ok(mask.footprint > 5_000, `${world}: the two worlds differ on only ${mask.footprint} pixels, nothing to compare`);
+    // Three tenths of the product's figure is the floor: the fragment draws fewer and
+    // larger windows than the voxel city, so parity is not expected -- what is being
+    // ruled out is the glazing disappearing with the detail layers, as it did in
+    // revision 2, where LOD 0 was massing with no windows in it at all.
+    // The measure is the light dusk adds inside that footprint, not the count of
+    // pixels that clear a threshold: at LOD 0 a window is about a pixel wide, so
+    // antialiasing dilutes each one below any per-pixel test while the light it adds
+    // remains. The two worlds put their windows in different places -- the fragment
+    // draws fewer and larger ones -- so this compares totals, not pixels.
+    const ratio = mask.fragmentEnergy / Math.max(1, mask.productEnergy);
+    assert.ok(
+      ratio > LOD0_DUSK_FLOOR,
+      `${world}: inside its own footprint the fragment adds ${mask.fragmentEnergy} of dusk light at LOD 0 `
+      + `against the product's ${mask.productEnergy} (ratio ${ratio.toFixed(2)}, footprint ${mask.footprint} px, `
+      + `lit pixels ${mask.fragmentLit} vs ${mask.productLit})`
+    );
+    // ...and the LOD cap has to be real: Low may not reach the top level.
+    // Levels across every cluster, because the cap is global, not per facade.
+    const allLevels = (quality) => entry.matrix
+      .filter((r) => r.quality === quality)
+      .flatMap((r) => Object.values(r.levels));
+    const lowLevels = allLevels('low');
+    const highLevels = allLevels('high');
+    assert.ok(Math.max(...lowLevels) <= 1, `${world}: Low reached LOD ${Math.max(...lowLevels)}`);
+    assert.equal(Math.max(...highLevels), 2, `${world}: High never reached LOD 2`);
+
+    // --- Cohorts: the five window groups wake and sleep at different hours, so the
+    // lit-pixel count has to follow the activity the scene itself reports.
+    await openHybrid(page, world, 'high', 'spike-street', true);
+    await page.evaluate(() => window.__diorama.debugSetLocalLightsEnabled(false));
+    await lookFromDistance(page, 24);
+    const cohortSamples = [];
+    const cohortShots = {};
+    for (const t01 of [0.5, 0.86, 0.94, 0.05]) {
+      await page.evaluate((t) => window.__diorama.setTime(t), t01);
+      await settle(page, 6);
+      const state = await sceneState(page);
+      const activity = state.voxelWindows.reduce((sum, entry2) => sum + entry2.activity, 0);
+      cohortShots[t01] = await captureRegion(page, FRAGMENT_BOX);
+      cohortSamples.push({ t01, activity, perCohort: state.voxelWindows, pixels: await pixelCounts(page, FRAGMENT_BOX) });
+    }
+    // Two night hours where the rhythm reports different cohorts awake: 20:38 has all
+    // five lit, 01:12 has two of them dark. Both are night, so the difference on the
+    // facade is the cohorts going out and not the sky changing colour.
+    const lateNight = await regionDiff(page, cohortShots[0.86], cohortShots[0.05]);
+    entry.cohorts = { samples: cohortSamples, lateNight };
+    const ordered = [...cohortSamples].sort((a, b) => a.activity - b.activity);
+    const quietest = ordered[0];
+    const busiest = ordered[ordered.length - 1];
+    assert.ok(
+      busiest.activity > quietest.activity + 0.3,
+      `${world}: cohort activity never varies (${quietest.activity.toFixed(2)}..${busiest.activity.toFixed(2)})`
+    );
+    assert.ok(
+      busiest.pixels.lit > quietest.pixels.lit,
+      `${world}: cohort activity ${quietest.activity.toFixed(2)}->${busiest.activity.toFixed(2)} did not change the glass `
+      + `(${quietest.pixels.lit} -> ${busiest.pixels.lit} lit pixels)`
+    );
+    const awakeAt = (t01) => cohortSamples.find((sample) => sample.t01 === t01);
+    assert.ok(
+      awakeAt(0.86).activity > awakeAt(0.05).activity,
+      `${world}: the rhythm claims no cohort sleeps between 20:38 and 01:12`
+    );
+    assert.ok(
+      lateNight.darker > 200,
+      `${world}: ${awakeAt(0.86).activity} cohorts awake at 20:38 and ${awakeAt(0.05).activity} at 01:12, `
+      + `but only ${lateNight.darker} facade pixels went dark`
+    );
+    // The cohorts are five distinct groups, not one switch: at some hour they disagree.
+    const spread = Math.max(...cohortSamples.map((sample) => {
+      const values = sample.perCohort.map((c) => c.activity);
+      return Math.max(...values) - Math.min(...values);
+    }));
+    assert.ok(spread > 0.15, `${world}: all cohorts move together (max spread ${spread.toFixed(3)})`);
+
+    // --- Snow and wetness, each against a reference taken moments before.
+    await page.evaluate((t) => window.__diorama.setTime(t), 0.5);
+    await settle(page, 6);
+    const dry = await pixelCounts(page, GROUND_BOX);
+    await page.evaluate(() => window.__diorama.setWeather('snow'));
+    await page.waitForTimeout(4_000);
+    await settle(page, 6);
+    const snowy = await pixelCounts(page, GROUND_BOX);
+    entry.snow = { dry, snowy };
+    assert.ok(
+      snowy.white > dry.white * 1.3 + 500,
+      `${world}: snow added only ${snowy.white - dry.white} white pixels to the ground`
+    );
+    await page.evaluate(() => window.__diorama.clearWeather());
+    await page.waitForTimeout(1_500);
+    await page.evaluate(() => window.__diorama.setWeather('rain'));
+    await page.waitForTimeout(6_000);
+    await settle(page, 6);
+    const wet = await pixelCounts(page, GROUND_BOX);
+    entry.wet = { dry, wet, rain: (await sceneState(page)).rain };
+    assert.ok(
+      Math.abs(wet.dark - dry.dark) > 400 || Math.abs(wet.bright - dry.bright) > 200,
+      `${world}: rain left the road unchanged (dark ${dry.dark}->${wet.dark}, bright ${dry.bright}->${wet.bright})`
+    );
+    await page.evaluate(() => window.__diorama.clearWeather());
+    await page.evaluate(() => window.__diorama.debugSetLocalLightsEnabled(true));
+
+    assert.deepEqual(errors, [], `${world}: materials console errors ${JSON.stringify(errors)}`);
+    page.off('console', onError);
+    report.worlds[world] = entry;
+    const nightRow = entry.matrix.filter((r) => r.phase === 'night').map((r) => `${r.quality[0]}${r.distance[0]}:L${r.lod}=${r.pixels.lit}`).join(' ');
+    console.log(`${world.padEnd(14)} materials  ${nightRow}\n               LOD0 dusk light ${entry.lod0.mask.fragmentEnergy} vs product ${entry.lod0.mask.productEnergy} (${entry.lod0.mask.fragmentLit}/${entry.lod0.mask.productLit} px in ${entry.lod0.mask.footprint})  cohorts ${lateNight.darker} px dark at 01:12  snow ${dry.white}->${snowy.white} white  rain dark ${dry.dark}->${wet.dark}`);
+  }
+  return report;
 }
 
 async function runGate3(page, worlds) {
@@ -341,7 +749,7 @@ try {
   page.on('pageerror', (error) => consoleErrors.push(error.message));
   await mkdir(FRAME_DIR, { recursive: true });
 
-  for (const world of PHASE === 'gate3' ? [] : WORLDS) {
+  for (const world of PHASE === 'gate3' || PHASE === 'materials' ? [] : WORLDS) {
     for (const quality of QUALITIES) {
       const checkpoints = quality === 'high' ? CHECKPOINTS : ['spike-street', 'spike-overview'];
       for (const checkpoint of checkpoints) {
@@ -409,10 +817,16 @@ try {
       }
     }
   }
-  const semantics = PHASE === 'frames' ? null : await runGate3(page, WORLDS.filter((w) => w !== 'voxel'));
+  const hybridWorlds = WORLDS.filter((w) => w !== 'voxel');
+  const semantics = PHASE === 'gate3' || PHASE === 'all' ? await runGate3(page, hybridWorlds) : null;
   if (semantics) {
     await writeFile(`${OUT_DIR}/spike-semantics.json`, JSON.stringify({ generatedAt: new Date().toISOString(), ...semantics }, null, 2));
     console.log(`gate 3 evidence written to ${OUT_DIR}/spike-semantics.json`);
+  }
+  const materials = PHASE === 'materials' || PHASE === 'all' ? await runMaterials(page, hybridWorlds) : null;
+  if (materials) {
+    await writeFile(`${OUT_DIR}/spike-materials.json`, JSON.stringify({ generatedAt: new Date().toISOString(), ...materials }, null, 2));
+    console.log(`material matrix written to ${OUT_DIR}/spike-materials.json`);
   }
   if (results.length === 0) {
     console.log('frames phase skipped');

@@ -1,0 +1,713 @@
+{
+  "generatedAt": "2026-09-03T12:48:13.944Z",
+  "worlds": {
+    "hybrid-direct": {
+      "matrix": [
+        {
+          "quality": "high",
+          "distance": "far",
+          "lod": 0,
+          "levels": {
+            "building-3": 0,
+            "building-4": 0,
+            "building-5": 0,
+            "building-24": 0,
+            "building-25": 0,
+            "streetscape": 0,
+            "dominant-chimney": 0,
+            "dominant-rtvTower": 0
+          },
+          "phase": "day",
+          "t01": 0.5,
+          "pixels": {
+            "lit": 175,
+            "bright": 246673,
+            "white": 246708,
+            "dark": 0,
+            "total": 270400
+          }
+        },
+        {
+          "quality": "high",
+          "distance": "far",
+          "lod": 0,
+          "levels": {
+            "building-3": 0,
+            "building-4": 0,
+            "building-5": 0,
+            "building-24": 0,
+            "building-25": 0,
+            "streetscape": 0,
+            "dominant-chimney": 0,
+            "dominant-rtvTower": 0
+          },
+          "phase": "night",
+          "t01": 0.94,
+          "pixels": {
+            "lit": 1016,
+            "bright": 371,
+            "white": 59,
+            "dark": 248853,
+            "total": 270400
+          }
+        },
+        {
+          "quality": "high",
+          "distance": "band",
+          "lod": 1,
+          "levels": {
+            "building-3": 1,
+            "building-4": 1,
+            "building-5": 1,
+            "building-24": 0,
+            "building-25": 1,
+            "streetscape": 1,
+            "dominant-chimney": 1,
+            "dominant-rtvTower": 2
+          },
+          "phase": "day",
+          "t01": 0.5,
+          "pixels": {
+            "lit": 1371,
+            "bright": 138402,
+            "white": 138857,
+            "dark": 3,
+            "total": 270400
+          }
+        },
+        {
+          "quality": "high",
+          "distance": "band",
+          "lod": 1,
+          "levels": {
+            "building-3": 1,
+            "building-4": 1,
+            "building-5": 1,
+            "building-24": 0,
+            "building-25": 1,
+            "streetscape": 1,
+            "dominant-chimney": 1,
+            "dominant-rtvTower": 2
+          },
+          "phase": "night",
+          "t01": 0.94,
+          "pixels": {
+            "lit": 5723,
+            "bright": 5817,
+            "white": 3363,
+            "dark": 135503,
+            "total": 270400
+          }
+        },
+        {
+          "quality": "high",
+          "distance": "mid",
+          "lod": 2,
+          "levels": {
+            "building-3": 2,
+            "building-4": 2,
+            "building-5": 2,
+            "building-24": 1,
+            "building-25": 1,
+            "streetscape": 2,
+            "dominant-chimney": 1,
+            "dominant-rtvTower": 2
+          },
+          "phase": "day",
+          "t01": 0.5,
+          "pixels": {
+            "lit": 0,
+            "bright": 23073,
+            "white": 31027,
+            "dark": 9273,
+            "total": 270400
+          }
+        },
+        {
+          "quality": "high",
+          "distance": "mid",
+          "lod": 2,
+          "levels": {
+            "building-3": 2,
+            "building-4": 2,
+            "building-5": 2,
+            "building-24": 1,
+            "building-25": 1,
+            "streetscape": 2,
+            "dominant-chimney": 1,
+            "dominant-rtvTower": 2
+          },
+          "phase": "night",
+          "t01": 0.94,
+          "pixels": {
+            "lit": 39756,
+            "bright": 39872,
+            "white": 21168,
+            "dark": 1761,
+            "total": 270400
+          }
+        },
+        {
+          "quality": "high",
+          "distance": "near",
+          "lod": 2,
+          "levels": {
+            "building-3": 2,
+            "building-4": 2,
+            "building-5": 2,
+            "building-24": 2,
+            "building-25": 2,
+            "streetscape": 2,
+            "dominant-chimney": 1,
+            "dominant-rtvTower": 1
+          },
+          "phase": "day",
+          "t01": 0.5,
+          "pixels": {
+            "lit": 21098,
+            "bright": 9708,
+            "white": 28427,
+            "dark": 3498,
+            "total": 270400
+          }
+        },
+        {
+          "quality": "high",
+          "distance": "near",
+          "lod": 2,
+          "levels": {
+            "building-3": 2,
+            "building-4": 2,
+            "building-5": 2,
+            "building-24": 2,
+            "building-25": 2,
+            "streetscape": 2,
+            "dominant-chimney": 1,
+            "dominant-rtvTower": 1
+          },
+          "phase": "night",
+          "t01": 0.94,
+          "pixels": {
+            "lit": 49197,
+            "bright": 29852,
+            "white": 24976,
+            "dark": 9364,
+            "total": 270400
+          }
+        },
+        {
+          "quality": "low",
+          "distance": "far",
+          "lod": 0,
+          "levels": {
+            "building-3": 0,
+            "building-4": 0,
+            "building-5": 0,
+            "building-24": 0,
+            "building-25": 0,
+            "streetscape": 0,
+            "dominant-chimney": 0,
+            "dominant-rtvTower": 0
+          },
+          "phase": "day",
+          "t01": 0.5,
+          "pixels": {
+            "lit": 168,
+            "bright": 246613,
+            "white": 246674,
+            "dark": 0,
+            "total": 270400
+          }
+        },
+        {
+          "quality": "low",
+          "distance": "far",
+          "lod": 0,
+          "levels": {
+            "building-3": 0,
+            "building-4": 0,
+            "building-5": 0,
+            "building-24": 0,
+            "building-25": 0,
+            "streetscape": 0,
+            "dominant-chimney": 0,
+            "dominant-rtvTower": 0
+          },
+          "phase": "night",
+          "t01": 0.94,
+          "pixels": {
+            "lit": 992,
+            "bright": 221,
+            "white": 56,
+            "dark": 248916,
+            "total": 270400
+          }
+        },
+        {
+          "quality": "low",
+          "distance": "band",
+          "lod": 1,
+          "levels": {
+            "building-3": 1,
+            "building-4": 1,
+            "building-5": 1,
+            "building-24": 0,
+            "building-25": 1,
+            "streetscape": 1,
+            "dominant-chimney": 1,
+            "dominant-rtvTower": 1
+          },
+          "phase": "day",
+          "t01": 0.5,
+          "pixels": {
+            "lit": 1126,
+            "bright": 138269,
+            "white": 138784,
+            "dark": 2,
+            "total": 270400
+          }
+        },
+        {
+          "quality": "low",
+          "distance": "band",
+          "lod": 1,
+          "levels": {
+            "building-3": 1,
+            "building-4": 1,
+            "building-5": 1,
+            "building-24": 0,
+            "building-25": 1,
+            "streetscape": 1,
+            "dominant-chimney": 1,
+            "dominant-rtvTower": 1
+          },
+          "phase": "night",
+          "t01": 0.94,
+          "pixels": {
+            "lit": 5610,
+            "bright": 5617,
+            "white": 3136,
+            "dark": 135451,
+            "total": 270400
+          }
+        },
+        {
+          "quality": "low",
+          "distance": "mid",
+          "lod": 1,
+          "levels": {
+            "building-3": 1,
+            "building-4": 1,
+            "building-5": 1,
+            "building-24": 1,
+            "building-25": 1,
+            "streetscape": 1,
+            "dominant-chimney": 1,
+            "dominant-rtvTower": 1
+          },
+          "phase": "day",
+          "t01": 0.5,
+          "pixels": {
+            "lit": 0,
+            "bright": 7948,
+            "white": 14174,
+            "dark": 11007,
+            "total": 270400
+          }
+        },
+        {
+          "quality": "low",
+          "distance": "mid",
+          "lod": 1,
+          "levels": {
+            "building-3": 1,
+            "building-4": 1,
+            "building-5": 1,
+            "building-24": 1,
+            "building-25": 1,
+            "streetscape": 1,
+            "dominant-chimney": 1,
+            "dominant-rtvTower": 1
+          },
+          "phase": "night",
+          "t01": 0.94,
+          "pixels": {
+            "lit": 41849,
+            "bright": 42435,
+            "white": 5879,
+            "dark": 12441,
+            "total": 270400
+          }
+        },
+        {
+          "quality": "low",
+          "distance": "near",
+          "lod": 1,
+          "levels": {
+            "building-3": 1,
+            "building-4": 1,
+            "building-5": 1,
+            "building-24": 1,
+            "building-25": 1,
+            "streetscape": 1,
+            "dominant-chimney": 1,
+            "dominant-rtvTower": 1
+          },
+          "phase": "day",
+          "t01": 0.5,
+          "pixels": {
+            "lit": 25684,
+            "bright": 2503,
+            "white": 17550,
+            "dark": 3126,
+            "total": 270400
+          }
+        },
+        {
+          "quality": "low",
+          "distance": "near",
+          "lod": 1,
+          "levels": {
+            "building-3": 1,
+            "building-4": 1,
+            "building-5": 1,
+            "building-24": 1,
+            "building-25": 1,
+            "streetscape": 1,
+            "dominant-chimney": 1,
+            "dominant-rtvTower": 1
+          },
+          "phase": "night",
+          "t01": 0.94,
+          "pixels": {
+            "lit": 55739,
+            "bright": 31849,
+            "white": 13108,
+            "dark": 12098,
+            "total": 270400
+          }
+        }
+      ],
+      "windows": [
+        {
+          "quality": "high",
+          "distance": "far",
+          "lod": 0,
+          "windows": {
+            "brighter": 813,
+            "warmer": 821,
+            "darker": 269454,
+            "changed": 270346,
+            "total": 270400
+          }
+        },
+        {
+          "quality": "high",
+          "distance": "band",
+          "lod": 1,
+          "windows": {
+            "brighter": 5235,
+            "warmer": 5079,
+            "darker": 168229,
+            "changed": 267075,
+            "total": 270400
+          }
+        },
+        {
+          "quality": "high",
+          "distance": "mid",
+          "lod": 2,
+          "windows": {
+            "brighter": 48595,
+            "warmer": 48920,
+            "darker": 1716,
+            "changed": 249231,
+            "total": 270400
+          }
+        },
+        {
+          "quality": "high",
+          "distance": "near",
+          "lod": 2,
+          "windows": {
+            "brighter": 32208,
+            "warmer": 32283,
+            "darker": 5,
+            "changed": 254660,
+            "total": 270400
+          }
+        },
+        {
+          "quality": "low",
+          "distance": "far",
+          "lod": 0,
+          "windows": {
+            "brighter": 769,
+            "warmer": 792,
+            "darker": 269464,
+            "changed": 270340,
+            "total": 270400
+          }
+        },
+        {
+          "quality": "low",
+          "distance": "band",
+          "lod": 1,
+          "windows": {
+            "brighter": 4874,
+            "warmer": 4765,
+            "darker": 173519,
+            "changed": 267076,
+            "total": 270400
+          }
+        },
+        {
+          "quality": "low",
+          "distance": "mid",
+          "lod": 1,
+          "windows": {
+            "brighter": 42238,
+            "warmer": 42141,
+            "darker": 1871,
+            "changed": 253210,
+            "total": 270400
+          }
+        },
+        {
+          "quality": "low",
+          "distance": "near",
+          "lod": 1,
+          "windows": {
+            "brighter": 31255,
+            "warmer": 31259,
+            "darker": 12,
+            "changed": 260452,
+            "total": 270400
+          }
+        }
+      ],
+      "lod0": {
+        "viewport": {
+          "width": 1440,
+          "height": 280
+        },
+        "distance": 110,
+        "mask": {
+          "footprint": 46887,
+          "fragmentLit": 168,
+          "productLit": 949,
+          "both": 19,
+          "pixels": 308000,
+          "fragmentEnergy": 17582,
+          "productEnergy": 102339
+        },
+        "levels": {
+          "building-3": 0,
+          "building-4": 0,
+          "building-5": 0,
+          "building-24": 0,
+          "building-25": 0,
+          "streetscape": 0,
+          "dominant-chimney": 0,
+          "dominant-rtvTower": 2
+        }
+      },
+      "cohorts": {
+        "samples": [
+          {
+            "t01": 0.5,
+            "activity": 0,
+            "perCohort": [
+              {
+                "cohort": 0,
+                "activity": 0,
+                "emissiveIntensity": 0
+              },
+              {
+                "cohort": 1,
+                "activity": 0,
+                "emissiveIntensity": 0
+              },
+              {
+                "cohort": 2,
+                "activity": 0,
+                "emissiveIntensity": 0
+              },
+              {
+                "cohort": 3,
+                "activity": 0,
+                "emissiveIntensity": 0
+              },
+              {
+                "cohort": 4,
+                "activity": 0,
+                "emissiveIntensity": 0
+              }
+            ],
+            "pixels": {
+              "lit": 5120,
+              "bright": 59735,
+              "white": 60870,
+              "dark": 219,
+              "total": 270400
+            }
+          },
+          {
+            "t01": 0.86,
+            "activity": 5,
+            "perCohort": [
+              {
+                "cohort": 0,
+                "activity": 1,
+                "emissiveIntensity": 0.803549090846849
+              },
+              {
+                "cohort": 1,
+                "activity": 1,
+                "emissiveIntensity": 0.803549090846849
+              },
+              {
+                "cohort": 2,
+                "activity": 1,
+                "emissiveIntensity": 0.803549090846849
+              },
+              {
+                "cohort": 3,
+                "activity": 1,
+                "emissiveIntensity": 0.803549090846849
+              },
+              {
+                "cohort": 4,
+                "activity": 1,
+                "emissiveIntensity": 0.803549090846849
+              }
+            ],
+            "pixels": {
+              "lit": 5725,
+              "bright": 8888,
+              "white": 5271,
+              "dark": 57646,
+              "total": 270400
+            }
+          },
+          {
+            "t01": 0.94,
+            "activity": 5,
+            "perCohort": [
+              {
+                "cohort": 0,
+                "activity": 1,
+                "emissiveIntensity": 1.1689740520555245
+              },
+              {
+                "cohort": 1,
+                "activity": 1,
+                "emissiveIntensity": 1.1689740520555245
+              },
+              {
+                "cohort": 2,
+                "activity": 1,
+                "emissiveIntensity": 1.1689740520555245
+              },
+              {
+                "cohort": 3,
+                "activity": 1,
+                "emissiveIntensity": 1.1689740520555245
+              },
+              {
+                "cohort": 4,
+                "activity": 1,
+                "emissiveIntensity": 1.1689740520555245
+              }
+            ],
+            "pixels": {
+              "lit": 5403,
+              "bright": 15567,
+              "white": 2265,
+              "dark": 58572,
+              "total": 270400
+            }
+          },
+          {
+            "t01": 0.05,
+            "activity": 3,
+            "perCohort": [
+              {
+                "cohort": 0,
+                "activity": 0,
+                "emissiveIntensity": 0
+              },
+              {
+                "cohort": 1,
+                "activity": 0,
+                "emissiveIntensity": 0
+              },
+              {
+                "cohort": 2,
+                "activity": 1,
+                "emissiveIntensity": 1.2381210319181286
+              },
+              {
+                "cohort": 3,
+                "activity": 1,
+                "emissiveIntensity": 1.2381210319181286
+              },
+              {
+                "cohort": 4,
+                "activity": 1,
+                "emissiveIntensity": 1.2381210319181286
+              }
+            ],
+            "pixels": {
+              "lit": 3790,
+              "bright": 2454,
+              "white": 2153,
+              "dark": 59358,
+              "total": 270400
+            }
+          }
+        ],
+        "lateNight": {
+          "brighter": 704,
+          "warmer": 298,
+          "darker": 6166,
+          "changed": 21754,
+          "total": 270400
+        }
+      },
+      "snow": {
+        "dry": {
+          "lit": 0,
+          "bright": 17158,
+          "white": 32392,
+          "dark": 0,
+          "total": 180000
+        },
+        "snowy": {
+          "lit": 0,
+          "bright": 63077,
+          "white": 52750,
+          "dark": 0,
+          "total": 180000
+        }
+      },
+      "wet": {
+        "dry": {
+          "lit": 0,
+          "bright": 17158,
+          "white": 32392,
+          "dark": 0,
+          "total": 180000
+        },
+        "wet": {
+          "lit": 32581,
+          "bright": 15192,
+          "white": 2435,
+          "dark": 65088,
+          "total": 180000
+        },
+        "rain": 1
+      }
+    }
+  }
+}

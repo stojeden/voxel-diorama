@@ -39,8 +39,12 @@ try {
     if (shot.camera) await page.keyboard.press(shot.camera);
     await page.evaluate(() => window.__diorama.debugBusStop?.('Osiedle Centralne'));
     await page.waitForTimeout(700);
-    const png = await page.screenshot({ type: 'png' });
-    await writeFile(`${OUT}/${shot.name}.png`, png);
+    const burst = Number(process.env.SHOT_BURST ?? 1);
+    for (let i = 0; i < burst; i++) {
+      if (i) await page.waitForTimeout(Number(process.env.SHOT_GAP_MS ?? 1200));
+      const png = await page.screenshot({ type: 'png' });
+      await writeFile(`${OUT}/${shot.name}${burst > 1 ? `-${i}` : ''}.png`, png);
+    }
     const m = await page.evaluate(() => ({ metrics: window.__diorama.getMetrics(), state: window.__diorama.getState() }));
     console.log(shot.name, m.metrics.quality.level, m.state.world, m.state.cameraMode, 'calls', m.metrics.renderer.calls);
   }
