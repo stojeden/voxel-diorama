@@ -7,10 +7,10 @@
   "diagnosticShadowsDisabled": false,
   "diagnosticLocalLightsDisabled": false,
   "readiness": {
-    "timeToInteractiveMs": 1288.3,
+    "timeToInteractiveMs": 1199.2,
     "definition": "diorama-ready after preload, shader warm-up, first interactive animation frame and loader dismissal",
-    "domContentLoadedMs": 335.7,
-    "firstContentfulPaintMs": 76
+    "domContentLoadedMs": 323.1,
+    "firstContentfulPaintMs": 80
   },
   "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Pro, Unspecified Version)",
   "vendor": "Google Inc. (Apple)",
@@ -21,20 +21,26 @@
       "camera": "checkpoint",
       "world": "voxel",
       "hybrid": null,
-      "jsHeapBytes": 64560115,
+      "jsHeapBytes": 83000301,
       "simulationSeed": 20260722,
       "layoutSeed": 20260610,
       "checkpointRevision": 2,
-      "timeToInteractiveMs": 775.6,
+      "timeToInteractiveMs": 696.9,
+      "timeToInteractiveSamples": [
+        711.2,
+        696.9,
+        695.8
+      ],
+      "timeToInteractiveWorstMs": 711.2,
       "diagnostics": {
         "shadowsEnabled": false,
         "visibleLocalLights": 6
       },
       "timing": {
         "frames": 180,
-        "averageFps": 60.00400026668446,
-        "averageFrameMs": 16.665555555555553,
-        "p95FrameMs": 16.799999999999272,
+        "averageFps": 60.00200006666889,
+        "averageFrameMs": 16.66611111111111,
+        "p95FrameMs": 16.800000000000182,
         "p99FrameMs": 16.800000000000182,
         "maxFrameMs": 16.800000000000182,
         "hitchCount": 0,
@@ -42,21 +48,21 @@
       },
       "cpu": {
         "scope": "Chromium renderer main thread; not total system CPU",
-        "taskMs": 634.4,
-        "busyPercent": 21.1,
-        "scriptMs": 590.9,
-        "layoutMs": 4.1
+        "taskMs": 721,
+        "busyPercent": 24,
+        "scriptMs": 677.1,
+        "layoutMs": 3.8
       },
       "gpu": {
         "available": true,
         "method": "EXT_disjoint_timer_query_webgl2 around an explicit composer frame",
         "sampleCount": 15,
-        "medianRenderMsRaw": 5.220249,
-        "p90RenderMsRaw": 7.534999,
-        "medianRenderMs": 5.2,
-        "p90RenderMs": 7.5,
-        "minRenderMs": 3,
-        "maxRenderMs": 7.7
+        "medianRenderMsRaw": 6.815791,
+        "p90RenderMsRaw": 9.046874,
+        "medianRenderMs": 6.8,
+        "p90RenderMs": 9,
+        "minRenderMs": 4.8,
+        "maxRenderMs": 9.1
       },
       "measuredState": {
         "t01": 0.5,
@@ -115,6 +121,358 @@
       },
       "finalState": {
         "t01": 0.5,
+        "theme": "classic",
+        "weather": "clear",
+        "cloud": 0.12,
+        "wind": 0.16,
+        "rain": 0,
+        "eclipse": {
+          "phase": "partial-in",
+          "progress": 0,
+          "phaseProgress": 0,
+          "coverage": 0,
+          "separation": -1,
+          "irradiance": 1,
+          "corona": 0,
+          "beads": 0,
+          "stars": 0,
+          "totality": 0,
+          "running": false
+        },
+        "trainProgress": 0.26296712337712513,
+        "busProgress": 0.11166666666666658,
+        "camera": {
+          "position": [
+            70.00000000000001,
+            47.99999999999999,
+            80.00000000000001
+          ],
+          "target": [
+            0,
+            6,
+            0
+          ],
+          "distance": 114.2978564978364
+        },
+        "rainbow": {
+          "visible": false,
+          "effectActive": false,
+          "strength": 0,
+          "extinction": 0,
+          "source": "lake",
+          "sourceIndex": 0,
+          "sourceCenter": [
+            -40,
+            27,
+            62
+          ],
+          "sourceRadii": [
+            62,
+            27.35,
+            30
+          ]
+        },
+        "quality": "low"
+      },
+      "renderer": {
+        "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Pro, Unspecified Version)",
+        "vendor": "Google Inc. (Apple)",
+        "calls": 414,
+        "triangles": 339403,
+        "lines": 0,
+        "points": 28,
+        "geometries": 401,
+        "textures": 20,
+        "programs": 70,
+        "pixelRatio": 1,
+        "canvasWidth": 1440,
+        "canvasHeight": 900,
+        "primaryTriangles": 339400,
+        "primaryCalls": 411
+      }
+    },
+    {
+      "name": "spike-street",
+      "checkpoint": "spike-street",
+      "camera": "checkpoint",
+      "world": "voxel",
+      "hybrid": null,
+      "jsHeapBytes": 48756736,
+      "simulationSeed": 20260722,
+      "layoutSeed": 20260610,
+      "checkpointRevision": 2,
+      "timeToInteractiveMs": 692.1,
+      "timeToInteractiveSamples": [
+        692.1,
+        680,
+        696.4
+      ],
+      "timeToInteractiveWorstMs": 696.4,
+      "diagnostics": {
+        "shadowsEnabled": false,
+        "visibleLocalLights": 6
+      },
+      "timing": {
+        "frames": 180,
+        "averageFps": 60.00400026668444,
+        "averageFrameMs": 16.665555555555557,
+        "p95FrameMs": 16.800000000000182,
+        "p99FrameMs": 16.800000000000182,
+        "maxFrameMs": 16.800000000000182,
+        "hitchCount": 0,
+        "slowFrameRatio": 0
+      },
+      "cpu": {
+        "scope": "Chromium renderer main thread; not total system CPU",
+        "taskMs": 442.3,
+        "busyPercent": 14.7,
+        "scriptMs": 392.8,
+        "layoutMs": 5.1
+      },
+      "gpu": {
+        "available": true,
+        "method": "EXT_disjoint_timer_query_webgl2 around an explicit composer frame",
+        "sampleCount": 15,
+        "medianRenderMsRaw": 5.844708,
+        "p90RenderMsRaw": 9.532875,
+        "medianRenderMs": 5.8,
+        "p90RenderMs": 9.5,
+        "minRenderMs": 3.9,
+        "maxRenderMs": 9.6
+      },
+      "measuredState": {
+        "t01": 0.5,
+        "theme": "classic",
+        "weather": "clear",
+        "cloud": 0.12,
+        "wind": 0.16,
+        "rain": 0,
+        "eclipse": {
+          "phase": "partial-in",
+          "progress": 0,
+          "phaseProgress": 0,
+          "coverage": 0,
+          "separation": -1,
+          "irradiance": 1,
+          "corona": 0,
+          "beads": 0,
+          "stars": 0,
+          "totality": 0,
+          "running": false
+        },
+        "trainProgress": 0.26296712337712513,
+        "busProgress": 0.11166666666666658,
+        "camera": {
+          "position": [
+            6.5,
+            1.200000000000001,
+            21
+          ],
+          "target": [
+            -9,
+            1.9,
+            30
+          ],
+          "distance": 17.937112365149524
+        },
+        "rainbow": {
+          "visible": false,
+          "effectActive": false,
+          "strength": 0,
+          "extinction": 0,
+          "source": "lake",
+          "sourceIndex": 0,
+          "sourceCenter": [
+            -40,
+            27,
+            62
+          ],
+          "sourceRadii": [
+            62,
+            27.35,
+            30
+          ]
+        },
+        "quality": "low"
+      },
+      "finalState": {
+        "t01": 0.5,
+        "theme": "classic",
+        "weather": "clear",
+        "cloud": 0.12,
+        "wind": 0.16,
+        "rain": 0,
+        "eclipse": {
+          "phase": "partial-in",
+          "progress": 0,
+          "phaseProgress": 0,
+          "coverage": 0,
+          "separation": -1,
+          "irradiance": 1,
+          "corona": 0,
+          "beads": 0,
+          "stars": 0,
+          "totality": 0,
+          "running": false
+        },
+        "trainProgress": 0.26296712337712513,
+        "busProgress": 0.11166666666666658,
+        "camera": {
+          "position": [
+            6.5,
+            1.200000000000001,
+            21
+          ],
+          "target": [
+            -9,
+            1.9,
+            30
+          ],
+          "distance": 17.937112365149524
+        },
+        "rainbow": {
+          "visible": false,
+          "effectActive": false,
+          "strength": 0,
+          "extinction": 0,
+          "source": "lake",
+          "sourceIndex": 0,
+          "sourceCenter": [
+            -40,
+            27,
+            62
+          ],
+          "sourceRadii": [
+            62,
+            27.35,
+            30
+          ]
+        },
+        "quality": "low"
+      },
+      "renderer": {
+        "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Pro, Unspecified Version)",
+        "vendor": "Google Inc. (Apple)",
+        "calls": 141,
+        "triangles": 328617,
+        "lines": 0,
+        "points": 28,
+        "geometries": 401,
+        "textures": 20,
+        "programs": 69,
+        "pixelRatio": 1,
+        "canvasWidth": 1440,
+        "canvasHeight": 900,
+        "primaryTriangles": 328614,
+        "primaryCalls": 138
+      }
+    },
+    {
+      "name": "spike-golden",
+      "checkpoint": "spike-golden",
+      "camera": "checkpoint",
+      "world": "voxel",
+      "hybrid": null,
+      "jsHeapBytes": 62996244,
+      "simulationSeed": 20260722,
+      "layoutSeed": 20260610,
+      "checkpointRevision": 2,
+      "timeToInteractiveMs": 1029.4,
+      "timeToInteractiveSamples": [
+        1029.4,
+        1014,
+        1062
+      ],
+      "timeToInteractiveWorstMs": 1062,
+      "diagnostics": {
+        "shadowsEnabled": false,
+        "visibleLocalLights": 6
+      },
+      "timing": {
+        "frames": 180,
+        "averageFps": 60.00400026668444,
+        "averageFrameMs": 16.665555555555557,
+        "p95FrameMs": 16.799999999999272,
+        "p99FrameMs": 16.800000000000182,
+        "maxFrameMs": 16.800000000000182,
+        "hitchCount": 0,
+        "slowFrameRatio": 0
+      },
+      "cpu": {
+        "scope": "Chromium renderer main thread; not total system CPU",
+        "taskMs": 708.5,
+        "busyPercent": 23.6,
+        "scriptMs": 664.9,
+        "layoutMs": 3.6
+      },
+      "gpu": {
+        "available": true,
+        "method": "EXT_disjoint_timer_query_webgl2 around an explicit composer frame",
+        "sampleCount": 15,
+        "medianRenderMsRaw": 7.455624,
+        "p90RenderMsRaw": 9.559125,
+        "medianRenderMs": 7.5,
+        "p90RenderMs": 9.6,
+        "minRenderMs": 4.7,
+        "maxRenderMs": 9.9
+      },
+      "measuredState": {
+        "t01": 0.28,
+        "theme": "classic",
+        "weather": "clear",
+        "cloud": 0.12,
+        "wind": 0.16,
+        "rain": 0,
+        "eclipse": {
+          "phase": "partial-in",
+          "progress": 0,
+          "phaseProgress": 0,
+          "coverage": 0,
+          "separation": -1,
+          "irradiance": 1,
+          "corona": 0,
+          "beads": 0,
+          "stars": 0,
+          "totality": 0,
+          "running": false
+        },
+        "trainProgress": 0.26296712337712513,
+        "busProgress": 0.11166666666666658,
+        "camera": {
+          "position": [
+            70.00000000000001,
+            47.99999999999999,
+            80.00000000000001
+          ],
+          "target": [
+            0,
+            6,
+            0
+          ],
+          "distance": 114.2978564978364
+        },
+        "rainbow": {
+          "visible": false,
+          "effectActive": false,
+          "strength": 0,
+          "extinction": 0,
+          "source": "lake",
+          "sourceIndex": 0,
+          "sourceCenter": [
+            -40,
+            27,
+            62
+          ],
+          "sourceRadii": [
+            62,
+            27.35,
+            30
+          ]
+        },
+        "quality": "low"
+      },
+      "finalState": {
+        "t01": 0.28,
         "theme": "classic",
         "weather": "clear",
         "cloud": 0.12,
@@ -172,347 +530,7 @@
         "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Pro, Unspecified Version)",
         "vendor": "Google Inc. (Apple)",
         "calls": 416,
-        "triangles": 339351,
-        "lines": 0,
-        "points": 28,
-        "geometries": 401,
-        "textures": 20,
-        "programs": 70,
-        "pixelRatio": 1,
-        "canvasWidth": 1440,
-        "canvasHeight": 900,
-        "primaryTriangles": 339348,
-        "primaryCalls": 413
-      }
-    },
-    {
-      "name": "spike-street",
-      "checkpoint": "spike-street",
-      "camera": "checkpoint",
-      "world": "voxel",
-      "hybrid": null,
-      "jsHeapBytes": 72763495,
-      "simulationSeed": 20260722,
-      "layoutSeed": 20260610,
-      "checkpointRevision": 2,
-      "timeToInteractiveMs": 708.4,
-      "diagnostics": {
-        "shadowsEnabled": false,
-        "visibleLocalLights": 6
-      },
-      "timing": {
-        "frames": 180,
-        "averageFps": 60.00200006666889,
-        "averageFrameMs": 16.66611111111111,
-        "p95FrameMs": 16.700000000000728,
-        "p99FrameMs": 16.800000000000182,
-        "maxFrameMs": 16.800000000000182,
-        "hitchCount": 0,
-        "slowFrameRatio": 0
-      },
-      "cpu": {
-        "scope": "Chromium renderer main thread; not total system CPU",
-        "taskMs": 622.6,
-        "busyPercent": 20.8,
-        "scriptMs": 557.7,
-        "layoutMs": 6.5
-      },
-      "gpu": {
-        "available": true,
-        "method": "EXT_disjoint_timer_query_webgl2 around an explicit composer frame",
-        "sampleCount": 15,
-        "medianRenderMsRaw": 6.142833,
-        "p90RenderMsRaw": 8.462375,
-        "medianRenderMs": 6.1,
-        "p90RenderMs": 8.5,
-        "minRenderMs": 3.7,
-        "maxRenderMs": 8.7
-      },
-      "measuredState": {
-        "t01": 0.5,
-        "theme": "classic",
-        "weather": "clear",
-        "cloud": 0.12,
-        "wind": 0.16,
-        "rain": 0,
-        "eclipse": {
-          "phase": "partial-in",
-          "progress": 0,
-          "phaseProgress": 0,
-          "coverage": 0,
-          "separation": -1,
-          "irradiance": 1,
-          "corona": 0,
-          "beads": 0,
-          "stars": 0,
-          "totality": 0,
-          "running": false
-        },
-        "trainProgress": 0.26296712337712513,
-        "busProgress": 0.11166666666666658,
-        "camera": {
-          "position": [
-            6.5,
-            1.200000000000001,
-            21
-          ],
-          "target": [
-            -9,
-            1.9,
-            30
-          ],
-          "distance": 17.937112365149524
-        },
-        "rainbow": {
-          "visible": false,
-          "effectActive": false,
-          "strength": 0,
-          "extinction": 0,
-          "source": "lake",
-          "sourceIndex": 0,
-          "sourceCenter": [
-            -40,
-            27,
-            62
-          ],
-          "sourceRadii": [
-            62,
-            27.35,
-            30
-          ]
-        },
-        "quality": "low"
-      },
-      "finalState": {
-        "t01": 0.5,
-        "theme": "classic",
-        "weather": "clear",
-        "cloud": 0.12,
-        "wind": 0.16,
-        "rain": 0,
-        "eclipse": {
-          "phase": "partial-in",
-          "progress": 0,
-          "phaseProgress": 0,
-          "coverage": 0,
-          "separation": -1,
-          "irradiance": 1,
-          "corona": 0,
-          "beads": 0,
-          "stars": 0,
-          "totality": 0,
-          "running": false
-        },
-        "trainProgress": 0.26296712337712513,
-        "busProgress": 0.11166666666666658,
-        "camera": {
-          "position": [
-            6.5,
-            1.200000000000001,
-            21
-          ],
-          "target": [
-            -9,
-            1.9,
-            30
-          ],
-          "distance": 17.937112365149524
-        },
-        "rainbow": {
-          "visible": false,
-          "effectActive": false,
-          "strength": 0,
-          "extinction": 0,
-          "source": "lake",
-          "sourceIndex": 0,
-          "sourceCenter": [
-            -40,
-            27,
-            62
-          ],
-          "sourceRadii": [
-            62,
-            27.35,
-            30
-          ]
-        },
-        "quality": "low"
-      },
-      "renderer": {
-        "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Pro, Unspecified Version)",
-        "vendor": "Google Inc. (Apple)",
-        "calls": 143,
-        "triangles": 328565,
-        "lines": 0,
-        "points": 28,
-        "geometries": 401,
-        "textures": 20,
-        "programs": 69,
-        "pixelRatio": 1,
-        "canvasWidth": 1440,
-        "canvasHeight": 900,
-        "primaryTriangles": 328562,
-        "primaryCalls": 140
-      }
-    },
-    {
-      "name": "spike-golden",
-      "checkpoint": "spike-golden",
-      "camera": "checkpoint",
-      "world": "voxel",
-      "hybrid": null,
-      "jsHeapBytes": 106375636,
-      "simulationSeed": 20260722,
-      "layoutSeed": 20260610,
-      "checkpointRevision": 2,
-      "timeToInteractiveMs": 977.4,
-      "diagnostics": {
-        "shadowsEnabled": false,
-        "visibleLocalLights": 6
-      },
-      "timing": {
-        "frames": 180,
-        "averageFps": 60.00200006666888,
-        "averageFrameMs": 16.666111111111114,
-        "p95FrameMs": 16.799999999999272,
-        "p99FrameMs": 16.800000000000182,
-        "maxFrameMs": 16.800000000000182,
-        "hitchCount": 0,
-        "slowFrameRatio": 0
-      },
-      "cpu": {
-        "scope": "Chromium renderer main thread; not total system CPU",
-        "taskMs": 560,
-        "busyPercent": 18.7,
-        "scriptMs": 515.4,
-        "layoutMs": 4.5
-      },
-      "gpu": {
-        "available": true,
-        "method": "EXT_disjoint_timer_query_webgl2 around an explicit composer frame",
-        "sampleCount": 15,
-        "medianRenderMsRaw": 7.012708,
-        "p90RenderMsRaw": 10.377749,
-        "medianRenderMs": 7,
-        "p90RenderMs": 10.4,
-        "minRenderMs": 5.5,
-        "maxRenderMs": 10.7
-      },
-      "measuredState": {
-        "t01": 0.28,
-        "theme": "classic",
-        "weather": "clear",
-        "cloud": 0.12,
-        "wind": 0.16,
-        "rain": 0,
-        "eclipse": {
-          "phase": "partial-in",
-          "progress": 0,
-          "phaseProgress": 0,
-          "coverage": 0,
-          "separation": -1,
-          "irradiance": 1,
-          "corona": 0,
-          "beads": 0,
-          "stars": 0,
-          "totality": 0,
-          "running": false
-        },
-        "trainProgress": 0.26296712337712513,
-        "busProgress": 0.11166666666666658,
-        "camera": {
-          "position": [
-            70.00000000000001,
-            47.99999999999999,
-            80.00000000000001
-          ],
-          "target": [
-            0,
-            6,
-            0
-          ],
-          "distance": 114.2978564978364
-        },
-        "rainbow": {
-          "visible": false,
-          "effectActive": false,
-          "strength": 0,
-          "extinction": 0,
-          "source": "lake",
-          "sourceIndex": 0,
-          "sourceCenter": [
-            -40,
-            27,
-            62
-          ],
-          "sourceRadii": [
-            62,
-            27.35,
-            30
-          ]
-        },
-        "quality": "low"
-      },
-      "finalState": {
-        "t01": 0.28,
-        "theme": "classic",
-        "weather": "clear",
-        "cloud": 0.12,
-        "wind": 0.16,
-        "rain": 0,
-        "eclipse": {
-          "phase": "partial-in",
-          "progress": 0,
-          "phaseProgress": 0,
-          "coverage": 0,
-          "separation": -1,
-          "irradiance": 1,
-          "corona": 0,
-          "beads": 0,
-          "stars": 0,
-          "totality": 0,
-          "running": false
-        },
-        "trainProgress": 0.26296712337712513,
-        "busProgress": 0.11166666666666658,
-        "camera": {
-          "position": [
-            70.00000000000001,
-            47.99999999999999,
-            80.00000000000001
-          ],
-          "target": [
-            0,
-            6,
-            0
-          ],
-          "distance": 114.2978564978364
-        },
-        "rainbow": {
-          "visible": false,
-          "effectActive": false,
-          "strength": 0,
-          "extinction": 0,
-          "source": "lake",
-          "sourceIndex": 0,
-          "sourceCenter": [
-            -40,
-            27,
-            62
-          ],
-          "sourceRadii": [
-            62,
-            27.35,
-            30
-          ]
-        },
-        "quality": "low"
-      },
-      "renderer": {
-        "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Pro, Unspecified Version)",
-        "vendor": "Google Inc. (Apple)",
-        "calls": 418,
-        "triangles": 339385,
+        "triangles": 339437,
         "lines": 0,
         "points": 28,
         "geometries": 403,
@@ -521,8 +539,8 @@
         "pixelRatio": 1,
         "canvasWidth": 1440,
         "canvasHeight": 900,
-        "primaryTriangles": 339382,
-        "primaryCalls": 415
+        "primaryTriangles": 339434,
+        "primaryCalls": 413
       }
     },
     {
@@ -531,20 +549,26 @@
       "camera": "checkpoint",
       "world": "voxel",
       "hybrid": null,
-      "jsHeapBytes": 60206643,
+      "jsHeapBytes": 38413369,
       "simulationSeed": 20260722,
       "layoutSeed": 20260610,
       "checkpointRevision": 2,
-      "timeToInteractiveMs": 993.4,
+      "timeToInteractiveMs": 1030.4,
+      "timeToInteractiveSamples": [
+        1027.4,
+        1044.8,
+        1030.4
+      ],
+      "timeToInteractiveWorstMs": 1044.8,
       "diagnostics": {
         "shadowsEnabled": false,
         "visibleLocalLights": 14
       },
       "timing": {
         "frames": 180,
-        "averageFps": 60.00400026668446,
-        "averageFrameMs": 16.665555555555553,
-        "p95FrameMs": 16.800000000000182,
+        "averageFps": 60.002000066668884,
+        "averageFrameMs": 16.66611111111111,
+        "p95FrameMs": 16.799999999999272,
         "p99FrameMs": 16.800000000000182,
         "maxFrameMs": 16.800000000000182,
         "hitchCount": 0,
@@ -552,20 +576,20 @@
       },
       "cpu": {
         "scope": "Chromium renderer main thread; not total system CPU",
-        "taskMs": 497,
-        "busyPercent": 16.6,
-        "scriptMs": 445,
-        "layoutMs": 4.8
+        "taskMs": 502.9,
+        "busyPercent": 16.8,
+        "scriptMs": 453.6,
+        "layoutMs": 7.8
       },
       "gpu": {
         "available": true,
         "method": "EXT_disjoint_timer_query_webgl2 around an explicit composer frame",
         "sampleCount": 15,
-        "medianRenderMsRaw": 7.246958,
-        "p90RenderMsRaw": 9.513708,
-        "medianRenderMs": 7.2,
-        "p90RenderMs": 9.5,
-        "minRenderMs": 5.8,
+        "medianRenderMsRaw": 8.279333,
+        "p90RenderMsRaw": 10.074749,
+        "medianRenderMs": 8.3,
+        "p90RenderMs": 10.1,
+        "minRenderMs": 5.7,
         "maxRenderMs": 10.2
       },
       "measuredState": {
@@ -681,8 +705,8 @@
       "renderer": {
         "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Pro, Unspecified Version)",
         "vendor": "Google Inc. (Apple)",
-        "calls": 146,
-        "triangles": 328599,
+        "calls": 144,
+        "triangles": 328651,
         "lines": 0,
         "points": 728,
         "geometries": 403,
@@ -691,8 +715,8 @@
         "pixelRatio": 1,
         "canvasWidth": 1440,
         "canvasHeight": 900,
-        "primaryTriangles": 328596,
-        "primaryCalls": 143
+        "primaryTriangles": 328648,
+        "primaryCalls": 141
       }
     }
   ]

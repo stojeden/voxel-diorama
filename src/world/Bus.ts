@@ -45,7 +45,16 @@ import {
 
 const BUS_LENGTH = 8;
 const BUS_WIDTH = 2.3;
-const BUS_HEIGHT = 2.6;
+/**
+ * Measured, not nominal: with the old floor at WHEEL_RADIUS + 0.35 the finished body
+ * stood 3.569 m tall on an 8.18 m chassis -- a height/length ratio of 0.44 where a real
+ * bus of this length sits near 0.33. At the street camera that made it 300 px tall while
+ * a bicycle 4 m closer was 98 px, which is what read as "giant bus, toy bicycles".
+ * Body 2.32 on a 0.45 skirt plus an 0.18 roof cap gives 2.95 m, ratio 0.36.
+ */
+const BUS_HEIGHT = 2.32;
+/** Skirt height: the wheel centre, so the lower half of each tyre reads below the body. */
+const BUS_FLOOR_Y = 0.45;
 const AXLE_OFFSET_METERS = 2.6;
 const BASE_SPEED = 6.5;
 const FINAL_LOOP_SPEED = 15;
@@ -111,7 +120,7 @@ function buildBusMesh(): {
   windowMat.envMapIntensity = 1.6;
   const wheelMat = make(0x141414, { roughness: 0.5, metalness: 0.6 });
 
-  const floorY = WHEEL_RADIUS + 0.35;
+  const floorY = BUS_FLOOR_Y;
 
   // Body
   const body = new THREE.Mesh(new THREE.BoxGeometry(BUS_WIDTH, BUS_HEIGHT, BUS_LENGTH), bodyMat);
@@ -147,6 +156,21 @@ function buildBusMesh(): {
     doors.push(door);
   }
 
+  // Wheel housings, so the tyres read as housed rather than stuck to a flat flank.
+  const archGeo = new THREE.BoxGeometry(0.06, 0.5, 1.24);
+  for (const zPos of [-AXLE_OFFSET_METERS, AXLE_OFFSET_METERS]) {
+    for (const side of [-1, 1]) {
+      const arch = new THREE.Mesh(archGeo, darkMat);
+      arch.position.set(side * (BUS_WIDTH / 2 + 0.02), floorY + 0.16, zPos);
+      group.add(arch);
+    }
+  }
+
+  // Rear window, so front and back are told apart from any angle.
+  const rearWin = new THREE.Mesh(new THREE.BoxGeometry(BUS_WIDTH - 0.6, 0.8, 0.06), windowMat);
+  rearWin.position.set(0, floorY + BUS_HEIGHT * 0.62, BUS_LENGTH / 2 + 0.02);
+  group.add(rearWin);
+
   // Bumper stripe
   const stripe = new THREE.Mesh(new THREE.BoxGeometry(BUS_WIDTH + 0.06, 0.3, BUS_LENGTH - 0.3), darkMat);
   stripe.position.y = floorY + 0.18;
@@ -180,12 +204,15 @@ function buildBusMesh(): {
       opacity: 0,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
-      side: THREE.DoubleSide,
+      side: THREE.FrontSide,
     });
     materials.push(beamMat);
-    const beam = new THREE.Mesh(new THREE.ConeGeometry(1.1, 8, 12, 1, true), beamMat);
+    // A short, rounder glow just ahead of the lamp. The previous cone was 8 m long and
+    // 2.2 m wide, additive and double-sided, so it cut a hard twelve-sided translucent
+    // wedge across the night street frame. The SpotLight already paints the road.
+    const beam = new THREE.Mesh(new THREE.ConeGeometry(0.42, 2.4, 20, 1, true), beamMat);
     beam.rotation.x = Math.PI / 2 - 0.1;
-    beam.position.set(side * 0.7, floorY + 0.15, -BUS_LENGTH / 2 - 3.8);
+    beam.position.set(side * 0.7, floorY + 0.1, -BUS_LENGTH / 2 - 1.15);
     group.add(beam);
     beamMaterials.push(beamMat);
   }

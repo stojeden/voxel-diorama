@@ -106,8 +106,19 @@ describe('streetscape emitter', () => {
     for (let i = 1; i < xs.length; i++) expect(xs[i] - xs[i - 1]).toBeCloseTo(width * 2, 6);
   });
 
-  test('draws three bicycles with six wheels', () => {
-    expect(primitives.filter((p) => p.kind === 'torus').length).toBe(6);
+  test('draws three bicycles whose six wheels are believable wheels, not hoops', () => {
+    const tori = primitives.filter((p) => p.kind === 'torus');
+    // Each wheel is a tyre plus a rim inside it: a bare hoop reads as wire.
+    expect(tori.length).toBe(12);
+    const tyres = tori.filter((p) => p.kind === 'torus' && p.tube > 0.03);
+    expect(tyres.length).toBe(6);
+    for (const tyre of tyres) {
+      if (tyre.kind !== 'torus') continue;
+      const diameter = 2 * (tyre.radius + tyre.tube);
+      expect(diameter).toBeGreaterThan(0.65);
+      expect(diameter).toBeLessThan(0.78);
+      expect(tyre.tube).toBeGreaterThanOrEqual(0.04);
+    }
   });
 });
 

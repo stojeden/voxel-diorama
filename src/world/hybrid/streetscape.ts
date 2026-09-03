@@ -69,10 +69,18 @@ function emitProp(E: Emitter, prop: PropSpec): void {
 }
 
 /**
- * Low-poly city bicycle heading along +x, rotated by `ry`, rolled by `lean`
- * about its own long axis. Wheel centres are lifted by r·cos(lean) and shifted
- * sideways by r·sin(lean) so the tyres touch the ground exactly at the probes.
+ * City bicycle heading along +x, rotated by `ry`, rolled by `lean` about its own
+ * long axis. Wheel centres are lifted by r·cos(lean) and shifted sideways by
+ * r·sin(lean) so the tyres touch the ground exactly at the probes.
+ *
+ * The dimensions were already right -- 0.74 m wheels on a 1.10 m wheelbase, 1.84 m
+ * overall -- but every tube was 4 cm and the tyre a 3 cm hoop, which at the street
+ * camera is two or three pixels. That thinness, not the scale, is what read as a
+ * toy. Tubes are 5.5 cm, the tyre 4.5 cm with a rim inside it, and the bars sit at
+ * 1.08 m instead of 0.97 so the silhouette reaches a believable height.
  */
+const TUBE = 0.055;
+
 function bicycle(E: Emitter, x: number, z: number, ry: number, lean: number): void {
   const r = 0.34;
   const c = Math.cos(ry);
@@ -87,17 +95,22 @@ function bicycle(E: Emitter, x: number, z: number, ry: number, lean: number): vo
   const o = { layer: 1 as const, rx: lean, ry, order: 'YXZ' as const };
   for (const dx of [-0.55, 0.55]) {
     const p = at(dx, r, 0);
-    E.torus(P.interior, p.x, p.y, p.z, r, 0.03, o);
+    E.torus(P.interior, p.x, p.y, p.z, r, 0.045, o);
+    // A rim inside the tyre: a bare hoop reads as wire, a hoop with a rim reads as a wheel.
+    E.torus(P.steel, p.x, p.y, p.z, r - 0.075, 0.022, o);
   }
   const part = (palette: number, dx: number, dy: number, dz: number, w: number, h: number, d: number, rz = 0) => {
     const p = at(dx, dy, dz);
     E.box(palette, p.x, p.y, p.z, w, h, d, { ...o, rz });
   };
-  part(P.accentRose, 0.0, 0.62, 0, 0.9, 0.04, 0.04);
-  part(P.accentRose, -0.15, 0.55, 0, 0.04, 0.5, 0.04);
-  part(P.accentRose, 0.45, 0.6, 0, 0.04, 0.6, 0.04);
-  part(P.accentRose, -0.2, 0.36, 0, 0.7, 0.04, 0.04, 0.35);
-  part(P.wood, -0.15, 0.86, 0, 0.28, 0.06, 0.14);
-  part(P.steel, 0.5, 0.95, 0, 0.04, 0.04, 0.5);
-  part(P.steel, -0.55, 0.72, 0, 0.36, 0.03, 0.08);
+  part(P.accentRose, 0.0, 0.66, 0, 0.92, TUBE, TUBE);            // top tube
+  part(P.accentRose, -0.16, 0.58, 0, TUBE, 0.56, TUBE);          // seat tube
+  part(P.accentRose, 0.46, 0.62, 0, TUBE, 0.66, TUBE);           // head tube and fork
+  part(P.accentRose, -0.2, 0.36, 0, 0.72, TUBE, TUBE, 0.35);     // down tube
+  part(P.accentRose, -0.36, 0.2, 0, 0.42, 0.045, 0.045, -0.5);   // chain stay
+  part(P.wood, -0.16, 0.95, 0, 0.3, 0.07, 0.15);                 // saddle
+  part(P.steel, 0.5, 1.05, 0, 0.05, 0.05, 0.54);                 // handlebar
+  part(P.steel, 0.5, 0.97, 0, 0.05, 0.14, 0.05);                 // stem
+  part(P.steel, -0.55, 0.74, 0, 0.4, 0.035, 0.09);               // rear rack
+  part(P.steel, -0.06, 0.13, 0, 0.1, 0.1, 0.05);                 // crank
 }

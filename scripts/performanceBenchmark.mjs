@@ -16,6 +16,13 @@ const QUALITY = process.env.BENCH_QUALITY ?? 'high';
 const WORLD = process.env.BENCH_WORLD ?? 'voxel';
 const SIMULATION_SEED = Number(process.env.BENCH_SEED ?? 20260722);
 const GPU_SAMPLE_COUNT = Number(process.env.BENCH_GPU_SAMPLES ?? 15);
+/**
+ * TTI is a cold-load measurement and the most contention-sensitive number here: a run
+ * started while a smoke render was still finishing reported 1855 ms for a scenario that
+ * measures 1260-1343 ms on a quiet machine. Rather than loosen the budget, each scenario
+ * is loaded a few times, every attempt is recorded, and the gate applies to the median.
+ */
+const TTI_SAMPLES = Number(process.env.BENCH_TTI_SAMPLES ?? 3);
 const requestedScenarioFilters = process.env.BENCH_SCENARIO
   ?.split(',')
   .map((value) => value.trim())
@@ -372,22 +379,28 @@ try {
 
   const results = [];
   for (const scenario of scenarios) {
-    await page.goto(
-      `${URL}/?seed=${SIMULATION_SEED}&checkpoint=${scenario.checkpoint}&quality=${QUALITY}&world=${WORLD}`,
-      { waitUntil: 'networkidle' }
-    );
-    // Waiting exactly MAX_TTI_MS turned a marginal load into an aborted run with no
-    // JSON at all. The wait is generous; the budget is enforced by the assertion below,
-    // which needs the measurement to exist in order to fail on it.
-    await page.waitForFunction(() => window.__diorama?.ready === true, null, { timeout: MAX_TTI_MS * 5 });
+    const ttiSamples = [];
+    for (let attempt = 0; attempt < TTI_SAMPLES; attempt++) {
+      await page.goto(
+        `${URL}/?seed=${SIMULATION_SEED}&checkpoint=${scenario.checkpoint}&quality=${QUALITY}&world=${WORLD}`,
+        { waitUntil: 'networkidle' }
+      );
+      // Waiting exactly MAX_TTI_MS turned a marginal load into an aborted run with no
+      // JSON at all. The wait is generous; the budget is enforced by the assertion below,
+      // which needs the measurement to exist in order to fail on it.
+      await page.waitForFunction(() => window.__diorama?.ready === true, null, { timeout: MAX_TTI_MS * 5 });
+      const readyAt = await page.evaluate(() => window.__benchmarkReadyAt);
+      if (readyAt !== null) ttiSamples.push(round(readyAt));
+    }
     const diagnostics = await applyDiagnosticOverrides(page);
-    const { checkpointState, qualityLevel, scenarioReadyAtMs } = await page.evaluate(() => ({
+    const { checkpointState, qualityLevel } = await page.evaluate(() => ({
       checkpointState: window.__diorama.getState(),
       qualityLevel: window.__diorama.getMetrics().quality.level,
-      // `readiness` above is measured on a load without ?world=, so it never sees the
-      // hybrid spike attach. This one does, which is what the spike's TTI gate needs.
-      scenarioReadyAtMs: window.__benchmarkReadyAt,
     }));
+    // `readiness` above is measured on a load without ?world=, so it never sees the hybrid
+    // spike attach. These do, which is what the spike's TTI gate needs.
+    const ttiSorted = [...ttiSamples].sort((a, b) => a - b);
+    const scenarioReadyAtMs = ttiSorted.length ? ttiSorted[Math.floor(ttiSorted.length / 2)] : null;
     assert.equal(checkpointState.simulationSeed, SIMULATION_SEED);
     assert.equal(checkpointState.checkpoint?.id, scenario.checkpoint);
     assert.equal(qualityLevel, QUALITY, `checkpoint ${scenario.checkpoint} ignored BENCH_QUALITY`);
@@ -491,7 +504,9 @@ try {
       simulationSeed: metrics.simulationSeed,
       layoutSeed: metrics.layoutSeed,
       checkpointRevision: checkpointState.checkpoint.revision,
-      timeToInteractiveMs: scenarioReadyAtMs === null ? null : round(scenarioReadyAtMs),
+      timeToInteractiveMs: scenarioReadyAtMs,
+      timeToInteractiveSamples: ttiSamples,
+      timeToInteractiveWorstMs: ttiSorted.length ? ttiSorted[ttiSorted.length - 1] : null,
       diagnostics,
       timing,
       cpu,
@@ -533,7 +548,7 @@ try {
     // first paint of that world and is held to the same budget.
     assert.ok(
       result.timeToInteractiveMs !== null && result.timeToInteractiveMs <= MAX_TTI_MS,
-      `${result.name}: TTI ${result.timeToInteractiveMs} ms exceeds ${MAX_TTI_MS} ms in world ${WORLD}`
+      `${result.name}: median TTI ${result.timeToInteractiveMs} ms of ${JSON.stringify(result.timeToInteractiveSamples)} exceeds ${MAX_TTI_MS} ms in world ${WORLD}`
     );
     assert.ok(
       result.timing.averageFps >= REQUIRED_FPS,
