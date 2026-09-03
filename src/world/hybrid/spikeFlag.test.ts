@@ -39,7 +39,10 @@ describe('spike flag', () => {
     expect(isSpikeGroundCell(-11, 27)).toBe(true); // north pavement by the shelter
     expect(isSpikeGroundCell(-11, 24)).toBe(false); // asphalt stays product
     expect(isOnRoad(-11, 24)).toBe(true);
-    expect(isSpikeGroundCell(-11, 30)).toBe(false); // grass stays product
+    // The stop apron is pavement now, so the fragment draws it; the lawn behind it
+    // is still the product's grass.
+    expect(isSpikeGroundCell(-11, 30)).toBe(true); // widened stop apron
+    expect(isSpikeGroundCell(-11, 32)).toBe(false); // grass stays product
     expect(isSpikeGroundCell(0, 29)).toBe(true); // forecourt is drawn by the fragment
     expect(isSpikeGroundCell(40, 27)).toBe(false); // outside the rectangle
   });

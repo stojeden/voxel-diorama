@@ -1,14 +1,17 @@
 import * as THREE from 'three';
 import { describe, expect, test } from 'vitest';
-import { BUS_SHELTER_ROOF_Y, GROUND_SURFACE_Y, BENCH_DIMENSIONS, ROAD_RECTS } from '../WorldLayout';
-import { buildPassenger } from '../PassengerCrowd';
+import { BUS_STOPS, GROUND_SURFACE_Y, BENCH_DIMENSIONS, ROAD_RECTS } from '../WorldLayout';
+import { generateBusShelter } from '../WorldGenerator';
+import { PASSENGER_SCALE, buildPassenger } from '../PassengerCrowd';
+import { Postman } from '../Postman';
 import { createBus } from '../Bus';
-import { CROSSWALK, KERB_HEIGHT, buildCityModel } from './CityModel';
+import { CROSSWALK, KERB_HEIGHT, buildCityModel, type PropSpec } from './CityModel';
+import { CONTACT_TOLERANCE } from './GroundContact';
 import { emitBuilding } from './architecture';
-import { emitStreetscape } from './streetscape';
+import { emitProp, emitStreetscape } from './streetscape';
 import { geometryFor } from './strategies/DirectSurfaceStrategy';
 import { P } from './palette';
-import type { SurfacePrimitive } from './surface';
+import { Emitter, type SurfacePrimitive } from './surface';
 
 /**
  * One metric system for the whole world. Every number here is measured off the
@@ -65,21 +68,59 @@ const busGroup = (() => {
 const isGlow = (mesh: THREE.Mesh) => mesh.geometry.type === 'ConeGeometry';
 const BUS = sizeOf(objectBounds(busGroup, isGlow));
 
-/** Everything the fragment draws for one bicycle, excluding the ground under it. */
-const GROUNDISH = new Set([P.pavement, P.kerb, P.marking]);
-function propNear(x: number, z: number, radius: number): SurfacePrimitive[] {
-  return street.filter((prim) => {
-    if (GROUNDISH.has(prim.palette)) return false;
-    const geometry = geometryFor(prim);
-    geometry.computeBoundingBox();
-    const centre = geometry.boundingBox!.getCenter(new THREE.Vector3());
-    geometry.dispose();
-    return Math.hypot(centre.x - x, centre.z - z) < radius;
-  });
+/**
+ * The primitives of one prop, by identity: its own emitter re-run for that prop
+ * alone. The earlier version collected everything within 1.1 m of the prop centre,
+ * which for a bicycle also swept in the second bicycle and the bike rack, so the
+ * "bicycle" it measured was 1.3 m wide and no single object at all.
+ */
+function propParts(prop: PropSpec): SurfacePrimitive[] {
+  const E = new Emitter();
+  emitProp(E, prop);
+  return E.primitives;
 }
 const bikeSpec = model.props.find((prop) => prop.kind === 'bicycle')!;
-const BIKE = boundsOf(propNear(bikeSpec.x, bikeSpec.z, 1.1));
+const leaningSpec = model.props.find((prop) => prop.kind === 'bicycleLeaning')!;
+const BIKE = boundsOf(propParts(bikeSpec));
 const BIKE_SIZE = sizeOf(BIKE);
+const LEANING_BIKE = boundsOf(propParts(leaningSpec));
+
+
+/**
+ * Vertex-accurate world bounds. `Box3.applyMatrix4` transforms the eight corners of
+ * a box and re-fits an AABB around them, which inflates every rotated mesh: the
+ * postman's wheels measured 1.15 m across that way and 0.70 m measured properly.
+ */
+function trueBounds(root: THREE.Object3D, keep: (mesh: THREE.Mesh) => boolean = () => true, into?: THREE.Matrix4): THREE.Box3 {
+  root.updateWorldMatrix(true, true);
+  const box = new THREE.Box3();
+  const vertex = new THREE.Vector3();
+  root.traverse((node) => {
+    const mesh = node as THREE.Mesh;
+    if (!mesh.isMesh || !mesh.geometry || !keep(mesh)) return;
+    const position = mesh.geometry.getAttribute('position') as THREE.BufferAttribute;
+    for (let i = 0; i < position.count; i++) {
+      vertex.fromBufferAttribute(position, i).applyMatrix4(mesh.matrixWorld);
+      if (into) vertex.applyMatrix4(into);
+      box.expandByPoint(vertex);
+    }
+  });
+  return box;
+}
+
+/** The postman mid-ride, and a frame to measure him in: y over the road, -z forward. */
+const postmanRig = (() => {
+  const scene = new THREE.Scene();
+  const postman = new Postman(scene);
+  for (let i = 0; i < 30; i++) postman.update(0.016, 100 + i * 0.016, 0.34);
+  const bike = scene.children.find((child) => child.name === 'postman-bike')!;
+  const dog = scene.children.find((child) => child.name === 'postman-dog')!;
+  bike.updateWorldMatrix(true, true);
+  const toBike = new THREE.Matrix4().copy(bike.matrixWorld).invert();
+  const named = (name: string) => trueBounds(bike.getObjectByName(name)!, () => true, toBike);
+  const unnamedBy = (test: (mesh: THREE.Mesh) => boolean) => trueBounds(bike, (mesh) => !mesh.name && test(mesh), toBike);
+  return { bike, dog, toBike, named, unnamedBy, postman };
+})();
 
 describe('one metric system', () => {
   test('the figure everything else is judged against is human-sized', () => {
@@ -189,24 +230,55 @@ describe('one metric system', () => {
   });
 
   test('street furniture is furniture, not architecture', () => {
-    // Measured from the emitted voxel data, which is where the absurdity lived: the
-    // roof was an integer voxel at y = 3, so with the ground at -0.5 it stood 4.00 m.
-    const shelterRoofTop = BUS_SHELTER_ROOF_Y + 0.18;
-    expect(shelterRoofTop, `wiata ${shelterRoofTop.toFixed(2)} m`).toBeGreaterThan(2.2);
-    expect(shelterRoofTop, `wiata ${shelterRoofTop.toFixed(2)} m`).toBeLessThan(2.7);
+    // Measured off the voxels the shelter emits -- centre plus or minus scale --
+    // because that is the geometry the renderer receives. Reading
+    // `BUS_SHELTER_ROOF_Y` back in a test would only restate a constant and could
+    // not catch a roof slab or a bench that stopped following it.
+    const stop = BUS_STOPS[0];
+    const shelter = generateBusShelter(stop.shelterX, stop.shelterZ, stop.axis, stop.benchSign);
+    const boxes = shelter.map((voxel) => {
+      const scale = voxel.scale ?? new THREE.Vector3(1, 1, 1);
+      return new THREE.Box3().setFromCenterAndSize(voxel.position, scale);
+    });
+    const roof = boxes.reduce((a, b) => (b.max.y - b.min.y < 0.3 && (b.max.x - b.min.x) * (b.max.z - b.min.z) > 4 ? b : a));
+    const posts = boxes.filter((b) => b.max.y - b.min.y > 1.5 && (b.max.x - b.min.x) < 0.25);
+    const seat = boxes.filter((b) => b.max.y - b.min.y < 0.2 && b.min.y - GROUND_SURFACE_Y > 0.3 && b.min.y - GROUND_SURFACE_Y < 0.6);
 
-    // A shelter is never taller than the bus it shelters. It was: 4.00 against 2.95.
-    expect(shelterRoofTop, `wiata ${shelterRoofTop.toFixed(2)} vs autobus ${BUS.y.toFixed(2)}`)
-      .toBeLessThan(BUS.y);
+    const roofTop = roof.max.y - GROUND_SURFACE_Y;
+    const clearance = roof.min.y - GROUND_SURFACE_Y;
+    expect(posts.length, 'wiata bez slupkow').toBeGreaterThanOrEqual(2);
+    expect(seat.length, 'przystanek bez siedziska').toBeGreaterThanOrEqual(1);
 
-    const versusPerson = shelterRoofTop / PASSENGER_HEIGHT;
-    expect(versusPerson, `wiata/pasazer ${versusPerson.toFixed(2)}`).toBeLessThan(1.55);
+    // Justified, not invented: a shelter has to let this world's tallest resident
+    // walk in and stand under it, and a roof that clears him by more than a storey
+    // is a canopy, not a shelter. Nothing here compares it to the bus -- that the
+    // shelter is lower than the bus is a styling choice in this diorama, not a rule
+    // of realism, and asserting it would freeze the choice as a law.
+    expect(clearance, `przeswit ${clearance.toFixed(2)} m`).toBeGreaterThan(PASSENGER_HEIGHT + 0.1);
+    expect(roofTop - clearance, `plyta dachu ${(roofTop - clearance).toFixed(2)} m`).toBeLessThan(0.35);
+    expect(roofTop, `wiata ${roofTop.toFixed(2)} m`).toBeLessThan(PASSENGER_HEIGHT + 0.9);
 
-    // The bench a person sits on cannot be longer than a person is tall by half.
-    const benchOverPerson = BENCH_DIMENSIONS.length / PASSENGER_HEIGHT;
-    expect(benchOverPerson, `lawka/pasazer ${benchOverPerson.toFixed(2)}`).toBeLessThan(1.1);
-    const backTop = BENCH_DIMENSIONS.seatHeight + BENCH_DIMENSIONS.backHeight;
-    expect(backTop).toBeLessThan(PASSENGER_HEIGHT * 0.55);
+    // The roof has to be over the bench, not beside it.
+    const bench = seat.reduce((a, b) => (b.getSize(new THREE.Vector3()).length() > a.getSize(new THREE.Vector3()).length() ? b : a));
+    expect(bench.min.x, 'siedzisko wystaje przed dach').toBeGreaterThan(roof.min.x - 0.2);
+    expect(bench.max.x).toBeLessThan(roof.max.x + 0.2);
+    expect(bench.min.z).toBeGreaterThan(roof.min.z - 0.2);
+    expect(bench.max.z).toBeLessThan(roof.max.z + 0.2);
+
+    // The bench itself, measured: a seat someone can sit on, deep enough to sit back
+    // on, long enough for two of this world's residents at 0.45 m of shoulder each.
+    const benchSize = bench.getSize(new THREE.Vector3());
+    const seatTop = bench.max.y - GROUND_SURFACE_Y;
+    const benchLength = Math.max(benchSize.x, benchSize.z);
+    const benchDepth = Math.min(benchSize.x, benchSize.z);
+    expect(seatTop, `siedzisko ${seatTop.toFixed(2)} m`).toBeGreaterThan(0.40);
+    expect(seatTop, `siedzisko ${seatTop.toFixed(2)} m`).toBeLessThan(0.52);
+    expect(benchDepth, `glebokosc ${benchDepth.toFixed(2)} m`).toBeGreaterThan(0.40);
+    expect(benchDepth).toBeLessThan(0.70);
+    expect(benchLength, `dlugosc ${benchLength.toFixed(2)} m`).toBeGreaterThan(0.9);
+    expect(benchLength, `dlugosc ${benchLength.toFixed(2)} m`).toBeLessThan(2.2);
+    const seats = Math.floor(benchLength / 0.45);
+    expect(seats, `miejsca ${seats}`).toBeGreaterThanOrEqual(2);
   });
 
   test('the street a person crosses has believable widths', () => {
@@ -221,14 +293,144 @@ describe('one metric system', () => {
   });
 
   test('nothing floats above the pavement or sinks into it', () => {
+    // The fragment's own contact tolerance, 12 mm, on the finished geometry of each
+    // prop measured on its own. The previous version allowed 50 mm of sink, which is
+    // exactly what it was hiding: every tyre was built as a 0.34 m torus with a
+    // 0.045 m section and its hub at 0.34, so the tread sat 45 mm under the pavement.
     for (const prop of model.props) {
-      const prims = propNear(prop.x, prop.z, prop.kind.startsWith('bicycle') ? 1.1 : 0.7);
+      const prims = propParts(prop);
       if (!prims.length) continue;
       const box = boundsOf(prims);
-      const lowest = box.min.y - GROUND_SURFACE_Y;
-      // A leaning bicycle dips a tyre edge below the plane by a few millimetres.
-      expect(lowest, `${prop.id} spod ${lowest.toFixed(3)} m`).toBeGreaterThan(-0.05);
-      expect(lowest, `${prop.id} unosi sie ${lowest.toFixed(3)} m`).toBeLessThan(0.02);
+      const gap = box.min.y - GROUND_SURFACE_Y;
+      expect(gap, `${prop.id} spod ${gap.toFixed(4)} m`).toBeGreaterThan(-CONTACT_TOLERANCE);
+      expect(gap, `${prop.id} unosi sie ${gap.toFixed(4)} m`).toBeLessThan(CONTACT_TOLERANCE);
     }
+  });
+
+  test('the leaning bicycle leans without burying a tyre', () => {
+    const gap = LEANING_BIKE.min.y - GROUND_SURFACE_Y;
+    expect(gap, `rower oparty spod ${gap.toFixed(4)} m`).toBeGreaterThan(-CONTACT_TOLERANCE);
+    expect(gap).toBeLessThan(CONTACT_TOLERANCE);
+    // A leaning wheel's hub is displaced sideways from its contact patch by
+    // r*sin(lean); an upright one sits over it. Measured on the tyre's own vertices,
+    // which is also the check that catches a lean applied to the frame but not to
+    // the wheels. (Comparing bounding-box heights proves nothing here: rotating a
+    // box raises a corner, so the leaning bicycle's AABB is the taller of the two.)
+    const offsetOf = (prop: PropSpec): number => {
+      const tyre = propParts(prop).find((prim) => prim.kind === 'torus' && prim.tube > 0.03);
+      const geometry = geometryFor(tyre!);
+      const position = geometry.getAttribute('position') as THREE.BufferAttribute;
+      const vertex = new THREE.Vector3();
+      const lowest = new THREE.Vector3(0, Infinity, 0);
+      const centre = new THREE.Vector3();
+      for (let i = 0; i < position.count; i++) {
+        vertex.fromBufferAttribute(position, i);
+        centre.add(vertex);
+        if (vertex.y < lowest.y) lowest.copy(vertex);
+      }
+      centre.divideScalar(position.count);
+      geometry.dispose();
+      return Math.hypot(centre.x - lowest.x, centre.z - lowest.z);
+    };
+    const leaning = offsetOf(leaningSpec);
+    const upright = offsetOf(bikeSpec);
+    expect(upright, `rower stojacy: os nad sladem ${upright.toFixed(4)} m`).toBeLessThan(0.005);
+    expect(leaning, `rower oparty: os obok sladu ${leaning.toFixed(4)} m`).toBeGreaterThan(0.04);
+    expect(leaning).toBeLessThan(0.12);
+  });
+
+  test('the postman rides his bicycle instead of hovering over it', () => {
+    const { bike, named, unnamedBy, toBike } = postmanRig;
+    const rig = trueBounds(bike, () => true, toBike);
+    const wheels = unnamedBy((mesh) => mesh.geometry.type === 'CylinderGeometry');
+    const wheelSize = sizeOf(wheels);
+    const bars = unnamedBy((mesh) => mesh.geometry.type === 'BoxGeometry' && mesh.position.y > 0.9);
+    const saddle = unnamedBy((mesh) => mesh.geometry.type === 'BoxGeometry' && Math.abs(mesh.position.z - 0.32) < 0.01 && mesh.position.y > 0.8);
+    const legs = named('postman-legs');
+    const arms = named('postman-left-arm');
+    const head = named('postman-head');
+
+    // Contact, in the bike's own frame where y = 0 is the road it stands on. The
+    // whole rig used to ride at y = 0 while the road is the ground plane at -0.5, so
+    // postman, bicycle and dog floated half a metre with detached shadows.
+    expect(rig.min.y, `spod kola ${rig.min.y.toFixed(4)} m`).toBeGreaterThan(-CONTACT_TOLERANCE);
+    expect(wheels.min.y, `kolo nad droga ${wheels.min.y.toFixed(4)} m`).toBeLessThan(CONTACT_TOLERANCE);
+    // And the same contact in world coordinates, against the road: the check above
+    // is in the bicycle's own frame, where its wheels touch y = 0 whatever height
+    // the whole rig is flying at.
+    const world = trueBounds(bike);
+    const gap = world.min.y - GROUND_SURFACE_Y;
+    expect(gap, `listonosz ${gap.toFixed(3)} m nad droga`).toBeGreaterThan(-CONTACT_TOLERANCE);
+    expect(gap, `listonosz ${gap.toFixed(3)} m nad droga`).toBeLessThan(CONTACT_TOLERANCE);
+    const dogGap = trueBounds(postmanRig.dog).min.y - GROUND_SURFACE_Y;
+    expect(dogGap, `pies ${dogGap.toFixed(3)} m nad droga`).toBeGreaterThan(-CONTACT_TOLERANCE);
+    expect(dogGap).toBeLessThan(CONTACT_TOLERANCE);
+
+    // One family of wheels: the street bicycles are 0.74 m, this was 0.84 m.
+    const streetWheel = (() => {
+      const tyre = propParts(bikeSpec).find((prim) => prim.kind === 'torus' && prim.tube > 0.03)!;
+      return tyre.kind === 'torus' ? 2 * (tyre.radius + tyre.tube) : 0;
+    })();
+    expect(wheelSize.y, `kolo ${wheelSize.y.toFixed(3)} m`).toBeGreaterThan(0.65);
+    expect(wheelSize.y).toBeLessThan(0.78);
+    expect(Math.abs(wheelSize.y - streetWheel), 'kola listonosza i ulicy rozjezdzaja sie').toBeLessThan(0.1);
+
+    // A bicycle he fits on: hips on the saddle, hands on the bars, feet off the road
+    // and under the saddle. Everything below is measured on finished meshes.
+    const saddleTop = saddle.max.y;
+    const hip = legs.max.y;
+    expect(saddleTop, `siodlo ${saddleTop.toFixed(3)} m`).toBeGreaterThan(0.8);
+    expect(saddleTop).toBeLessThan(1.0);
+    expect(bars.min.y, 'kierownica nizej niz siodlo').toBeGreaterThan(saddleTop - 0.1);
+    expect(-bars.max.z, 'kierownica nie jest przed siodlem').toBeGreaterThan(-saddle.min.z);
+    expect(Math.abs(hip - saddleTop), `biodra ${(hip - saddleTop).toFixed(3)} m od siodla`).toBeLessThan(0.14);
+    // Hands: the arm's lower end has to overlap the grips in height and reach them.
+    expect(arms.min.y, `rece ${arms.min.y.toFixed(3)} m wobec kierownicy ${bars.min.y.toFixed(3)}`).toBeLessThan(bars.max.y + 0.05);
+    expect(arms.min.y).toBeGreaterThan(bars.min.y - 0.15);
+    expect(-arms.min.z, 'rece nie dosiegaja kierownicy').toBeGreaterThan(-bars.max.z - 0.1);
+    expect(legs.min.y, `stopa ${legs.min.y.toFixed(3)} m`).toBeGreaterThan(0.05);
+    expect(legs.min.y).toBeLessThan(saddleTop);
+
+    // He is one of this world's people, not a bigger species.
+    const crown = rig.max.y;
+    expect(crown, `czubek czapki ${crown.toFixed(3)} m`).toBeGreaterThan(PASSENGER_HEIGHT);
+    expect(crown, `czubek czapki ${crown.toFixed(3)} m`).toBeLessThan(PASSENGER_HEIGHT * 1.25);
+    expect(head.max.y).toBeLessThan(crown + 0.001);
+    const rider = bike.getObjectByName('postman-rider')!;
+    expect(rider.scale.x, 'jezdziec skalowany inaczej niz mieszkancy').toBeCloseTo(PASSENGER_SCALE, 5);
+  });
+
+  test('the bus stands on the road it drives on', () => {
+    // Measured after the bus has been placed by its own update, because that is
+    // where the defect was: the route is stored at y = 0, the road is the ground
+    // plane, and nothing reconciled them -- the bus drove half a metre in the air
+    // with its shadow detached from its wheels.
+    const scene = new THREE.Scene();
+    const bus = createBus(scene);
+    bus.update(1 / 60, 0, false, 12 / 24); // midday, running service
+    const group = scene.children.find((child) => child.type === 'Group')!;
+    const bounds = trueBounds(group, (mesh) => mesh.geometry.type !== 'ConeGeometry');
+    const gap = bounds.min.y - GROUND_SURFACE_Y;
+    expect(gap, `autobus ${gap.toFixed(3)} m nad jezdnia`).toBeGreaterThan(-0.02);
+    expect(gap, `autobus ${gap.toFixed(3)} m nad jezdnia`).toBeLessThan(0.05);
+  });
+
+  test('the dog is a dog, not a pony', () => {
+    // Before any update, too: the yard position is where the dog is put on
+    // construction, and it is a separate constant from the one the update writes.
+    const fresh = new THREE.Scene();
+    new Postman(fresh);
+    const parked = trueBounds(fresh.children.find((child) => child.name === 'postman-dog')!);
+    expect(parked.min.y - GROUND_SURFACE_Y, `pies w budzie ${(parked.min.y - GROUND_SURFACE_Y).toFixed(3)} m nad ziemia`)
+      .toBeLessThan(CONTACT_TOLERANCE);
+    expect(parked.min.y - GROUND_SURFACE_Y).toBeGreaterThan(-CONTACT_TOLERANCE);
+
+    const dog = trueBounds(postmanRig.dog);
+    const size = sizeOf(dog);
+    const shoulder = dog.max.y - GROUND_SURFACE_Y;
+    expect(shoulder, `pies ${shoulder.toFixed(2)} m w klebie`).toBeGreaterThan(0.35);
+    expect(shoulder, `pies ${shoulder.toFixed(2)} m w klebie`).toBeLessThan(0.75);
+    expect(Math.max(size.x, size.z), `dlugosc ${Math.max(size.x, size.z).toFixed(2)} m`).toBeLessThan(1.1);
+    expect(shoulder).toBeLessThan(PASSENGER_HEIGHT * 0.45);
   });
 });

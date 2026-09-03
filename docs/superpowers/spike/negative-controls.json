@@ -1,0 +1,63 @@
+[
+  {
+    "defect": "postman rig placed on the route plane (y=0) instead of the road",
+    "failing_tests": [
+      "the postman rides his bicycle instead of hovering over it"
+    ]
+  },
+  {
+    "defect": "postman wheels back to 0.42 m radius on a 1.30 m wheelbase",
+    "failing_tests": [
+      "the postman rides his bicycle instead of hovering over it"
+    ]
+  },
+  {
+    "defect": "rider back to scale 0.85 seated 0.85 m over the frame",
+    "failing_tests": [
+      "the postman rides his bicycle instead of hovering over it"
+    ]
+  },
+  {
+    "defect": "arms pivoting at the middle of the box again",
+    "failing_tests": [
+      "the postman rides his bicycle instead of hovering over it"
+    ]
+  },
+  {
+    "defect": "street bicycle hub back at the torus radius (tyre 45 mm under the pavement)",
+    "failing_tests": [
+      "nothing floats above the pavement or sinks into it",
+      "the leaning bicycle leans without burying a tyre"
+    ]
+  },
+  {
+    "defect": "bus placed on the route plane instead of the road",
+    "failing_tests": [
+      "the bus stands on the road it drives on"
+    ]
+  },
+  {
+    "defect": "dog back to its 1.04 m shoulder",
+    "failing_tests": [
+      "the dog is a dog, not a pony"
+    ]
+  },
+  {
+    "defect": "dog left on the route plane instead of the road",
+    "failing_tests": [
+      "the dog is a dog, not a pony"
+    ]
+  },
+  {
+    "defect": "shelter roof lifted to the old integer voxel height",
+    "failing_tests": [
+      "street furniture is furniture, not architecture"
+    ]
+  },
+  {
+    "defect": "bench stretched back to 2.8 m",
+    "failing_tests": [
+      "street furniture is furniture, not architecture"
+    ]
+  }
+]

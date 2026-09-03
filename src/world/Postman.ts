@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { DOG_HOME, MAIL_STOPS, POSTMAN_ROUTE_CURVE } from './WorldLayout';
-import type { PassengerBuild } from './PassengerCrowd';
+import { DOG_HOME, GROUND_SURFACE_Y, MAIL_STOPS, POSTMAN_ROUTE_CURVE } from './WorldLayout';
+import { PASSENGER_SCALE, type PassengerBuild } from './PassengerCrowd';
 import type { EclipseWorldReactionState } from '../experience/EclipseWorldReaction';
 
 /**
@@ -11,6 +11,24 @@ import type { EclipseWorldReactionState } from '../experience/EclipseWorldReacti
  */
 
 const ROUTE_LENGTH = POSTMAN_ROUTE_CURVE.getLength();
+/**
+ * The postman's own bicycle, in the same family of sizes as the street bicycles
+ * (0.74 m wheels on a 1.10 m wheelbase) rather than the 0.84 m wheels on a 1.30 m
+ * wheelbase it used to carry. Every figure here is measured off the finished meshes
+ * by `Postman.test.ts`, not off these constants.
+ */
+const WHEEL_RADIUS = 0.35;
+const WHEELBASE = 1.1;
+const SADDLE_Y = 0.92;
+const BAR_Y = 1.0;
+/** Hip and shoulder heights of the product figure in its own unscaled units. */
+const RIDER_HIP_Y = 0.92;
+const RIDER_SHOULDER_Y = 1.89;
+/** Riding pose: legs swing from the hip, the torso leans, hands sit on the bars. */
+const SADDLE_Z = 0.32;
+const RIDER_LEAN = 0.42;
+const LEG_PEDAL_ANGLE = -0.5;
+const ARM_REACH_ANGLE = -1.05;
 const RIDE_SPEED = 6;
 const MORNING_START = 0.28;
 const MORNING_END = 0.5;
@@ -70,12 +88,13 @@ function buildPostmanRider(satchelMaterial: THREE.Material): PostmanRider {
     return mesh;
   };
 
-  const legs = makePart(
-    'postman-legs',
-    new THREE.BoxGeometry(0.58, 0.92, 0.52),
-    trousersMaterial
-  );
-  legs.position.y = 0.46;
+  // Limbs pivot at the joint, not at the centre of their box: with the old centre
+  // pivot the pedalling legs swung their feet up as much as forward and the arms
+  // could not reach the handlebars at all.
+  const legGeometry = new THREE.BoxGeometry(0.58, 0.92, 0.52);
+  legGeometry.translate(0, -0.46, 0);
+  const legs = makePart('postman-legs', legGeometry, trousersMaterial);
+  legs.position.y = RIDER_HIP_Y;
   group.add(legs);
 
   const body = makePart(
@@ -94,20 +113,14 @@ function buildPostmanRider(satchelMaterial: THREE.Material): PostmanRider {
   head.position.y = 2.2;
   group.add(head);
 
-  const leftArm = makePart(
-    'postman-left-arm',
-    new THREE.BoxGeometry(0.23, 0.86, 0.34),
-    uniformMaterial
-  );
-  leftArm.position.set(-0.47, 1.46, 0);
+  const armGeometry = new THREE.BoxGeometry(0.23, 0.86, 0.34);
+  armGeometry.translate(0, -0.43, 0);
+  const leftArm = makePart('postman-left-arm', armGeometry, uniformMaterial);
+  leftArm.position.set(-0.47, RIDER_SHOULDER_Y, 0);
   group.add(leftArm);
 
-  const rightArm = makePart(
-    'postman-right-arm',
-    new THREE.BoxGeometry(0.23, 0.86, 0.34),
-    uniformMaterial
-  );
-  rightArm.position.set(0.47, 1.46, 0);
+  const rightArm = makePart('postman-right-arm', armGeometry, uniformMaterial);
+  rightArm.position.set(0.47, RIDER_SHOULDER_Y, 0);
   group.add(rightArm);
 
   const cap = new THREE.Group();
@@ -151,12 +164,22 @@ function buildPostmanRider(satchelMaterial: THREE.Material): PostmanRider {
   strap.rotation.z = 0.48;
   group.add(strap);
 
-  group.position.set(0, 0.85, 0.3);
-  group.rotation.y = Math.PI;
-  group.scale.setScalar(0.85);
-  legs.rotation.x = -0.9;
-  leftArm.rotation.x = -0.4;
-  rightArm.rotation.x = -0.4;
+  // The rider is the product's own figure, so he is scaled like the product's
+  // figures (PASSENGER_SCALE) rather than 0.85: at 0.85 he stood 2.24 m against
+  // everyone else's 1.915 m and his hips sat 0.4 m above the saddle -- he floated
+  // over the bicycle instead of sitting on it.
+  //
+  // The lean is a rotation about the hip, not about the group origin at his feet:
+  // rotate first, then place the rotated hip on the saddle. Upright, this figure's
+  // arms fall 0.2 m short of the handlebars -- its shoulders are 0.68 m above the
+  // bars and its arms are 0.67 m long -- so the lean is what puts his hands on them.
+  group.rotation.set(-RIDER_LEAN, Math.PI, 0);
+  group.scale.setScalar(PASSENGER_SCALE);
+  const hip = new THREE.Vector3(0, RIDER_HIP_Y * PASSENGER_SCALE, 0).applyEuler(group.rotation);
+  group.position.set(-hip.x, SADDLE_Y - hip.y, SADDLE_Z - hip.z);
+  legs.rotation.x = LEG_PEDAL_ANGLE;
+  leftArm.rotation.x = ARM_REACH_ANGLE;
+  rightArm.rotation.x = ARM_REACH_ANGLE;
 
   return {
     group,
@@ -182,26 +205,27 @@ function buildBike(): { group: THREE.Group; wheels: THREE.Mesh[]; rider: Postman
   mats.push(frameMat, wheelMat, bagMat);
 
   const wheels: THREE.Mesh[] = [];
-  const wheelGeo = new THREE.CylinderGeometry(0.42, 0.42, 0.1, 14);
-  for (const z of [-0.65, 0.65]) {
+  const wheelGeo = new THREE.CylinderGeometry(WHEEL_RADIUS, WHEEL_RADIUS, 0.1, 14);
+  for (const z of [-WHEELBASE / 2, WHEELBASE / 2]) {
     const wheel = new THREE.Mesh(wheelGeo, wheelMat);
     wheel.rotation.z = Math.PI / 2;
-    wheel.position.set(0, 0.42, z);
+    // Hub at exactly the wheel radius, so the tread meets the road the group sits on.
+    wheel.position.set(0, WHEEL_RADIUS, z);
     group.add(wheel);
     wheels.push(wheel);
   }
-  const bar = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 1.3), frameMat);
-  bar.position.set(0, 0.78, 0);
-  group.add(bar);
-  const seatPost = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.5, 0.08), frameMat);
-  seatPost.position.set(0, 1.0, 0.35);
-  group.add(seatPost);
-  const handlePost = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.45, 0.08), frameMat);
-  handlePost.position.set(0, 1.0, -0.55);
-  group.add(handlePost);
-  const handles = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.07, 0.07), frameMat);
-  handles.position.set(0, 1.24, -0.55);
-  group.add(handles);
+  const member = (w: number, h: number, d: number, y: number, z: number) => {
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), frameMat);
+    mesh.position.set(0, y, z);
+    group.add(mesh);
+  };
+  member(0.07, 0.07, WHEELBASE, 0.6, 0);            // top tube
+  member(0.07, 0.44, 0.07, SADDLE_Y - 0.22, SADDLE_Z);
+  // The saddle he actually sits on: without it the seat post ended in mid-air.
+  member(0.24, 0.06, 0.16, SADDLE_Y - 0.03, SADDLE_Z);
+  member(0.07, 0.44, 0.07, BAR_Y - 0.22, -0.46);    // head tube
+  // 0.66 m across, so the figure's hands land over the grips rather than outboard of them.
+  member(0.66, 0.06, 0.06, BAR_Y, -0.46);           // handlebars
   const rider = buildPostmanRider(bagMat);
   group.add(rider.group);
 
@@ -211,6 +235,9 @@ function buildBike(): { group: THREE.Group; wheels: THREE.Mesh[]; rider: Postman
 function buildDog(): { group: THREE.Group; head: THREE.Mesh; tail: THREE.Mesh; mats: THREE.Material[] } {
   const group = new THREE.Group();
   group.name = 'postman-dog';
+  // Built in the same oversized units as the old rider: 1.04 m at the shoulder and
+  // 1.48 m long, a pony beside 1.9 m people. Scaled to a real dog instead.
+  group.scale.setScalar(0.62);
   const mats: THREE.Material[] = [];
   const furMat = new THREE.MeshStandardMaterial({ color: 0x8a6a42, roughness: 0.9 });
   const darkMat = new THREE.MeshStandardMaterial({ color: 0x5a4226, roughness: 0.9 });
@@ -265,7 +292,7 @@ export class Postman {
   private readonly scene: THREE.Scene;
   private readonly bike: ReturnType<typeof buildBike>;
   private readonly dog: ReturnType<typeof buildDog>;
-  private readonly dogHome = new THREE.Vector3(DOG_HOME.x, 0, DOG_HOME.z);
+  private readonly dogHome = new THREE.Vector3(DOG_HOME.x, GROUND_SURFACE_Y, DOG_HOME.z);
   private dogMode: DogMode = 'home';
   private dogChaseTime = 0;
   private chaseReaction = 0;
@@ -335,9 +362,9 @@ export class Postman {
     this.bike.group.rotation.z = 0;
     this.bike.rider.group.rotation.z = 0;
     this.bike.rider.head.rotation.z = 0;
-    this.bike.rider.legs.rotation.x = -0.9;
-    this.bike.rider.leftArm.rotation.x = -0.4;
-    this.bike.rider.rightArm.rotation.x = -0.4;
+    this.bike.rider.legs.rotation.x = LEG_PEDAL_ANGLE;
+    this.bike.rider.leftArm.rotation.x = ARM_REACH_ANGLE;
+    this.bike.rider.rightArm.rotation.x = ARM_REACH_ANGLE;
   }
 
   private updateRide(delta: number, elapsed: number): void {
@@ -348,9 +375,9 @@ export class Postman {
       this.bike.group.rotation.z = 0;
       this.bike.rider.group.rotation.z = 0;
       this.bike.rider.head.rotation.z = 0;
-      this.bike.rider.legs.rotation.x = -0.9;
-      this.bike.rider.leftArm.rotation.x = -0.4;
-      this.bike.rider.rightArm.rotation.x = -1.6 + Math.sin(elapsed * 6) * 0.3;
+      this.bike.rider.legs.rotation.x = LEG_PEDAL_ANGLE;
+      this.bike.rider.leftArm.rotation.x = ARM_REACH_ANGLE;
+      this.bike.rider.rightArm.rotation.x = -1.9 + Math.sin(elapsed * 6) * 0.3;
       return;
     }
 
@@ -376,20 +403,22 @@ export class Postman {
 
     const p = POSTMAN_ROUTE_CURVE.getPointAt(this.t);
     const tangent = POSTMAN_ROUTE_CURVE.getTangentAt(this.t).normalize();
-    this.bike.group.position.set(p.x, 0, p.z);
+    // The route is stored at y=0; the road is the ground plane, and the bicycle is
+    // modelled with its tread at the group origin.
+    this.bike.group.position.set(p.x, GROUND_SURFACE_Y, p.z);
 
-    const wheelSpin = (RIDE_SPEED * delta) / 0.42;
+    const wheelSpin = (RIDE_SPEED * delta) / WHEEL_RADIUS;
     for (const wheel of this.bike.wheels) wheel.rotation.x += wheelSpin;
 
     // Pedalling legs + a controlled wobble when the dog reaches the bicycle.
     const dogWobble = Math.sin(elapsed * 9.5) * 0.075 * this.chaseReaction;
     const yaw = Math.atan2(-tangent.x, -tangent.z); // bicycle front is local -Z
-    this.bike.rider.legs.rotation.x = -0.9 + Math.sin(elapsed * 9) * 0.35;
+    this.bike.rider.legs.rotation.x = LEG_PEDAL_ANGLE + Math.sin(elapsed * 9) * 0.3;
     this.bike.group.rotation.set(0, yaw, Math.sin(elapsed * 1.3) * 0.02 + dogWobble);
     this.bike.rider.group.rotation.z = -dogWobble * 0.7;
     this.bike.rider.head.rotation.z = dogWobble * 0.45;
-    this.bike.rider.rightArm.rotation.x = -0.4;
-    this.bike.rider.leftArm.rotation.x = -0.4;
+    this.bike.rider.rightArm.rotation.x = ARM_REACH_ANGLE;
+    this.bike.rider.leftArm.rotation.x = ARM_REACH_ANGLE;
   }
 
   private updateDog(delta: number, elapsed: number): void {
@@ -400,7 +429,7 @@ export class Postman {
         this.dogChaseTime -= delta;
         if (this.dogChaseTime <= 0 || !this.active) this.dogMode = 'returnHome';
       }
-      this.dog.group.position.y = 0;
+      this.dog.group.position.y = GROUND_SURFACE_Y;
       this.dog.tail.rotation.y = Math.sin(elapsed * 1.8) * 0.12 * (1 - alert);
       return;
     }
@@ -414,7 +443,7 @@ export class Postman {
       // Naps / sniffs around its yard.
       this.dog.group.position.set(
         this.dogHome.x + Math.sin(elapsed * 0.4) * 0.4,
-        0,
+        GROUND_SURFACE_Y,
         this.dogHome.z + Math.cos(elapsed * 0.3) * 0.4
       );
       this.dog.tail.rotation.y = Math.sin(elapsed * 3) * 0.3;
@@ -437,7 +466,7 @@ export class Postman {
         this.dog.group.position.z += (dz / dist) * step;
       }
       if (dist > 1e-3) this.dog.group.rotation.y = Math.atan2(dx, dz) + Math.PI; // head is -Z
-      this.dog.group.position.y = Math.abs(Math.sin(elapsed * 11)) * 0.12; // excited hops
+      this.dog.group.position.y = GROUND_SURFACE_Y + Math.abs(Math.sin(elapsed * 11)) * 0.12; // excited hops
       this.dog.tail.rotation.y = Math.sin(elapsed * 14) * 0.6;
       if (this.dogChaseTime <= 0 || !this.active) {
         this.dogMode = 'returnHome';
@@ -454,7 +483,7 @@ export class Postman {
         this.dog.group.position.x += (dx / dist) * step;
         this.dog.group.position.z += (dz / dist) * step;
         this.dog.group.rotation.y = Math.atan2(dx, dz) + Math.PI;
-        this.dog.group.position.y = Math.abs(Math.sin(elapsed * 7)) * 0.08;
+        this.dog.group.position.y = GROUND_SURFACE_Y + Math.abs(Math.sin(elapsed * 7)) * 0.08;
       }
     }
   }

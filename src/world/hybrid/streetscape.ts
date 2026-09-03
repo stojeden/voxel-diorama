@@ -37,7 +37,12 @@ export function emitStreetscape(model: CityModel): Cluster {
   return E.cluster('streetscape', [-9, GROUND, 28], 32);
 }
 
-function emitProp(E: Emitter, prop: PropSpec): void {
+/**
+ * One prop's primitives. Exported so a test can measure a single finished object by
+ * its identity: the previous approach collected everything within 1.1 m of a prop's
+ * centre, which for a bicycle also swept in the second bicycle and the rack.
+ */
+export function emitProp(E: Emitter, prop: PropSpec): void {
   const { x, z, ry } = prop;
   switch (prop.kind) {
     case 'bikeRack': {
@@ -84,9 +89,17 @@ function emitProp(E: Emitter, prop: PropSpec): void {
  * 1.08 m instead of 0.97 so the silhouette reaches a believable height.
  */
 const TUBE = 0.055;
+/**
+ * Tyre section and outer radius. The wheel is defined by where it touches the road:
+ * the torus radius is the outer radius minus the section, so the tread lands exactly
+ * on the ground. Building it the other way -- torus radius 0.34 with a 0.045 section
+ * and the hub at 0.34 -- put the bottom of every tyre 45 mm under the pavement.
+ */
+const TYRE = 0.045;
+const WHEEL = 0.37;
 
 function bicycle(E: Emitter, x: number, z: number, ry: number, lean: number): void {
-  const r = 0.34;
+  const r = WHEEL - TYRE;
   const c = Math.cos(ry);
   const s = Math.sin(ry);
   const lift = Math.cos(lean);
@@ -97,9 +110,13 @@ function bicycle(E: Emitter, x: number, z: number, ry: number, lean: number): vo
     z: z - dx * s + (dz + dy * side) * c,
   });
   const o = { layer: 1 as const, rx: lean, ry, order: 'YXZ' as const };
+  // A torus rolled by `lean` about the bike's long axis reaches r*cos(lean) + TYRE
+  // below its hub, not (r + TYRE)*cos(lean): the section is a tube, so its lowest
+  // point rolls around it. `at` scales the height by cos(lean), hence the division.
+  const hub = (r * lift + TYRE) / lift;
   for (const dx of [-0.55, 0.55]) {
-    const p = at(dx, r, 0);
-    E.torus(P.interior, p.x, p.y, p.z, r, 0.045, o);
+    const p = at(dx, hub, 0);
+    E.torus(P.interior, p.x, p.y, p.z, r, TYRE, o);
     // A rim inside the tyre: a bare hoop reads as wire, a hoop with a rim reads as a wheel.
     E.torus(P.steel, p.x, p.y, p.z, r - 0.075, 0.022, o);
   }

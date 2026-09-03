@@ -83,7 +83,11 @@ export function isPointClear(point: THREE.Vector3, colliders: readonly Collision
 
 /** Four deterministic waiting spots under the roof, behind the bench. */
 export function busStopWaitingPositions(stop: BusStop): THREE.Vector3[] {
-  return [-1, -0.33, 0.34, 1.01].map((along) => localToWorld(stop, along, -0.65));
+  // Outward -0.15, not -0.65: the roof spans 0.85 m either side of its centre line,
+  // so at -0.65 a waiting passenger stood 0.15 m behind its rear edge -- queueing at
+  // the shelter without being under it. At -0.15 the whole body is under the roof and
+  // still half a metre clear of the bench behind them.
+  return [-1, -0.33, 0.34, 1.01].map((along) => localToWorld(stop, along, -0.15));
 }
 
 /**

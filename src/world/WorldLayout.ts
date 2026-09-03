@@ -241,9 +241,22 @@ export function isOnRoad(x: number, z: number): boolean {
   return false;
 }
 
+/**
+ * Pavement wider than the one-metre strip a road gets by default, where what stands
+ * on it needs the room. The Osiedle Centralne stop is the case that forced this: its
+ * shelter roof is 1.7 m deep and its posts stand a metre behind the kerb, so on the
+ * default strip the shelter, the bench, the stop sign and everyone waiting stood on
+ * grass, and the path around the shelter ran over a lawn. The carriageway is left
+ * alone -- it is 5 m wide and the bus is 2.45 m, so the vehicle was never the problem.
+ *
+ * Deliberately local: this is one apron at one stop, not a decision to widen every
+ * pavement in the city.
+ */
 export function isOnSidewalk(x: number, z: number): boolean {
   if (isOnRoad(x, z)) return false;
   if (BUILDING_ACCESS_CELL_KEYS.has(`${Math.round(x)},${Math.round(z)}`)) return true;
+  // The Osiedle Centralne apron, inline rather than a table: one stop needs it.
+  if (x >= -16 && x <= -6 && z >= 27 && z <= 30) return true;
   for (const r of ROAD_RECTS) {
     if (x >= r.minX - 1 && x <= r.maxX + 1 && z >= r.minZ - 1 && z <= r.maxZ + 1) return true;
   }

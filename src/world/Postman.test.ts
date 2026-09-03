@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import * as THREE from 'three';
 import { POSTMAN_STOP_TS, POSTMAN_UNIFORM_COLOR, Postman } from './Postman';
+import { GROUND_SURFACE_Y } from './WorldLayout';
 
 describe('postman and dog interaction', () => {
   test('keeps the complete opaque rider visible while the dog gives chase', () => {
@@ -20,7 +21,12 @@ describe('postman and dog interaction', () => {
         expect(state.riderVisible).toBe(true);
         expect(state.riderOpacity).toBe(1);
         expect(state.riderHiddenParts).toBe(0);
-        expect(state.riderWorldY).toBeGreaterThan(2);
+        // The head of a rider who is sitting on the bicycle: above the handlebars and
+        // below a bus roof, measured against the road rather than against zero. The
+        // absolute `> 2` this replaces was satisfied by the whole rig riding half a
+        // metre above the asphalt.
+        expect(state.riderWorldY - GROUND_SURFACE_Y).toBeGreaterThan(1.3);
+        expect(state.riderWorldY - GROUND_SURFACE_Y).toBeLessThan(2.1);
       }
       maxReaction = Math.max(maxReaction, state.chaseReaction);
     }
@@ -50,7 +56,10 @@ describe('postman and dog interaction', () => {
       expect(state.riderOpacity).toBe(1);
       expect(state.riderHiddenParts).toBe(0);
       expect(state.riderMeshCount).toBeGreaterThanOrEqual(10);
-      if (state.active) expect(state.riderWorldY).toBeGreaterThan(2);
+      if (state.active) {
+        expect(state.riderWorldY - GROUND_SURFACE_Y).toBeGreaterThan(1.3);
+        expect(state.riderWorldY - GROUND_SURFACE_Y).toBeLessThan(2.1);
+      }
       sawActive ||= state.active;
       if (sawActive && !state.active) {
         sawFinished = true;

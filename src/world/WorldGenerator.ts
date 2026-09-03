@@ -463,7 +463,7 @@ function generatePlayground(x: number, z: number): VoxelData[] {
   return voxels;
 }
 
-function generateBench(x: number, z: number, rotate = false, backSign: 1 | -1 = -1): VoxelData[] {
+export function generateBench(x: number, z: number, rotate = false, backSign: 1 | -1 = -1): VoxelData[] {
   const { length, depth, seatHeight, seatThickness, backHeight } = BENCH_DIMENSIONS;
   const alongScale = rotate
     ? new THREE.Vector3(depth, seatThickness, length)
@@ -872,7 +872,12 @@ function buildStationLighting(group: THREE.Group): {
  * Bus shelter: 5-long roof on two steel posts + a bench, built along either
  * street axis. `benchSign` offsets the bench/roof extension toward the road.
  */
-function generateBusShelter(x: number, z: number, axis: 'x' | 'z', benchSign: 1 | -1): VoxelData[] {
+/**
+ * Exported for tests: a shelter's dimensions have to be read off the voxels it
+ * actually emits. Deriving them from `BUS_SHELTER_ROOF_Y` in a test only restates
+ * the constant and cannot catch a roof slab or a bench that does not follow it.
+ */
+export function generateBusShelter(x: number, z: number, axis: 'x' | 'z', benchSign: 1 | -1): VoxelData[] {
   const voxels: VoxelData[] = [];
   const at = (along: number, perp: number) =>
     axis === 'x'

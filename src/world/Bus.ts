@@ -673,6 +673,12 @@ export function createBus(scene: THREE.Scene, random = fallbackRandom('bus')): B
       rearPos.copy(BUS_ROUTE_CURVE.getPointAt(wrap01(leadT - dT)));
       mid.copy(frontPos).add(rearPos).multiplyScalar(0.5);
       group.position.copy(mid);
+      // The route is stored at y=0 but the road surface is the ground plane at
+      // GROUND_SURFACE_Y, and the bus is modelled with its wheel contact at the group
+      // origin. Without this the whole bus hovered half a metre over its own asphalt,
+      // with a detached shadow -- measured, not guessed: lowest bus vertex +0.011 m
+      // against a road raycast of -0.500 m.
+      group.position.y += GROUND_SURFACE_Y;
       forward.copy(frontPos).sub(rearPos).normalize();
       // lookAt points +Z at the target; the bus front (windscreen, lamps)
       // sits on -Z, so aim the look-target BEHIND the bus.
