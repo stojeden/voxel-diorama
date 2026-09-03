@@ -41,6 +41,13 @@ export interface DioramaDebugHandle {
   releaseCheckpoint: () => void;
   /** One composer frame, with no readback and no encode: the GPU timer brackets this. */
   renderFrame: () => void;
+  /** Diagnostic only: hold every local light off for a whole measurement window. */
+  debugSetLocalLightsEnabled: (enabled: boolean) => void;
+  /** How many local lights are visible right now. */
+  debugCountVisibleLocalLights: () => Promise<number>;
+  /** Time `count` real animation frames on the GPU, without a second render. */
+  debugStartFrameTiming: (count: number) => Promise<void>;
+  debugReadFrameTiming: () => { samples: number[]; disjoint: boolean; pending: number };
   captureFrame: (
     width?: number,
     jpegQuality?: number,

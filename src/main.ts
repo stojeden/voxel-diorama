@@ -58,6 +58,7 @@ import {
   type QualityMode,
 } from './performance/QualityManager';
 import type { DevStatsHandle } from './performance/DevStats';
+import type { FrameTiming } from './debug/frameTiming';
 import type { DioramaDebugHandle } from './debug/DioramaDebugTypes';
 import { isSpikeGroundCell, parseWorldMode, SPIKE_BLOCK_SET, strategyOf } from './world/hybrid/spikeFlag';
 import type { HybridHandle } from './world/hybrid/HybridSpike';
@@ -770,8 +771,8 @@ function animate(timestamp?: number) {
   }
   // Do not pay the global fragment-shader cost of the other vehicle's spotlights
   // in a chase camera. The followed vehicle keeps its physical headlights.
-  train.setHeadlightsEnabled(cameraMode !== 'bus');
-  bus.setHeadlightsEnabled(cameraMode !== 'train');
+  train.setHeadlightsEnabled(diagnosticLocalLights && cameraMode !== 'bus');
+  bus.setHeadlightsEnabled(diagnosticLocalLights && cameraMode !== 'train');
   world.setSnowCover(weather.getSnowCover());
   world.setWetness(weather.getWetness());
   if (hybrid) {
@@ -901,7 +902,13 @@ function animate(timestamp?: number) {
   }
 
   env.renderer.info.reset();
+  // Diagnostic only: time the frame the user actually sees. The previous probe
+  // bracketed an extra `captureFrame`, which renders a second frame and then reads
+  // the framebuffer back and JPEG-encodes it, so it measured neither this render
+  // nor anything reproducible.
+  const frameQuery = frameTiming?.begin() ?? null;
   env.composer.render(presentationDelta);
+  frameTiming?.end(frameQuery);
   if (quality.getProfile().labels) env.labelRenderer.render(env.scene, env.camera);
   devStats?.update();
 
@@ -917,6 +924,20 @@ function animate(timestamp?: number) {
     }
   }
 }
+
+/**
+ * Diagnostic gate for every local light. The frame loop reassigns the bus and train
+ * headlamps from the camera mode on each frame, so a one-shot disable was undone
+ * immediately -- the same trap as `DayNightCycle` reassigning `visible`.
+ */
+let diagnosticLocalLights = true;
+
+/**
+ * Frame-timing and light-counting diagnostics load on demand, so the entry chunk pays
+ * for a nullable handle and two optional calls rather than for the instrumentation.
+ */
+let frameTiming: FrameTiming | null = null;
+const loadDiagnostics = () => import('./debug/frameTiming');
 
 const debugHandle: DioramaDebugHandle = {
   ready: false,
@@ -1096,6 +1117,36 @@ const debugHandle: DioramaDebugHandle = {
   renderFrame: () => {
     env.composer.render(0);
   },
+  /**
+   * Diagnostic only. `DayNightCycle.update` reassigns `visible` on every local light
+   * each frame, so a benchmark setting `visible = false` once had it back by the next
+   * frame; bus and train headlamps behave the same through their own flags. This
+   * holds all of them off for a whole measurement window, and restores them.
+   */
+  debugSetLocalLightsEnabled: (enabled: boolean) => {
+    diagnosticLocalLights = enabled;
+    dayNight.setLocalLightsEnabled(enabled);
+    bus.setHeadlightsEnabled(enabled);
+    train.setHeadlightsEnabled(enabled);
+  },
+  /**
+   * Lights actually visible right now, counted by walking the scene rather than by
+   * trusting any list: this is the number a diagnostic verifies against, so it has to
+   * be ground truth and has to include the bus and train headlamps.
+   */
+  debugCountVisibleLocalLights: async () => {
+    const { countVisibleLocalLights } = await loadDiagnostics();
+    return countVisibleLocalLights(env.scene);
+  },
+  /** Begin timing `count` real animation frames on the GPU. */
+  debugStartFrameTiming: async (count: number) => {
+    if (!frameTiming) {
+      const { createFrameTiming } = await loadDiagnostics();
+      frameTiming = createFrameTiming(env.renderer);
+    }
+    frameTiming.start(count);
+  },
+  debugReadFrameTiming: () => frameTiming?.read() ?? { samples: [], disjoint: false, pending: 0 },
   captureFrame: (width = 960, jpegQuality = 0.82, format: 'jpeg' | 'png' = 'jpeg') => {
     env.composer.render(0);
     const source = env.renderer.domElement;

@@ -1,0 +1,13 @@
+rev	rep	world	lights	shadows	fps	p95	slowRatio	animMedianMs	animSpreadMs	animConclusive	visibleLightsDuring	visibleLightsAfter	status
+a89af98	1	voxel	on	on	60.0	16.7	0.000	20.74	5.63	False	16	16	ok
+a89af98	1	hybrid-direct	on	on	60.0	16.8	0.000	25.03	12.24	False	16	16	ok
+a89af98	1	voxel	off	on	60.0	16.7	0.000	7.77	7.54	False	0	0	ok
+a89af98	1	hybrid-direct	off	on	60.0	16.7	0.000	9.89	7.02	False	0	0	ok
+a89af98	2	voxel	on	on	60.0	16.7	0.000	20.21	6.16	False	16	16	ok
+a89af98	2	hybrid-direct	on	on	60.0	16.7	0.000	25.44	15.03	False	16	16	ok
+a89af98	2	voxel	off	on	60.0	16.8	0.000	7.37	6.47	False	0	0	ok
+a89af98	2	hybrid-direct	off	on	60.0	16.8	0.000	10.08	9.81	False	0	0	ok
+a89af98	3	voxel	on	on	60.0	16.7	0.000	20.48	2.25	True	16	16	ok
+a89af98	3	hybrid-direct	on	on	60.0	16.8	0.000	25.29	12.27	False	16	16	ok
+a89af98	3	voxel	off	on	60.0	16.7	0.000	7.79	6.23	False	0	0	ok
+a89af98	3	hybrid-direct	off	on	60.0	16.8	0.000	9.2	9.09	False	0	0	ok

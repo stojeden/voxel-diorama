@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { access, open, readFile, unlink } from 'node:fs/promises';
+import { renameSync, writeFileSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -118,23 +119,114 @@ async function waitForServer(timeoutMs = 15_000) {
   throw new Error(`Preview did not start within ${timeoutMs} ms`);
 }
 
+/**
+ * Diagnostic overrides that survive the measurement window.
+ *
+ * The previous version walked the scene once and set `visible = false` on every
+ * point and spot light. That does nothing: `DayNightCycle.update` reassigns
+ * `visible` on every street, bus-stop, station and window light on each frame, and
+ * Bus and Train reset their headlamps from their own flags, so the lights were back
+ * one frame later and every "local lights off" number taken with it was meaningless.
+ * The disable now goes through a durable gate inside those loops, and the state is
+ * read back from the scene rather than assumed.
+ */
 async function applyDiagnosticOverrides(page) {
-  const state = await page.evaluate(({ disableShadows, disableLocalLights }) => {
+  const state = await page.evaluate(async ({ disableShadows, disableLocalLights }) => {
     if (disableShadows) window.__diorama.renderer.shadowMap.enabled = false;
-    let visibleLocalLights = 0;
-    window.__diorama.scene.traverse((object) => {
-      if (!object.isPointLight && !object.isSpotLight) return;
-      if (disableLocalLights) object.visible = false;
-      if (object.visible) visibleLocalLights++;
-    });
+    if (disableLocalLights) window.__diorama.debugSetLocalLightsEnabled(false);
+    // Let frames run before reading back: the gate is applied inside the update, so
+    // asserting in the same tick reports the state from before it took effect.
+    for (let i = 0; i < 4; i++) await new Promise((resolve) => requestAnimationFrame(resolve));
     return {
       shadowsEnabled: window.__diorama.renderer.shadowMap.enabled,
-      visibleLocalLights,
+      visibleLocalLights: await window.__diorama.debugCountVisibleLocalLights(),
     };
   }, { disableShadows: DISABLE_SHADOWS, disableLocalLights: DISABLE_LOCAL_LIGHTS });
   if (DISABLE_SHADOWS) assert.equal(state.shadowsEnabled, false, 'shadow diagnostic override was not applied');
   if (DISABLE_LOCAL_LIGHTS) assert.equal(state.visibleLocalLights, 0, 'local-light diagnostic override was not applied');
   return state;
+}
+
+/** Read the overrides back mid-window and again afterwards: applied once is not applied. */
+async function confirmDiagnosticOverrides(page, when) {
+  const state = await page.evaluate(async () => ({
+    shadowsEnabled: window.__diorama.renderer.shadowMap.enabled,
+    visibleLocalLights: await window.__diorama.debugCountVisibleLocalLights(),
+  }));
+  if (DISABLE_SHADOWS) {
+    assert.equal(state.shadowsEnabled, false, `shadows came back ${when}`);
+  }
+  if (DISABLE_LOCAL_LIGHTS) {
+    assert.equal(state.visibleLocalLights, 0, `local lights came back ${when}: ${state.visibleLocalLights} visible`);
+  }
+  return state;
+}
+
+/** Put the world back the way it was, so one experiment cannot colour the next. */
+async function clearDiagnosticOverrides(page) {
+  await page.evaluate(() => {
+    window.__diorama.debugSetLocalLightsEnabled(true);
+  });
+}
+
+/**
+ * GPU cost of the frames the animation actually presents. One disjoint timer query
+ * per real frame inside the render loop, read back a few frames later, with no second
+ * render and no framebuffer read. `conclusive` is false when the extension is missing,
+ * the driver reported a disjoint interval, too few samples came back, or the samples
+ * disagree with each other by more than a quarter of their median -- in which case the
+ * figure must not be used to grant a PASS or to attribute cost to a feature.
+ */
+async function measureAnimationGpu(page, frames) {
+  const raw = await page.evaluate(async (count) => {
+    await window.__diorama.debugStartFrameTiming(count);
+    const deadline = performance.now() + 8_000;
+    let read = window.__diorama.debugReadFrameTiming();
+    while (read.samples.length < count && performance.now() < deadline) {
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      read = window.__diorama.debugReadFrameTiming();
+    }
+    return read;
+  }, frames);
+  const samples = [...raw.samples].sort((a, b) => a - b);
+  if (samples.length < 5) {
+    return { available: false, conclusive: false, reason: `only ${samples.length} of ${frames} frames timed`, samples };
+  }
+  const median = samples[Math.floor(samples.length / 2)];
+  const spread = samples.at(-1) - samples[0];
+  /**
+   * The threshold is a quarter of the 16.7 ms frame budget, not a fraction of the
+   * median. The question this number answers is "where does a frame's time go", so
+   * the scale that matters is the frame, not the size of the reading: a spread of
+   * 12 ms is useless whether the median is 10 ms or 40 ms, because it is most of a
+   * frame either way. Justified, not tuned to make readings pass.
+   */
+  const tolerance = 16.7 / 4;
+  return {
+    available: true,
+    method: 'EXT_disjoint_timer_query_webgl2 around the animation frame in the render loop',
+    sampleCount: samples.length,
+    medianMs: Math.round(median * 100) / 100,
+    p90Ms: Math.round(samples[Math.min(samples.length - 1, Math.floor(samples.length * 0.9))] * 100) / 100,
+    minMs: Math.round(samples[0] * 100) / 100,
+    maxMs: Math.round(samples.at(-1) * 100) / 100,
+    spreadMs: Math.round(spread * 100) / 100,
+    disjoint: raw.disjoint,
+    toleranceMs: Math.round(tolerance * 100) / 100,
+    /** True only when this one run's samples agree closely enough to localise cost
+     *  inside a frame. Never sufficient on its own -- see `attribution`. */
+    conclusive: !raw.disjoint && spread <= tolerance,
+    /**
+     * A single run never certifies an attribution, however tight its samples. What
+     * did hold up in practice is the run median: across three alternating
+     * repetitions it repeated to about a third of a millisecond while individual
+     * samples inside each run scattered by six to fifteen. So attribute cost only
+     * from medians of at least three alternating repetitions, recorded in
+     * docs/superpowers/spike/night-experiment.tsv, and never from one run.
+     */
+    attribution: 'requires >=3 alternating repetitions; compare run medians, not single samples',
+    samples: samples.map((value) => Math.round(value * 100) / 100),
+  };
 }
 
 async function readMeasuredState(page) {
@@ -309,6 +401,37 @@ const nonRainbowScenarios = filteredScenarios.filter(
 const rainbowScenarios = rainbowPair
   .map((name) => filteredScenarios.find((scenario) => scenario.name === name))
   .filter(Boolean);
+/**
+ * Write the report only if it is complete, and never over a good file with a bad one.
+ *
+ * The previous flow was `node ... > bench-<tag>.json`, so the shell truncated the
+ * target before node started: any crash -- an assertion, a timeout -- left a 0-byte
+ * file where a valid result had been, which is how bench-voxel-low.json was lost.
+ * Set BENCH_OUT to enable it; validation runs before the rename, so a rejected report
+ * leaves the previous file untouched.
+ */
+function writeReport(report, expected) {
+  const out = process.env.BENCH_OUT;
+  if (!out) return;
+  const got = report.results.map((result) => result.name);
+  const missing = expected.filter((name) => !got.includes(name));
+  assert.equal(missing.length, 0, `refusing to write ${out}: missing scenarios ${missing.join(', ')}`);
+  for (const result of report.results) {
+    assert.ok(
+      Array.isArray(result.timeToInteractiveSamples) && result.timeToInteractiveSamples.length === TTI_SAMPLES,
+      `refusing to write ${out}: ${result.name} has ${result.timeToInteractiveSamples?.length} of ${TTI_SAMPLES} TTI attempts`
+    );
+    assert.ok(
+      result.timing && Number.isFinite(result.timing.averageFps),
+      `refusing to write ${out}: ${result.name} has no timing`
+    );
+  }
+  const serialised = JSON.stringify(report, null, 2);
+  JSON.parse(serialised);
+  writeFileSync(`${out}.partial`, serialised);
+  renameSync(`${out}.partial`, out);
+}
+
 const scenarios = [...nonRainbowScenarios];
 if (rainbowScenarios.length === 2) {
   for (let repetition = 0; repetition < RAINBOW_REPETITIONS; repetition++) {
@@ -505,8 +628,14 @@ try {
       }
     }
     const metrics = await page.evaluate(() => window.__diorama.getMetrics());
+    // Two separate numbers, never mixed: the animation frame the user sees, and the
+    // forced capture render kept only for continuity with older results.
+    const animationGpu = await measureAnimationGpu(page, 90);
+    const diagnosticsDuring = await confirmDiagnosticOverrides(page, `during ${scenario.name}`);
     const jsHeapBytes = await page.evaluate(() => performance.memory?.usedJSHeapSize ?? null);
     results.push({
+      animationGpu,
+      diagnosticsDuring,
       ...scenario,
       world: metrics.world ?? 'voxel',
       hybrid: metrics.hybrid ?? null,
@@ -520,7 +649,10 @@ try {
       diagnostics,
       timing,
       cpu,
-      gpu,
+      /** Legacy probe: brackets a forced extra render plus a framebuffer read and a
+       *  JPEG encode, so it is not the cost of an animation frame. Kept for
+       *  continuity only; `animationGpu` is the one to read. */
+      captureFrameGpu: gpu,
       measuredState,
       finalState,
       renderer: metrics.renderer,
@@ -529,7 +661,28 @@ try {
     else if (scenario.camera === 'bus') await page.keyboard.press('b');
   }
 
-  console.log(JSON.stringify({
+  const diagnosticsAfter = await confirmDiagnosticOverrides(page, 'after the measurement window');
+  await clearDiagnosticOverrides(page);
+  const diagnosticsRestored = await page.evaluate(async () => {
+    // The gate is read inside the light update, so the restore lands on a later frame.
+    for (let i = 0; i < 4; i++) await new Promise((resolve) => requestAnimationFrame(resolve));
+    return { visibleLocalLights: await window.__diorama.debugCountVisibleLocalLights() };
+  });
+
+  const report = {
+    revision: process.env.BENCH_REVISION ?? null,
+    recordedAt: new Date().toISOString(),
+    conditions: {
+      viewport: '1440x900',
+      deviceScaleFactor: 1,
+      ttiSamples: TTI_SAMPLES,
+      gpuSampleCount: GPU_SAMPLE_COUNT,
+      animationFramesTimed: 90,
+      rainbowRepetitions: RAINBOW_REPETITIONS,
+      diagnosticShadowsDisabled: DISABLE_SHADOWS,
+      diagnosticLocalLightsDisabled: DISABLE_LOCAL_LIGHTS,
+      note: 'one world and one tab per run; a benchmark must not share the GPU with builds, renders or other agents',
+    },
     headful: HEADFUL,
     quality: QUALITY,
     world: WORLD,
@@ -545,8 +698,12 @@ try {
     },
     gpu: identity.gpu,
     vendor: identity.vendor,
+    diagnosticsAfter,
+    diagnosticsRestored,
     results,
-  }, null, 2));
+  };
+  writeReport(report, scenarios.map((scenario) => scenario.name));
+  console.log(JSON.stringify(report, null, 2));
   assert.deepEqual(errors, [], `browser errors:\n${errors.join('\n')}`);
   assert.ok(
     readiness.timeToInteractiveMs <= MAX_TTI_MS,

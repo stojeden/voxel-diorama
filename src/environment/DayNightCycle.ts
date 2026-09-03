@@ -308,6 +308,14 @@ export class DayNightCycle {
   private readonly shadowFocus = new THREE.Vector3();
   private shadowRadius = 95;
   private lightSelectionCooldown = 0;
+  /**
+   * Diagnostic only. `update()` reassigns `visible` on every street, bus-stop,
+   * station and window light each frame, so a one-shot `visible = false` from a
+   * benchmark is undone on the next frame. This gate is checked inside those loops
+   * so a diagnostic disable survives the whole measurement window.
+   */
+  private localLightsEnabled = true;
+
   private wideView = false;
   private cameraMode: 'free' | 'train' | 'bus' = 'free';
 
@@ -524,6 +532,11 @@ export class DayNightCycle {
   }
 
   /** Compatibility helper for diagnostics that directly set eclipse coverage. */
+  /** Diagnostic only: hold every local light off for a whole measurement window. */
+  setLocalLightsEnabled(enabled: boolean): void {
+    this.localLightsEnabled = enabled;
+  }
+
   setEclipse(strength: number): void {
     const coverage = clamp01(strength);
     this.setEclipseState({
@@ -760,7 +773,7 @@ export class DayNightCycle {
     const physicalLightThreshold = this.wideView ? 0.28 : 0.001;
     for (let i = 0; i < this.hooks.streetLights.length; i++) {
       const light = this.hooks.streetLights[i];
-      light.visible = night > physicalLightThreshold && i < streetLightBudget;
+      light.visible = this.localLightsEnabled && night > physicalLightThreshold && i < streetLightBudget;
       // A small urban LED luminaire is several thousand lumens. The point-light
       // approximation needs enough candela to reach pavement and nearby walls.
       light.intensity = light.visible ? night * 135 : 0;
@@ -771,7 +784,7 @@ export class DayNightCycle {
     this.hooks.streetGlowMaterial.uniforms.uNight.value = streetGlow;
     for (let i = 0; i < this.hooks.busStopLights.length; i++) {
       const light = this.hooks.busStopLights[i];
-      light.visible = night > physicalLightThreshold && i < busStopLightBudget;
+      light.visible = this.localLightsEnabled && night > physicalLightThreshold && i < busStopLightBudget;
       light.intensity = light.visible ? night * 48 : 0;
     }
     for (const material of this.hooks.busStopGlowMaterials) {
@@ -779,7 +792,7 @@ export class DayNightCycle {
     }
     for (let i = 0; i < this.hooks.stationLights.length; i++) {
       const light = this.hooks.stationLights[i];
-      light.visible = night > physicalLightThreshold && i < stationLightBudget;
+      light.visible = this.localLightsEnabled && night > physicalLightThreshold && i < stationLightBudget;
       // Railway platforms stay brighter than bus shelters for visibility and safety.
       light.intensity = light.visible ? night * 145 : 0;
       light.distance = 28;
@@ -794,6 +807,7 @@ export class DayNightCycle {
     for (let i = 0; i < this.hooks.windowLights.length; i++) {
       const light = this.hooks.windowLights[i];
       light.visible =
+        this.localLightsEnabled &&
         night > physicalLightThreshold && residentialActivity > 0.001 && i < windowLightBudget;
       light.intensity = light.visible ? night * residentialActivity * 32 : 0;
       light.distance = 20;
