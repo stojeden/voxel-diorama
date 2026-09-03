@@ -1,0 +1,43 @@
+{
+  "generatedAt": "2026-09-03T15:16:09.606Z",
+  "world": "hybrid-direct",
+  "found": {
+    "x": -57.23027293983355,
+    "y": -0.5,
+    "z": -45.84455280513271
+  },
+  "shots": [
+    {
+      "name": "postman",
+      "frame": "docs/superpowers/spike/frames/hybrid-direct-high-postman.jpg",
+      "aimed": {
+        "x": -33.44276014024578,
+        "y": -0.5,
+        "z": -45.70276529344685,
+        "camera": [
+          -28.94276014024578,
+          1.7000000000000002,
+          -52.70276529344685
+        ]
+      },
+      "active": true,
+      "dogMode": "home"
+    },
+    {
+      "name": "postman-close",
+      "frame": "docs/superpowers/spike/frames/hybrid-direct-high-postman-close.jpg",
+      "aimed": {
+        "x": -31.942081528488043,
+        "y": -0.5,
+        "z": -45.75102116499002,
+        "camera": [
+          -31.442081528488043,
+          1.6,
+          -50.25102116499002
+        ]
+      },
+      "active": true,
+      "dogMode": "home"
+    }
+  ]
+}

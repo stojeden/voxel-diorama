@@ -513,6 +513,15 @@ export interface BenchSpec {
  * (1.915 m). A real shelter is 2.3-2.6 m.
  */
 export const BUS_SHELTER_ROOF_Y = 2.28;
+/**
+ * The shelter members that more than one module has to agree about: the generator
+ * builds them and the navigation collides with them. They did not agree -- a 0.16 m
+ * post carried a 1.0 m collision box, which spent 1.7 m of the 4 m between the posts
+ * and left four waiting figures nowhere to stand apart from each other. The roof's own
+ * dimensions stay in the generator, which is the only place that draws it.
+ */
+export const BUS_SHELTER_POST_SIZE = 0.16;
+export const BUS_SHELTER_SIGN_SIZE = 0.09;
 
 /**
  * A three-seat street bench. Was 2.8 m long with a back reaching 1.17 m above the

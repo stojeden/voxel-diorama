@@ -117,7 +117,7 @@ function buildBusMesh(): {
   // Daytime glass is dark and takes its brightness from the sky it reflects; the lit
   // interior is a night state, so the emissive starts at zero and the day look comes
   // from the environment map instead.
-  const windowMat = make(BUS_GLASS_DAY, {
+  const windowMat = make(BUS_GLASS_NORMAL.getHex(), {
     roughness: 0.16,
     metalness: 0.35,
     emissive: COLORS.windowLit,
@@ -362,8 +362,7 @@ const BUS_BODY_CYBER = new THREE.Color(0x14181f);
 const BUS_ROOF_NORMAL = new THREE.Color(0xe8e2cf);
 const BUS_ROOF_CYBER = new THREE.Color(0x20262e);
 /** Daylight bus glazing: dark blue-grey, brightened only by what it reflects. */
-const BUS_GLASS_DAY = 0x36414c;
-const BUS_GLASS_NORMAL = new THREE.Color(BUS_GLASS_DAY);
+const BUS_GLASS_NORMAL = new THREE.Color(0x36414c);
 /** The lit interior behind that glass, which is a night state. */
 const BUS_INTERIOR_LIT = new THREE.Color(COLORS.windowLit);
 const BUS_GLASS_CYBER = new THREE.Color(0x35e6ff);

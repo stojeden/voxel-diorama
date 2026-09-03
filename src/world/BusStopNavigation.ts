@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import {
   BENCH_DIMENSIONS,
+  BUS_SHELTER_POST_SIZE,
+  BUS_SHELTER_SIGN_SIZE,
   GROUND_SURFACE_Y,
   busShelterCenter,
   type BusStop,
@@ -51,9 +53,13 @@ export function busShelterColliders(
   stop: BusStop,
   clearance = PEDESTRIAN_RADIUS
 ): CollisionRect[] {
+  // Half the real post, not half a metre: a 0.16 m post used to be a 1.0 m box, which
+  // ate 1.7 m of the 4 m between the posts and left the waiting figures nowhere to
+  // stand apart from each other.
+  const post = BUS_SHELTER_POST_SIZE / 2;
   return [
-    localRect(stop, 'left-post', -2, 0, 0.5, 0.5, clearance),
-    localRect(stop, 'right-post', 2, 0, 0.5, 0.5, clearance),
+    localRect(stop, 'left-post', -2, 0, post, post, clearance),
+    localRect(stop, 'right-post', 2, 0, post, post, clearance),
     // Advertising lightbox closes the left side; pedestrians use the open
     // right end selected by busStopWalkingPath.
     // The glass end wall is 1.35 m deep now, not 1.75.
@@ -67,7 +73,7 @@ export function busShelterColliders(
       BENCH_DIMENSIONS.depth / 2,
       clearance
     ),
-    localRect(stop, 'stop-sign', -3, 1, 0.5, 0.5, clearance),
+    localRect(stop, 'stop-sign', -3, 1, BUS_SHELTER_SIGN_SIZE / 2, BUS_SHELTER_SIGN_SIZE / 2, clearance),
   ];
 }
 
@@ -81,13 +87,22 @@ export function isPointClear(point: THREE.Vector3, colliders: readonly Collision
   );
 }
 
-/** Four deterministic waiting spots under the roof, behind the bench. */
+/**
+ * Four deterministic waiting spots under the roof, behind the bench.
+ *
+ * Two loose rows rather than one line. The product's figure is 0.874 m across with its
+ * arms, and the space between the shelter posts is 4 m, so four figures in a single
+ * row stood 0.67 m apart and their arms passed through each other. Staggered in two
+ * rows the nearest pair is 0.84 m apart, which reads as a group waiting rather than a
+ * rank, and every body still falls inside the 2 m roof.
+ */
 export function busStopWaitingPositions(stop: BusStop): THREE.Vector3[] {
-  // Outward -0.15, not -0.65: the roof spans 0.85 m either side of its centre line,
-  // so at -0.65 a waiting passenger stood 0.15 m behind its rear edge -- queueing at
-  // the shelter without being under it. At -0.15 the whole body is under the roof and
-  // still half a metre clear of the bench behind them.
-  return [-1, -0.33, 0.34, 1.01].map((along) => localToWorld(stop, along, -0.15));
+  return ([
+    [-0.95, -0.05],
+    [0.45, -0.05],
+    [-0.25, -0.52],
+    [1.15, -0.52],
+  ] as const).map(([along, outward]) => localToWorld(stop, along, outward));
 }
 
 /**

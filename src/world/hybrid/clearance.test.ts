@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { describe, expect, test } from 'vitest';
 import {
   BUILDING_ACCESS_CELLS,
+  BUS_SHELTER_POST_SIZE,
+  BUS_SHELTER_SIGN_SIZE,
   BUS_ROUTE_CURVE,
   BUS_STOPS,
   GROUND_SURFACE_Y,
@@ -270,16 +272,62 @@ describe('the stop is one street system', () => {
     b.max.y - b.min.y < 0.3 && (b.max.x - b.min.x) * (b.max.z - b.min.z) > 4 ? b : a
   ));
 
+  test('the waiting figures do not stand inside each other', () => {
+    // The product's figure is 0.874 m across with its arms, measured off the finished
+    // mesh. Four of them in one row between posts 4 m apart stood 0.67 m apart and
+    // overlapped; two loose rows put the nearest pair 0.84 m apart.
+    // Width of the finished figure, arms included, off its own mesh.
+    const body = new THREE.Box3().setFromObject(buildPassenger().group).getSize(new THREE.Vector3()).x;
+    const positions = busStopWaitingPositions(stop);
+    expect(positions.length).toBe(4);
+    let nearest = Infinity;
+    for (const a of positions) {
+      for (const b of positions) {
+        if (a === b) continue;
+        nearest = Math.min(nearest, Math.hypot(a.x - b.x, a.z - b.z));
+      }
+    }
+    expect(nearest, `najblizsza para ${nearest.toFixed(2)} m przy figurze ${body.toFixed(3)} m`)
+      .toBeGreaterThan(body * 0.9);
+    // And none of them stands in the shelter.
+    const colliders = busShelterColliders(stop);
+    for (const position of positions) {
+      const inside = colliders.filter((rect) => (
+        position.x > rect.minX && position.x < rect.maxX && position.z > rect.minZ && position.z < rect.maxZ
+      ));
+      expect(inside.map((rect) => rect.id), `oczekujacy w kolizji`).toEqual([]);
+    }
+  });
+
+  test('the shelter colliders are the shelter, not a metre of air around it', () => {
+    // Geometry, navigation and collision from one set of numbers: the posts are
+    // BUS_SHELTER_POST_SIZE square, and their collision boxes were 1.0 m square, which
+    // spent 1.7 m of the 4 m between them and left the figures nowhere to stand.
+    const colliders = busShelterColliders(stop, 0);
+    const expected = BUS_SHELTER_POST_SIZE;
+    for (const id of ['left-post', 'right-post']) {
+      const rect = colliders.find((candidate) => candidate.id === id)!;
+      const width = rect.maxX - rect.minX;
+      const depth = rect.maxZ - rect.minZ;
+      expect(width, `${id} szerokosc kolizjonera ${width.toFixed(2)} m`).toBeCloseTo(expected, 5);
+      expect(depth, `${id} glebokosc kolizjonera ${depth.toFixed(2)} m`).toBeCloseTo(expected, 5);
+    }
+    const sign = colliders.find((candidate) => candidate.id === 'stop-sign')!;
+    expect(sign.maxX - sign.minX).toBeCloseTo(BUS_SHELTER_SIGN_SIZE, 5);
+  });
+
   test('everyone waiting stands on the pavement and under the roof', () => {
     const positions = busStopWaitingPositions(stop);
     expect(positions.length).toBeGreaterThan(0);
+    // The body, not the centre point and not the navigation radius: the figure's own
+    // finished footprint, 0.874 m across and 0.429 m deep.
+    const figure = new THREE.Box3().setFromObject(buildPassenger().group).getSize(new THREE.Vector3());
     for (const position of positions) {
       expect(paved(position.x, position.z), `oczekujacy na (${position.x.toFixed(1)}, ${position.z.toFixed(1)}) stoi na trawie`).toBe(true);
-      // The body, not just the centre point, has to be under the roof.
-      expect(position.x - PEDESTRIAN_RADIUS).toBeGreaterThan(roof.min.x);
-      expect(position.x + PEDESTRIAN_RADIUS).toBeLessThan(roof.max.x);
-      expect(position.z - PEDESTRIAN_RADIUS, `oczekujacy ${position.z.toFixed(2)} wobec dachu ${roof.min.z.toFixed(2)}..${roof.max.z.toFixed(2)}`).toBeGreaterThan(roof.min.z);
-      expect(position.z + PEDESTRIAN_RADIUS).toBeLessThan(roof.max.z);
+      expect(position.x - figure.x / 2).toBeGreaterThan(roof.min.x);
+      expect(position.x + figure.x / 2).toBeLessThan(roof.max.x);
+      expect(position.z - figure.z / 2, `oczekujacy ${position.z.toFixed(2)} wobec dachu ${roof.min.z.toFixed(2)}..${roof.max.z.toFixed(2)}`).toBeGreaterThan(roof.min.z);
+      expect(position.z + figure.z / 2).toBeLessThan(roof.max.z);
     }
   });
 

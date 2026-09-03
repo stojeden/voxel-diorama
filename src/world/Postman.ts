@@ -20,13 +20,20 @@ const ROUTE_LENGTH = POSTMAN_ROUTE_CURVE.getLength();
 const WHEEL_RADIUS = 0.35;
 const WHEELBASE = 1.1;
 const SADDLE_Y = 0.92;
-const BAR_Y = 1.0;
+const BAR_Y = 1.05;
 /** Hip and shoulder heights of the product figure in its own unscaled units. */
 const RIDER_HIP_Y = 0.92;
 const RIDER_SHOULDER_Y = 1.89;
-/** Riding pose: legs swing from the hip, the torso leans, hands sit on the bars. */
+/**
+ * Riding pose. The lean is what puts this figure's hands on the bars -- upright, its
+ * 0.67 m arms fall 0.2 m short of them -- but at 0.42 rad the head ended up 0.53 m
+ * forward, past the handlebars, and he read as a racing crouch rather than a postman.
+ * At 0.26 rad with the bars 0.1 m higher and 0.1 m closer the hands rest on the grips
+ * and the head stays behind them. Measured on the finished meshes, not reasoned.
+ */
 const SADDLE_Z = 0.32;
-const RIDER_LEAN = 0.42;
+const BAR_Z = -0.36;
+const RIDER_LEAN = 0.26;
 const LEG_PEDAL_ANGLE = -0.5;
 const ARM_REACH_ANGLE = -1.05;
 const RIDE_SPEED = 6;
@@ -200,7 +207,10 @@ function buildBike(): { group: THREE.Group; wheels: THREE.Mesh[]; rider: Postman
   group.rotation.order = 'YXZ';
   const mats: THREE.Material[] = [];
   const frameMat = new THREE.MeshStandardMaterial({ color: 0xb33a2e, metalness: 0.5, roughness: 0.4 });
-  const wheelMat = new THREE.MeshStandardMaterial({ color: 0x202020, roughness: 0.7 });
+  // The same tyre colour as the fragment's own bicycles (0x3b332c): two bikes in one
+  // world had two different blacks, and at 0x202020 his tyres were darker than the
+  // asphalt, which in a building's shadow left him riding on nothing.
+  const wheelMat = new THREE.MeshStandardMaterial({ color: 0x3b332c, roughness: 0.7 });
   const bagMat = new THREE.MeshStandardMaterial({ color: 0xc9a14e, roughness: 0.85 });
   mats.push(frameMat, wheelMat, bagMat);
 
@@ -223,9 +233,9 @@ function buildBike(): { group: THREE.Group; wheels: THREE.Mesh[]; rider: Postman
   member(0.07, 0.44, 0.07, SADDLE_Y - 0.22, SADDLE_Z);
   // The saddle he actually sits on: without it the seat post ended in mid-air.
   member(0.24, 0.06, 0.16, SADDLE_Y - 0.03, SADDLE_Z);
-  member(0.07, 0.44, 0.07, BAR_Y - 0.22, -0.46);    // head tube
+  member(0.07, 0.44, 0.07, BAR_Y - 0.22, BAR_Z);    // head tube
   // 0.66 m across, so the figure's hands land over the grips rather than outboard of them.
-  member(0.66, 0.06, 0.06, BAR_Y, -0.46);           // handlebars
+  member(0.66, 0.06, 0.06, BAR_Y, BAR_Z);           // handlebars
   const rider = buildPostmanRider(bagMat);
   group.add(rider.group);
 

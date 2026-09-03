@@ -22,7 +22,7 @@ const QUALITIES = (process.env.SPIKE_QUALITIES ?? 'high,low').split(',').map((s)
 const CHECKPOINTS = ['spike-overview', 'spike-street', 'spike-golden', 'spike-night-street'];
 const OUT_DIR = 'docs/superpowers/spike';
 const FRAME_DIR = `${OUT_DIR}/frames`;
-/** `frames` renders the Gate 1 kadry; `gate3` proves LOD, semantics and determinism; `materials` runs the LOD x quality material matrix; `all` does all three. */
+/** `frames` renders the Gate 1 kadry; `gate3` proves LOD, semantics and determinism; `materials` runs the LOD x quality material matrix; `postman` frames the postman mid-ride; `all` does all of them. */
 const PHASE = process.env.SPIKE_PHASE ?? 'frames';
 /** `voxel` renders the same four frames without attaching the fragment, so the spike has a visual baseline. */
 const SUMMARY = process.env.SPIKE_SUMMARY
@@ -306,6 +306,62 @@ async function lookFromDistance(page, distance) {
 }
 
 /**
+ * The postman, in a frame. He rides at dawn on the south road, checkpoints freeze
+ * actors, and there is no free-camera hook, so the previous round verified him by
+ * measurement alone. The camera can be placed through `controls.setLookAt` and the
+ * scene walked through `window.__diorama.scene`, so this phase runs the live
+ * simulation, waits for him to appear, and aims at where he actually is.
+ */
+async function runPostman(page, world) {
+  await page.goto(`${URL}/?seed=${SEED}&world=${world}&quality=high`, { waitUntil: 'load' });
+  await page.waitForFunction(() => window.__diorama?.ready === true, null, { timeout: 90_000 });
+  // 11:17, near the end of his round, because that is where the light is: at 07:12 and
+  // even at 08:40 the south road is in shadow and his dark tyres disappear into it, so
+  // a frame meant to judge geometry could not.
+  await page.evaluate(() => window.__diorama.setTime(0.47));
+  // He starts at dawn and rides a 240 m loop at 6 m/s, so he is somewhere on the south
+  // road within a few seconds of the clock reaching the morning window.
+  const found = await page.waitForFunction(() => {
+    const bike = window.__diorama.scene.getObjectByName('postman-bike');
+    if (!bike || !bike.visible) return null;
+    const p = bike.getWorldPosition(new bike.position.constructor());
+    return { x: p.x, y: p.y, z: p.z };
+  }, null, { timeout: 60_000, polling: 100 }).then((handle) => handle.jsonValue());
+
+  const shots = [];
+  // Let him ride clear of the block he starts beside: at 6 m/s four seconds puts him
+  // 24 m down the road, out of the building's shadow, where his tyres are not black on
+  // black.
+  await page.waitForTimeout(4_000);
+  for (const [name, side, ahead, height] of [
+    ['postman', 7, 4.5, 1.3],
+    ['postman-close', 4.5, 0.5, 1.2],
+  ]) {
+    // Aim one frame before the shot: at 6 m/s he moves 10 cm per frame.
+    const aimed = await page.evaluate(({ side: s, ahead: a, height: h }) => {
+      const bike = window.__diorama.scene.getObjectByName('postman-bike');
+      const p = bike.getWorldPosition(new bike.position.constructor());
+      // He rides the south road along x, so the camera stands off in z and looks back
+      // along his direction of travel.
+      // Stand on the sunlit side: the blocks along the south road throw shadows across
+      // it late in his round, and from the shaded side the whole frame is one black wedge.
+      const dz = -s;
+      window.__diorama.controls.setLookAt(p.x + a, p.y + h + 0.55, p.z + dz, p.x, p.y + h, p.z, false);
+      return { x: p.x, y: p.y, z: p.z, camera: [p.x + a, p.y + h + 0.9, p.z + dz] };
+    }, { side, ahead, height });
+    await settle(page, 2);
+    const frame = `${FRAME_DIR}/${world}-high-${name}.jpg`;
+    await page.screenshot({ path: frame, type: 'jpeg', quality: 88 });
+    const state = await page.evaluate(() => window.__diorama.postmanState());
+    shots.push({ name, frame, aimed, active: state.active, dogMode: state.dogMode });
+    console.log(`${world.padEnd(14)} high  ${name.padEnd(19)} at (${aimed.x.toFixed(1)}, ${aimed.z.toFixed(1)})  active ${state.active}  dog ${state.dogMode}`);
+    assert.equal(state.active, true, `${world}: the postman stopped riding before the ${name} frame`);
+  }
+  assert.ok(found, 'the postman never appeared');
+  return { world, found, shots };
+}
+
+/**
  * Gate 3, materials half: an LOD x quality matrix under light we control, with the
  * window glass, the cohort rhythm, the snow and the wetness each checked directly
  * rather than inferred from one average.
@@ -320,7 +376,7 @@ async function runMaterials(page, worlds) {
     const errors = [];
     const onError = (message) => { if (message.type() === 'error') errors.push(message.text()); };
     page.on('console', onError);
-    const entry = { matrix: [], windows: [], lod0: null, cohorts: null, snow: null, wet: null };
+    const entry = { matrix: [], windows: [], lod0: null, cohorts: null, effects: [] };
 
     for (const quality of ['high', 'low']) {
       await openHybrid(page, world, quality, 'spike-street', true);
@@ -497,38 +553,58 @@ async function runMaterials(page, worlds) {
     }));
     assert.ok(spread > 0.15, `${world}: all cohorts move together (max spread ${spread.toFixed(3)})`);
 
-    // --- Snow and wetness, each against a reference taken moments before.
-    await page.evaluate((t) => window.__diorama.setTime(t), 0.5);
-    await settle(page, 6);
-    const dry = await pixelCounts(page, GROUND_BOX);
-    await page.evaluate(() => window.__diorama.setWeather('snow'));
-    await page.waitForTimeout(4_000);
-    await settle(page, 6);
-    const snowy = await pixelCounts(page, GROUND_BOX);
-    entry.snow = { dry, snowy };
-    assert.ok(
-      snowy.white > dry.white * 1.3 + 500,
-      `${world}: snow added only ${snowy.white - dry.white} white pixels to the ground`
-    );
-    await page.evaluate(() => window.__diorama.clearWeather());
-    await page.waitForTimeout(1_500);
-    await page.evaluate(() => window.__diorama.setWeather('rain'));
-    await page.waitForTimeout(6_000);
-    await settle(page, 6);
-    const wet = await pixelCounts(page, GROUND_BOX);
-    entry.wet = { dry, wet, rain: (await sceneState(page)).rain };
-    assert.ok(
-      Math.abs(wet.dark - dry.dark) > 400 || Math.abs(wet.bright - dry.bright) > 200,
-      `${world}: rain left the road unchanged (dark ${dry.dark}->${wet.dark}, bright ${dry.bright}->${wet.bright})`
-    );
-    await page.evaluate(() => window.__diorama.clearWeather());
-    await page.evaluate(() => window.__diorama.debugSetLocalLightsEnabled(true));
+    // --- Snow and wetness, in every combination that exists: both qualities, day and
+    // night. They used to be measured once, at High, at noon, which left the case the
+    // diorama is actually judged on -- wet asphalt at night -- untested.
+    for (const quality of ['high', 'low']) {
+      await openHybrid(page, world, quality, 'spike-street', true);
+      await page.evaluate(() => window.__diorama.debugSetLocalLightsEnabled(false));
+      await lookFromDistance(page, 24);
+      for (const [phase, t01] of [['day', 0.5], ['night', 0.94]]) {
+        await page.evaluate((t) => window.__diorama.setTime(t), t01);
+        await settle(page, 6);
+        const dry = await pixelCounts(page, GROUND_BOX);
+        await page.evaluate(() => window.__diorama.setWeather('snow'));
+        await page.waitForTimeout(4_000);
+        await settle(page, 6);
+        const snowy = await pixelCounts(page, GROUND_BOX);
+        await page.evaluate(() => window.__diorama.clearWeather());
+        await page.waitForTimeout(1_500);
+        await page.evaluate(() => window.__diorama.setWeather('rain'));
+        await page.waitForTimeout(6_000);
+        await settle(page, 6);
+        const wet = await pixelCounts(page, GROUND_BOX);
+        const rain = (await sceneState(page)).rain;
+        await page.evaluate(() => window.__diorama.clearWeather());
+        await page.waitForTimeout(1_500);
+        entry.effects.push({ quality, phase, t01, dry, snowy, wet, rain });
+
+        // Snow whitens the ground; at night there is less light to whiten, so the floor
+        // is a fraction of the dry figure rather than a fixed count.
+        assert.ok(
+          snowy.white > dry.white * 1.2 + 200,
+          `${world}: ${quality}/${phase} snow added only ${snowy.white - dry.white} white ground pixels `
+          + `(dry ${dry.white}, snowy ${snowy.white})`
+        );
+        assert.ok(rain > 0.2, `${world}: ${quality}/${phase} rain intensity only ${rain}`);
+        // Wetness darkens the road and sharpens what it reflects, so either the dark or
+        // the bright count has to move. Thresholds scale with the ground box's pixels.
+        const moved = Math.abs(wet.dark - dry.dark) + Math.abs(wet.bright - dry.bright);
+        assert.ok(
+          moved > wet.total * 0.01,
+          `${world}: ${quality}/${phase} rain moved only ${moved} of ${wet.total} ground pixels `
+          + `(dark ${dry.dark}->${wet.dark}, bright ${dry.bright}->${wet.bright})`
+        );
+      }
+      await page.evaluate(() => window.__diorama.debugSetLocalLightsEnabled(true));
+    }
 
     assert.deepEqual(errors, [], `${world}: materials console errors ${JSON.stringify(errors)}`);
     page.off('console', onError);
     report.worlds[world] = entry;
     const nightRow = entry.matrix.filter((r) => r.phase === 'night').map((r) => `${r.quality[0]}${r.distance[0]}:L${r.lod}=${r.pixels.lit}`).join(' ');
-    console.log(`${world.padEnd(14)} materials  ${nightRow}\n               LOD0 dusk light ${entry.lod0.mask.fragmentEnergy} vs product ${entry.lod0.mask.productEnergy} (${entry.lod0.mask.fragmentLit}/${entry.lod0.mask.productLit} px in ${entry.lod0.mask.footprint})  cohorts ${lateNight.darker} px dark at 01:12  snow ${dry.white}->${snowy.white} white  rain dark ${dry.dark}->${wet.dark}`);
+    const effectRow = entry.effects.map((e) => `${e.quality[0]}${e.phase[0]} snow ${e.dry.white}->${e.snowy.white} wet ${e.dry.dark}->${e.wet.dark}`).join('  ');
+    console.log(`${world.padEnd(14)} materials  ${nightRow}\n               LOD0 dusk light ${entry.lod0.mask.fragmentEnergy} vs product ${entry.lod0.mask.productEnergy} (${entry.lod0.mask.fragmentLit}/${entry.lod0.mask.productLit} px in ${entry.lod0.mask.footprint})  cohorts ${lateNight.darker} px dark at 01:12\n               ${effectRow}`);
   }
   return report;
 }
@@ -749,7 +825,7 @@ try {
   page.on('pageerror', (error) => consoleErrors.push(error.message));
   await mkdir(FRAME_DIR, { recursive: true });
 
-  for (const world of PHASE === 'gate3' || PHASE === 'materials' ? [] : WORLDS) {
+  for (const world of ['gate3', 'materials', 'postman'].includes(PHASE) ? [] : WORLDS) {
     for (const quality of QUALITIES) {
       const checkpoints = quality === 'high' ? CHECKPOINTS : ['spike-street', 'spike-overview'];
       for (const checkpoint of checkpoints) {
@@ -848,6 +924,13 @@ try {
   if (semantics) {
     await writeFile(`${OUT_DIR}/spike-semantics.json`, JSON.stringify({ generatedAt: new Date().toISOString(), ...semantics }, null, 2));
     console.log(`gate 3 evidence written to ${OUT_DIR}/spike-semantics.json`);
+  }
+  const postman = PHASE === 'postman' || PHASE === 'all'
+    ? await runPostman(page, hybridWorlds[0] ?? WORLDS[0])
+    : null;
+  if (postman) {
+    await writeFile(`${OUT_DIR}/spike-postman.json`, JSON.stringify({ generatedAt: new Date().toISOString(), ...postman }, null, 2));
+    console.log(`postman frames written to ${FRAME_DIR}/`);
   }
   const materials = PHASE === 'materials' || PHASE === 'all' ? await runMaterials(page, hybridWorlds) : null;
   if (materials) {

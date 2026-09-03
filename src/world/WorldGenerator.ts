@@ -8,7 +8,9 @@ import type { QualityProfile } from '../performance/QualityManager';
 import {
   BLOCK_CONFIGS,
   BENCH_DIMENSIONS,
+  BUS_SHELTER_POST_SIZE,
   BUS_SHELTER_ROOF_Y,
+  BUS_SHELTER_SIGN_SIZE,
   BENCH_SPECS,
   BUILDING_ENTRANCES,
   BUS_STOPS,
@@ -601,7 +603,7 @@ const BUS_POSTERS = [
   { background: '#327a3d', accent: '#f1c65b', title: 'BLIZEJ', subtitle: 'MIASTA' },
 ] as const;
 
-const BUS_SHELTER_POST = 0.16;
+const BUS_SHELTER_POST = BUS_SHELTER_POST_SIZE;
 const BUS_SHELTER_END_WALL_ALONG = -2;
 const BUS_SHELTER_END_WALL_HALF_DEPTH = 0.5;
 const BUS_POSTER_SURFACE_GAP = 0.015;
@@ -900,9 +902,12 @@ export function generateBusShelter(x: number, z: number, axis: 'x' | 'z', benchS
   for (const a of [0, 4]) {
     put(at(a, 0), BUS_SHELTER_ROOF_Y / 2, BUS_SHELTER_POST, BUS_SHELTER_ROOF_Y, BUS_SHELTER_POST, COLORS.steel);
   }
-  put(at(2, benchSign * 0.35), BUS_SHELTER_ROOF_Y + 0.09, 5, 0.18, 1.7, COLORS.kiosk);
+  // 5 m along the street by 2.0 m across, offset a quarter of a metre toward the
+  // carriageway: that depth is what covers the bench and two rows of waiting figures.
+  // At 1.7 m the back row stood in the rain.
+  put(at(2, benchSign * 0.25), BUS_SHELTER_ROOF_Y + 0.09, 5, 0.18, 2, COLORS.kiosk);
   // Lit stop sign on its own post, clear of the roof.
-  put(at(-1, benchSign * 0.9), 1, 0.09, 2, 0.09, COLORS.steel);
+  put(at(-1, benchSign * 0.9), 1, BUS_SHELTER_SIGN_SIZE, 2, BUS_SHELTER_SIGN_SIZE, COLORS.steel);
   put(at(-1, benchSign * 0.9), 2, 0.5, 0.24, 0.12, COLORS.signalGreen);
   const benchPos = at(2, benchSign);
   voxels.push(...generateBench(benchPos.x, benchPos.z, axis === 'z', -benchSign as 1 | -1));

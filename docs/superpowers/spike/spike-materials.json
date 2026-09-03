@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-03T12:48:13.944Z",
+  "generatedAt": "2026-09-03T15:19:12.755Z",
   "worlds": {
     "hybrid-direct": {
       "matrix": [
@@ -20,9 +20,9 @@
           "phase": "day",
           "t01": 0.5,
           "pixels": {
-            "lit": 175,
+            "lit": 174,
             "bright": 246673,
-            "white": 246708,
+            "white": 246702,
             "dark": 0,
             "total": 270400
           }
@@ -44,10 +44,10 @@
           "phase": "night",
           "t01": 0.94,
           "pixels": {
-            "lit": 1016,
-            "bright": 371,
+            "lit": 1015,
+            "bright": 361,
             "white": 59,
-            "dark": 248853,
+            "dark": 248903,
             "total": 270400
           }
         },
@@ -68,10 +68,10 @@
           "phase": "day",
           "t01": 0.5,
           "pixels": {
-            "lit": 1371,
-            "bright": 138402,
+            "lit": 1367,
+            "bright": 138401,
             "white": 138857,
-            "dark": 3,
+            "dark": 11,
             "total": 270400
           }
         },
@@ -93,9 +93,9 @@
           "t01": 0.94,
           "pixels": {
             "lit": 5723,
-            "bright": 5817,
-            "white": 3363,
-            "dark": 135503,
+            "bright": 5789,
+            "white": 3292,
+            "dark": 135495,
             "total": 270400
           }
         },
@@ -117,9 +117,9 @@
           "t01": 0.5,
           "pixels": {
             "lit": 0,
-            "bright": 23073,
-            "white": 31027,
-            "dark": 9273,
+            "bright": 23065,
+            "white": 31024,
+            "dark": 9275,
             "total": 270400
           }
         },
@@ -140,10 +140,10 @@
           "phase": "night",
           "t01": 0.94,
           "pixels": {
-            "lit": 39756,
-            "bright": 39872,
-            "white": 21168,
-            "dark": 1761,
+            "lit": 39763,
+            "bright": 39868,
+            "white": 21102,
+            "dark": 1784,
             "total": 270400
           }
         },
@@ -164,10 +164,10 @@
           "phase": "day",
           "t01": 0.5,
           "pixels": {
-            "lit": 21098,
-            "bright": 9708,
-            "white": 28427,
-            "dark": 3498,
+            "lit": 21104,
+            "bright": 9707,
+            "white": 28426,
+            "dark": 3537,
             "total": 270400
           }
         },
@@ -188,10 +188,10 @@
           "phase": "night",
           "t01": 0.94,
           "pixels": {
-            "lit": 49197,
-            "bright": 29852,
-            "white": 24976,
-            "dark": 9364,
+            "lit": 49126,
+            "bright": 29826,
+            "white": 24965,
+            "dark": 9365,
             "total": 270400
           }
         },
@@ -212,9 +212,9 @@
           "phase": "day",
           "t01": 0.5,
           "pixels": {
-            "lit": 168,
-            "bright": 246613,
-            "white": 246674,
+            "lit": 167,
+            "bright": 246617,
+            "white": 246673,
             "dark": 0,
             "total": 270400
           }
@@ -237,9 +237,9 @@
           "t01": 0.94,
           "pixels": {
             "lit": 992,
-            "bright": 221,
-            "white": 56,
-            "dark": 248916,
+            "bright": 224,
+            "white": 58,
+            "dark": 248938,
             "total": 270400
           }
         },
@@ -261,9 +261,9 @@
           "t01": 0.5,
           "pixels": {
             "lit": 1126,
-            "bright": 138269,
-            "white": 138784,
-            "dark": 2,
+            "bright": 138286,
+            "white": 138806,
+            "dark": 5,
             "total": 270400
           }
         },
@@ -284,10 +284,10 @@
           "phase": "night",
           "t01": 0.94,
           "pixels": {
-            "lit": 5610,
-            "bright": 5617,
-            "white": 3136,
-            "dark": 135451,
+            "lit": 5607,
+            "bright": 5620,
+            "white": 3137,
+            "dark": 135454,
             "total": 270400
           }
         },
@@ -309,8 +309,8 @@
           "t01": 0.5,
           "pixels": {
             "lit": 0,
-            "bright": 7948,
-            "white": 14174,
+            "bright": 7978,
+            "white": 14177,
             "dark": 11007,
             "total": 270400
           }
@@ -332,10 +332,10 @@
           "phase": "night",
           "t01": 0.94,
           "pixels": {
-            "lit": 41849,
-            "bright": 42435,
-            "white": 5879,
-            "dark": 12441,
+            "lit": 41854,
+            "bright": 42434,
+            "white": 5906,
+            "dark": 12440,
             "total": 270400
           }
         },
@@ -357,8 +357,8 @@
           "t01": 0.5,
           "pixels": {
             "lit": 25684,
-            "bright": 2503,
-            "white": 17550,
+            "bright": 2496,
+            "white": 17168,
             "dark": 3126,
             "total": 270400
           }
@@ -380,10 +380,10 @@
           "phase": "night",
           "t01": 0.94,
           "pixels": {
-            "lit": 55739,
-            "bright": 31849,
-            "white": 13108,
-            "dark": 12098,
+            "lit": 55700,
+            "bright": 31819,
+            "white": 13100,
+            "dark": 12128,
             "total": 270400
           }
         }
@@ -394,8 +394,8 @@
           "distance": "far",
           "lod": 0,
           "windows": {
-            "brighter": 813,
-            "warmer": 821,
+            "brighter": 814,
+            "warmer": 820,
             "darker": 269454,
             "changed": 270346,
             "total": 270400
@@ -406,10 +406,10 @@
           "distance": "band",
           "lod": 1,
           "windows": {
-            "brighter": 5235,
-            "warmer": 5079,
-            "darker": 168229,
-            "changed": 267075,
+            "brighter": 5315,
+            "warmer": 5087,
+            "darker": 168669,
+            "changed": 267258,
             "total": 270400
           }
         },
@@ -418,10 +418,10 @@
           "distance": "mid",
           "lod": 2,
           "windows": {
-            "brighter": 48595,
-            "warmer": 48920,
-            "darker": 1716,
-            "changed": 249231,
+            "brighter": 48602,
+            "warmer": 48938,
+            "darker": 1718,
+            "changed": 249741,
             "total": 270400
           }
         },
@@ -430,10 +430,10 @@
           "distance": "near",
           "lod": 2,
           "windows": {
-            "brighter": 32208,
-            "warmer": 32283,
-            "darker": 5,
-            "changed": 254660,
+            "brighter": 32213,
+            "warmer": 32287,
+            "darker": 4,
+            "changed": 255605,
             "total": 270400
           }
         },
@@ -442,10 +442,10 @@
           "distance": "far",
           "lod": 0,
           "windows": {
-            "brighter": 769,
-            "warmer": 792,
-            "darker": 269464,
-            "changed": 270340,
+            "brighter": 770,
+            "warmer": 789,
+            "darker": 269466,
+            "changed": 270337,
             "total": 270400
           }
         },
@@ -454,10 +454,10 @@
           "distance": "band",
           "lod": 1,
           "windows": {
-            "brighter": 4874,
-            "warmer": 4765,
-            "darker": 173519,
-            "changed": 267076,
+            "brighter": 4875,
+            "warmer": 4778,
+            "darker": 173561,
+            "changed": 267098,
             "total": 270400
           }
         },
@@ -466,10 +466,10 @@
           "distance": "mid",
           "lod": 1,
           "windows": {
-            "brighter": 42238,
-            "warmer": 42141,
-            "darker": 1871,
-            "changed": 253210,
+            "brighter": 42242,
+            "warmer": 42142,
+            "darker": 1884,
+            "changed": 253047,
             "total": 270400
           }
         },
@@ -479,9 +479,9 @@
           "lod": 1,
           "windows": {
             "brighter": 31255,
-            "warmer": 31259,
-            "darker": 12,
-            "changed": 260452,
+            "warmer": 31260,
+            "darker": 13,
+            "changed": 259203,
             "total": 270400
           }
         }
@@ -493,13 +493,13 @@
         },
         "distance": 110,
         "mask": {
-          "footprint": 46887,
+          "footprint": 46923,
           "fragmentLit": 168,
-          "productLit": 949,
-          "both": 19,
+          "productLit": 951,
+          "both": 20,
           "pixels": 308000,
-          "fragmentEnergy": 17582,
-          "productEnergy": 102339
+          "fragmentEnergy": 17663,
+          "productEnergy": 102193
         },
         "levels": {
           "building-3": 0,
@@ -545,10 +545,10 @@
               }
             ],
             "pixels": {
-              "lit": 5120,
-              "bright": 59735,
-              "white": 60870,
-              "dark": 219,
+              "lit": 5113,
+              "bright": 59733,
+              "white": 60878,
+              "dark": 218,
               "total": 270400
             }
           },
@@ -559,34 +559,34 @@
               {
                 "cohort": 0,
                 "activity": 1,
-                "emissiveIntensity": 0.803549090846849
+                "emissiveIntensity": 0.8034062036951948
               },
               {
                 "cohort": 1,
                 "activity": 1,
-                "emissiveIntensity": 0.803549090846849
+                "emissiveIntensity": 0.8034062036951948
               },
               {
                 "cohort": 2,
                 "activity": 1,
-                "emissiveIntensity": 0.803549090846849
+                "emissiveIntensity": 0.8034062036951948
               },
               {
                 "cohort": 3,
                 "activity": 1,
-                "emissiveIntensity": 0.803549090846849
+                "emissiveIntensity": 0.8034062036951948
               },
               {
                 "cohort": 4,
                 "activity": 1,
-                "emissiveIntensity": 0.803549090846849
+                "emissiveIntensity": 0.8034062036951948
               }
             ],
             "pixels": {
-              "lit": 5725,
-              "bright": 8888,
-              "white": 5271,
-              "dark": 57646,
+              "lit": 5789,
+              "bright": 8289,
+              "white": 5686,
+              "dark": 57572,
               "total": 270400
             }
           },
@@ -597,34 +597,34 @@
               {
                 "cohort": 0,
                 "activity": 1,
-                "emissiveIntensity": 1.1689740520555245
+                "emissiveIntensity": 1.1598054099166892
               },
               {
                 "cohort": 1,
                 "activity": 1,
-                "emissiveIntensity": 1.1689740520555245
+                "emissiveIntensity": 1.1598054099166892
               },
               {
                 "cohort": 2,
                 "activity": 1,
-                "emissiveIntensity": 1.1689740520555245
+                "emissiveIntensity": 1.1598054099166892
               },
               {
                 "cohort": 3,
                 "activity": 1,
-                "emissiveIntensity": 1.1689740520555245
+                "emissiveIntensity": 1.1598054099166892
               },
               {
                 "cohort": 4,
                 "activity": 1,
-                "emissiveIntensity": 1.1689740520555245
+                "emissiveIntensity": 1.1598054099166892
               }
             ],
             "pixels": {
-              "lit": 5403,
-              "bright": 15567,
-              "white": 2265,
-              "dark": 58572,
+              "lit": 5478,
+              "bright": 13986,
+              "white": 2303,
+              "dark": 58453,
               "total": 270400
             }
           },
@@ -645,69 +645,146 @@
               {
                 "cohort": 2,
                 "activity": 1,
-                "emissiveIntensity": 1.2381210319181286
+                "emissiveIntensity": 1.234482484031541
               },
               {
                 "cohort": 3,
                 "activity": 1,
-                "emissiveIntensity": 1.2381210319181286
+                "emissiveIntensity": 1.234482484031541
               },
               {
                 "cohort": 4,
                 "activity": 1,
-                "emissiveIntensity": 1.2381210319181286
+                "emissiveIntensity": 1.234482484031541
               }
             ],
             "pixels": {
-              "lit": 3790,
-              "bright": 2454,
-              "white": 2153,
-              "dark": 59358,
+              "lit": 3792,
+              "bright": 2469,
+              "white": 2160,
+              "dark": 59334,
               "total": 270400
             }
           }
         ],
         "lateNight": {
-          "brighter": 704,
-          "warmer": 298,
-          "darker": 6166,
-          "changed": 21754,
+          "brighter": 674,
+          "warmer": 264,
+          "darker": 5526,
+          "changed": 20159,
           "total": 270400
         }
       },
-      "snow": {
-        "dry": {
-          "lit": 0,
-          "bright": 17158,
-          "white": 32392,
-          "dark": 0,
-          "total": 180000
+      "effects": [
+        {
+          "quality": "high",
+          "phase": "day",
+          "t01": 0.5,
+          "dry": {
+            "lit": 12101,
+            "bright": 16697,
+            "white": 25178,
+            "dark": 4796,
+            "total": 180000
+          },
+          "snowy": {
+            "lit": 0,
+            "bright": 61949,
+            "white": 51724,
+            "dark": 0,
+            "total": 180000
+          },
+          "wet": {
+            "lit": 173,
+            "bright": 3,
+            "white": 31,
+            "dark": 58350,
+            "total": 180000
+          },
+          "rain": 1
         },
-        "snowy": {
-          "lit": 0,
-          "bright": 63077,
-          "white": 52750,
-          "dark": 0,
-          "total": 180000
+        {
+          "quality": "high",
+          "phase": "night",
+          "t01": 0.94,
+          "dry": {
+            "lit": 0,
+            "bright": 0,
+            "white": 14,
+            "dark": 57787,
+            "total": 180000
+          },
+          "snowy": {
+            "lit": 0,
+            "bright": 17973,
+            "white": 16249,
+            "dark": 0,
+            "total": 180000
+          },
+          "wet": {
+            "lit": 0,
+            "bright": 0,
+            "white": 4,
+            "dark": 64866,
+            "total": 180000
+          },
+          "rain": 1
+        },
+        {
+          "quality": "low",
+          "phase": "day",
+          "t01": 0.5,
+          "dry": {
+            "lit": 12365,
+            "bright": 17097,
+            "white": 31928,
+            "dark": 4948,
+            "total": 180000
+          },
+          "snowy": {
+            "lit": 0,
+            "bright": 62023,
+            "white": 66413,
+            "dark": 0,
+            "total": 180000
+          },
+          "wet": {
+            "lit": 147,
+            "bright": 1,
+            "white": 42,
+            "dark": 56953,
+            "total": 180000
+          },
+          "rain": 1
+        },
+        {
+          "quality": "low",
+          "phase": "night",
+          "t01": 0.94,
+          "dry": {
+            "lit": 0,
+            "bright": 0,
+            "white": 11,
+            "dark": 89529,
+            "total": 180000
+          },
+          "snowy": {
+            "lit": 0,
+            "bright": 18672,
+            "white": 16355,
+            "dark": 0,
+            "total": 180000
+          },
+          "wet": {
+            "lit": 0,
+            "bright": 0,
+            "white": 1,
+            "dark": 93959,
+            "total": 180000
+          },
+          "rain": 1
         }
-      },
-      "wet": {
-        "dry": {
-          "lit": 0,
-          "bright": 17158,
-          "white": 32392,
-          "dark": 0,
-          "total": 180000
-        },
-        "wet": {
-          "lit": 32581,
-          "bright": 15192,
-          "white": 2435,
-          "dark": 65088,
-          "total": 180000
-        },
-        "rain": 1
-      }
+      ]
     }
   }
 }
