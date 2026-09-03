@@ -4,10 +4,16 @@ Gałąź `worktree-spike-hybrid-osiedle-centralne`, **rewizja 2** z 2 września 
 Spike miał się skończyć renderami, pomiarami i **jedną rekomendacją**. Rekomendacja jest
 w rozdziale 8.
 
-Rewizja 2 powstała po decyzjach właściciela: asercja TTI zaostrzona, trzy defekty naprawione,
-nocny koszt GPU wyjaśniony, `GreedyVoxelStrategy` usunięta, Streetscape 2.0 wydzielony jako
-osobna naprawa. Zawiera też erratę do dwóch błędnych twierdzeń rewizji 1 — rozdział 0.
-Gałąź nie jest zmergowana; czysty zestaw do merge'a jest jeszcze do przygotowania (10.3).
+**Rewizja 3.** Audyt wspólnej skali świata (rozdział 12): autobus kończył 3,569 m na podwoziu
+8,18 m i to, nie perspektywa, czytało się jako „olbrzym obok zabawek"; naprawiony razem z
+rowerem i stożkami świateł. Rewizja 2 dodała: zaostrzoną asercję TTI, trzy defekty, usunięcie
+`GreedyVoxelStrategy` i wydzielenie Streetscape 2.0; rozdział 0 zawiera erratę do dwóch jej
+błędnych twierdzeń.
+
+**Nowa blokada, rozdział 13: hybryda nie trzyma 58 FPS w kadrze nocnym — 47–50 FPS w dziewięciu
+z dziewięciu prób, przy 60,0 FPS produktu w tych samych dziewięciu.** Rewizja 2 raportowała
+60 FPS wszędzie; było zmierzone, ale niestabilne. Werdykt z rozdziału 8 jest tym wstrzymany.
+Gałąź nie jest zmergowana; czysty zestaw do merge'a jest do przygotowania (10.3).
 
 Sprzęt i warunki wszystkich pomiarów: MacBook M1 Pro, systemowy Chrome przez Playwrighta,
 ANGLE Metal, viewport 1440×900, `deviceScaleFactor` 1, seed symulacji 20260722, seed layoutu
@@ -579,3 +585,164 @@ Do zrobienia przed drugim fragmentem, z liczbami, które już mamy:
 Czego Streetscape 2.0 **nie** obejmuje: drzew, kiosku i wiaty w nowym języku — one zostają
 voxelowe i były celowo poza zakresem spike'u.
 
+## 12. Wspólna skala świata — audyt i naprawa
+
+### 12.1 Werdykt
+
+Autobus był za wysoki, rower za cienki, a jedno i drugie mierzyłem dotąd z argumentów
+konstruktora, nie z gotowej geometrii. Po naprawie autobus, człowiek i rower należą do jednej
+rodziny wielkości; przy przystanku nadal stoją na trawie, i to zostaje otwarte.
+
+**Kluczowa liczba:** autobus jest budowany z `BUS_HEIGHT = 2.6`, a kończył **3,569 m** wysokości
+na podwoziu 8,181 m — stosunek wysokości do długości **0,44**, gdzie autobus tej długości ma
+około 0,33. Nominalne parametry i wynik nie zgadzały się o 37%.
+
+### 12.2 Geometria czy perspektywa
+
+Najpierw rozdzieliłem jedno od drugiego, bo „wielki autobus, mikroskopijne rowerki" mogło być
+efektem obiektywu. Rzut ośmiu wierzchołków bryły otaczającej na ekran, kamera uliczna produktu:
+
+| Pole widzenia | autobus (16,6 m) | rower (12,5 m) | pasażer (20,0 m) |
+|---|---|---|---|
+| **50°, kamera produktu** | **300 px** | **98 px** | 96 px |
+| 40° | 384 px | 126 px | 123 px |
+| 35° | 444 px | 145 px | 142 px |
+
+Zwężenie obiektywu powiększa **wszystko tym samym współczynnikiem** (×1,28 i ×1,48) — proporcje
+wzajemne nie drgnęły. Do tego autobus stoi **dalej** niż rowery (16,6 m wobec 12,5 m), więc
+perspektywa działa przeciw niemu, a nie na jego korzyść. Wniosek: to była geometria. Autobusu nie
+zmniejszyłem dlatego, że jest blisko — zmniejszyłem, bo miał złe proporcje własne.
+
+### 12.3 Zmierzone wymiary
+
+Wszystko poniżej to bryły otaczające **gotowej geometrii** w przestrzeni świata — po skalowaniu,
+obrocie i osadzeniu — a nie parametry konstruktorów. Mierzy to
+`src/world/hybrid/proportions.test.ts`.
+
+| Obiekt | Zmierzone (szer. × wys. × dł.) | Zakres wiarygodny | Ocena |
+|---|---|---|---|
+| pasażer (skala 0,78) | 0,874 × **1,915** × 0,429 | 1,65–1,90 | +1% ponad; to figura odniesienia produktu |
+| **autobus, przed** | 2,453 × **3,569** × 8,181 | h/l ≈ 0,33 | **h/l 0,44** |
+| **autobus, po** | 2,45 × **2,95** × 8,18 | | **h/l 0,36** ✓ |
+| koło autobusu | średnica 0,90, os na 0,45 | ~1,0 | ✓ |
+| **stożek świateł, przed** | 2,20 × 2,99 × **8,18** | — | **8-metrowy klin** |
+| **stożek świateł, po** | 0,84 × 0,50 × **2,40** | — | ✓ |
+| **rower, przed** | 1,32 × **1,00** × 1,84 | dł. 1,7–1,9 | długość ✓, rurki 4 cm |
+| **rower, po** | 1,32 × **1,08** × 1,84 | | ✓, rurki 5,5 cm |
+| koło roweru | średnica **0,740** | 0,65–0,75 | ✓ |
+| kierownica | 0,97 → **1,08** | 0,95–1,15 | ✓ |
+| stojak rowerowy | 1,14 × 0,90 × 1,01 | — | ✓ |
+| kosz | 0,56 × 0,96 × 0,56 | — | ✓ |
+| drzwi wejściowe | 1,30 × **2,20** | 2,0–2,2 | ✓ |
+| witryna (szyba) | 2,15 × 2,30 | — | ✓ |
+| okno, płyta / kamienica / punktowiec | 1,50×1,40 / 1,05×1,85 / 1,40×1,30 | — | ✓ |
+| kondygnacja, płyta i punktowiec | **2,80** | 2,7–3,3 | ✓ |
+| parter kamienicy | **3,70** | 3,3–4,0 | ✓ |
+| kondygnacja kamienicy | **3,30** | 2,7–3,3 | ✓ |
+| słupek balustrady | **1,00** | 0,9–1,1 | ✓ |
+| ławka | 2,80 × 1,20 × 0,58, siedzisko 0,48 | — | ✓ |
+| krawężnik | 0,22 × **0,12** × 1,00 | 0,10–0,16 | ✓ |
+| jezdnia Alei Południowej | **4,00 m** na dwa kierunki | — | wąska, ale to produkt |
+| przejście dla pieszych | **2,80 m** szerokie, pasy 3,70 m | nie symboliczne | ✓ |
+| chodnik przy przystanku | **2 komórki (2 m)** | ma pozwalać minąć wiatę | **nadal za wąski** |
+| pozycje oczekiwania na chodniku | **nie — wszystkie cztery na trawie** | — | **otwarte** |
+
+Relacje, których pilnuje test:
+
+| Relacja | Przed | Po | Odniesienie |
+|---|---|---|---|
+| autobus / pasażer | 1,86 | **1,54** | ~1,66 |
+| autobus / rower | 3,57 | **2,73** | ~2,64 |
+| pasażer / rower | 1,92 | **1,77** | ~1,6 |
+| wysokość / długość autobusu | 0,44 | **0,36** | ~0,33 |
+
+### 12.4 Co zmieniłem
+
+**Autobus** (`src/world/Bus.ts`, geometria produktu, więc widać ją też w domyślnym świecie):
+korpus 2,32 na cokole 0,45 plus czapa dachu daje 2,95 m; dolna połowa każdej opony czyta się pod
+nadwoziem; doszły nadkola, żeby opony nie były przyklejone do płaskiego boku, i tylna szyba,
+żeby przód różnił się od tyłu z każdej strony.
+
+**Rower** (`src/world/hybrid/streetscape.ts`): wymiary były już dobre — koła 0,74 m, rozstaw osi
+1,10 m, długość 1,84 m — ale każda rurka miała 4 cm, a opona była obręczą 3 cm, czyli dwa–trzy
+piksele w kamerze ulicznej. **To cienkość, nie skala, czytała się jako zabawka.** Rurki mają
+5,5 cm, opona 4,5 cm z obręczą wewnątrz, kierownica na 1,08 m, doszła dolna rura, mostek,
+korba i bagażnik.
+
+**Stożki świateł**: były `ConeGeometry(1.1, 8, 12)` na lampę, additive i dwustronne — twardy,
+dwunastokątny klin przez cały nocny kadr. To były **te same bryły, które w rewizji 2 przypisałem
+latarniom ulicznym**; przypisanie było błędne, choć wniosek „są też w produkcie" słuszny, bo
+autobus jest obiektem produktu. Teraz 0,42 × 2,4 m, dwadzieścia segmentów, jednostronne.
+
+### 12.5 Test, który się wywraca
+
+`proportions.test.ts` mierzy gotowe bryły i relacje między nimi. Po przywróceniu starego
+autobusu i starego roweru **wywalają się cztery z dziewięciu przypadków**: proporcje autobusu,
+długość stożka świateł, rower i rodzina wielkości. Sprawdzone przez faktyczne przywrócenie
+starych wartości, nie przez rozumowanie.
+
+Test złapał też dwie moje własne pomyłki, zanim je zapisałem jako wynik: pierwsza wersja
+pomiaru balustrady szukała płyty pod poręczą przez sąsiedztwo i trafiała raz w dolną poprzeczkę
+(0,52 m), raz w parapet okna (1,56 m), dla balustrady, która ma 1,00 m. Ostateczna wersja mierzy
+wysokość samych słupków, bez szukania punktu odniesienia.
+
+## 13. BLOKADA: hybryda nie trzyma 58 FPS w kadrze nocnym
+
+To najważniejsza rzecz w tej rewizji i zmienia werdykt z rozdziału 8.
+
+Dziewięć izolowanych uruchomień, światy przeplatane, żeby ewentualny dryf maszyny obciążał oba
+jednakowo, jedna karta, nic innego na GPU:
+
+| Świat | FPS | p95 | p99 | max | hitch | klatki > 20,5 ms | sonda GPU |
+|---|---|---|---|---|---|---|---|
+| **voxel** | **60,0** (9/9) | 16,7 | 16,8 | 16,8 | 0 | **0,0%** | 34,7–44,3 ms |
+| **hybrid-direct** | **47,4–49,7** (9/9) | **33,4** | **33,4** | 33,5 | 0 | **20,8–26,6%** | 56,1–59,1 ms |
+
+p95 = 33,4 ms to dokładnie dwa okresy odświeżania: hybryda **gubi vsync na co czwartej–piątej
+klatce nocnej**. Progi produktu to ≥ 58 FPS i p95 ≤ 20,5 ms — oba niespełnione, przy spełnionych
+w tym samym kadrze przez sam produkt.
+
+**Rewizja 2 twierdziła, że każdy świat trzyma 60,0 FPS przy p95 16,8 ms. To było zmierzone, ale
+nie jest stabilne.** Ten sam build dawał 60,0 wcześniej w sesji i 47–50 w dziewięciu kolejnych
+próbach później. Sonda GPU produktu rosła przez sesję z 31 do 44 ms przy niezmienionym kodzie,
+więc maszyna się nagrzewała; produkt ma zapas i tego nie odczuł, hybryda przy 57 ms zapasu nie
+ma i spada poniżej progu. Wniosek, który trzeba zapisać wprost: **hybryda nocą stoi na granicy
+vsync, a rewizja 2 raportowała szczęśliwą stronę rozkładu dwumodalnego jako wynik.**
+
+### Co zostało wyeliminowane pomiarem
+
+| Hipoteza | Pomiar | Wniosek |
+|---|---|---|
+| światła lokalne (18 nocą) | 40,2 → 39,9 ms przy `BENCH_DISABLE_LOCAL_LIGHTS=1` | nie one |
+| cienie | 40,2 → 39,9 ms przy `BENCH_DISABLE_SHADOWS=1` (globalne wyłączenie, asercja potwierdza) | nie one |
+| selektywny bloom | 40,2 → 41,7 ms po wypisaniu `glow` hybrydy | nie on |
+| szum proceduralny materiału | 40,2 → 40,2 ms po zaślepieniu | nie on **nocą** (w dzień kosztuje 9,6–11,3 ms) |
+| stożki świateł autobusu | kontrolowane A/B: 39,3 → 38,5 ms nocą | nie one nocą (w dzień 4,3 ms w produkcie) |
+| piksele fragmentu | **kamera odwrócona o 180°, fragment poza kadrem: delta utrzymuje się, +5,6 ms** | **nie piksele** |
+| obręcze kół roweru (nowe) | usunięte → 50,0 FPS, bez zmiany | nie one |
+
+Ostatni wiersz jest najważniejszy: przy kamerze odwróconej tyłem do fragmentu hybryda nadal
+kosztuje o tyle samo więcej (30,2 wobec 24,1 ms w produkcie), a mimo braku fragmentu w kadrze
+wciąż wystawia **+15 draw calli** (294 wobec 279). To znaczy, że koszt jest **stały na klatkę**
+i wynika z samego podpięcia fragmentu do scen, nie z jego pikseli: bryły otaczające scalonych
+meshy klastrów są duże (promień klastra streetscape to 32 m), więc nie są odcinane frustumem i
+przechodzą przez wszystkie passy kompozytora.
+
+### Co z tym zrobić
+
+Nie rozszerzam fragmentu. Zgodnie z Twoim polecieniem wskazuję blokadę.
+
+Najbliższy trop, jeszcze niesprawdzony: **odcinanie frustumem scalonych meshy**. Każdy klaster
+jest jednym meshem z jedną bryłą otaczającą; przy promieniu 32 m dla streetscape'u i wysokich
+punktowcach żaden nie wypada z frustuma prawie nigdy, a passów jest kilka. Do sprawdzenia w tej
+kolejności:
+
+1. policzyć, ile draw calli i trójkątów fragment wystawia w passie głównym i w passie normalnych
+   SSAO osobno, przy kamerze skierowanej na fragment i odwróconej;
+2. podzielić klastry na mniejsze meshe albo zawęzić bryły otaczające i zmierzyć ponownie;
+3. sprawdzić, czy `glassClear` (przezroczysty, `depthWrite: false`) nie trafia do passu, w którym
+   nie powinien się znaleźć — hybryda dodaje 12 programów szaderów wobec produktu;
+4. dopiero potem wracać do rozszerzania świata.
+
+Do czasu rozstrzygnięcia werdykt z rozdziału 8 brzmi: **wstrzymane blokadą**, nie „gotowe do
+przygotowania merge'a".
