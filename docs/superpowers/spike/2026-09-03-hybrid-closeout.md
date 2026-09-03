@@ -1,8 +1,14 @@
 # Zamknięcie iteracji hybrydy — Osiedle Centralne
 
-Gałąź `spike/hybrid-osiedle-centralne`, rewizja `d3846e0` (+ ta runda).
-Poprzedni raport: [`2026-09-02-hybrid-spike-report.md`](2026-09-02-hybrid-spike-report.md) (rewizja 3).
+Gałąź `spike/hybrid-osiedle-centralne`. Poprzedni raport: [`2026-09-02-hybrid-spike-report.md`](2026-09-02-hybrid-spike-report.md) (rewizja 3).
 **Nic nie zmergowane, nic nie wypchnięte, nic nie wdrożone.**
+
+> **Sprostowanie do pierwszej wersji tego dokumentu.** Pisałem tu, że nocny kadr uliczny
+> daje 48,3–48,7 FPS „3/3" i że hybryda jest przyczyną. Pierwsza połowa była niepełna, a
+> druga myląca. Ten sam przepis pomiarowy dał później 60,0 FPS w ośmiu kolejnych
+> uruchomieniach. Kadr jest **dwumodalny**, bo stoi 1,9 ms pod progiem klatki, a FPS pod
+> vsync nie mierzy zapasu — tylko to, po której stronie progu klatka wypadła. Rozdział 3
+> jest przepisany na podstawie pomiaru bez vsync. Werdykt się zmienił.
 
 ---
 
@@ -16,252 +22,291 @@ w gotowym świecie: droga −0,500 m, najniższy wierzchołek autobusu +0,011 m.
 listonosz i pies jechali pół metra nad własnym asfaltem, z cieniem odklejonym od kół.
 Render A/B tego samego kadru pokazuje cień schodzący do opon po osadzeniu na ziemi.
 
-Nie zauważyłem tego wcześniej, bo patrzyłem na kadr z poziomu oczu: przy kamerze
-16 m od autobusu jezdnia za nim wypełnia dokładnie tę część ekranu, w której powinna
-być szpara, i koła „stoją" na drodze, która jest bliżej. Rozstrzygnął dopiero pomiar i
-A/B, nie oko.
+Nie zobaczyłem tego wcześniej, bo patrzyłem z poziomu oczu: przy kamerze 16 m od
+autobusu jezdnia za nim wypełnia dokładnie tę część ekranu, w której powinna być szpara.
+Rozstrzygnął pomiar i A/B, nie oko.
 
-### 1.2 Skala — mierzona na gotowych siatkach, nie na argumentach konstruktorów
+### 1.2 Skala, mierzona na gotowych siatkach
 
 | Obiekt | Przed | Po |
 |---|---|---|
 | opona rowerowa (ulica) | torus r 0,34 + przekrój 0,045, os na 0,34 → **45 mm pod chodnikiem** | koło definiowane promieniem zewnętrznym 0,37 → styk co do milimetra |
 | rower oparty | ten sam błąd + przechył | oś obok śladu o 0,065 m, opona na ziemi |
 | koła listonosza | 0,84 m na bazie 1,30 m | **0,70 m na bazie 1,10 m** (rodzina rowerów ulicznych: 0,74 m) |
-| jeździec | skala 0,85 → 2,24 m | `PASSENGER_SCALE` — ta sama figura, co wszyscy mieszkańcy |
+| jeździec | skala 0,85 → 2,24 m wzrostu | `PASSENGER_SCALE` — ta sama figura, co mieszkańcy |
 | biodra jeźdźca | 0,40 m **nad** siodłem | 13 mm od siodła, które w ogóle powstało |
-| kończyny | obrót w środku bryły | obrót w biodrze i barku; ręce na kierownicy, stopa nad jezdnią i pod siodłem |
+| kończyny | obrót w środku bryły | obrót w biodrze i barku; ręce na kierownicy |
+| pochylenie jeźdźca | — | 0,42 rad dawało głowę 0,53 m do przodu, **przed kierownicą**; 0,26 rad z kierownicą wyżej i bliżej trzyma głowę za nią |
+| opony listonosza | 0x202020, ciemniejsze niż asfalt | 0x3b332c, jak opony rowerów fragmentu |
 | pies | 1,04 m w kłębie, 1,48 m długości | 0,64 m i 0,92 m |
 
-Poprzednia wersja testu proporcji **dopuszczała 50 mm zapadnięcia** — czyli dokładnie
-tyle, ile maskowała. Teraz obowiązuje własna tolerancja fragmentu, 12 mm, i mierzy się
-gotową geometrię każdego obiektu osobno.
-
-Sylwetka jeźdźca kończy się na 2,27 m nad jezdnią. To konsekwencja proporcji figury
+Sylwetka jeźdźca kończy się na 2,28 m nad jezdnią. To konsekwencja proporcji figury
 produktu (nogi to 37% wzrostu, u człowieka ~48%), nie osobna decyzja: **ta sama figura
-stojąca ma 1,915 m**. Zapisuję to jako własność stylizacji, nie jako naprawione.
+stojąca ma 1,915 m**. Zapisuję jako własność stylizacji, nie jako naprawione.
 
 ### 1.3 Przystanek jako jeden układ
 
 Dach wiaty ma 1,7 m głębokości, a słupki stoją metr za krawężnikiem, więc na domyślnym
 **metrowym** chodniku wiata, ławka, znak i wszyscy oczekujący stali na trawie, a trasa
 dookoła wiaty biegła po trawniku. Jeden lokalny fartuch chodnika przy tym przystanku
-(x −16..−6, z 27..30) i pozycje oczekiwania przesunięte pod dach — wcześniej stały
-0,15 m **za** jego krawędzią.
+(x −16..−6, z 27..30), dach pogłębiony do 2,0 m i pozycje oczekiwania przesunięte pod
+niego. **Jezdni nie ruszałem i autobusu nie zmniejszałem**: jezdnia ma 5 m, autobus
+2,45 m, luz do każdego krawężnika 1,27 m.
 
-**Jezdni nie ruszałem i autobusu nie zmniejszałem.** Zmierzone: jezdnia Alei
-Południowej ma 5 m (5 komórek asfaltu), autobus 2,45 m, luz do każdego krawężnika
-1,27 m. Pojazd nigdy nie był tu problemem — problemem był chodnik.
+### 1.4 Oczekujący i kolizje — jedna sprawa
 
-### 1.4 Pomiar zamiast powtarzania stałej
+Słupek wiaty ma 0,16 m, a jego kolizjoner miał **1,0 m**, co zabierało 1,7 m z 4 m
+między słupkami. Dlatego czterech oczekujących, każdy 0,874 m szeroki w ramionach, stało
+co 0,67 m i przechodziło przez siebie. Teraz rozmiar słupka jest jedną stałą, którą
+czytają generator, nawigacja i kolizjonery, a cztery pozycje to dwa luźne rzędy —
+najbliższa para 0,84 m, każde ciało pod dachem, nikt w kolizjonerze.
 
-- Test wiaty czyta **woksele, które wiata emituje**, nie przelicza `BUS_SHELTER_ROOF_Y`.
-- Części obiektu mierzone przez ponowne uruchomienie jego własnego emitera (`emitProp`),
-  nie przez zbieranie wszystkiego w promieniu 1,1 m — co przy rowerze łapało drugi
-  rower i stojak, więc „rower" miał 1,3 m szerokości i nie był żadnym obiektem.
-- Wycięte pseudo-uniwersalne reguły: „wiata nigdy nie wyższa niż autobus", „ławka nie
-  dłuższa niż wzrost pasażera o połowę". W ich miejsce: prześwit nad najwyższym
-  mieszkańcem, dach nad ławką, siedzisko na wysokości siedzenia, miejsce dla dwóch osób,
-  luz autobusu do obu krawężników. To, że wiata jest niższa od autobusu, jest decyzją
-  stylistyczną tej diorami — nie prawem realizmu i nie asercją.
+### 1.5 Autobus ma szkło, nie cztery jasne panele
 
-### 1.5 Paczka i diagnostyka
+Szyby miały kolor `windowLit` — ten sam ciepły krem, co zapalone okno w bloku — plus
+0,25 emisji **w biały dzień**, więc żółty autobus nosił cztery płaskie blade prostokąty.
+Szkło w dzień jest ciemne i bierze jasność z nieba, które odbija; zapalone wnętrze to
+stan nocny. Dwie rzeczy, które pokazały kadry, a nie kod:
 
-Sonda czasu klatki i licznik świateł to diagnostyka, więc **ładują się na żądanie**, a
-nie w chunku wejściowym: pętla renderowania trzyma tylko nullowy uchwyt i dwa
-opcjonalne wywołania. Chunk wejściowy **239 866 B** wobec nietkniętego budżetu
-240 000 B (`main` 33 311 / 50 000, `hybrid-spike` 34 305).
+- Przy `envMapIntensity` 2 i chropowatości 0,08 tafla wypala się do płaskiej białej
+  plamy tam, gdzie szkło jest widziane pod małym kątem — czyli na całym boku autobusu.
+  1,2 i 0,16 zostawiają niebo w szybie, nie wymazując tafli.
+- `setCyberLook` interpolował **emisję** z koloru szkła, więc po ściemnieniu tafli nocny
+  autobus świecił granatowo zamiast pokazywać zapalone wnętrze. Tafla i wnętrze to dwa
+  różne kolory.
 
-Wyniki benchmarku zapisuje `writeReport()`: waliduje komplet scenariuszy i prób TTI,
-pisze plik tymczasowy i dopiero podmienia. Dlatego `bench-voxel-low.json` już nie
-może mieć 0 bajtów — poprzednio driver przekierowywał stdout do pliku docelowego, więc
-powłoka obcinała go, zanim node wystartował. Każdy raport nosi rewizję, znacznik czasu
-i warunki pomiaru, w tym `deviceScaleFactor` i to, czy działała diagnostyczna nadpiska.
+### 1.6 Paczka i diagnostyka
+
+Sonda czasu klatki i licznik świateł ładują się na żądanie, nie w chunku wejściowym.
+Chunk wejściowy **239 954 B** wobec nietkniętego budżetu 240 000 B (`main` 33 311 /
+50 000, `hybrid-spike` 34 305). Zapis wyników przechodzi przez `writeReport()`: waliduje
+komplet scenariuszy i prób, pisze plik tymczasowy i dopiero podmienia, więc
+`bench-voxel-low.json` nie może już mieć 0 bajtów.
 
 ---
 
-## 2. Testy i gdzie są pełne dowody
+## 2. Izolacja serii pomiarowych
+
+To okazało się przyczyną sprzeczności, nie przypisem do niej.
+
+- **Światy porównywane w jednym procesie** (`BENCH_WORLDS=voxel,hybrid-direct`),
+  naprzemiennie scenariusz po scenariuszu, z zamienianą kolejnością pierwszeństwa.
+  Wcześniej voxel i hybryda jechały jako dwa procesy w odstępie minut, więc wszystko, co
+  maszyna zrobiła w przerwie, ląduje na mierzonej różnicy.
+- **Kanarek**: ten sam tani scenariusz mierzony jako pierwszy i ostatni w każdym
+  przebiegu; przebieg, w którym kanarek drgnął, **nie może dać PASS**. Wszystkie
+  dotychczasowe: stabilny do 0,1 ms.
+- **`BENCH_ORDER=given|reverse|shuffle`**, a każdy wynik zapisuje swoją pozycję w serii.
+  Nocna ulica czyta się tak samo na pozycji 1, 4 i 9.
+- **Stan maszyny przy każdym pomiarze**: load average i najbardziej obciążające procesy
+  obce wokół okna pomiarowego. Ten pulpit nigdy nie jest bezczynny — kompozytor, okno
+  rozmowy i narzędzie projektowe siedzą na tym samym GPU — i to jest teraz zapisana
+  współzmienna, nie wyjaśnienie podawane po fakcie.
+- **`BENCH_UNCAPPED=1`** wyłącza vsync do pomiarów zapasu, a uruchomienie bez vsync jest
+  odrzucane, jeśli ktoś spróbuje ocenić je bramką 58 FPS.
+
+---
+
+## 3. Nocna wydajność — przepisane na podstawie pomiaru
+
+### 3.1 Dlaczego FPS nie odpowiadał na to pytanie
+
+Pod vsync czas klatki jest kwantowany do wielokrotności 16,7 ms, więc FPS mówi tylko
+„w budżecie" albo „poza nim". Dlatego nocna ulica czyta się jako 60,0 **albo** 48,3 i
+nigdy nic pomiędzy, i dlatego dwa klastry uruchomień tego samego kodu mogły się różnić o
+12 FPS. Z wyłączonym vsync czas klatki jest ciągły i da się porównywać koszty.
+
+### 3.2 Z czego zrobiona jest nocna klatka
+
+Rozdzielczość produktu (pixel ratio 1,15, 1655×1035), światło i geometria bez zmian,
+oba światy w jednym procesie, powtórzenia zgodne do 0,1 ms (`night-attribution.json`):
+
+| stan | ms/klatkę |
+|---|---|
+| voxel (produkt) | **11,9–12,1** |
+| hybryda jak jest | **14,8–15,0** |
+| hybryda, światła lokalne zgaszone | **3,58–3,59** |
+| voxel, światła lokalne zgaszone | 3,30–3,36 |
+| hybryda, szkło ukryte | 14,58–14,73 |
+| hybryda, fragment ukryty | 9,54–9,62 |
+
+Z tego, wszystko z pomiaru:
+
+- **Szesnaście świateł lokalnych to 11,2 ms z 14,8 ms klatki**, 0,71 ms na światło — i
+  produkt płaci to samo (11,9 z 12,0 ms swojej nocnej klatki). Noc jest droga od świateł,
+  nie od fragmentu.
+- **Fragment dokłada 2,85 ms przy zapalonych światłach i 0,25 ms przy zgaszonych.** Jego
+  koszt *to* jego piksele cieniowane szesnastoma światłami w rendererze forward.
+- Klatka skaluje się z liczbą pikseli: 14,8 ms przy 1,71 Mpx wobec 10,94 ms przy
+  1,30 Mpx (stosunek 1,35 przy 1,32 pikseli). Klatka jest fill-bound.
+- „Fragment ukryty" jest **tańszy** od produktu, bo świat hybrydowy wyłącza pięć bloków,
+  które fragment zastępuje: ukrycie go zostawia dziurę. Własny koszt fragmentu to
+  hybryda minus voxel, nie hybryda minus ukryty.
+- Intensywność świateł nie jest dźwignią: three.js kompiluje liczbę świateł w szader,
+  więc wyzerowanie ośmiu z szesnastu nie zmieniło nic (14,82 wobec 14,97 ms).
+
+### 3.3 Tańszy materiał — zmierzony przed wyborem
+
+Cztery warianty, każdy zbudowany osobno, mierzony bez vsync przy 1,15, ze światem voxel
+w tym samym procesie jako odniesieniem stanu maszyny (`night-attribution-summary.json`):
+
+| wariant | nocna klatka hybrydy | koszt fragmentu | chunk |
+|---|---|---|---|
+| trzy oktawy szumu (obecnie) | 14,01 / 13,85 ms | 2,82 / 2,63 ms | 34 305 B |
+| **bez szumu** | **13,47 / 13,39 ms** | **2,25 / 2,21 ms** | 34 160 B |
+| jedna oktawa | 13,82 / 13,83 ms | 2,63 / 2,62 ms | 34 238 B |
+| dwie oktawy | 13,81 / 14,89 ms | 1,75 / 2,88 ms | 34 275 B |
+
+**Usunięcie szumu w całości kupuje 0,5 ms z 14,8 ms — 3,4% klatki — a spłaszcza każdą
+powierzchnię fragmentu.** Jedna i dwie oktawy nie kupują nic mierzalnego. Ukrycie całego
+szkła kupuje 0,15 ms. Materiał nie jest tu dźwignią i nie zamieniam ostrości obrazu na
+te 0,5 ms.
+
+### 3.4 Zmierzone dźwignie
+
+| dźwignia | oszczędność na 14,8 ms | co kosztuje |
+|---|---|---|
+| bez proceduralnego szumu | 0,5 ms | płaski fragment |
+| bez warstw szkła | 0,15 ms | okna przestają być szkłem |
+| jedno światło lokalne mniej | 0,71 ms | ciemniejsza ulica, w całym mieście, na High |
+| pixel ratio 1,15 → 1,00 | 3,9 ms | 13% mniej rozdzielczości liniowej |
+
+Zapas dziś: **1,9 ms z fragmentem, 4,7 ms bez niego.**
+
+---
+
+## 4. Adaptacyjna rozdzielczość — ocena, nie wdrożenie
+
+Optymalizacja materiału nie wystarczyła (0,5 ms z potrzebnych ~2,9 ms), więc oceniam
+rozdzielczość — i tylko oceniam. Nie wprowadzam jej: to zmiana zachowania całego
+produktu, nie naprawa spike'u.
+
+**Produkt już ma taką zasadę i już ma w niej wyjątek dopasowany do jednego pomiaru.**
+`bootstrap.ts` liczy `pixelRatio = min(devicePixelRatio, max(1, quality.pixelRatio ×
+distanceScale × cameraScale))`, gdzie:
+
+- `distanceScale` = 1 blisko / 0,8 daleko, przełączane odległością ostrości z histerezą
+  112/102 m — **to jest zasada**: dalej znaczy mniej czytelnego detalu;
+- `cameraScale` = 0,87 **tylko dla kamery autobusu**, z komentarzem „sprawiała, że High
+  spadał na co drugi vblank na M1" — **to jest wyjątek dopasowany do jednego pomiaru na
+  jednej maszynie**, dokładnie ten kształt, którego nie należy mnożyć. Nocna ulica byłaby
+  drugim takim wyjątkiem.
+
+Spójna zasada, która obejmuje oba przypadki: **skalować rozdzielczość zmierzonym kosztem
+klatki, nie tożsamością kamery.** Pętla o dyscyplinie selektora LOD, który już mamy:
+mediana czasu klatki z ostatnich N klatek, progi wejścia i wyjścia (histereza),
+cooldown, dolna granica pixel ratio, jeden stopień na raz. Wtedy żaden kadr — nocna
+ulica, deszcz w południe, przyszła dzielnica — nie potrzebuje własnej stałej.
+
+Co to kupuje, z pomiaru: 1,15 → 1,00 to 3,9 ms, czyli 5,8 ms zapasu zamiast 1,9 ms.
+Co kosztuje: 13% rozdzielczości liniowej tam i tylko tam, gdzie klatka i tak by nie
+zdążyła.
+
+**Warunek, bez którego nie wolno tego wprowadzić:** adaptacyjna rozdzielczość unieważnia
+bramkę FPS, jeśli raport nie podaje rozdzielczości, w której klatka faktycznie
+powstała — „60 FPS" zaczyna wtedy znaczyć „tyle pikseli, ile się zmieściło". Benchmark
+zapisuje już `pixelRatio` i rozmiar kanwy przy każdym wyniku; przy takiej pętli musiałby
+podawać ich **rozkład w oknie pomiarowym**, a bramka brzmieć „58 FPS przy pełnej
+rozdzielczości profilu", nie „58 FPS".
+
+Alternatywa o podobnym efekcie: **budżet świateł**. Trzy światła mniej na High to 2,1 ms
+i mieści się w istniejącej zasadzie („ile świateł wolno danemu poziomowi jakości"), tylko
+wprost zmienia nocny obraz całego miasta. Wybór między tymi dwiema zasadami należy do
+właściciela; obie są wycenione.
+
+---
+
+## 5. Testy i gdzie są pełne dowody
 
 | Test | Plik / faza | Co mierzy |
 |---|---|---|
 | proporcje i styk z ziemią | `src/world/hybrid/proportions.test.ts` (14) | gotowe bryły: autobus, oba rowery, listonosz, pies, wiata, ławka, jezdnia |
-| prześwity i przejścia | `src/world/hybrid/clearance.test.ts` (13) | wiata na chodniku, oczekujący pod dachem, trasa nie po trawie, luz autobusu do krawężników |
-| histereza LOD | `src/world/hybrid/lodHysteresis.test.ts` (7) | oba progi w obu kierunkach, pasmo, 40 klatek drgań na każdym progu, cooldown co do klatki, sufit Low, najazd i odjazd |
-| deterministyczność | `src/world/hybrid/determinism.test.ts` (4) | skróty FNV-1a **wszystkich** atrybutów wszystkich geometrii wszystkich klastrów; dwa budowania i dwa modele z ziarna |
-| materiały | `SPIKE_PHASE=materials` → `spike-materials.json` | macierz LOD 0/1/2 × High/Low przy zgaszonych i potwierdzonych światłach, okna, kohorty, śnieg, wilgoć |
-| LOD i semantyka w scenie | `SPIKE_PHASE=gate3` → `spike-semantics.json` | bez zmian względem rewizji 3 |
-| koszt nocny fragmentu | `night-fragment-experiment.json` | widoczny / ukryty / odpięty + liczniki per przebieg |
-| noc a rozdzielczość | `night-resolution-experiment.json` | oba światy naprzemiennie przy 1,15 i przy 1,00 |
-| komplet wydajności | `bench-{voxel,hybrid-direct}-{high,low}.json` | 36 scenariuszy, po 3 próby TTI każdy |
-| kadry | `docs/superpowers/spike/frames/` | 8 kadrów hybrydy + 8 odpowiedników produktu |
+| prześwity, przejścia, oczekujący | `src/world/hybrid/clearance.test.ts` (15) | wiata na chodniku, ludzie pod dachem i nie w sobie, kolizjoner rozmiaru słupka, trasa nie po trawie, luz autobusu |
+| szyby autobusu | `src/world/Bus.test.ts` (6) | ciemne i niegasnące w dzień, ciepłe i świecące nocą, cyjan w Cyberpunku |
+| histereza LOD | `src/world/hybrid/lodHysteresis.test.ts` (7) | oba progi w obu kierunkach, pasmo, drgania, cooldown, sufit Low, najazd i odjazd |
+| deterministyczność | `src/world/hybrid/determinism.test.ts` (4) | skróty FNV-1a wszystkich atrybutów wszystkich geometrii wszystkich klastrów |
+| materiały | `SPIKE_PHASE=materials` → `spike-materials.json` | LOD 0/1/2 × High/Low, okna, kohorty; śnieg i wilgoć w **czterech** kombinacjach jakość × dzień/noc |
+| listonosz | `SPIKE_PHASE=postman` → `spike-postman.json` + kadry | pozycja, poza i kontakt w ruchu, w świetle |
+| koszt nocny | `night-attribution.json`, `night-attribution-summary.json` | widoczny / ukryty / odpięty / bez świateł / bez szkła, warianty materiału, skalowanie rozdzielczości |
+| komplet wydajności | `bench-{voxel,hybrid-direct}-{high,low}.json` | 36 scenariuszy, po 3 próby TTI |
+| kadry | `docs/superpowers/spike/frames/` | 8 kadrów hybrydy + 8 produktu + 2 listonosza |
 
-Zestaw jednostkowy: **256 testów w 39 plikach**, `tsc --noEmit` czysty.
+Zestaw jednostkowy: **260 testów w 39 plikach**, `tsc --noEmit` czysty, smoke
+przeglądarkowy zielony, budżety paczki spełnione.
 
-### 2.1 Że te testy wykrywają regresje
+### 5.1 Że te testy wykrywają regresje
 
-Nie przez zawężanie zakresów. Przez kontrolowane wprowadzenie usterki z powrotem —
-dziesięć przypadków geometrii, każdy z listą testów, które padły
-(`negative-controls.json`), i dwa przypadki materiałów w przeglądarce
-(`negative-controls-materials.json`). Po każdym przywróceniu zestaw znowu zielony.
+Trzynaście przypadków kontrolowanego przywrócenia usterki, każdy z listą testów, które
+padły: `negative-controls.json` (geometria, skala, szyby) i
+`negative-controls-materials.json` (okna w LOD 0, kohorty). Po każdym przywróceniu
+zestaw znowu zielony.
 
-Dwa z tych przypadków najpierw **nie zostały wykryte**, i to jest najważniejsza rzecz w
-tym rozdziale:
+Cztery instrumenty **najpierw nie wykryły** usterki, którą miały łapać, i to jest
+najważniejsza część tego rozdziału:
 
-1. Pierwsza wersja testu listonosza przepuściła jego lewitację, bo mierzyła w układzie
-   roweru, gdzie koła dotykają `y = 0` niezależnie od tego, jak wysoko lata cały zestaw.
-   Test mierzy teraz **także w układzie świata, wobec jezdni**.
-2. Pierwsza wersja pomiaru okien przepuściła szklenie usunięte z LOD 0. Przy 300 m
-   pudełko fasady to głównie bloki produktu: fragment dawał 824 rozjaśnione piksele,
-   produkt 827, a usunięcie szkła z fragmentu **nie ruszyło żadnej z tych liczb**. Teraz
-   LOD 0 osiąga się wysokością okna (280 px z 110 m), fragment jest izolowany różnicą
-   dwóch światów piksel po pikselu, a miarą jest suma przyrostu jasności, bo przy LOD 0
-   okno ma szerokość jednego piksela i antyaliasing rozmywa je pod każdy próg.
-   Zmierzone: fragment dodaje **0,17** światła produktu, a ze szkleniem wyniesionym z
-   warstwy masy — **0,07**. Próg 0,11 to średnia geometryczna tych dwóch liczb.
-
----
-
-## 3. Nocna wydajność — co ustalone, a co pozostaje hipotezą
-
-### 3.1 Ustalone
-
-**Fragment jest przyczyną, ale tylko przy pełnej rozdzielczości profilu High.**
-Ten sam checkpoint, ta sama kamera, to samo ziarno, ta sama jakość, światy
-naprzemiennie, wszystkie próby zapisane w `night-resolution-experiment.json`:
-
-| pixel ratio | świat | FPS | p95 | klatki > 20,5 ms | draw calls | trójkąty |
-|---|---|---|---|---|---|---|
-| **1,15** (1655×1035) | voxel | 60,0 / 60,0 / 60,0 | 16,7–16,8 | 0,0% | 319 | 669 577 |
-| **1,15** | hybrid-direct | **48,3 / 48,7 / 48,7** | **33,3–33,4** | **23,3–24,1%** | 347 | 642 287 |
-| **1,00** (1440×900) | voxel | 60,0 / 60,0 | 16,7–16,8 | 0,0% | 319 | — |
-| **1,00** | hybrid-direct | **60,0 / 60,0** | 16,7–16,8 | 0,0% | 347 | — |
-
-Z tego wynika kilka rzeczy, każda z pomiaru:
-
-- **To nie jest geometria.** Hybryda rysuje w tym kadrze **mniej** trójkątów niż
-  produkt, który zastępuje (642 287 wobec 669 577), przy 28 draw callach więcej. Koszt
-  jest na piksel, nie na wierzchołek i nie na obiekt.
-- **To nie jest podpięcie do scen.** Ten sam kadr z fragmentem ukrytym (`visible =
-  false`, dalej w scenie) i odpiętym (usuniętym ze scen) daje **identyczne liczniki per
-  przebieg**, co do trójkąta: main 141/306 624, normalne 138/299 628, trzeci 23/13 728.
-  Hipoteza rewizji 3 — „bryły otaczające scalonych meshy nie są odcinane frustumem,
-  więc koszt jest stały na klatkę" — jest tym pomiarem **wykluczona**, i nic tu nie
-  uzasadnia zawężania bryły otaczającej poniżej rozmiarów obiektu.
-  Rozbicie na przebiegi wymagało owinięcia `renderer.render` z harnessu; sam graf scen
-  był dostępny prościej, przez `window.__diorama.scene`, czego wcześniej nie sprawdziłem.
-- Koszt fragmentu w liczbach: 13 draw calli i 11 098 trójkątów w passie głównym, tyle
-  samo w passie normalnych SSAO, 2 calle w trzecim.
-- **Sprzeczność z rewizji 3 jest wyjaśniona i nie jest to obciążenie maszyny ani
-  temperatura.** 9/9 uruchomień przy 47–50 FPS i 9/9 przy 60 FPS pochodziły z dwóch
-  harnessów, które różniły się jedną rzeczą: `deviceScaleFactor`. Profil High prosi o
-  pixel ratio 1,15, a renderer bierze `min(devicePixelRatio, 1,15 · distanceScale ·
-  cameraScale)`. Przy `deviceScaleFactor: 1` wychodzi 1,00 i **32% pikseli mniej**.
-  Teraz to jedna stała w skrypcie i pole w każdym pliku wyniku.
-
-### 3.2 Pozostaje hipotezą
-
-- **Która część kosztu na piksel dominuje**: trzyoktawowy szum materiału, przemalowanie
-  przez `glass` i `glassClear`, czy pass normalnych SSAO nad fragmentem. Odczyty
-  `TIME_ELAPSED_EXT` pod vsync obejmują oczekiwanie i w większości uruchomień wychodzą
-  **niekonkluzywne** według reguły rozrzutu (16,7/4 ms), więc nie da się nimi rozdzielić
-  składników. Jedna czysta para przy pixel ratio 1,00 daje ~5 ms na fragment.
-- **Czy punktowe obniżenie pixel ratio dla nocnej kamery ulicznej zamknęłoby bramkę bez
-  widocznej straty.** Produkt robi dokładnie to dla kamery autobusu (`cameraScale =
-  0,87`), a pomiar pokazuje, że przy 1,00 kadr trzyma 60 FPS z zerowym udziałem wolnych
-  klatek. Nie wprowadzam tego: to decyzja o jakości całego produktu, nie naprawa spike'u.
-
-### 3.3 Komplet wyników
-
-`bench-{voxel,hybrid-direct}-{high,low}.json`, rewizja `d3846e0`, 36 scenariuszy, po
-3 próby TTI każdy (zapisane wszystkie, nie tylko mediana). Po `d3846e0` nie zmieniło
-się nic w `src/` — późniejsze commity to dokumentacja i harness — więc te liczby
-dotyczą także HEAD.
-
-- **35 z 36 scenariuszy: 60,0 FPS, p95 16,7–16,8 ms, 0% klatek powyżej 20,5 ms.**
-- **1 scenariusz nie przechodzi: `hybrid-direct` / High / `spike-night-street` — 48,3 FPS,
-  p95 33,4 ms, 24,1% wolnych klatek.** Ten sam kadr na Low: 60,0 FPS.
-- TTI: mediana median 1081 ms, najgorsza mediana 1364 ms, **najgorsza pojedyncza próba
-  1379 ms** (`hybrid-direct` / High / `night-snow-train`, próby 1378,7 / 1347,4 /
-  1364,1). Próg 1800 ms — z zapasem, licząc po najgorszej próbie, nie po medianie.
-- Historyczne wyniki z rewizji sprzed `a89af98` leżą w `bench-archive/` z opisem, czym
-  są i czego w nich brakuje. Nie są przedstawiane jako aktualny pomiar.
+1. Test listonosza mierzył w układzie roweru, gdzie koła dotykają `y = 0` niezależnie od
+   tego, jak wysoko lata cały zestaw. Mierzy teraz także w układzie świata.
+2. Pomiar okien przy 300 m obejmował głównie bloki produktu: fragment dawał 824
+   rozjaśnione piksele, produkt 827, a usunięcie szkła nie ruszyło żadnej z tych liczb.
+   LOD 0 osiąga się teraz wysokością okna, fragment izoluje różnica dwóch światów piksel
+   po pikselu, a miarą jest suma przyrostu jasności (0,17 wobec 0,07 z usterką).
+3. FPS pod vsync nie mierzył zapasu — rozdział 3.
+4. Dwa procesy w odstępie minut nie mierzyły różnicy między światami, tylko różnicę
+   między stanami maszyny — rozdział 2.
 
 ---
 
-## 4. Kadry do oceny wizualnej
+## 6. Kadry
 
-Osiem kadrów hybrydy i osiem odpowiedników produktu z tym samym ziarnem, checkpointem i
-kamerą, w `docs/superpowers/spike/frames/`:
+Osiem kadrów hybrydy i osiem odpowiedników produktu z tym samym ziarnem i kamerą, plus
+dwa kadry listonosza, w `docs/superpowers/spike/frames/`: przegląd neutralny, poziom
+oczu, kamera autobusu, kamera toura, złota godzina, noc, przegląd Low, ulica Low,
+`hybrid-direct-high-postman{,-close}.jpg`.
 
-| Kadr | Plik (hybryda) |
-|---|---|
-| przegląd, światło neutralne | `hybrid-direct-high-spike-overview.jpg` |
-| poziom oczu | `hybrid-direct-high-spike-street.jpg` |
-| kamera autobusu | `hybrid-direct-high-bus-camera.jpg` |
-| kamera toura | `hybrid-direct-high-tour-camera.jpg` |
-| złota godzina | `hybrid-direct-high-spike-golden.jpg` |
-| noc | `hybrid-direct-high-spike-night-street.jpg` |
-| przegląd, Low | `hybrid-direct-low-spike-overview.jpg` |
-| ulica, Low | `hybrid-direct-low-spike-street.jpg` |
+Ocena, do zakwestionowania kadrami:
 
-Moja ocena, do zakwestionowania kadrami:
-
-- **Autobus wygląda jak pojazd.** Nadkola, tylna szyba, stożki świateł 0,42 × 2,4 m
-  zamiast ośmiometrowego klina, i — od tej rundy — koła na jezdni.
-- **Szkło wygląda jak szkło, a nocą lepiej niż w produkcie.** W kadrze nocnym okna
-  kamienicy czytają się jako okna z podziałami i ciepłym wnętrzem; produkt w tym samym
-  kadrze pokazuje wielkie płaskie świecące prostokąty. Zmierzone 0,17 światła produktu
-  to nie deficyt czytelności — produkt prześwietla.
-- **Rowery i mieszkańcy należą do tego samego świata.** Autobus/pasażer 1,54,
-  autobus/rower 2,73, pasażer/rower 1,77 — wszystkie w okolicy wartości odniesienia.
-- **Low trzyma sylwetkę.** Na ulicy Low różni się brakiem podziałów okien i cieńszą
-  ramą, nie brakiem obiektów.
-- **Kamera toura nie odwiedza fragmentu** — tour jedzie za pociągiem. Ten kadr pokazuje
-  tylko, że tour nie ucierpiał; nie jest oceną fragmentu.
-- **Czterech oczekujących pod wiatą zachodzi na siebie.** Figura ma 0,874 m szerokości z
-  rękami, a pozycje oczekiwania są co 0,67 m; wolny prześwit między słupkami wiaty to
-  2,36 m, a czterech takich figur potrzebuje 3,5 m. Wszyscy stoją na chodniku, pod
-  dachem i poza każdym kolizjonerem — ale ramiona się przecinają. Zostawiam: naprawa to
-  albo mniej oczekujących, albo dłuższa wiata, albo węższa figura, czyli decyzja o
-  produkcie, nie o tym fragmencie.
+- **Autobus wygląda jak pojazd i ma szkło.** Tylna szyba czyta się jako ciemna tafla,
+  bok bierze niebo pod małym kątem, nocą świeci wnętrze. Koła na jezdni.
+- **Przystanek jest czytelniejszy**: chodnik pod wiatą, czterech ludzi pod dachem,
+  ławka pod nim, nikt nie stoi w słupku.
+- **Rowery i mieszkańcy z jednego świata**: autobus/pasażer 1,54, autobus/rower 2,73,
+  pasażer/rower 1,77.
+- **Listonosz jedzie, a nie leży na kierownicy** — po korekcie pochylenia. Jego rower
+  nadal jest ciemny na ciemnym asfalcie w cieniu bloku; kadr trzeba stawiać od strony
+  słońca, co harness robi.
+- **Low trzyma sylwetkę**: różni się brakiem podziałów okien, nie brakiem obiektów.
+- **Kamera toura nie odwiedza fragmentu** — tour jedzie za pociągiem.
+- **Szyby pociągu są zrobione tak, jak były szyby autobusu** (`color: windowLit,
+  emissive: windowLit`) i w dzień będą równie płaskie. Nie tknięte: to inny obiekt w
+  innej części miasta i nikt jeszcze nie patrzył na jego kadr.
 
 ---
 
-## 5. Pozostałe luki
+## 7. Pozostałe luki
 
-1. **`spike-night-street` na High nie przechodzi bramki 58 FPS.** Przyczyna
-   zlokalizowana (koszt na piksel fragmentu przy pixel ratio 1,15), mechanizm
-   udowodniony, rozstrzygnięcie — nie. **To blokuje merge.**
-2. **Rozdział kosztu na piksel** między szum, szkło i SSAO — nie zmierzony
-   rozstrzygająco, bo sonda GPU pod vsync jest niekonkluzywna.
-3. **Kolizjonery wiaty nie odpowiadają jej geometrii**: słupek ma 0,16 m, a jego
-   kolizjoner 1,0 m (plus 0,32 m zapasu). Nic z tego nie wynika dla obecnych pozycji
-   (są poza kolizjonerami), ale to niespójność danych, którą zgłaszam, a nie naprawiam
-   — dotyczy nawigacji całego produktu, nie fragmentu.
-4. **Listonosz nie ma kadru referencyjnego.** Zweryfikowany pomiarem gotowych siatek
-   (styk, rozmiary, poza, relacje), nie renderem: pojawia się tylko o świcie na drodze
-   południowej, checkpointy zamrażają aktorów, a debugowe API nie daje swobodnej kamery.
-5. **Streetscape 2.0** — nadal wydzielone, nie zrobione (rozdział 11 poprzedniego
-   raportu).
-6. **28 JPEG-ów w historii Git** — decyzja właściciela, wciąż otwarta.
+1. **Nocna ulica na High stoi 1,9 ms pod progiem klatki** i przy zajętym pulpicie
+   przechodzi na drugą stronę. Przyczyna zmierzona, dźwignie wycenione, wybór zasady
+   należy do właściciela. **To nadal blokuje merge.**
+2. **Reszta kosztu fragmentu** (2,2 ms z 2,85 po odjęciu szumu i szkła) to jego piksele
+   pod szesnastoma światłami; rozbicie tego dalej wymagałoby licznika na przebieg
+   świetlny, którego forward renderer nie daje.
+3. **Szyby pociągu** — ten sam wzór, co poprawiony w autobusie.
+4. **Streetscape 2.0** — nadal wydzielone, nie zrobione.
+5. **28 JPEG-ów w historii Git** — decyzja właściciela, wciąż otwarta.
 
 ---
 
-## 6. Stan gałęzi i werdykt
+## 8. Stan gałęzi i werdykt
 
-- Gałąź `spike/hybrid-osiedle-centralne`, drzewo czyste, `main` nietknięty.
-- Nowe commity tej rundy: paczka i zapis dowodów, geometria i skala świata, trzy
-  brakujące zestawy testów, dowód kosztu nocnego.
-- `tsc --noEmit` czysto, 256 testów zielonych, budżety paczki niezmienione i spełnione.
+Drzewo czyste, `main` nietknięty. `tsc` czysto, 260 testów zielonych, smoke zielony,
+budżety paczki niezmienione i spełnione.
 
-**Werdykt: nadal wstrzymane jedną bramką, ale to już nie jest ta sama blokada.**
+**Werdykt: wstrzymane jedną bramką, ale to już nie jest zagadka — to wycena.**
 
-W rewizji 3 blokada brzmiała „hybryda gubi vsync nocą i nie wiemy dlaczego, a
-przypuszczenie mówi o bryłach otaczających". Teraz brzmi: *hybryda kosztuje na piksel
-tyle, że nocny kadr uliczny przy pixel ratio 1,15 mieści się w 20,5 ms tylko w trzech
-czwartych klatek; przy 1,00 mieści się w całości; geometria i podpięcie są z tego
-wykluczone pomiarem.* Do decyzji właściciela zostaje **jedna rzecz**: czy zamykamy tę
-bramkę taniej rysowanym nocnym materiałem, czy punktowym obniżeniem rozdzielczości dla
-tej kamery — tak jak produkt już robi dla kamery autobusu.
-
-Wszystko poza tą jedną bramką jest w tej rundzie zamknięte i zmierzone.
+Nocny kadr uliczny kosztuje 14,8 ms z 16,7 ms budżetu, z czego 11,2 ms to szesnaście
+świateł, które produkt płaci tak samo, a 2,85 ms to piksele fragmentu pod tymi
+światłami. Materiał zmierzony i odrzucony jako dźwignia: 0,5 ms za spłaszczenie całego
+fragmentu. Do wyboru zostają dwie zasady o podobnym efekcie — koszt klatki jako
+sterowanie rozdzielczością albo budżet świateł jako sterowanie nocą — obie wycenione w
+milisekundach i obie widoczne w obrazie. Nic w tej rundzie nie zostało zamienione na
+zielony wynik testu.
