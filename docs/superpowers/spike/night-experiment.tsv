@@ -1,16 +1,19 @@
-rev	rep	world	lights	shadows	fps	p95	slowRatio	animMedianMs	animSpreadMs	animConclusive	visibleLightsDuring	visibleLightsAfter	status
-a89af98	1	voxel	on	on	60.0	16.7	0.000	20.74	5.63	False	16	16	ok
-a89af98	1	hybrid-direct	on	on	60.0	16.8	0.000	25.03	12.24	False	16	16	ok
-a89af98	1	voxel	off	on	60.0	16.7	0.000	7.77	7.54	False	0	0	ok
-a89af98	1	hybrid-direct	off	on	60.0	16.7	0.000	9.89	7.02	False	0	0	ok
-a89af98	2	voxel	on	on	60.0	16.7	0.000	20.21	6.16	False	16	16	ok
-a89af98	2	hybrid-direct	on	on	60.0	16.7	0.000	25.44	15.03	False	16	16	ok
-a89af98	2	voxel	off	on	60.0	16.8	0.000	7.37	6.47	False	0	0	ok
-a89af98	2	hybrid-direct	off	on	60.0	16.8	0.000	10.08	9.81	False	0	0	ok
-a89af98	3	voxel	on	on	60.0	16.7	0.000	20.48	2.25	True	16	16	ok
-a89af98	3	hybrid-direct	on	on	60.0	16.8	0.000	25.29	12.27	False	16	16	ok
-a89af98	3	voxel	off	on	60.0	16.7	0.000	7.79	6.23	False	0	0	ok
-a89af98	3	hybrid-direct	off	on	60.0	16.8	0.000	9.2	9.09	False	0	0	ok
+# Every night attempt, including the ones that came back inconclusive.
+# The `fragment` column was added when the visible/hidden/detached experiment
+# started; the a89af98 rows predate it and carry the state they actually ran in.
+rev	rep	world	fragment	lights	shadows	fps	p95	slowRatio	animMedianMs	animSpreadMs	animConclusive	visibleLightsDuring	visibleLightsAfter	status
+a89af98	1	voxel	no-fragment	on	on	60.0	16.7	0.000	20.74	5.63	False	16	16	ok
+a89af98	1	hybrid-direct	attached	on	on	60.0	16.8	0.000	25.03	12.24	False	16	16	ok
+a89af98	1	voxel	no-fragment	off	on	60.0	16.7	0.000	7.77	7.54	False	0	0	ok
+a89af98	1	hybrid-direct	attached	off	on	60.0	16.7	0.000	9.89	7.02	False	0	0	ok
+a89af98	2	voxel	no-fragment	on	on	60.0	16.7	0.000	20.21	6.16	False	16	16	ok
+a89af98	2	hybrid-direct	attached	on	on	60.0	16.7	0.000	25.44	15.03	False	16	16	ok
+a89af98	2	voxel	no-fragment	off	on	60.0	16.8	0.000	7.37	6.47	False	0	0	ok
+a89af98	2	hybrid-direct	attached	off	on	60.0	16.8	0.000	10.08	9.81	False	0	0	ok
+a89af98	3	voxel	no-fragment	on	on	60.0	16.7	0.000	20.48	2.25	True	16	16	ok
+a89af98	3	hybrid-direct	attached	on	on	60.0	16.8	0.000	25.29	12.27	False	16	16	ok
+a89af98	3	voxel	no-fragment	off	on	60.0	16.7	0.000	7.79	6.23	False	0	0	ok
+a89af98	3	hybrid-direct	attached	off	on	60.0	16.8	0.000	9.2	9.09	False	0	0	ok
 c1990ac	0	hybrid-direct	attached	lights-on	shadows-on	60.1	17.7	0.000	19.64	2.52	yes	0	16	ok
 c1990ac	0	hybrid-direct	hidden	lights-on	shadows-on	60.0	18.4	0.000	17.10	23.28	no	0	16	ok
 c1990ac	0	hybrid-direct	detached	lights-on	shadows-on	60.1	17.7	0.000	14.23	3.44	yes	0	16	ok

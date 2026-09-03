@@ -173,7 +173,9 @@ Z tego wynika kilka rzeczy, każda z pomiaru:
 ### 3.3 Komplet wyników
 
 `bench-{voxel,hybrid-direct}-{high,low}.json`, rewizja `d3846e0`, 36 scenariuszy, po
-3 próby TTI każdy (zapisane wszystkie, nie tylko mediana).
+3 próby TTI każdy (zapisane wszystkie, nie tylko mediana). Po `d3846e0` nie zmieniło
+się nic w `src/` — późniejsze commity to dokumentacja i harness — więc te liczby
+dotyczą także HEAD.
 
 - **35 z 36 scenariuszy: 60,0 FPS, p95 16,7–16,8 ms, 0% klatek powyżej 20,5 ms.**
 - **1 scenariusz nie przechodzi: `hybrid-direct` / High / `spike-night-street` — 48,3 FPS,
