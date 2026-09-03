@@ -15,15 +15,19 @@ export function emitStreetscape(model: CityModel): Cluster {
     const dz = kerb.side === '+z' ? 0.39 : kerb.side === '-z' ? -0.39 : 0;
     E.box(P.kerb, kerb.x + dx, GROUND + KERB_HEIGHT / 2, kerb.z + dz, alongX ? 1 : 0.22, KERB_HEIGHT, alongX ? 0.22 : 1, { layer: 0 });
   }
-  // Aleja Poludniowa runs along x, so the bars run across it (along z) and repeat
-  // along the road, clipped to the crossing: bars and gaps of one equal width.
+  // A zebra's bars run ALONG the carriageway and repeat ACROSS it: a pedestrian
+  // crossing steps over successive stripes, and a driver sees them pointing back.
+  // An earlier round turned them the other way on my own faulty reasoning; the
+  // original orientation was right, only the bar length overhung the crossing.
+  // Each bar is now exactly as long as the crossing is wide.
   const cw = model.crosswalk;
-  const cz = (cw.minZ + cw.maxZ) / 2;
-  const barLength = cw.maxZ - cw.minZ - 0.3;
-  const barWidth = (cw.maxX - cw.minX) / (cw.stripes * 2 - 1);
+  const cx = (cw.minX + cw.maxX) / 2;
+  const barLength = cw.maxX - cw.minX;
+  const span = cw.maxZ - cw.minZ - 0.3;
+  const bar = span / (cw.stripes * 2 - 1);
   for (let k = 0; k < cw.stripes; k++) {
-    const x = cw.minX + barWidth * (2 * k + 0.5);
-    E.box(P.marking, x, GROUND + 0.006, cz, barWidth, 0.012, barLength, { layer: 0 });
+    const z = cw.minZ + 0.15 + bar * (2 * k + 0.5);
+    E.box(P.marking, cx, GROUND + 0.006, z, barLength, 0.012, bar, { layer: 0 });
   }
   for (const prop of model.props) emitProp(E, prop);
   // clipped hedge along the forecourt edge (planted, so it sits on the ground by construction)

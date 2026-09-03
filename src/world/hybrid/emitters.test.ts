@@ -93,17 +93,18 @@ describe('streetscape emitter', () => {
     for (const bar of bars) {
       expect(bar.kind).toBe('box');
       if (bar.kind !== 'box') continue;
-      // Aleja Poludniowa runs along x, so a bar is long across the road and narrow along it.
-      expect(bar.d).toBeGreaterThan(bar.w);
+      // A bar is long along the carriageway and narrow across it, so a pedestrian
+      // steps over successive stripes.
+      expect(bar.w).toBeGreaterThan(bar.d);
       expect(bar.x - bar.w / 2).toBeGreaterThanOrEqual(cw.minX - 1e-9);
       expect(bar.x + bar.w / 2).toBeLessThanOrEqual(cw.maxX + 1e-9);
-      expect(bar.z - bar.d / 2).toBeGreaterThanOrEqual(cw.minZ);
-      expect(bar.z + bar.d / 2).toBeLessThanOrEqual(cw.maxZ);
+      expect(bar.z - bar.d / 2).toBeGreaterThanOrEqual(cw.minZ - 1e-9);
+      expect(bar.z + bar.d / 2).toBeLessThanOrEqual(cw.maxZ + 1e-9);
     }
     // Bars and gaps of one width: consecutive centres are exactly two bar widths apart.
-    const xs = bars.map((b) => (b.kind === 'box' ? b.x : 0)).sort((a, b) => a - b);
-    const width = bars[0].kind === 'box' ? bars[0].w : 0;
-    for (let i = 1; i < xs.length; i++) expect(xs[i] - xs[i - 1]).toBeCloseTo(width * 2, 6);
+    const zs = bars.map((b) => (b.kind === 'box' ? b.z : 0)).sort((a, b) => a - b);
+    const across = bars[0].kind === 'box' ? bars[0].d : 0;
+    for (let i = 1; i < zs.length; i++) expect(zs[i] - zs[i - 1]).toBeCloseTo(across * 2, 6);
   });
 
   test('draws three bicycles whose six wheels are believable wheels, not hoops', () => {

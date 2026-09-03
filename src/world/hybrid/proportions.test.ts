@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { describe, expect, test } from 'vitest';
-import { GROUND_SURFACE_Y, BENCH_DIMENSIONS, ROAD_RECTS } from '../WorldLayout';
+import { BUS_SHELTER_ROOF_Y, GROUND_SURFACE_Y, BENCH_DIMENSIONS, ROAD_RECTS } from '../WorldLayout';
 import { buildPassenger } from '../PassengerCrowd';
 import { createBus } from '../Bus';
 import { CROSSWALK, KERB_HEIGHT, buildCityModel } from './CityModel';
@@ -188,15 +188,36 @@ describe('one metric system', () => {
     expect(posts, 'zaden slupek balustrady nie zostal zmierzony').toBeGreaterThan(0);
   });
 
+  test('street furniture is furniture, not architecture', () => {
+    // Measured from the emitted voxel data, which is where the absurdity lived: the
+    // roof was an integer voxel at y = 3, so with the ground at -0.5 it stood 4.00 m.
+    const shelterRoofTop = BUS_SHELTER_ROOF_Y + 0.18;
+    expect(shelterRoofTop, `wiata ${shelterRoofTop.toFixed(2)} m`).toBeGreaterThan(2.2);
+    expect(shelterRoofTop, `wiata ${shelterRoofTop.toFixed(2)} m`).toBeLessThan(2.7);
+
+    // A shelter is never taller than the bus it shelters. It was: 4.00 against 2.95.
+    expect(shelterRoofTop, `wiata ${shelterRoofTop.toFixed(2)} vs autobus ${BUS.y.toFixed(2)}`)
+      .toBeLessThan(BUS.y);
+
+    const versusPerson = shelterRoofTop / PASSENGER_HEIGHT;
+    expect(versusPerson, `wiata/pasazer ${versusPerson.toFixed(2)}`).toBeLessThan(1.55);
+
+    // The bench a person sits on cannot be longer than a person is tall by half.
+    const benchOverPerson = BENCH_DIMENSIONS.length / PASSENGER_HEIGHT;
+    expect(benchOverPerson, `lawka/pasazer ${benchOverPerson.toFixed(2)}`).toBeLessThan(1.1);
+    const backTop = BENCH_DIMENSIONS.seatHeight + BENCH_DIMENSIONS.backHeight;
+    expect(backTop).toBeLessThan(PASSENGER_HEIGHT * 0.55);
+  });
+
   test('the street a person crosses has believable widths', () => {
     const lane = (ROAD_RECTS[0].maxZ - ROAD_RECTS[0].minZ) / 2;
     expect(lane, `pas ruchu ${lane} m`).toBeGreaterThanOrEqual(1.8);
     const crossing = CROSSWALK.maxX - CROSSWALK.minX;
     expect(crossing, `przejscie ${crossing.toFixed(2)} m`).toBeGreaterThanOrEqual(2.5);
-    // Bars across the carriageway, not along it.
+    // Bars along the carriageway, repeating across it.
     const bars = street.filter((p) => p.palette === P.marking && p.kind === 'box');
     expect(bars.length).toBe(CROSSWALK.stripes);
-    for (const bar of bars) if (bar.kind === 'box') expect(bar.d).toBeGreaterThan(bar.w);
+    for (const bar of bars) if (bar.kind === 'box') expect(bar.w).toBeGreaterThan(bar.d);
   });
 
   test('nothing floats above the pavement or sinks into it', () => {

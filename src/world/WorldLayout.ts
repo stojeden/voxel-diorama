@@ -493,12 +493,25 @@ export interface BenchSpec {
 }
 
 /** Human-scale street bench dimensions in world metres. */
+/**
+ * Roof underside of a bus shelter, metres above the walking surface. The voxel
+ * version put its roof slab at integer y = 3, which with the ground at -0.5 is
+ * 4.00 m: taller than the bus it shelters (2.95 m) and 2.09x the waiting passenger
+ * (1.915 m). A real shelter is 2.3-2.6 m.
+ */
+export const BUS_SHELTER_ROOF_Y = 2.28;
+
+/**
+ * A three-seat street bench. Was 2.8 m long with a back reaching 1.17 m above the
+ * pavement -- 1.46x the height of the passenger sitting on it, where a real bench is
+ * about 0.95x. Length and back come down; the seat height was already right.
+ */
 export const BENCH_DIMENSIONS = {
-  length: 2.8,
+  length: 1.7,
   depth: 0.58,
-  seatHeight: 0.48,
-  seatThickness: 0.16,
-  backHeight: 0.72,
+  seatHeight: 0.46,
+  seatThickness: 0.14,
+  backHeight: 0.42,
 } as const;
 
 export interface PropFootprint {

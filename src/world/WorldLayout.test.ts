@@ -407,8 +407,15 @@ describe('palette', () => {
   test('uses human-scale benches and a shared walking surface', () => {
     expect(BENCH_DIMENSIONS.seatHeight).toBeGreaterThanOrEqual(0.42);
     expect(BENCH_DIMENSIONS.seatHeight).toBeLessThanOrEqual(0.52);
-    expect(BENCH_DIMENSIONS.length).toBeGreaterThanOrEqual(2.4);
-    expect(BENCH_DIMENSIONS.length).toBeLessThanOrEqual(3.2);
+    // This range used to be 2.4-3.2 m under the same "human-scale" name, which no
+    // three-seat street bench is: at 2.8 m the bench was 1.46x the height of the
+    // passenger sitting on it. Narrowed to a real bench, not widened.
+    expect(BENCH_DIMENSIONS.length).toBeGreaterThanOrEqual(1.5);
+    expect(BENCH_DIMENSIONS.length).toBeLessThanOrEqual(2.0);
+    // The back is what read as oversized and was never asserted at all.
+    const backTop = BENCH_DIMENSIONS.seatHeight + BENCH_DIMENSIONS.backHeight;
+    expect(backTop).toBeGreaterThanOrEqual(0.78);
+    expect(backTop).toBeLessThanOrEqual(0.95);
     expect(BENCH_DIMENSIONS.seatThickness).toBeLessThan(0.22);
     expect(GROUND_SURFACE_Y).toBe(-0.5);
   });

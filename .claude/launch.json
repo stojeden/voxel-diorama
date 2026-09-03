@@ -4,8 +4,26 @@
     {
       "name": "voxel-diorama-dev",
       "runtimeExecutable": "npx",
-      "runtimeArgs": ["vite", "--port", "5184", "--strictPort"],
+      "runtimeArgs": [
+        "vite",
+        "--port",
+        "5184",
+        "--strictPort"
+      ],
       "port": 5184
+    },
+    {
+      "name": "spike-hybrid-dev",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "vite",
+        "--root",
+        "/Users/piotr/Projekty/voxel-diorama/.claude/worktrees/spike-hybrid-osiedle-centralne",
+        "--port",
+        "5185",
+        "--strictPort"
+      ],
+      "port": 5185
     }
   ]
 }

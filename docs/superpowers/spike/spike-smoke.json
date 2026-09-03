@@ -1,9 +1,9 @@
 {
-  "generatedAt": "2026-09-03T08:59:42.493Z",
+  "generatedAt": "2026-09-03T10:22:28.152Z",
   "bundles": {
-    "entry": 238903,
+    "entry": 238920,
     "main": 33311,
-    "spike": 34267
+    "spike": 34271
   },
   "results": [
     {
@@ -12,15 +12,15 @@
       "checkpoint": "spike-overview",
       "frame": "docs/superpowers/spike/frames/hybrid-direct-high-spike-overview.jpg",
       "calls": 604,
-      "triangles": 580117,
-      "primaryTriangles": 580114,
+      "triangles": 578677,
+      "primaryTriangles": 578674,
       "primaryCalls": 601,
       "programs": 156,
       "geometries": 434,
       "textures": 37,
       "hybrid": {
         "strategy": "direct",
-        "generationMs": 28.299999952316284,
+        "generationMs": 27.899999976158142,
         "triangles": [
           3304,
           10820,
@@ -70,15 +70,15 @@
       "checkpoint": "spike-street",
       "frame": "docs/superpowers/spike/frames/hybrid-direct-high-spike-street.jpg",
       "calls": 471,
-      "triangles": 902389,
-      "primaryTriangles": 577172,
+      "triangles": 900229,
+      "primaryTriangles": 575732,
       "primaryCalls": 283,
       "programs": 152,
       "geometries": 433,
       "textures": 37,
       "hybrid": {
         "strategy": "direct",
-        "generationMs": 27.199999928474426,
+        "generationMs": 25.399999976158142,
         "triangles": [
           3304,
           10820,
@@ -128,15 +128,15 @@
       "checkpoint": "spike-golden",
       "frame": "docs/superpowers/spike/frames/hybrid-direct-high-spike-golden.jpg",
       "calls": 606,
-      "triangles": 580151,
-      "primaryTriangles": 580148,
+      "triangles": 578711,
+      "primaryTriangles": 578708,
       "primaryCalls": 603,
       "programs": 216,
       "geometries": 436,
       "textures": 37,
       "hybrid": {
         "strategy": "direct",
-        "generationMs": 25.59999990463257,
+        "generationMs": 23.399999976158142,
         "triangles": [
           3304,
           10820,
@@ -186,15 +186,15 @@
       "checkpoint": "spike-night-street",
       "frame": "docs/superpowers/spike/frames/hybrid-direct-high-spike-night-street.jpg",
       "calls": 347,
-      "triangles": 643727,
-      "primaryTriangles": 318442,
+      "triangles": 642287,
+      "primaryTriangles": 317722,
       "primaryCalls": 154,
       "programs": 194,
       "geometries": 435,
       "textures": 35,
       "hybrid": {
         "strategy": "direct",
-        "generationMs": 24.40000009536743,
+        "generationMs": 23.899999976158142,
         "triangles": [
           3304,
           10820,
@@ -244,15 +244,15 @@
       "checkpoint": "spike-street",
       "frame": "docs/superpowers/spike/frames/hybrid-direct-low-spike-street.jpg",
       "calls": 151,
-      "triangles": 312855,
-      "primaryTriangles": 312852,
+      "triangles": 312135,
+      "primaryTriangles": 312132,
       "primaryCalls": 148,
       "programs": 75,
       "geometries": 432,
       "textures": 20,
       "hybrid": {
         "strategy": "direct",
-        "generationMs": 25.399999976158142,
+        "generationMs": 24.799999952316284,
         "triangles": [
           2760,
           9824,
@@ -302,15 +302,15 @@
       "checkpoint": "spike-overview",
       "frame": "docs/superpowers/spike/frames/hybrid-direct-low-spike-overview.jpg",
       "calls": 437,
-      "triangles": 327433,
-      "primaryTriangles": 327430,
+      "triangles": 326713,
+      "primaryTriangles": 326710,
       "primaryCalls": 434,
       "programs": 76,
       "geometries": 433,
       "textures": 20,
       "hybrid": {
         "strategy": "direct",
-        "generationMs": 23.699999928474426,
+        "generationMs": 22.899999976158142,
         "triangles": [
           2760,
           9824,

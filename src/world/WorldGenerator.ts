@@ -8,6 +8,7 @@ import type { QualityProfile } from '../performance/QualityManager';
 import {
   BLOCK_CONFIGS,
   BENCH_DIMENSIONS,
+  BUS_SHELTER_ROOF_Y,
   BENCH_SPECS,
   BUILDING_ENTRANCES,
   BUS_STOPS,
@@ -600,6 +601,7 @@ const BUS_POSTERS = [
   { background: '#327a3d', accent: '#f1c65b', title: 'BLIZEJ', subtitle: 'MIASTA' },
 ] as const;
 
+const BUS_SHELTER_POST = 0.16;
 const BUS_SHELTER_END_WALL_ALONG = -2;
 const BUS_SHELTER_END_WALL_HALF_DEPTH = 0.5;
 const BUS_POSTER_SURFACE_GAP = 0.015;
@@ -653,7 +655,7 @@ function buildBusShelterDetails(group: THREE.Group): {
   const glowMaterials: THREE.MeshStandardMaterial[] = [];
   const disposables: Array<{ dispose: () => void }> = [];
   const boxGeometry = new THREE.BoxGeometry(1, 1, 1);
-  const posterGeometry = new THREE.PlaneGeometry(1.12, 1.75);
+  const posterGeometry = new THREE.PlaneGeometry(0.9, 1.25);
   const glassMaterial = new THREE.MeshStandardMaterial({
     color: 0xa8c7cf,
     roughness: 0.18,
@@ -675,11 +677,11 @@ function buildBusShelterDetails(group: THREE.Group): {
     const stop = BUS_STOPS[index];
     const glass = new THREE.Mesh(boxGeometry, glassMaterial);
     glass.name = `bus-stop-glass-${index}`;
-    glass.position.copy(shelterPoint(stop, BUS_SHELTER_END_WALL_ALONG, 0.5, 1.1));
+    glass.position.copy(shelterPoint(stop, BUS_SHELTER_END_WALL_ALONG, 0.5, 0.7));
     glass.scale.set(
-      stop.axis === 'x' ? 0.08 : 1.75,
-      2.5,
-      stop.axis === 'x' ? 1.75 : 0.08
+      stop.axis === 'x' ? 0.08 : 1.35,
+      1.9,
+      stop.axis === 'x' ? 1.35 : 0.08
     );
     glass.castShadow = false;
     glass.receiveShadow = true;
@@ -705,7 +707,7 @@ function buildBusShelterDetails(group: THREE.Group): {
         stop,
         BUS_SHELTER_END_WALL_ALONG + BUS_SHELTER_END_WALL_HALF_DEPTH + BUS_POSTER_SURFACE_GAP,
         0.5,
-        1.14
+        0.72
       ));
       interior.rotation.y = stop.axis === 'x' ? Math.PI / 2 : 0;
       interior.castShadow = false;
@@ -717,7 +719,7 @@ function buildBusShelterDetails(group: THREE.Group): {
         stop,
         BUS_SHELTER_END_WALL_ALONG - BUS_SHELTER_END_WALL_HALF_DEPTH - BUS_POSTER_SURFACE_GAP,
         0.5,
-        1.14
+        0.72
       ));
       exterior.rotation.y = stop.axis === 'x' ? -Math.PI / 2 : Math.PI;
       exterior.castShadow = false;
@@ -726,7 +728,7 @@ function buildBusShelterDetails(group: THREE.Group): {
 
     const fixture = new THREE.Mesh(boxGeometry, fixtureMaterial);
     fixture.name = `bus-stop-ceiling-light-${index}`;
-    fixture.position.copy(shelterPoint(stop, 0, 0.45, 2.42));
+    fixture.position.copy(shelterPoint(stop, 0, 0.45, GROUND_SURFACE_Y + BUS_SHELTER_ROOF_Y - 0.1));
     fixture.scale.set(stop.axis === 'x' ? 1.6 : 0.28, 0.1, stop.axis === 'x' ? 0.28 : 1.6);
     fixture.castShadow = false;
     group.add(fixture);
@@ -878,17 +880,25 @@ function generateBusShelter(x: number, z: number, axis: 'x' | 'z', benchSign: 1 
       : new THREE.Vector3(x + perp, 0, z + along);
   const lift = (v: THREE.Vector3, y: number) => new THREE.Vector3(v.x, y, v.z);
 
-  for (let a = 0; a < 5; a++) {
-    voxels.push({ position: lift(at(a, 0), 3), color: COLORS.steel });
-    voxels.push({ position: lift(at(a, benchSign), 3), color: COLORS.kiosk });
-  }
+  // Scaled voxels, not integer stacks: a 1 m grid cannot express a 2.3 m shelter,
+  // and rounding it up to 3 m of post and a roof at 4 m is what made the shelter
+  // the tallest thing at the stop.
+  const put = (v: THREE.Vector3, y: number, along: number, height: number, deep: number, color: ColorHex) => {
+    voxels.push({
+      position: new THREE.Vector3(v.x, GROUND_SURFACE_Y + y, v.z),
+      color,
+      scale: axis === 'x'
+        ? new THREE.Vector3(along, height, deep)
+        : new THREE.Vector3(deep, height, along),
+    });
+  };
   for (const a of [0, 4]) {
-    for (let y = 0; y < 3; y++) {
-      voxels.push({ position: lift(at(a, 0), y), color: COLORS.steel });
-    }
+    put(at(a, 0), BUS_SHELTER_ROOF_Y / 2, BUS_SHELTER_POST, BUS_SHELTER_ROOF_Y, BUS_SHELTER_POST, COLORS.steel);
   }
-  // Lit stop sign
-  voxels.push({ position: lift(at(-1, benchSign), 3), color: COLORS.signalGreen });
+  put(at(2, benchSign * 0.35), BUS_SHELTER_ROOF_Y + 0.09, 5, 0.18, 1.7, COLORS.kiosk);
+  // Lit stop sign on its own post, clear of the roof.
+  put(at(-1, benchSign * 0.9), 1, 0.09, 2, 0.09, COLORS.steel);
+  put(at(-1, benchSign * 0.9), 2, 0.5, 0.24, 0.12, COLORS.signalGreen);
   const benchPos = at(2, benchSign);
   voxels.push(...generateBench(benchPos.x, benchPos.z, axis === 'z', -benchSign as 1 | -1));
   return voxels;

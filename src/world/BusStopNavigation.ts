@@ -56,7 +56,8 @@ export function busShelterColliders(
     localRect(stop, 'right-post', 2, 0, 0.5, 0.5, clearance),
     // Advertising lightbox closes the left side; pedestrians use the open
     // right end selected by busStopWalkingPath.
-    localRect(stop, 'poster-wall', -2, 0.5, 0.1, 0.9, clearance),
+    // The glass end wall is 1.35 m deep now, not 1.75.
+    localRect(stop, 'poster-wall', -2, 0.5, 0.1, 0.7, clearance),
     localRect(
       stop,
       'bench',
