@@ -1,0 +1,134 @@
+{
+  "recordedAt": "2026-09-03T14:52:13.830Z",
+  "vsync": "disabled",
+  "seconds": 3,
+  "reps": 1,
+  "rows": [
+    {
+      "label": "voxel (reference)",
+      "world": "voxel",
+      "applied": null,
+      "frames": 250,
+      "frameMs": 12.093,
+      "medianMs": 12.199999999999818,
+      "p95Ms": 13,
+      "calls": 319,
+      "triangles": 669577,
+      "pixelRatio": 1.15,
+      "canvas": "1655x1035",
+      "visibleLights": 16
+    },
+    {
+      "label": "hybrid, as shipped",
+      "world": "hybrid-direct",
+      "applied": null,
+      "frames": 202,
+      "frameMs": 14.967,
+      "medianMs": 15,
+      "p95Ms": 15.900000000000546,
+      "calls": 347,
+      "triangles": 642287,
+      "pixelRatio": 1.15,
+      "canvas": "1655x1035",
+      "visibleLights": 16
+    },
+    {
+      "label": "hybrid, local lights off",
+      "world": "hybrid-direct",
+      "applied": {
+        "lights": 0
+      },
+      "frames": 840,
+      "frameMs": 3.579,
+      "medianMs": 3.600000000000364,
+      "p95Ms": 4.5,
+      "calls": 347,
+      "triangles": 642287,
+      "pixelRatio": 1.15,
+      "canvas": "1655x1035",
+      "visibleLights": 0
+    },
+    {
+      "label": "voxel, local lights off",
+      "world": "voxel",
+      "applied": {
+        "lights": 0
+      },
+      "frames": 912,
+      "frameMs": 3.296,
+      "medianMs": 3.5,
+      "p95Ms": 4.100000000000364,
+      "calls": 319,
+      "triangles": 669577,
+      "pixelRatio": 1.15,
+      "canvas": "1655x1035",
+      "visibleLights": 0
+    },
+    {
+      "label": "hybrid, glass hidden",
+      "world": "hybrid-direct",
+      "applied": {
+        "hidden": 2
+      },
+      "frames": 207,
+      "frameMs": 14.616,
+      "medianMs": 14.700000000000728,
+      "p95Ms": 15.5,
+      "calls": 343,
+      "triangles": 642215,
+      "pixelRatio": 1.15,
+      "canvas": "1655x1035",
+      "visibleLights": 16
+    },
+    {
+      "label": "hybrid, 8 of 16 lights",
+      "world": "hybrid-direct",
+      "applied": {
+        "lightsFound": 16,
+        "dimmed": 8
+      },
+      "frames": 204,
+      "frameMs": 14.822,
+      "medianMs": 14.899999999999636,
+      "p95Ms": 15.800000000000182,
+      "calls": 347,
+      "triangles": 642287,
+      "pixelRatio": 1.15,
+      "canvas": "1655x1035",
+      "visibleLights": 16
+    },
+    {
+      "label": "hybrid, 4 of 16 lights",
+      "world": "hybrid-direct",
+      "applied": {
+        "lightsFound": 16,
+        "dimmed": 12
+      },
+      "frames": 204,
+      "frameMs": 14.82,
+      "medianMs": 14.899999999999636,
+      "p95Ms": 15.800000000000182,
+      "calls": 347,
+      "triangles": 642287,
+      "pixelRatio": 1.15,
+      "canvas": "1655x1035",
+      "visibleLights": 16
+    },
+    {
+      "label": "hybrid, fragment hidden",
+      "world": "hybrid-direct",
+      "applied": {
+        "hidden": "whole group"
+      },
+      "frames": 316,
+      "frameMs": 9.552,
+      "medianMs": 9.699999999999818,
+      "p95Ms": 10.399999999999636,
+      "calls": 319,
+      "triangles": 619997,
+      "pixelRatio": 1.15,
+      "canvas": "1655x1035",
+      "visibleLights": 16
+    }
+  ]
+}

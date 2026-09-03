@@ -1,0 +1,167 @@
+{
+  "recordedAt": "2026-09-03T16:54:53+02:00",
+  "question": "Where does the hybrid night frame spend its time, and what would a cheaper material buy?",
+  "instrument": "Vsync disabled (--disable-gpu-vsync --disable-frame-rate-limit), so a frame time is continuous instead of quantised to multiples of 16.7 ms; both worlds measured in one browser session so the machine state is shared; the product pixel ratio 1.15 (canvas 1655x1035) unchanged, light and geometry unchanged. Frame budget for 60 Hz is 16.7 ms.",
+  "nightFrameMs": {
+    "voxelProduct": [
+      11.97,
+      11.89,
+      12.09
+    ],
+    "hybridAsShipped": [
+      14.79,
+      14.78,
+      14.97
+    ],
+    "hybridLocalLightsOff": [
+      3.59,
+      3.59,
+      3.58
+    ],
+    "voxelLocalLightsOff": [
+      3.36,
+      3.31,
+      3.3
+    ],
+    "hybridGlassHidden": [
+      14.58,
+      14.73,
+      14.62
+    ],
+    "hybridFragmentHidden": [
+      9.54,
+      9.62,
+      9.55
+    ],
+    "note": "\"fragment hidden\" is lower than the voxel product because the hybrid world excludes the five blocks the fragment replaces: hiding it leaves a hole. The fragment's own cost is therefore hybrid minus voxel, 2.85 ms, not hybrid minus hidden."
+  },
+  "attribution": {
+    "localLights": {
+      "ms": 11.2,
+      "of": 14.8,
+      "perLight": 0.71,
+      "lights": 16,
+      "note": "the dominant term, and the product pays it too (11.9 of its 12.0 ms night frame)"
+    },
+    "fragmentWithLights": {
+      "ms": 2.85,
+      "note": "hybrid 14.8 minus voxel 12.0 at the same resolution"
+    },
+    "fragmentWithoutLights": {
+      "ms": 0.25,
+      "note": "hybrid 3.59 minus voxel 3.34: the fragment costs almost nothing on its own"
+    },
+    "proceduralNoise": {
+      "ms": 0.5,
+      "note": "from the variant experiment below"
+    },
+    "glassLayers": {
+      "ms": 0.15,
+      "note": "hiding every transparent mesh of the fragment"
+    },
+    "conclusion": "The fragment's night cost is its pixels being shaded by sixteen point lights in a forward renderer, not the material's texture detail. Intensity is not a lever: three.js compiles the light count into the shader, so zeroing eight lights changed nothing (14.82 vs 14.97 ms). Only the light budget or the pixel count moves this number."
+  },
+  "materialVariants": {
+    "v0-three-octave": {
+      "nightHybridMs": [
+        14.00787037037037,
+        13.8545871559633
+      ],
+      "nightFragmentMs": [
+        2.821,
+        2.63
+      ],
+      "dayFragmentMs": [
+        0.665,
+        0.541
+      ],
+      "spikeChunkBytes": 34305
+    },
+    "v1-no-noise": {
+      "nightHybridMs": [
+        13.473660714285712,
+        13.392444444444441
+      ],
+      "nightFragmentMs": [
+        2.254,
+        2.206
+      ],
+      "dayFragmentMs": [
+        0.372,
+        0.462
+      ],
+      "spikeChunkBytes": 34160
+    },
+    "v2-one-octave": {
+      "nightHybridMs": [
+        13.815981735159813,
+        13.825114155251145
+      ],
+      "nightFragmentMs": [
+        2.626,
+        2.624
+      ],
+      "dayFragmentMs": [
+        0.523,
+        0.522
+      ],
+      "spikeChunkBytes": 34238
+    },
+    "v3-two-octave": {
+      "nightHybridMs": [
+        13.80913242009132,
+        14.886206896551723
+      ],
+      "nightFragmentMs": [
+        1.752,
+        2.883
+      ],
+      "dayFragmentMs": [
+        0.575,
+        0.621
+      ],
+      "spikeChunkBytes": 34275
+    }
+  },
+  "resolutionScaling": {
+    "pixelRatio1.15": {
+      "megapixels": 1.71,
+      "hybridMs": 14.8,
+      "voxelMs": 12.0,
+      "hybridHeadroomMs": 1.9
+    },
+    "pixelRatio1.00": {
+      "megapixels": 1.3,
+      "hybridMs": 10.94,
+      "voxelMs": 8.84,
+      "hybridHeadroomMs": 5.8
+    },
+    "note": "the frame scales with pixel count (ratio 1.35 measured against 1.32 of pixels), which is what a fill-bound frame does"
+  },
+  "levers": [
+    {
+      "lever": "drop the procedural noise",
+      "savesMs": 0.5,
+      "costs": "every surface in the fragment flattens",
+      "measured": true
+    },
+    {
+      "lever": "drop the glass layers",
+      "savesMs": 0.15,
+      "costs": "windows stop reading as glass",
+      "measured": true
+    },
+    {
+      "lever": "one fewer local light",
+      "savesMs": 0.71,
+      "costs": "a dimmer street, city-wide, at High",
+      "measured": true
+    },
+    {
+      "lever": "pixel ratio 1.15 -> 1.00",
+      "savesMs": 3.9,
+      "costs": "13% less linear resolution",
+      "measured": true
+    }
+  ]
+}

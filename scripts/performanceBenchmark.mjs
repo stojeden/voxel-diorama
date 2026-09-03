@@ -3,7 +3,7 @@ import { access, open, readFile, unlink } from 'node:fs/promises';
 import { renameSync, writeFileSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { join } from 'node:path';
-import { tmpdir } from 'node:os';
+import { loadavg, tmpdir } from 'node:os';
 import { chromium } from 'playwright';
 
 const HOST = '127.0.0.1';
@@ -15,6 +15,18 @@ const MAX_TTI_MS = Number(process.env.BENCH_MAX_TTI_MS ?? 1_800);
 const QUALITY = process.env.BENCH_QUALITY ?? 'high';
 // Reversible hybrid spike: `voxel` is the product; hybrid modes add the spike frames.
 const WORLD = process.env.BENCH_WORLD ?? 'voxel';
+/**
+ * Worlds measured in ONE process, alternating scenario by scenario.
+ *
+ * This is the isolation fix that mattered. The voxel/hybrid comparison used to run as
+ * two processes minutes apart, so the machine's own state between them -- other
+ * applications on the same GPU, clocks, whatever the desktop was doing -- landed
+ * entirely on the difference being measured. The night street measured 48.3 FPS three
+ * times in one cluster of runs and 60.0 FPS five times in another, same revision, same
+ * recipe. Measured as a pair inside one browser session, minutes apart becomes seconds
+ * apart and the state is shared by both sides of the comparison.
+ */
+const WORLDS = (process.env.BENCH_WORLDS ?? WORLD).split(',').map((name) => name.trim()).filter(Boolean);
 const SIMULATION_SEED = Number(process.env.BENCH_SEED ?? 20260722);
 const GPU_SAMPLE_COUNT = Number(process.env.BENCH_GPU_SAMPLES ?? 15);
 /**
@@ -32,10 +44,11 @@ const TTI_SAMPLES = Number(process.env.BENCH_TTI_SAMPLES ?? 3);
  * differed only here reported 48 FPS and 60 FPS for the same night street, which is
  * why this is one constant, and why it is written into every result file.
  */
-const PAGE_SETUP = {
-  viewport: { width: 1440, height: 900 },
-  deviceScaleFactor: Number(process.env.BENCH_DEVICE_SCALE ?? 2),
-};
+const PAGE_SETUP = (() => {
+  const [width, height] = (process.env.BENCH_VIEWPORT ?? '1440x900').split('x').map(Number);
+  assert.ok(width > 0 && height > 0, `BENCH_VIEWPORT must be WxH, received ${process.env.BENCH_VIEWPORT}`);
+  return { viewport: { width, height }, deviceScaleFactor: Number(process.env.BENCH_DEVICE_SCALE ?? 2) };
+})();
 const requestedScenarioFilters = process.env.BENCH_SCENARIO
   ?.split(',')
   .map((value) => value.trim())
@@ -261,6 +274,44 @@ async function readMeasuredState(page) {
   });
 }
 
+/**
+ * What else the machine was doing while this scenario was measured.
+ *
+ * The benchmark shares a GPU with whatever the desktop is running -- a compositor, a
+ * browser rendering a conversation, a design tool repainting -- and the hybrid night
+ * frame has so little headroom that a competing application can flip it over the
+ * vsync cliff. That was the difference between two clusters of runs that agreed on
+ * everything else, so the load is recorded next to every number instead of being
+ * offered afterwards as an explanation.
+ *
+ * Sampled with `ps`, which needs no privileges; our own node, Chrome and vite
+ * processes are excluded so that the figure is about foreign load.
+ */
+async function machineState() {
+  const busiest = await new Promise((resolve) => {
+    const ps = spawn('ps', ['-Ao', 'pcpu,comm', '-r'], { stdio: ['ignore', 'pipe', 'ignore'] });
+    let out = '';
+    ps.stdout.on('data', (chunk) => { out += chunk.toString(); });
+    ps.on('close', () => {
+      const rows = out.split('\n').slice(1)
+        .map((line) => line.trim().match(/^([\d.]+)\s+(.*)$/))
+        .filter(Boolean)
+        .map((match) => ({ cpu: Number(match[1]), command: match[2].split('/').pop() }))
+        .filter((row) => row.cpu >= 1 && !/^(node|ps|vite)$/.test(row.command));
+      resolve(rows.slice(0, 5));
+    });
+    ps.on('error', () => resolve([]));
+  });
+  // Our own headless Chrome cannot be told from another Chrome by process name, so it
+  // is listed among the busiest but left out of the foreign total.
+  const ours = /^Google Chrome/;
+  return {
+    loadAverage: loadavg().map((value) => round(value, 2)),
+    foreignCpuPercent: round(busiest.filter((row) => !ours.test(row.command)).reduce((total, row) => total + row.cpu, 0), 1),
+    busiest,
+  };
+}
+
 async function measureFrames(page, seconds = 3) {
   return page.evaluate(async (durationSeconds) => {
     const deltas = [];
@@ -381,7 +432,7 @@ const allScenarios = [
   { name: 'evening-rain-bus', checkpoint: 'evening-rain-bus', camera: 'bus' },
   { name: 'eclipse-totality-overview', checkpoint: 'eclipse-totality-overview', camera: 'overview' },
 ];
-if (WORLD !== 'voxel' || SCENARIO_FILTERS.some((name) => name.startsWith('spike-'))) {
+if (WORLDS.some((world) => world !== 'voxel') || SCENARIO_FILTERS.some((name) => name.startsWith('spike-'))) {
   allScenarios.push(
     { name: 'spike-overview', checkpoint: 'spike-overview', camera: 'checkpoint' },
     { name: 'spike-street', checkpoint: 'spike-street', camera: 'checkpoint' },
@@ -444,7 +495,45 @@ function writeReport(report, expected) {
   renameSync(`${out}.partial`, out);
 }
 
-const scenarios = [...nonRainbowScenarios];
+/**
+ * Order of the series, and a drift control around it.
+ *
+ * A run measures a dozen scenarios back to back in one browser process, so anything
+ * that changes over a run -- clocks, caches, the GPU warming up -- lands on whichever
+ * scenario happens to sit late in the list, and a fixed order makes "this scenario is
+ * expensive" indistinguishable from "this scenario ran last". Two things fix that:
+ * `BENCH_ORDER` can reverse or shuffle the series, and the same cheap scenario is
+ * measured first and last as a canary. A run whose canary moved is not evidence, so
+ * it cannot grant a PASS -- the assertions below reject it.
+ */
+const UNCAPPED = process.env.BENCH_UNCAPPED === '1';
+const ORDER = process.env.BENCH_ORDER ?? 'given';
+assert.ok(['given', 'reverse', 'shuffle'].includes(ORDER), `BENCH_ORDER must be given|reverse|shuffle, received ${ORDER}`);
+const CANARY_NAME = 'golden-clear-overview';
+/** Drift the canary is allowed between the start and the end of one run. */
+const CANARY_TOLERANCE = { fps: 2, p95Ms: 2 };
+
+function orderSeries(list) {
+  if (ORDER === 'reverse') return [...list].reverse();
+  if (ORDER === 'shuffle') {
+    // Seeded from BENCH_SEED so a shuffled order is reproducible and reportable.
+    const out = [...list];
+    let state = SIMULATION_SEED >>> 0;
+    const next = () => {
+      state = (Math.imul(state, 1_664_525) + 1_013_904_223) >>> 0;
+      return state / 4_294_967_296;
+    };
+    for (let i = out.length - 1; i > 0; i--) {
+      const j = Math.floor(next() * (i + 1));
+      [out[i], out[j]] = [out[j], out[i]];
+    }
+    return out;
+  }
+  return [...list];
+}
+
+const canarySource = allScenarios.find((scenario) => scenario.name === CANARY_NAME);
+const scenarios = orderSeries(nonRainbowScenarios);
 if (rainbowScenarios.length === 2) {
   for (let repetition = 0; repetition < RAINBOW_REPETITIONS; repetition++) {
     const ordered = repetition % 2 === 0
@@ -454,6 +543,29 @@ if (rainbowScenarios.length === 2) {
   }
 } else {
   scenarios.push(...rainbowScenarios);
+}
+/**
+ * Pair the series across worlds: each scenario is measured in every world before the
+ * series moves on, and which world goes first alternates so that neither side always
+ * pays for being second.
+ */
+if (WORLDS.length > 1) {
+  const paired = [];
+  for (const [index, scenario] of scenarios.entries()) {
+    const worlds = index % 2 === 0 ? WORLDS : [...WORLDS].reverse();
+    for (const world of worlds) {
+      paired.push({ ...scenario, world, name: `${scenario.name}@${world}` });
+    }
+  }
+  scenarios.length = 0;
+  scenarios.push(...paired);
+}
+
+// The canary brackets the whole series, including the rainbow repetitions.
+if (canarySource && scenarios.length > 1) {
+  const canaryWorld = WORLDS[0];
+  scenarios.unshift({ ...canarySource, world: canaryWorld, name: 'canary-start', canary: 'start' });
+  scenarios.push({ ...canarySource, world: canaryWorld, name: 'canary-end', canary: 'end' });
 }
 assert.ok(['low', 'medium', 'high'].includes(QUALITY), `unknown benchmark quality: ${QUALITY}`);
 
@@ -486,6 +598,13 @@ try {
       '--use-angle=metal',
       '--disable-background-timer-throttling',
       '--disable-renderer-backgrounding',
+      // Headroom mode. With vsync on, a frame time is quantised to multiples of
+      // 16.7 ms, so FPS says only "inside the budget" or "outside it" and cannot say
+      // by how much -- which is why the night street reads either 60.0 or 48.3 and
+      // nothing between. Uncapped, the frame time is continuous and two builds can be
+      // compared by cost instead of by which side of the cliff they landed on. Never
+      // used for a gate run: the product ships with vsync.
+      ...(UNCAPPED ? ['--disable-gpu-vsync', '--disable-frame-rate-limit'] : []),
     ],
   });
   const page = await browser.newPage({ viewport: PAGE_SETUP.viewport, deviceScaleFactor: PAGE_SETUP.deviceScaleFactor });
@@ -523,11 +642,12 @@ try {
   assert.equal(softwareRenderer, false, `hardware GPU required, received: ${identity.gpu}`);
 
   const results = [];
-  for (const scenario of scenarios) {
+  for (const [position, scenario] of scenarios.entries()) {
+    const startedAt = new Date().toISOString();
     const ttiSamples = [];
     for (let attempt = 0; attempt < TTI_SAMPLES; attempt++) {
       await page.goto(
-        `${URL}/?seed=${SIMULATION_SEED}&checkpoint=${scenario.checkpoint}&quality=${QUALITY}&world=${WORLD}`,
+        `${URL}/?seed=${SIMULATION_SEED}&checkpoint=${scenario.checkpoint}&quality=${QUALITY}&world=${scenario.world ?? WORLD}`,
         { waitUntil: 'networkidle' }
       );
       // Waiting exactly MAX_TTI_MS turned a marginal load into an aborted run with no
@@ -568,9 +688,11 @@ try {
     // Discard a short state-local sample so lazy shader variants, shadow maps,
     // and post-processing targets are not counted as sustained animation cost.
     await measureFrames(page, 1);
+    const machineBefore = await machineState();
     const cpuBefore = await cdp.send('Performance.getMetrics');
     const timing = await measureFrames(page);
     const cpuAfter = await cdp.send('Performance.getMetrics');
+    const machineAfter = await machineState();
     const wallSeconds = timing.averageFrameMs * timing.frames / 1_000;
     const mainThreadTaskSeconds = metricValue(cpuAfter, 'TaskDuration') - metricValue(cpuBefore, 'TaskDuration');
     const scriptSeconds = metricValue(cpuAfter, 'ScriptDuration') - metricValue(cpuBefore, 'ScriptDuration');
@@ -646,6 +768,12 @@ try {
     const diagnosticsDuring = await confirmDiagnosticOverrides(page, `during ${scenario.name}`);
     const jsHeapBytes = await page.evaluate(() => performance.memory?.usedJSHeapSize ?? null);
     results.push({
+      // Where in the series this was measured, so an order effect is visible in the
+      // file rather than reconstructed from the order of the array.
+      positionInSeries: position,
+      startedAt,
+      canary: scenario.canary ?? null,
+      machine: { before: machineBefore, after: machineAfter },
       animationGpu,
       diagnosticsDuring,
       ...scenario,
@@ -681,6 +809,30 @@ try {
     return { visibleLocalLights: await window.__diorama.debugCountVisibleLocalLights() };
   });
 
+  /**
+   * What the canary did between the start and the end of the series. A run whose
+   * cheap reference scenario moved cannot separate a scenario's own cost from the
+   * machine's drift, so it is not allowed to grant a PASS.
+   */
+  const canaryDrift = (() => {
+    const first = results.find((result) => result.canary === 'start');
+    const last = results.find((result) => result.canary === 'end');
+    if (!first || !last) return null;
+    const fps = round(last.timing.averageFps - first.timing.averageFps);
+    const p95Ms = round(last.timing.p95FrameMs - first.timing.p95FrameMs);
+    return {
+      scenario: CANARY_NAME,
+      startFps: round(first.timing.averageFps),
+      endFps: round(last.timing.averageFps),
+      startP95Ms: round(first.timing.p95FrameMs),
+      endP95Ms: round(last.timing.p95FrameMs),
+      fps,
+      p95Ms,
+      tolerance: CANARY_TOLERANCE,
+      drifted: Math.abs(fps) > CANARY_TOLERANCE.fps || Math.abs(p95Ms) > CANARY_TOLERANCE.p95Ms,
+    };
+  })();
+
   const report = {
     revision: process.env.BENCH_REVISION ?? null,
     recordedAt: new Date().toISOString(),
@@ -691,15 +843,26 @@ try {
       gpuSampleCount: GPU_SAMPLE_COUNT,
       animationFramesTimed: 90,
       rainbowRepetitions: RAINBOW_REPETITIONS,
+      order: ORDER,
+      vsync: UNCAPPED ? 'disabled (headroom mode, not a gate run)' : 'on, as shipped',
       diagnosticShadowsDisabled: DISABLE_SHADOWS,
       diagnosticLocalLightsDisabled: DISABLE_LOCAL_LIGHTS,
       note: 'one world and one tab per run; a benchmark must not share the GPU with builds, renders or other agents',
     },
     headful: HEADFUL,
     quality: QUALITY,
-    world: WORLD,
+    world: WORLDS.length > 1 ? WORLDS.join(',') : WORLD,
     simulationSeed: SIMULATION_SEED,
-    isolation: 'exclusive process lock, one browser context, one page',
+    isolation: {
+      processLock: 'exclusive; a second benchmark cannot start while this one holds it',
+      browser: 'one browser context, one page, a fresh document per TTI attempt',
+      order: ORDER,
+      series: scenarios.map((scenario) => scenario.name),
+      canary: canaryDrift,
+      note: canaryDrift
+        ? 'the canary scenario was measured first and last; its drift bounds what this run can claim'
+        : 'no canary in this run (single-scenario run), so nothing bounds drift here',
+    },
     diagnosticShadowsDisabled: DISABLE_SHADOWS,
     diagnosticLocalLightsDisabled: DISABLE_LOCAL_LIGHTS,
     readiness: {
@@ -717,9 +880,41 @@ try {
   writeReport(report, scenarios.map((scenario) => scenario.name));
   console.log(JSON.stringify(report, null, 2));
   assert.deepEqual(errors, [], `browser errors:\n${errors.join('\n')}`);
+  const contended = results.filter((result) => result.machine.after.foreignCpuPercent > 120);
+  if (contended.length) {
+    console.log(
+      `foreign CPU above 120% during: ${contended.map((result) => `${result.name} (${result.machine.after.foreignCpuPercent}%)`).join(', ')}`
+    );
+  }
+  for (const result of results) {
+    console.log(
+      `${String(result.positionInSeries).padStart(2)} ${result.name.padEnd(30)}`
+      + `${result.timing.averageFps.toFixed(1).padStart(5)} fps  p95 ${result.timing.p95FrameMs.toFixed(1).padStart(5)}  `
+      + `slow ${(result.timing.slowFrameRatio * 100).toFixed(1).padStart(5)}%  `
+      + `pxr ${result.renderer.pixelRatio.toFixed(2)} ${result.renderer.canvasWidth}x${result.renderer.canvasHeight}  `
+      + `load ${result.machine.after.loadAverage[0]}  foreign ${result.machine.after.foreignCpuPercent}%`
+    );
+  }
+  if (canaryDrift) {
+    console.log(
+      `canary ${CANARY_NAME}: ${canaryDrift.startFps.toFixed(1)} -> ${canaryDrift.endFps.toFixed(1)} FPS, `
+      + `p95 ${canaryDrift.startP95Ms.toFixed(1)} -> ${canaryDrift.endP95Ms.toFixed(1)} ms `
+      + `(${canaryDrift.drifted ? 'DRIFTED, this run is not evidence' : 'stable'}), order ${ORDER}`
+    );
+    assert.equal(
+      canaryDrift.drifted,
+      false,
+      `the canary moved ${canaryDrift.fps.toFixed(1)} FPS and ${canaryDrift.p95Ms.toFixed(1)} ms p95 between the `
+      + `start and the end of this run, so nothing measured in it can be attributed to a scenario`
+    );
+  }
   assert.ok(
     readiness.timeToInteractiveMs <= MAX_TTI_MS,
     `TTI ${readiness.timeToInteractiveMs.toFixed(1)} ms exceeds ${MAX_TTI_MS} ms`
+  );
+  assert.ok(
+    !(UNCAPPED && REQUIRED_FPS >= 58),
+    'an uncapped run cannot be judged against the 58 FPS gate: it measures cost, not compliance'
   );
   for (const result of results) {
     // The readiness above is measured on a load without ?world=, so on its own it
@@ -727,7 +922,7 @@ try {
     // first paint of that world and is held to the same budget.
     assert.ok(
       result.timeToInteractiveMs !== null && result.timeToInteractiveMs <= MAX_TTI_MS,
-      `${result.name}: median TTI ${result.timeToInteractiveMs} ms of ${JSON.stringify(result.timeToInteractiveSamples)} exceeds ${MAX_TTI_MS} ms in world ${WORLD}`
+      `${result.name}: median TTI ${result.timeToInteractiveMs} ms of ${JSON.stringify(result.timeToInteractiveSamples)} exceeds ${MAX_TTI_MS} ms in world ${result.world}`
     );
     assert.ok(
       result.timing.averageFps >= REQUIRED_FPS,
