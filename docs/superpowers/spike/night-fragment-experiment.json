@@ -1,0 +1,2258 @@
+{
+  "recordedAt": "2026-09-03T12:51:32.966Z",
+  "revision": "c1990ac",
+  "frames": 90,
+  "reps": 3,
+  "rows": [
+    {
+      "rep": 0,
+      "state": "attached",
+      "revision": "c1990ac",
+      "applied": {
+        "ok": true,
+        "inScene": true,
+        "visible": true,
+        "meshes": 33
+      },
+      "lightsOff": 0,
+      "lightsOn": 16,
+      "gpuMedianMs": 19.636625,
+      "gpuSpreadMs": 2.519583000000001,
+      "gpuSamples": 90,
+      "disjoint": false,
+      "conclusive": true,
+      "fps": 60.080106809078764,
+      "p95": 17.699999928474426,
+      "p99": 18.300000071525574,
+      "slowRatio": 0,
+      "metrics": {
+        "calls": 347,
+        "triangles": 642287,
+        "programs": 211,
+        "geometries": 435,
+        "textures": 35,
+        "primaryCalls": 154,
+        "primaryTriangles": 317722,
+        "hybrid": {
+          "triangles": [
+            3370,
+            10820,
+            8640
+          ],
+          "lod": {
+            "building-3": 2,
+            "building-4": 2,
+            "building-5": 2,
+            "building-24": 2,
+            "building-25": 2,
+            "streetscape": 2,
+            "dominant-chimney": 1,
+            "dominant-rtvTower": 1
+          }
+        }
+      },
+      "passes": [
+        {
+          "scene": "Scene",
+          "calls": 154,
+          "triangles": 317722
+        },
+        {
+          "scene": "Scene",
+          "calls": 151,
+          "triangles": 310726
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 25,
+          "triangles": 13822
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 154,
+          "triangles": 317722
+        },
+        {
+          "scene": "Scene",
+          "calls": 151,
+          "triangles": 310726
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 25,
+          "triangles": 13822
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        }
+      ]
+    },
+    {
+      "rep": 0,
+      "state": "hidden",
+      "revision": "c1990ac",
+      "applied": {
+        "ok": true,
+        "inScene": true,
+        "visible": false,
+        "meshes": 33
+      },
+      "lightsOff": 0,
+      "lightsOn": 16,
+      "gpuMedianMs": 17.095833,
+      "gpuSpreadMs": 23.280041000000004,
+      "gpuSamples": 90,
+      "disjoint": false,
+      "conclusive": false,
+      "fps": 59.998000066187636,
+      "p95": 18.399999976158142,
+      "p99": 18.600000023841858,
+      "slowRatio": 0,
+      "metrics": {
+        "calls": 319,
+        "triangles": 619997,
+        "programs": 209,
+        "geometries": 435,
+        "textures": 35,
+        "primaryCalls": 141,
+        "primaryTriangles": 306624,
+        "hybrid": {
+          "triangles": [
+            3370,
+            10820,
+            8640
+          ],
+          "lod": {
+            "building-3": 2,
+            "building-4": 2,
+            "building-5": 2,
+            "building-24": 2,
+            "building-25": 2,
+            "streetscape": 2,
+            "dominant-chimney": 1,
+            "dominant-rtvTower": 1
+          }
+        }
+      },
+      "passes": [
+        {
+          "scene": "Scene",
+          "calls": 141,
+          "triangles": 306624
+        },
+        {
+          "scene": "Scene",
+          "calls": 138,
+          "triangles": 299628
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 23,
+          "triangles": 13728
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 141,
+          "triangles": 306624
+        },
+        {
+          "scene": "Scene",
+          "calls": 138,
+          "triangles": 299628
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 23,
+          "triangles": 13728
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        }
+      ]
+    },
+    {
+      "rep": 0,
+      "state": "detached",
+      "revision": "c1990ac",
+      "applied": {
+        "ok": true,
+        "inScene": false,
+        "visible": true,
+        "meshes": 33
+      },
+      "lightsOff": 0,
+      "lightsOn": 16,
+      "gpuMedianMs": 14.225708,
+      "gpuSpreadMs": 3.444458000000001,
+      "gpuSamples": 90,
+      "disjoint": false,
+      "conclusive": true,
+      "fps": 60.05204510623599,
+      "p95": 17.700000047683716,
+      "p99": 18.40000009536743,
+      "slowRatio": 0,
+      "metrics": {
+        "calls": 319,
+        "triangles": 619997,
+        "programs": 209,
+        "geometries": 435,
+        "textures": 35,
+        "primaryCalls": 141,
+        "primaryTriangles": 306624,
+        "hybrid": {
+          "triangles": [
+            3370,
+            10820,
+            8640
+          ],
+          "lod": {
+            "building-3": 2,
+            "building-4": 2,
+            "building-5": 2,
+            "building-24": 2,
+            "building-25": 2,
+            "streetscape": 2,
+            "dominant-chimney": 1,
+            "dominant-rtvTower": 1
+          }
+        }
+      },
+      "passes": [
+        {
+          "scene": "Scene",
+          "calls": 141,
+          "triangles": 306624
+        },
+        {
+          "scene": "Scene",
+          "calls": 138,
+          "triangles": 299628
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 23,
+          "triangles": 13728
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 141,
+          "triangles": 306624
+        },
+        {
+          "scene": "Scene",
+          "calls": 138,
+          "triangles": 299628
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 23,
+          "triangles": 13728
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        }
+      ]
+    },
+    {
+      "rep": 1,
+      "state": "attached",
+      "revision": "c1990ac",
+      "applied": {
+        "ok": true,
+        "inScene": true,
+        "visible": true,
+        "meshes": 33
+      },
+      "lightsOff": 0,
+      "lightsOn": 16,
+      "gpuMedianMs": 21.012041,
+      "gpuSpreadMs": 1.868041999999999,
+      "gpuSamples": 90,
+      "disjoint": false,
+      "conclusive": true,
+      "fps": 60.03201707386436,
+      "p95": 18.200000047683716,
+      "p99": 18.699999928474426,
+      "slowRatio": 0,
+      "metrics": {
+        "calls": 347,
+        "triangles": 642287,
+        "programs": 211,
+        "geometries": 435,
+        "textures": 35,
+        "primaryCalls": 154,
+        "primaryTriangles": 317722,
+        "hybrid": {
+          "triangles": [
+            3370,
+            10820,
+            8640
+          ],
+          "lod": {
+            "building-3": 2,
+            "building-4": 2,
+            "building-5": 2,
+            "building-24": 2,
+            "building-25": 2,
+            "streetscape": 2,
+            "dominant-chimney": 1,
+            "dominant-rtvTower": 1
+          }
+        }
+      },
+      "passes": [
+        {
+          "scene": "Scene",
+          "calls": 154,
+          "triangles": 317722
+        },
+        {
+          "scene": "Scene",
+          "calls": 151,
+          "triangles": 310726
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 25,
+          "triangles": 13822
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 154,
+          "triangles": 317722
+        },
+        {
+          "scene": "Scene",
+          "calls": 151,
+          "triangles": 310726
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 25,
+          "triangles": 13822
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        }
+      ]
+    },
+    {
+      "rep": 1,
+      "state": "hidden",
+      "revision": "c1990ac",
+      "applied": {
+        "ok": true,
+        "inScene": true,
+        "visible": false,
+        "meshes": 33
+      },
+      "lightsOff": 0,
+      "lightsOn": 16,
+      "gpuMedianMs": 17.184666,
+      "gpuSpreadMs": 9.980250000000002,
+      "gpuSamples": 90,
+      "disjoint": false,
+      "conclusive": false,
+      "fps": 60.01600426923602,
+      "p95": 17.100000023841858,
+      "p99": 17.40000009536743,
+      "slowRatio": 0,
+      "metrics": {
+        "calls": 319,
+        "triangles": 619997,
+        "programs": 209,
+        "geometries": 435,
+        "textures": 35,
+        "primaryCalls": 141,
+        "primaryTriangles": 306624,
+        "hybrid": {
+          "triangles": [
+            3370,
+            10820,
+            8640
+          ],
+          "lod": {
+            "building-3": 2,
+            "building-4": 2,
+            "building-5": 2,
+            "building-24": 2,
+            "building-25": 2,
+            "streetscape": 2,
+            "dominant-chimney": 1,
+            "dominant-rtvTower": 1
+          }
+        }
+      },
+      "passes": [
+        {
+          "scene": "Scene",
+          "calls": 141,
+          "triangles": 306624
+        },
+        {
+          "scene": "Scene",
+          "calls": 138,
+          "triangles": 299628
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 23,
+          "triangles": 13728
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 141,
+          "triangles": 306624
+        },
+        {
+          "scene": "Scene",
+          "calls": 138,
+          "triangles": 299628
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 23,
+          "triangles": 13728
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        }
+      ]
+    },
+    {
+      "rep": 1,
+      "state": "detached",
+      "revision": "c1990ac",
+      "applied": {
+        "ok": true,
+        "inScene": false,
+        "visible": true,
+        "meshes": 33
+      },
+      "lightsOff": 0,
+      "lightsOn": 16,
+      "gpuMedianMs": 17.7365,
+      "gpuSpreadMs": 8.468667000000002,
+      "gpuSamples": 90,
+      "disjoint": false,
+      "conclusive": false,
+      "fps": 60.02000666888963,
+      "p95": 17.40000009536743,
+      "p99": 17.90000009536743,
+      "slowRatio": 0,
+      "metrics": {
+        "calls": 319,
+        "triangles": 619997,
+        "programs": 209,
+        "geometries": 435,
+        "textures": 35,
+        "primaryCalls": 141,
+        "primaryTriangles": 306624,
+        "hybrid": {
+          "triangles": [
+            3370,
+            10820,
+            8640
+          ],
+          "lod": {
+            "building-3": 2,
+            "building-4": 2,
+            "building-5": 2,
+            "building-24": 2,
+            "building-25": 2,
+            "streetscape": 2,
+            "dominant-chimney": 1,
+            "dominant-rtvTower": 1
+          }
+        }
+      },
+      "passes": [
+        {
+          "scene": "Scene",
+          "calls": 141,
+          "triangles": 306624
+        },
+        {
+          "scene": "Scene",
+          "calls": 138,
+          "triangles": 299628
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 23,
+          "triangles": 13728
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 141,
+          "triangles": 306624
+        },
+        {
+          "scene": "Scene",
+          "calls": 138,
+          "triangles": 299628
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 23,
+          "triangles": 13728
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        }
+      ]
+    },
+    {
+      "rep": 2,
+      "state": "attached",
+      "revision": "c1990ac",
+      "applied": {
+        "ok": true,
+        "inScene": true,
+        "visible": true,
+        "meshes": 33
+      },
+      "lightsOff": 0,
+      "lightsOn": 16,
+      "gpuMedianMs": 19.454,
+      "gpuSpreadMs": 3.637999999999998,
+      "gpuSamples": 90,
+      "disjoint": false,
+      "conclusive": true,
+      "fps": 60.04603529515789,
+      "p95": 17.09999990463257,
+      "p99": 17.200000047683716,
+      "slowRatio": 0,
+      "metrics": {
+        "calls": 347,
+        "triangles": 642287,
+        "programs": 211,
+        "geometries": 435,
+        "textures": 35,
+        "primaryCalls": 154,
+        "primaryTriangles": 317722,
+        "hybrid": {
+          "triangles": [
+            3370,
+            10820,
+            8640
+          ],
+          "lod": {
+            "building-3": 2,
+            "building-4": 2,
+            "building-5": 2,
+            "building-24": 2,
+            "building-25": 2,
+            "streetscape": 2,
+            "dominant-chimney": 1,
+            "dominant-rtvTower": 1
+          }
+        }
+      },
+      "passes": [
+        {
+          "scene": "Scene",
+          "calls": 154,
+          "triangles": 317722
+        },
+        {
+          "scene": "Scene",
+          "calls": 151,
+          "triangles": 310726
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 25,
+          "triangles": 13822
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 154,
+          "triangles": 317722
+        },
+        {
+          "scene": "Scene",
+          "calls": 151,
+          "triangles": 310726
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 25,
+          "triangles": 13822
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        }
+      ]
+    },
+    {
+      "rep": 2,
+      "state": "hidden",
+      "revision": "c1990ac",
+      "applied": {
+        "ok": true,
+        "inScene": true,
+        "visible": false,
+        "meshes": 33
+      },
+      "lightsOff": 0,
+      "lightsOn": 16,
+      "gpuMedianMs": 12.246374,
+      "gpuSpreadMs": 5.919625,
+      "gpuSamples": 90,
+      "disjoint": false,
+      "conclusive": false,
+      "fps": 60.02000666888963,
+      "p95": 17,
+      "p99": 17.399999976158142,
+      "slowRatio": 0,
+      "metrics": {
+        "calls": 319,
+        "triangles": 619997,
+        "programs": 209,
+        "geometries": 435,
+        "textures": 35,
+        "primaryCalls": 141,
+        "primaryTriangles": 306624,
+        "hybrid": {
+          "triangles": [
+            3370,
+            10820,
+            8640
+          ],
+          "lod": {
+            "building-3": 2,
+            "building-4": 2,
+            "building-5": 2,
+            "building-24": 2,
+            "building-25": 2,
+            "streetscape": 2,
+            "dominant-chimney": 1,
+            "dominant-rtvTower": 1
+          }
+        }
+      },
+      "passes": [
+        {
+          "scene": "Scene",
+          "calls": 141,
+          "triangles": 306624
+        },
+        {
+          "scene": "Scene",
+          "calls": 138,
+          "triangles": 299628
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 23,
+          "triangles": 13728
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 141,
+          "triangles": 306624
+        },
+        {
+          "scene": "Scene",
+          "calls": 138,
+          "triangles": 299628
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 23,
+          "triangles": 13728
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        }
+      ]
+    },
+    {
+      "rep": 2,
+      "state": "detached",
+      "revision": "c1990ac",
+      "applied": {
+        "ok": true,
+        "inScene": false,
+        "visible": true,
+        "meshes": 33
+      },
+      "lightsOff": 0,
+      "lightsOn": 16,
+      "gpuMedianMs": 16.635583,
+      "gpuSpreadMs": 13.469416999999998,
+      "gpuSamples": 90,
+      "disjoint": false,
+      "conclusive": false,
+      "fps": 60.02000666888963,
+      "p95": 17.199999928474426,
+      "p99": 17.5,
+      "slowRatio": 0,
+      "metrics": {
+        "calls": 319,
+        "triangles": 619997,
+        "programs": 209,
+        "geometries": 435,
+        "textures": 35,
+        "primaryCalls": 141,
+        "primaryTriangles": 306624,
+        "hybrid": {
+          "triangles": [
+            3370,
+            10820,
+            8640
+          ],
+          "lod": {
+            "building-3": 2,
+            "building-4": 2,
+            "building-5": 2,
+            "building-24": 2,
+            "building-25": 2,
+            "streetscape": 2,
+            "dominant-chimney": 1,
+            "dominant-rtvTower": 1
+          }
+        }
+      },
+      "passes": [
+        {
+          "scene": "Scene",
+          "calls": 141,
+          "triangles": 306624
+        },
+        {
+          "scene": "Scene",
+          "calls": 138,
+          "triangles": 299628
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 23,
+          "triangles": 13728
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 141,
+          "triangles": 306624
+        },
+        {
+          "scene": "Scene",
+          "calls": 138,
+          "triangles": 299628
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 23,
+          "triangles": 13728
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        },
+        {
+          "scene": "Scene",
+          "calls": 1,
+          "triangles": 1
+        }
+      ]
+    }
+  ]
+}

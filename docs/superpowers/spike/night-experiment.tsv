@@ -11,3 +11,12 @@ a89af98	3	voxel	on	on	60.0	16.7	0.000	20.48	2.25	True	16	16	ok
 a89af98	3	hybrid-direct	on	on	60.0	16.8	0.000	25.29	12.27	False	16	16	ok
 a89af98	3	voxel	off	on	60.0	16.7	0.000	7.79	6.23	False	0	0	ok
 a89af98	3	hybrid-direct	off	on	60.0	16.8	0.000	9.2	9.09	False	0	0	ok
+c1990ac	0	hybrid-direct	attached	lights-on	shadows-on	60.1	17.7	0.000	19.64	2.52	yes	0	16	ok
+c1990ac	0	hybrid-direct	hidden	lights-on	shadows-on	60.0	18.4	0.000	17.10	23.28	no	0	16	ok
+c1990ac	0	hybrid-direct	detached	lights-on	shadows-on	60.1	17.7	0.000	14.23	3.44	yes	0	16	ok
+c1990ac	1	hybrid-direct	attached	lights-on	shadows-on	60.0	18.2	0.000	21.01	1.87	yes	0	16	ok
+c1990ac	1	hybrid-direct	hidden	lights-on	shadows-on	60.0	17.1	0.000	17.18	9.98	no	0	16	ok
+c1990ac	1	hybrid-direct	detached	lights-on	shadows-on	60.0	17.4	0.000	17.74	8.47	no	0	16	ok
+c1990ac	2	hybrid-direct	attached	lights-on	shadows-on	60.0	17.1	0.000	19.45	3.64	yes	0	16	ok
+c1990ac	2	hybrid-direct	hidden	lights-on	shadows-on	60.0	17.0	0.000	12.25	5.92	no	0	16	ok
+c1990ac	2	hybrid-direct	detached	lights-on	shadows-on	60.0	17.2	0.000	16.64	13.47	no	0	16	ok
