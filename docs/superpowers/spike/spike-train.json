@@ -1,0 +1,102 @@
+{
+  "generatedAt": "2026-09-04T09:59:43.815Z",
+  "world": "hybrid-direct",
+  "shots": [
+    {
+      "name": "train-day",
+      "t01": 0.42,
+      "frame": "docs/superpowers/spike/frames/hybrid-direct-high-train-day.jpg",
+      "aimed": {
+        "x": 26.135696976693325,
+        "z": 3.054837748142059,
+        "distance": 4.005686024995285,
+        "camera": [
+          52,
+          18,
+          23
+        ],
+        "target": [
+          30,
+          4,
+          2
+        ]
+      },
+      "settledAfterReads": 11,
+      "ramp": [
+        0.246,
+        0.123,
+        0.062,
+        0.029,
+        0.013,
+        0.007,
+        0.003,
+        0.002,
+        0.001,
+        0,
+        0
+      ],
+      "glazing": [
+        {
+          "meshes": [
+            "batched-MeshStandardMaterial@-37,-6",
+            "batched-MeshStandardMaterial@-46,-4",
+            "batched-MeshStandardMaterial@-55,-2",
+            "batched-MeshStandardMaterial@-65,-1"
+          ],
+          "colorHex": "#24465f",
+          "colorLuminance": 0.056,
+          "emissiveHex": "#ffdd88",
+          "emissiveLuminance": 0.748,
+          "emissiveIntensity": 0,
+          "roughness": 0.2,
+          "metalness": 0.4,
+          "envMapIntensity": 1
+        }
+      ]
+    },
+    {
+      "name": "train-night",
+      "t01": 0.94,
+      "frame": "docs/superpowers/spike/frames/hybrid-direct-high-train-night.jpg",
+      "aimed": {
+        "x": 27.858775306759828,
+        "z": 3.672120357841695,
+        "distance": 2.7167682415049885,
+        "camera": [
+          52,
+          18,
+          23
+        ],
+        "target": [
+          30,
+          4,
+          2
+        ]
+      },
+      "settledAfterReads": 3,
+      "ramp": [
+        0.7,
+        1,
+        1
+      ],
+      "glazing": [
+        {
+          "meshes": [
+            "batched-MeshStandardMaterial@34,5",
+            "batched-MeshStandardMaterial@26,3",
+            "batched-MeshStandardMaterial@16,-1",
+            "batched-MeshStandardMaterial@7,-4"
+          ],
+          "colorHex": "#24465f",
+          "colorLuminance": 0.056,
+          "emissiveHex": "#ffdd88",
+          "emissiveLuminance": 0.748,
+          "emissiveIntensity": 1,
+          "roughness": 0.2,
+          "metalness": 0.4,
+          "envMapIntensity": 1
+        }
+      ]
+    }
+  ]
+}

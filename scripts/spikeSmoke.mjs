@@ -570,54 +570,110 @@ async function runPostman(page, world) {
  * frame, so a frame that looks right for the wrong reason is still caught.
  */
 async function runTrain(page, world) {
-  await page.goto(`${URL}/?seed=${SEED}&world=${world}&checkpoint=train&quality=high`, { waitUntil: 'load' });
+  // No checkpoint. A loaded checkpoint freezes presentation time so that a frame stays
+  // reproducible, and DayNightCycle eases its night factor with that same delta: with
+  // `checkpoint=train` the HUD read 22:33 over a black sky while the light, the street
+  // lamps and the carriage interiors were all still at the checkpoint's mid-morning.
+  // The first "night" train frame was a day-lit city under a night sky.
+  await page.goto(`${URL}/?seed=${SEED}&world=${world}&quality=high`, { waitUntil: 'load' });
   await page.waitForFunction(() => window.__diorama?.ready === true, null, { timeout: 90_000 });
   await settle(page, 4);
 
   const readGlazing = () => page.evaluate(() => {
-    const found = new Set();
+    // Identified by the parameters this round chose for it, and asserted to be unique.
+    // Everything else was tried and does not work in the live scene: the material has
+    // no name to spend bundle bytes on; seven materials in the city share the product's
+    // unlit window colour (flats, the bus, the shelter); the train's only named part is
+    // its bogie, and its carriages are siblings of the bogies rather than parents; and
+    // mergeStaticMeshes folds the carriage meshes into `batched-*` meshes -- it reuses
+    // the same material object, so what Train.update writes is still what draws, but
+    // their node positions are useless for identification. What is unique is the pane
+    // itself: a carriage window is a large flat sheet seen side-on, so it was given
+    // 0.2 roughness, 0.4 metalness and 1.0 reflectivity, deliberately not the bus's
+    // 0.12 and 1.2.
+    const hosts = new Map();
+    const Vector3 = window.__diorama.scene.position.constructor;
+    window.__diorama.scene.updateMatrixWorld(true);
     window.__diorama.scene.traverse((node) => {
       if (!node.isMesh || !node.material) return;
-      const list = Array.isArray(node.material) ? node.material : [node.material];
-      for (const material of list) {
-        if (node.name === 'train-window' || (material.name === 'train-window')) found.add(material);
+      for (const material of Array.isArray(node.material) ? node.material : [node.material]) {
+        if (material.color?.getHex() !== 0x24465f || !material.emissive) continue;
+        if (Math.abs(material.roughness - 0.2) > 0.001) continue;
+        if (Math.abs(material.metalness - 0.4) > 0.001) continue;
+        if (Math.abs((material.envMapIntensity ?? 0) - 1) > 0.001) continue;
+        const centre = node.getWorldPosition(new Vector3());
+        const list = hosts.get(material) ?? [];
+        list.push(`${node.name || node.geometry.type}@${centre.x.toFixed(0)},${centre.z.toFixed(0)}`);
+        hosts.set(material, list);
       }
     });
-    // No name to lean on: the glazing is the train material whose own colour is the
-    // product's unlit window, exactly as Train.test.ts finds it.
-    if (!found.size) {
-      const train = window.__diorama.scene.getObjectByName('train') ?? window.__diorama.scene;
-      train.traverse((node) => {
-        if (!node.isMesh || !node.material) return;
-        const list = Array.isArray(node.material) ? node.material : [node.material];
-        for (const material of list) {
-          if (material.emissive && material.color && material.roughness !== undefined
-            && material.color.getHex() === 0x24465f) found.add(material);
-        }
-      });
-    }
     const luminance = (color) => Math.round((0.2126 * color.r + 0.7152 * color.g + 0.0722 * color.b) * 1000) / 1000;
-    return [...found].map((material) => ({
-      colorHex: `#${material.color.getHexString()}`,
-      colorLuminance: luminance(material.color),
-      emissiveHex: `#${material.emissive.getHexString()}`,
-      emissiveLuminance: luminance(material.emissive),
-      emissiveIntensity: Math.round(material.emissiveIntensity * 1000) / 1000,
-      roughness: material.roughness,
-      metalness: material.metalness,
-      envMapIntensity: material.envMapIntensity,
-    }));
+    return {
+      materials: [...hosts.entries()].map(([material, meshes]) => ({
+        meshes,
+        colorHex: `#${material.color.getHexString()}`,
+        colorLuminance: luminance(material.color),
+        emissiveHex: `#${material.emissive.getHexString()}`,
+        emissiveLuminance: luminance(material.emissive),
+        emissiveIntensity: Math.round(material.emissiveIntensity * 1000) / 1000,
+        roughness: material.roughness,
+        metalness: material.metalness,
+        envMapIntensity: material.envMapIntensity,
+      })),
+    };
   });
 
   const shots = [];
   for (const [name, t01] of [['train-day', 0.42], ['train-night', 0.94]]) {
     await page.evaluate((t) => window.__diorama.setTime(t), t01);
-    await settle(page, 3);
-    const glazing = await readGlazing();
+    // The sky follows the clock at once; the light does not. DayNightCycle eases its
+    // night factor with the presentation delta, so three frames after setTime the HUD
+    // said 22:33 while the lighting was still mid-morning and the carriages were dark
+    // for a reason that had nothing to do with their material. Wait for the value this
+    // shot is about to be judged on to stop moving, and record how long that took.
+    const settled = { ms: 0, reads: [] };
+    for (let i = 0; i < 60; i++) {
+      const before = (await readGlazing()).materials[0]?.emissiveIntensity ?? 0;
+      await settle(page, 3);
+      const after = (await readGlazing()).materials[0]?.emissiveIntensity ?? 0;
+      settled.reads.push(after);
+      if (Math.abs(after - before) < 0.001 && i > 0) break;
+      settled.ms += 200;
+    }
+    const reading = await readGlazing();
+    const glazing = reading.materials;
+    const clock = await page.evaluate(() => ({ t01: window.__diorama.getState().t01, checkpoint: window.__diorama.getState().checkpoint }));
+    console.log(`${' '.repeat(21)}asked t=${t01} -> t01 ${clock.t01?.toFixed?.(3)}, emissive settled after ${settled.reads.length} reads: ${settled.reads.map((r) => r.toFixed(2)).join(' ')}`);
+    // The product's own train composition, not a camera invented here. Two attempts at
+    // inventing one failed: a fixed offset put the camera inside a block of flats, and
+    // choosing a viewpoint by ray against world boxes cannot work in this scene --
+    // mergeStaticMeshes folds whole blocks into single meshes whose boxes are mostly
+    // empty air, and the catenary's box spans the entire route. So instead: wait for
+    // the train to reach the level crossing the `train` checkpoint frames, then use
+    // that checkpoint's camera. Both shots then share a camera *and* a train position,
+    // which is what makes them a comparison rather than two pictures.
+    const CROSSING = { x: 30, z: 2 };
+    const arrival = await page.waitForFunction((where) => {
+      const scene = window.__diorama.scene;
+      const Vector3 = scene.position.constructor;
+      scene.updateMatrixWorld(true);
+      let best = null;
+      scene.traverse((node) => {
+        if (node.name !== 'bogie' || !node.visible) return;
+        const p = node.getWorldPosition(new Vector3());
+        const distance = Math.hypot(p.x - where.x, p.z - where.z);
+        if (!best || distance < best.distance) best = { x: p.x, z: p.z, distance };
+      });
+      return best && best.distance < 6 ? best : null;
+    }, CROSSING, { timeout: 180_000, polling: 250 }).then((handle) => handle.jsonValue());
+    await page.evaluate(() => window.__diorama.controls.setLookAt(52, 18, 23, 30, 4, 2, false));
+    const aimed = { ...arrival, camera: [52, 18, 23], target: [30, 4, 2] };
+    console.log(`${' '.repeat(21)}train reached the crossing at ${arrival.x.toFixed(1)},${arrival.z.toFixed(1)} (${arrival.distance.toFixed(1)} m from it)`);
+    await settle(page, 4);
     const frame = `${FRAME_DIR}/${world}-high-${name}.jpg`;
     await page.screenshot({ path: frame, type: 'jpeg', quality: 88 });
-    shots.push({ name, t01, frame, glazing });
-    console.log(`${world.padEnd(14)} high  ${name.padEnd(12)} t=${t01}  ${glazing.map((g) => `pane ${g.colorHex} L${g.colorLuminance} emissive ${g.emissiveHex} x${g.emissiveIntensity}`).join(' | ') || 'GLAZING NOT FOUND'}`);
+    shots.push({ name, t01, frame, aimed, settledAfterReads: settled.reads.length, ramp: settled.reads, glazing });
+    console.log(`${world.padEnd(14)} high  ${name.padEnd(12)} t=${t01}  ${glazing.map((g) => `pane ${g.colorHex} L${g.colorLuminance} emissive ${g.emissiveHex} x${g.emissiveIntensity} rough ${g.roughness} env ${g.envMapIntensity} on ${g.meshes.join('+')}`).join(' | ') || 'GLAZING NOT FOUND'}`);
     assert.equal(glazing.length, 1, `${world}: expected exactly one train glazing material, found ${glazing.length}`);
   }
   const [day, night] = shots;
@@ -1095,7 +1151,7 @@ try {
   page.on('pageerror', (error) => consoleErrors.push(error.message));
   await mkdir(FRAME_DIR, { recursive: true });
 
-  for (const world of ['gate3', 'materials', 'postman'].includes(PHASE) ? [] : WORLDS) {
+  for (const world of ['gate3', 'materials', 'postman', 'train'].includes(PHASE) ? [] : WORLDS) {
     for (const quality of QUALITIES) {
       const checkpoints = quality === 'high' ? CHECKPOINTS : ['spike-street', 'spike-overview'];
       for (const checkpoint of checkpoints) {
