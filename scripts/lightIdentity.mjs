@@ -13,26 +13,9 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { writeFile } from 'node:fs/promises';
-import { execFileSync } from 'node:child_process';
 import { chromium } from 'playwright';
-/**
- * Which code produced these numbers, and whether anything was uncommitted while it did.
- * A measurement without a revision cannot be quoted in a comment or a report: that is
- * how "eleven milliseconds at sixteen lights" ended up in a source comment describing a
- * configuration nobody had measured.
- */
-const revisionOf = () => {
-  const run = (args) => execFileSync('git', args, { encoding: 'utf8' }).trim();
-  try {
-    return {
-      revision: run(['rev-parse', '--short', 'HEAD']),
-      workingTreeDirty: run(['status', '--porcelain']).length > 0,
-      dirtyPaths: run(['status', '--porcelain']).split('\n').filter(Boolean).slice(0, 20),
-    };
-  } catch {
-    return { revision: 'unknown', workingTreeDirty: null, dirtyPaths: [] };
-  }
-};
+import { stopPreview } from './previewServer.mjs';
+import { releaseLock, verifyBuild } from './buildProvenance.mjs';
 
 
 const PORT = Number(process.env.IDENTITY_PORT ?? 4219);
@@ -40,6 +23,8 @@ const URL = `http://127.0.0.1:${PORT}`;
 const OUT = process.env.IDENTITY_OUT ?? 'docs/superpowers/spike/light-identity.json';
 const SEED = 20260722;
 const CHECKPOINT = process.env.IDENTITY_CHECKPOINT ?? 'spike-night-street';
+
+const BUILD = verifyBuild();
 
 const preview = spawn(
   process.execPath,
@@ -63,7 +48,7 @@ try {
     args: ['--enable-gpu', '--ignore-gpu-blocklist', '--use-angle=metal'],
   });
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2 });
-  const report = { recordedAt: new Date().toISOString(), ...revisionOf(), checkpoint: CHECKPOINT, worlds: {} };
+  const report = { recordedAt: new Date().toISOString(), ...BUILD, checkpoint: CHECKPOINT, worlds: {} };
 
   for (const world of ['voxel', 'hybrid-direct']) {
     await page.goto(`${URL}/?seed=${SEED}&world=${world}&checkpoint=${CHECKPOINT}&quality=high`, { waitUntil: 'load' });
@@ -125,11 +110,8 @@ try {
   console.log(`\nwritten to ${OUT}`);
   assert.ok(report.worlds.voxel.visibleLights > 0, 'no visible local lights: wrong checkpoint?');
 } finally {
+  // The shared render lock, taken by verifyBuild before anything was measured.
+  releaseLock();
   await browser?.close();
-  try {
-    if (preview?.pid && process.platform !== 'win32') process.kill(-preview.pid, 'SIGTERM');
-    else preview?.kill('SIGTERM');
-  } catch (error) {
-    if (error.code !== 'ESRCH') throw error;
-  }
+  console.log(`preview: ${await stopPreview(preview)}`);
 }

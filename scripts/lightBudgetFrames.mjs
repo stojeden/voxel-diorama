@@ -17,26 +17,9 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { mkdir, writeFile } from 'node:fs/promises';
-import { execFileSync } from 'node:child_process';
 import { chromium } from 'playwright';
-/**
- * Which code produced these numbers, and whether anything was uncommitted while it did.
- * A measurement without a revision cannot be quoted in a comment or a report: that is
- * how "eleven milliseconds at sixteen lights" ended up in a source comment describing a
- * configuration nobody had measured.
- */
-const revisionOf = () => {
-  const run = (args) => execFileSync('git', args, { encoding: 'utf8' }).trim();
-  try {
-    return {
-      revision: run(['rev-parse', '--short', 'HEAD']),
-      workingTreeDirty: run(['status', '--porcelain']).length > 0,
-      dirtyPaths: run(['status', '--porcelain']).split('\n').filter(Boolean).slice(0, 20),
-    };
-  } catch {
-    return { revision: 'unknown', workingTreeDirty: null, dirtyPaths: [] };
-  }
-};
+import { stopPreview } from './previewServer.mjs';
+import { releaseLock, verifyBuild } from './buildProvenance.mjs';
 
 
 const PORT = Number(process.env.FRAMES_PORT ?? 4213);
@@ -133,10 +116,12 @@ const REGION_DIFF = async ([a, b, regions]) => {
   return out;
 };
 
+const BUILD = verifyBuild();
+
 const preview = spawn(
   process.execPath,
   ['node_modules/vite/bin/vite.js', 'preview', '--host', '127.0.0.1', '--port', String(PORT), '--strictPort'],
-  { stdio: ['ignore', 'pipe', 'pipe'] }
+  { stdio: ['ignore', 'pipe', 'pipe'], detached: true }
 );
 const waitForServer = async () => {
   for (let i = 0; i < 150; i++) {
@@ -147,7 +132,7 @@ const waitForServer = async () => {
 };
 
 let browser;
-const report = { recordedAt: new Date().toISOString(), ...revisionOf(), world: WORLD, caps: CAPS, regions: REGIONS, shots: [] };
+const report = { recordedAt: new Date().toISOString(), ...BUILD, world: WORLD, caps: CAPS, regions: REGIONS, shots: [] };
 try {
   await waitForServer();
   await mkdir(OUT_DIR, { recursive: true });
@@ -197,11 +182,8 @@ try {
   await writeFile(SUMMARY, JSON.stringify(report, null, 2));
   console.log(`\nframes in ${OUT_DIR}, per-region differences in ${SUMMARY}`);
 } finally {
+  // The shared render lock, taken by verifyBuild before anything was measured.
+  releaseLock();
   await browser?.close();
-  try {
-    if (preview?.pid && process.platform !== 'win32') process.kill(-preview.pid, 'SIGTERM');
-    else preview?.kill('SIGTERM');
-  } catch (error) {
-    if (error.code !== 'ESRCH') throw error;
-  }
+  console.log(`preview: ${await stopPreview(preview)}`);
 }

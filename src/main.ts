@@ -1044,6 +1044,13 @@ const debugHandle: DioramaDebugHandle = {
    * different scene wearing the same numbers.
    */
   dayNight,
+  /**
+   * Exposed for the same reason as `dayNight`: a day/night comparison of the same
+   * carriage has to be able to *place* the train, not wait for it to come round the
+   * loop while the clock runs on. `seekRouteProgress` plus `update` with a zero delta
+   * places the cars without advancing anything.
+   */
+  train,
   cameraPose: () => {
     env.controls.getTarget(postFocusTarget, false);
     return {

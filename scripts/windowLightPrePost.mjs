@@ -33,6 +33,8 @@ import { createHash } from 'node:crypto';
 import { execFileSync, spawn } from 'node:child_process';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { chromium } from 'playwright';
+import { stopPreview } from './previewServer.mjs';
+import { releaseLock, verifyBuild } from './buildProvenance.mjs';
 
 const PORT = Number(process.env.PREPOST_PORT ?? 4221);
 const URL = `http://127.0.0.1:${PORT}`;
@@ -59,19 +61,6 @@ const VARIANT = process.env.PREPOST_VARIANT ?? 'windowLights';
 const { field: BUDGET_FIELD, baseline: BASELINE_BUDGET, adopted: ADOPTED_BUDGET } =
   VARIANTS[VARIANT] ?? (() => { throw new Error(`unknown variant ${VARIANT}`); })();
 
-const revisionOf = () => {
-  const run = (args) => execFileSync('git', args, { encoding: 'utf8' }).trim();
-  try {
-    const status = run(['status', '--porcelain']);
-    return {
-      revision: run(['rev-parse', '--short', 'HEAD']),
-      workingTreeDirty: status.length > 0,
-      dirtyPaths: status.split('\n').filter(Boolean).slice(0, 20),
-    };
-  } catch {
-    return { revision: 'unknown', workingTreeDirty: null, dirtyPaths: [] };
-  }
-};
 
 /**
  * Five frames. Four are cameras that could see a window pool; the fifth is the wide
@@ -106,6 +95,8 @@ const LIGHT_STATE = () => {
   }));
 };
 
+const BUILD = verifyBuild();
+
 const preview = spawn(
   process.execPath,
   ['node_modules/vite/bin/vite.js', 'preview', '--host', '127.0.0.1', '--port', String(PORT), '--strictPort'],
@@ -128,7 +119,7 @@ const settle = async (page, frames = 4) => {
 let browser;
 const report = {
   recordedAt: new Date().toISOString(),
-  ...revisionOf(),
+  ...BUILD,
   question: 'What do the two window-pool lights the High profile gave up actually change in the picture?',
   method: {
     variant: VARIANT,
@@ -422,11 +413,8 @@ try {
   console.log(`\nframes in ${OUT_DIR}/, raw diffs and hashes in ${SUMMARY}`);
   assert.deepEqual(errors, [], `browser errors:\n${errors.join('\n')}`);
 } finally {
+  // The shared render lock, taken by verifyBuild before anything was measured.
+  releaseLock();
   await browser?.close();
-  try {
-    if (preview?.pid && process.platform !== 'win32') process.kill(-preview.pid, 'SIGTERM');
-    else preview?.kill('SIGTERM');
-  } catch (error) {
-    if (error.code !== 'ESRCH') throw error;
-  }
+  console.log(`preview: ${await stopPreview(preview)}`);
 }

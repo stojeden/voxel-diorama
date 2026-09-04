@@ -4,6 +4,7 @@ import { BUS_ROUTE_CURVE, BUS_STOPS, busShelterCenter } from './WorldLayout';
 import {
   busShelterColliders,
   BUS_DOOR_APPROACH_DISTANCE,
+  busStopWaitingPlacements,
   busStopWaitingPositions,
   busStopWalkingPath,
   isPointClear,
@@ -21,18 +22,12 @@ describe('bus-stop pedestrian navigation', () => {
 
   test('routes passengers around posts, bench and stop sign in both shelter orientations', () => {
     for (const stop of BUS_STOPS) {
-      const lane = BUS_ROUTE_CURVE.getPointAt(stop.atT);
-      const tangent = BUS_ROUTE_CURVE.getTangentAt(stop.atT).normalize();
-      const center = busShelterCenter(stop);
-      const towardShelter = new THREE.Vector3(center.x - lane.x, 0, center.z - lane.z).normalize();
-      const doorBase = lane.clone().addScaledVector(towardShelter, BUS_DOOR_APPROACH_DISTANCE);
-      doorBase.y = 0.5;
       const colliders = busShelterColliders(stop);
-
-      for (const [index, waitPosition] of busStopWaitingPositions(stop).entries()) {
-        const doorPosition = doorBase
-          .clone()
-          .addScaledVector(tangent, index % 2 === 0 ? -1.6 : 1.6);
+      // The doors the product walks them to, not doors derived again here. This test
+      // used to rebuild `doorBase` from the lane curve and re-apply the +/-1.6 m queue
+      // offset itself, which is the same duplication that let the clearance test measure
+      // figures facing a direction the runtime never uses.
+      for (const { index, waitPos: waitPosition, doorPos: doorPosition } of busStopWaitingPlacements(stop)) {
         const path = busStopWalkingPath(stop, waitPosition, doorPosition);
         for (let segment = 1; segment < path.length; segment++) {
           for (let sample = 0; sample <= 20; sample++) {

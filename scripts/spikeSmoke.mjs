@@ -12,6 +12,8 @@ import assert from 'node:assert/strict';
 import { access, mkdir, readdir, stat, writeFile } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { chromium } from 'playwright';
+import { stopPreview } from './previewServer.mjs';
+import { releaseLock, verifyBuild } from './buildProvenance.mjs';
 
 const HOST = '127.0.0.1';
 const PORT = 4176;
@@ -20,10 +22,18 @@ const SEED = 20260722;
 const WORLDS = (process.env.SPIKE_WORLDS ?? 'hybrid-direct').split(',').map((s) => s.trim()).filter(Boolean);
 const QUALITIES = (process.env.SPIKE_QUALITIES ?? 'high,low').split(',').map((s) => s.trim()).filter(Boolean);
 const CHECKPOINTS = ['spike-overview', 'spike-street', 'spike-golden', 'spike-night-street'];
-const OUT_DIR = 'docs/superpowers/spike';
-const FRAME_DIR = `${OUT_DIR}/frames`;
+/**
+ * Where the evidence goes. Overridable, because a run that certifies a clean tree cannot
+ * write into the repository it is certifying: the first file it saves dirties the tree
+ * for every run after it. The batch points these at a scratch directory and copies the
+ * finished set in afterwards.
+ */
+const OUT_DIR = process.env.SPIKE_OUT_DIR ?? 'docs/superpowers/spike';
+const FRAME_DIR = process.env.SPIKE_FRAME_DIR ?? `${OUT_DIR}/frames`;
 /** `frames` renders the Gate 1 kadry; `gate3` proves LOD, semantics and determinism; `materials` runs the LOD x quality material matrix; `postman` frames the postman mid-ride; `all` does all of them. */
 const PHASE = process.env.SPIKE_PHASE ?? 'frames';
+/** The signed bundle this run measures, verified before the preview server starts. */
+const BUILD = verifyBuild();
 /** `voxel` renders the same four frames without attaching the fragment, so the spike has a visual baseline. */
 const SUMMARY = process.env.SPIKE_SUMMARY
   ?? (WORLDS.join(',') === 'hybrid-direct' ? 'spike-smoke.json' : `spike-smoke-${WORLDS.join('-')}.json`);
@@ -589,28 +599,39 @@ async function runPostman(page, world) {
  * material's own numbers are read off the finished mesh in the same breath as the
  * frame, so a frame that looks right for the wrong reason is still caught.
  */
+/**
+ * Day and night on the same train, at the same place, at controlled times.
+ *
+ * Three things had to be separable, and now are: the train's position, the clock, and
+ * the lighting's settled state.
+ *
+ * - **Position** comes from `train.seekRouteProgress` followed by `train.update` with a
+ *   zero delta -- which places the cars from `leadT` without advancing anything -- so
+ *   the harness no longer waits for the consist to come round a 162.3 m loop while the
+ *   clock runs on. That waiting is what left the two frames at t01 0.545 and 0.065 when
+ *   0.42 and 0.94 were asked for.
+ * - **The clock** is set, allowed to settle, corrected for the drift the settling cost,
+ *   and then frozen: with `requestAnimationFrame` parked the frame loop stops, and t01
+ *   only advances inside it.
+ * - **The lighting** is settled *before* the freeze by waiting for the value the shot is
+ *   judged on to stop moving, because DayNightCycle eases its night factor over real
+ *   time. The frozen night factor is then handed to `train.update` explicitly, so the
+ *   glazing this frame renders is the glazing this clock implies.
+ *
+ * Weather and camera are set explicitly rather than inherited. Both tolerances are fixed
+ * here, before the run.
+ */
 async function runTrain(page, world) {
-  /**
-   * Day and night on the same train, at the same place, from the same camera.
-   *
-   * The `train` checkpoint pins the consist's route position (0.68) and a camera that
-   * frames it, so both are taken from the product rather than invented. But a locked
-   * checkpoint sets the presentation delta to zero (`main.ts`:
-   * `experience.isCheckpointLocked() ? 0 : rawDelta`), and DayNightCycle eases its night
-   * factor with that delta -- which is why the first night frame was a day-lit city
-   * under a black sky. So each shot loads the checkpoint for its camera and its train
-   * position, then releases it so the clock runs, then waits for two things to settle:
-   * the value the shot is judged on, and the train's own position on the route.
-   *
-   * The tolerance is fixed here, before the run: 0.001 of a 162.3 m route is 0.16 m, so
-   * both frames show the same carriage at the same spot to within a sixth of a metre.
-   * The achieved positions are recorded, and the two shots are asserted against each
-   * other, not against a hope.
-   */
-  const TARGET_PROGRESS = 0.68;
+  /** 0.001 of a 162.3 m route is 0.16 m; a seek lands exactly, so this is slack, not aim. */
   const PROGRESS_TOLERANCE = 0.001;
+  /** 0.002 of a day is under three minutes of diorama time. */
+  const T01_TOLERANCE = 0.002;
+  /** The route position and camera the product's own `train` checkpoint frames. */
+  const TARGET_PROGRESS = 0.68;
   const CAMERA = [52, 18, 23];
   const TARGET = [30, 4, 2];
+  /** Fixed, so the carriages' wobble phase is identical in both frames. */
+  const FROZEN_ELAPSED = 100;
 
   const readGlazing = () => page.evaluate(() => {
     // Identified by the parameters this round chose for it, and asserted to be unique.
@@ -658,33 +679,66 @@ async function runTrain(page, world) {
 
   const shots = [];
   for (const [name, t01] of [['train-day', 0.42], ['train-night', 0.94]]) {
-    await page.goto(`${URL}/?seed=${SEED}&world=${world}&checkpoint=train&quality=high`, { waitUntil: 'load' });
+    // No checkpoint: a locked checkpoint zeroes the presentation delta, and the night
+    // factor is eased with that delta, so the lighting would never reach the clock.
+    await page.goto(`${URL}/?seed=${SEED}&world=${world}&quality=high`, { waitUntil: 'load' });
     await page.waitForFunction(() => window.__diorama?.ready === true, null, { timeout: 90_000 });
     await settle(page, 4);
-    const pinned = await page.evaluate(() => window.__diorama.getState().trainProgress);
-
-    // Release the lock so the clock runs, and hold the weather where the checkpoint had
-    // it: releasing also hands the weather back to automatic.
     await page.evaluate((t) => {
-      window.__diorama.releaseCheckpoint();
       window.__diorama.setWeather('clear');
       window.__diorama.setTime(t);
     }, t01);
 
-    // Wait for the value this shot is about to be judged on to stop moving.
+    /**
+     * Settle the lighting on the value that actually drives it, then correct the clock
+     * for the drift the settling cost.
+     *
+     * Not the glazing's emissive: that is `min(1, night * 1.4)`, so it saturates at a
+     * night factor of 0.714 and reports "settled" while the light is still climbing. A
+     * frame taken then was lit at 0.936 of night and looked it. DayNightCycle's own
+     * smoothed factor is the thing to wait for.
+     */
     const ramp = [];
-    for (let i = 0; i < 60; i++) {
-      const before = (await readGlazing()).materials[0]?.emissiveIntensity ?? 0;
+    const nightRamp = [];
+    for (let i = 0; i < 90; i++) {
+      const before = await page.evaluate(() => window.__diorama.dayNight.smoothedNight);
       await settle(page, 3);
-      const after = (await readGlazing()).materials[0]?.emissiveIntensity ?? 0;
-      ramp.push(after);
-      if (i > 0 && Math.abs(after - before) < 0.001) break;
+      const after = await page.evaluate(() => window.__diorama.dayNight.smoothedNight);
+      nightRamp.push(Math.round(after * 10000) / 10000);
+      ramp.push((await readGlazing()).materials[0]?.emissiveIntensity ?? 0);
+      if (i > 0 && Math.abs(after - before) < 0.0005) break;
     }
-
-    await page.evaluate(([camera, target]) => {
-      window.__diorama.controls.setLookAt(camera[0], camera[1], camera[2], target[0], target[1], target[2], false);
-    }, [CAMERA, TARGET]);
+    const driftedTo = await page.evaluate(() => window.__diorama.getState().t01);
+    await page.evaluate((t) => window.__diorama.setTime(t), t01);
     await settle(page, 3);
+
+    // Freeze: from here the clock, the actors and the weather cannot move.
+    await page.evaluate(() => {
+      window.__parked = [];
+      window.__raf = window.requestAnimationFrame.bind(window);
+      window.requestAnimationFrame = (callback) => { window.__parked.push(callback); return 0; };
+    });
+    await page.waitForTimeout(200);
+
+    // Place the train and the camera in the frozen world.
+    const placed = await page.evaluate(([progress, elapsed, camera, target]) => {
+      const diorama = window.__diorama;
+      const night = diorama.dayNight.smoothedNight;
+      diorama.train.seekRouteProgress(progress);
+      // Zero delta: places the cars from leadT, advances nothing.
+      diorama.train.update(0, elapsed, night, 1);
+      diorama.controls.setLookAt(camera[0], camera[1], camera[2], target[0], target[1], target[2], false);
+      // With the frame loop parked nothing calls controls.update(), and camera-controls
+      // only writes the pose into the camera object there -- so setLookAt alone left the
+      // camera wherever the director had put it, three metres off.
+      diorama.controls.update(0);
+      return {
+        progress: diorama.train.getRouteProgress(),
+        night: Math.round(night * 10000) / 10000,
+        t01: diorama.getState().t01,
+      };
+    }, [TARGET_PROGRESS, FROZEN_ELAPSED, CAMERA, TARGET]);
+
     const pose = await page.evaluate(() => window.__diorama.cameraPose());
     for (const [axis, index] of [['x', 0], ['y', 1], ['z', 2]]) {
       assert.ok(
@@ -693,71 +747,68 @@ async function runTrain(page, world) {
       );
     }
 
-    // Then the train's own position, immediately before the shutter.
-    const arrival = await page.waitForFunction((wanted) => {
-      const progress = window.__diorama.getState().trainProgress;
-      const delta = Math.abs(((progress - wanted.target) % 1 + 1.5) % 1 - 0.5);
-      return delta < wanted.tolerance ? { progress, delta } : null;
-    }, { target: TARGET_PROGRESS, tolerance: PROGRESS_TOLERANCE }, { timeout: 180_000, polling: 16 })
-      .then((handle) => handle.jsonValue());
-
-    // Freeze before the shutter so nothing moves between the read and the frame.
-    await page.evaluate(() => {
-      window.__parked = [];
-      window.__raf = window.requestAnimationFrame.bind(window);
-      window.requestAnimationFrame = (callback) => { window.__parked.push(callback); return 0; };
-    });
-    await page.waitForTimeout(200);
     await page.evaluate(() => window.__diorama.renderFrame());
     const frame = `${FRAME_DIR}/${world}-high-${name}.jpg`;
     await page.screenshot({ path: frame, type: 'jpeg', quality: 88 });
     const reading = await readGlazing();
     const glazing = reading.materials;
-    const clock = await page.evaluate(() => window.__diorama.getState().t01);
     await page.evaluate(() => {
       window.requestAnimationFrame = window.__raf;
       for (const callback of window.__parked) window.requestAnimationFrame(callback);
       window.__parked = [];
     });
 
+    const progressError = Math.abs(((placed.progress - TARGET_PROGRESS) % 1 + 1.5) % 1 - 0.5);
+    const t01Error = Math.abs(((placed.t01 - t01) % 1 + 1.5) % 1 - 0.5);
     shots.push({
       name,
       requestedT01: t01,
-      actualT01: Math.round(clock * 10000) / 10000,
-      checkpointPinnedProgress: Math.round(pinned * 100000) / 100000,
-      shotAtProgress: Math.round(arrival.progress * 100000) / 100000,
-      progressErrorFromTarget: Math.round(arrival.delta * 100000) / 100000,
-      progressErrorMetres: Math.round(arrival.delta * 162.3 * 1000) / 1000,
+      shotAtT01: Math.round(placed.t01 * 100000) / 100000,
+      t01Error: Math.round(t01Error * 100000) / 100000,
+      t01Tolerance: T01_TOLERANCE,
+      clockDriftDuringSettle: Math.round((driftedTo - t01) * 100000) / 100000,
+      nightFactorAtShot: placed.night,
+      requestedProgress: TARGET_PROGRESS,
+      shotAtProgress: Math.round(placed.progress * 100000) / 100000,
+      progressError: Math.round(progressError * 100000) / 100000,
+      progressErrorMetres: Math.round(progressError * 162.3 * 1000) / 1000,
+      progressTolerance: PROGRESS_TOLERANCE,
+      weather: 'clear',
       camera: CAMERA,
       target: TARGET,
+      frozenElapsed: FROZEN_ELAPSED,
       frame,
       settledAfterReads: ramp.length,
-      ramp,
+      glazingRamp: ramp,
+      nightFactorRamp: nightRamp,
       glazing,
     });
     console.log(
-      `${world.padEnd(14)} high  ${name.padEnd(12)} t01 ${clock.toFixed(3)}  progress ${arrival.progress.toFixed(5)} ` +
-      `(${(arrival.delta * 162.3).toFixed(2)} m from target)  ` +
+      `${world.padEnd(14)} high  ${name.padEnd(12)} t01 ${placed.t01.toFixed(4)} (asked ${t01}, err ${t01Error.toFixed(5)})  ` +
+      `night ${placed.night}  progress ${placed.progress.toFixed(5)} (err ${(progressError * 162.3).toFixed(3)} m)  ` +
       `${glazing.map((g) => `pane ${g.colorHex} L${g.colorLuminance} emissive ${g.emissiveHex} x${g.emissiveIntensity}`).join(' | ') || 'GLAZING NOT FOUND'}`
     );
     assert.equal(glazing.length, 1, `${world}: expected exactly one train glazing material, found ${glazing.length}`);
+    assert.ok(t01Error < T01_TOLERANCE, `${world}: ${name} shot at t01 ${placed.t01}, asked ${t01}, tolerance ${T01_TOLERANCE}`);
+    assert.ok(progressError < PROGRESS_TOLERANCE, `${world}: ${name} shot ${progressError * 162.3} m from the target position`);
   }
 
   const [day, night] = shots;
-  // The two frames must show the same train in the same place, and that is asserted
-  // between the shots rather than each against a target.
   const between = Math.abs(day.shotAtProgress - night.shotAtProgress);
-  console.log(`${' '.repeat(21)}day and night shot ${(between * 162.3).toFixed(2)} m apart on a 162.3 m route`);
-  assert.ok(
-    between < PROGRESS_TOLERANCE * 2,
-    `train day and night were shot ${(between * 162.3).toFixed(2)} m apart, tolerance ${(PROGRESS_TOLERANCE * 2 * 162.3).toFixed(2)} m`
-  );
-  assert.equal(day.checkpointPinnedProgress, night.checkpointPinnedProgress, 'the checkpoint pinned a different train position between shots');
-  // The claim, as numbers: dark glass by day, a lit interior by night, one pane.
+  console.log(`${' '.repeat(21)}day and night: ${(between * 162.3).toFixed(3)} m apart, clocks ${day.shotAtT01} and ${night.shotAtT01}`);
+  assert.ok(between < PROGRESS_TOLERANCE, `train day and night were shot ${(between * 162.3).toFixed(3)} m apart`);
+  assert.ok(day.nightFactorAtShot < 0.01, `the day frame's night factor is ${day.nightFactorAtShot}`);
+  assert.ok(night.nightFactorAtShot > 0.99, `the night frame's night factor is ${night.nightFactorAtShot}`);
   assert.ok(day.glazing[0].emissiveIntensity < 0.05, `train glass glows by day (${day.glazing[0].emissiveIntensity})`);
   assert.ok(night.glazing[0].emissiveIntensity > 0.9, `train interior stays dark at night (${night.glazing[0].emissiveIntensity})`);
   assert.ok(night.glazing[0].colorLuminance < 0.2, 'the night pane itself has to stay dark');
-  return { world, routeLengthM: 162.3, progressTolerance: PROGRESS_TOLERANCE, shots };
+  return {
+    world,
+    routeLengthM: 162.3,
+    progressTolerance: PROGRESS_TOLERANCE,
+    t01Tolerance: T01_TOLERANCE,
+    shots,
+  };
 }
 
 async function runMaterials(page, worlds) {
@@ -1203,6 +1254,7 @@ async function runGate3(page, worlds) {
 const preview = spawn(process.execPath, ['node_modules/vite/bin/vite.js', 'preview', '--host', HOST, '--port', String(PORT), '--strictPort'], {
   cwd: process.cwd(),
   stdio: ['ignore', 'pipe', 'pipe'],
+  detached: true,
   detached: process.platform !== 'win32',
 });
 let browser;
@@ -1331,29 +1383,27 @@ try {
     ? await runPostman(page, hybridWorlds[0] ?? WORLDS[0])
     : null;
   if (postman) {
-    await writeFile(`${OUT_DIR}/spike-postman.json`, JSON.stringify({ generatedAt: new Date().toISOString(), ...postman }, null, 2));
+    await writeFile(`${OUT_DIR}/spike-postman.json`, JSON.stringify({ generatedAt: new Date().toISOString(), ...BUILD, ...postman }, null, 2));
     console.log(`postman frames written to ${FRAME_DIR}/`);
   }
   const train = PHASE === 'train' || PHASE === 'all' ? await runTrain(page, hybridWorlds[0] ?? 'voxel') : null;
   if (train) {
-    await writeFile(`${OUT_DIR}/spike-train.json`, JSON.stringify({ generatedAt: new Date().toISOString(), ...train }, null, 2));
+    await writeFile(`${OUT_DIR}/spike-train.json`, JSON.stringify({ generatedAt: new Date().toISOString(), ...BUILD, ...train }, null, 2));
     console.log(`train frames written to ${FRAME_DIR}/`);
   }
   const materials = PHASE === 'materials' || PHASE === 'all' ? await runMaterials(page, hybridWorlds) : null;
   if (materials) {
-    await writeFile(`${OUT_DIR}/spike-materials.json`, JSON.stringify({ generatedAt: new Date().toISOString(), ...materials }, null, 2));
+    await writeFile(`${OUT_DIR}/spike-materials.json`, JSON.stringify({ generatedAt: new Date().toISOString(), ...BUILD, ...materials }, null, 2));
     console.log(`material matrix written to ${OUT_DIR}/spike-materials.json`);
   }
   if (results.length === 0) {
     console.log('frames phase skipped');
-  } else await writeFile(`${OUT_DIR}/${SUMMARY}`, JSON.stringify({ generatedAt: new Date().toISOString(), bundles, results }, null, 2));
+  } else await writeFile(`${OUT_DIR}/${SUMMARY}`, JSON.stringify({ generatedAt: new Date().toISOString(), ...BUILD, bundles, results }, null, 2));
   console.log(`\nbundles: entry ${bundles.entry} B, main ${bundles.main} B, hybrid-spike ${bundles.spike} B`);
   if (results.length > 0) console.log(`frames + ${SUMMARY} written to ${OUT_DIR}/`);
 } finally {
+  // The shared render lock, taken by verifyBuild before anything was measured.
+  releaseLock();
   await browser?.close();
-  if (process.platform !== 'win32' && preview.pid) {
-    try { process.kill(-preview.pid, 'SIGTERM'); } catch { /* already gone */ }
-  } else {
-    preview.kill('SIGTERM');
-  }
+  console.log(`preview: ${await stopPreview(preview)}`);
 }

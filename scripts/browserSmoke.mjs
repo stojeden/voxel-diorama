@@ -2,8 +2,13 @@ import assert from 'node:assert/strict';
 import { access, readdir, readFile, stat } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { chromium } from 'playwright';
+import { stopPreview } from './previewServer.mjs';
+import { releaseLock, verifyBuild } from './buildProvenance.mjs';
 
 /** Top of the voxel ground layer: the surface every actor stands or drives on. */
+/** The signed bundle this smoke exercises, verified before anything starts. */
+const BUILD = verifyBuild();
+
 const ROAD_SURFACE_Y = -0.5;
 /**
  * Read from the source of truth rather than copied here. This assertion exists to catch
@@ -363,6 +368,7 @@ async function assertMobileLayout(page) {
 const preview = spawn(process.execPath, ['node_modules/vite/bin/vite.js', 'preview', '--host', HOST, '--port', String(PORT), '--strictPort'], {
   cwd: process.cwd(),
   stdio: ['ignore', 'pipe', 'pipe'],
+  detached: true,
   detached: process.platform !== 'win32',
 });
 
@@ -1632,11 +1638,8 @@ try {
   console.error(previewLog);
   throw error;
 } finally {
+  // The shared render lock, taken by verifyBuild before anything was measured.
+  releaseLock();
   await browser?.close();
-  try {
-    if (preview.pid && process.platform !== 'win32') process.kill(-preview.pid, 'SIGTERM');
-    else preview.kill('SIGTERM');
-  } catch (error) {
-    if (error.code !== 'ESRCH') throw error;
-  }
+  console.log(`preview: ${await stopPreview(preview)}`);
 }

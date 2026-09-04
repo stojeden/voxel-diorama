@@ -36,26 +36,9 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { writeFile } from 'node:fs/promises';
 import { loadavg } from 'node:os';
-import { execFileSync } from 'node:child_process';
 import { chromium } from 'playwright';
-/**
- * Which code produced these numbers, and whether anything was uncommitted while it did.
- * A measurement without a revision cannot be quoted in a comment or a report: that is
- * how "eleven milliseconds at sixteen lights" ended up in a source comment describing a
- * configuration nobody had measured.
- */
-const revisionOf = () => {
-  const run = (args) => execFileSync('git', args, { encoding: 'utf8' }).trim();
-  try {
-    return {
-      revision: run(['rev-parse', '--short', 'HEAD']),
-      workingTreeDirty: run(['status', '--porcelain']).length > 0,
-      dirtyPaths: run(['status', '--porcelain']).split('\n').filter(Boolean).slice(0, 20),
-    };
-  } catch {
-    return { revision: 'unknown', workingTreeDirty: null, dirtyPaths: [] };
-  }
-};
+import { stopPreview } from './previewServer.mjs';
+import { releaseLock, verifyBuild } from './buildProvenance.mjs';
 
 
 const PORT = Number(process.env.LIGHT_PORT ?? 4211);
@@ -156,10 +139,18 @@ const INSTALL_CAP = (rank) => {
   return 'installed';
 };
 
+/**
+ * Before the server, before the browser, before a single frame: prove that `dist/` is the
+ * signed bundle built from this commit. This used to be taken while writing the results,
+ * which in the default mode rebuilt the bundle *after* the measurement and stamped the
+ * new hash onto the old numbers.
+ */
+const BUILD = verifyBuild();
+
 const preview = spawn(
   process.execPath,
   ['node_modules/vite/bin/vite.js', 'preview', '--host', '127.0.0.1', '--port', String(PORT), '--strictPort'],
-  { stdio: ['ignore', 'pipe', 'pipe'] }
+  { stdio: ['ignore', 'pipe', 'pipe'], detached: true }
 );
 const waitForServer = async () => {
   for (let i = 0; i < 150; i++) {
@@ -322,7 +313,7 @@ try {
 
   await writeFile(OUT, JSON.stringify({
     recordedAt: new Date().toISOString(),
-    ...revisionOf(),
+    ...BUILD,
     budgetOverride: BUDGET_OVERRIDE,
     question: 'What does one physical local light cost, and is the cost linear in the count?',
     rank: RANK,
@@ -349,11 +340,8 @@ try {
     console.log(`${world}: ${summary[world].marginal.map((step) => `${step.from}->${step.to} ${step.savedMs.toFixed(2)} ms (${step.perLightMs.toFixed(2)}/light)`).join('  ')}`);
   }
 } finally {
+  // The shared render lock, taken by verifyBuild before anything was measured.
+  releaseLock();
   await browser?.close();
-  try {
-    if (preview?.pid && process.platform !== 'win32') process.kill(-preview.pid, 'SIGTERM');
-    else preview?.kill('SIGTERM');
-  } catch (error) {
-    if (error.code !== 'ESRCH') throw error;
-  }
+  console.log(`preview: ${await stopPreview(preview)}`);
 }

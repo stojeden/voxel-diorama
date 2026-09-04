@@ -17,11 +17,9 @@ import {
 import { createBus } from '../Bus';
 import { generateBusShelter } from '../WorldGenerator';
 import {
-  BUS_DOOR_APPROACH_DISTANCE,
   PEDESTRIAN_RADIUS,
   busShelterColliders,
   busStopWaitingPlacements,
-  busStopWaitingPositions,
   busStopWalkingPath,
 } from '../BusStopNavigation';
 import { buildPassenger } from '../PassengerCrowd';
@@ -132,20 +130,20 @@ function pointRect(point: THREE.Vector3): Rect {
   };
 }
 
-/** Everything a pedestrian body sweeps through around the stop, as inflated rectangles. */
+/**
+ * Everything a pedestrian body sweeps through around the stop, as inflated rectangles.
+ *
+ * The waiting spots and the doors they walk to come from `busStopWaitingPlacements` --
+ * the function the crowd itself is built from. This used to rebuild the door from the
+ * lane curve and re-apply the queue offset here, which is a third copy of an algorithm
+ * that has already drifted once.
+ */
 function pedestrianZones(): Array<Rect & { id: string }> {
   const zones: Array<Rect & { id: string }> = busShelterColliders(stop).map((rect) => ({ ...rect }));
-  const lane = BUS_ROUTE_CURVE.getPointAt(stop.atT);
-  const tangent = BUS_ROUTE_CURVE.getTangentAt(stop.atT).normalize();
-  const center = busShelterCenter(stop);
-  const towardShelter = new THREE.Vector3(center.x - lane.x, 0, center.z - lane.z).normalize();
-  const doorBase = lane.clone().addScaledVector(towardShelter, BUS_DOOR_APPROACH_DISTANCE);
-  doorBase.y = GROUND_SURFACE_Y;
 
-  for (const [index, waitPosition] of busStopWaitingPositions(stop).entries()) {
+  for (const { index, waitPos: waitPosition, doorPos } of busStopWaitingPlacements(stop)) {
     zones.push({ id: `wait-${index}`, ...pointRect(waitPosition) });
-    const doorPosition = doorBase.clone().addScaledVector(tangent, index % 2 === 0 ? -1.6 : 1.6);
-    const path = busStopWalkingPath(stop, waitPosition, doorPosition);
+    const path = busStopWalkingPath(stop, waitPosition, doorPos);
     for (let segment = 1; segment < path.length; segment++) {
       for (let sample = 0; sample <= 40; sample++) {
         const point = new THREE.Vector3().lerpVectors(path[segment - 1], path[segment], sample / 40);
@@ -384,17 +382,20 @@ describe('the stop is one street system', () => {
   });
 
   test('everyone waiting stands on the pavement and under the roof', () => {
-    const positions = busStopWaitingPositions(stop);
-    expect(positions.length).toBeGreaterThan(0);
-    // The body, not the centre point and not the navigation radius: the figure's own
-    // finished footprint, 0.874 m across and 0.429 m deep.
-    const figure = new THREE.Box3().setFromObject(buildPassenger().group).getSize(new THREE.Vector3());
-    for (const position of positions) {
+    expect(waitingFigures.length).toBeGreaterThan(0);
+    /**
+     * The rotated, finished outline -- the same boxes the intersection tests use -- not
+     * the figure's nominal unrotated footprint. Turned toward its door a figure is up to
+     * 0.90 m across and 0.75 m deep, against 0.874 x 0.429 m standing square, so the
+     * nominal box was the wrong shape in both axes and forgiving in the deeper one.
+     */
+    for (const figure of waitingFigures) {
+      const { position, box } = figure;
       expect(paved(position.x, position.z), `oczekujacy na (${position.x.toFixed(1)}, ${position.z.toFixed(1)}) stoi na trawie`).toBe(true);
-      expect(position.x - figure.x / 2).toBeGreaterThan(roof.min.x);
-      expect(position.x + figure.x / 2).toBeLessThan(roof.max.x);
-      expect(position.z - figure.z / 2, `oczekujacy ${position.z.toFixed(2)} wobec dachu ${roof.min.z.toFixed(2)}..${roof.max.z.toFixed(2)}`).toBeGreaterThan(roof.min.z);
-      expect(position.z + figure.z / 2).toBeLessThan(roof.max.z);
+      expect(box.min.x, `oczekujacy ${figure.index} x ${box.min.x.toFixed(2)} wobec dachu ${roof.min.x.toFixed(2)}`).toBeGreaterThan(roof.min.x);
+      expect(box.max.x).toBeLessThan(roof.max.x);
+      expect(box.min.z, `oczekujacy ${figure.index} z ${box.min.z.toFixed(2)} wobec dachu ${roof.min.z.toFixed(2)}..${roof.max.z.toFixed(2)}`).toBeGreaterThan(roof.min.z);
+      expect(box.max.z).toBeLessThan(roof.max.z);
     }
   });
 
@@ -406,9 +407,10 @@ describe('the stop is one street system', () => {
   });
 
   test('a resident can walk round the shelter without stepping off the pavement', () => {
-    const positions = busStopWaitingPositions(stop);
-    const doorPosition = new THREE.Vector3(centre.x + 3.05, GROUND_SURFACE_Y, centre.z - stop.benchSign * -1.75);
-    const path = busStopWalkingPath(stop, positions[0], doorPosition);
+    // The first passenger's own route, from the placement the runtime uses: this test
+    // used to invent a door 3.05 m off the shelter centre and check a path nobody walks.
+    const [first] = busStopWaitingPlacements(stop);
+    const path = busStopWalkingPath(stop, first.waitPos, first.doorPos);
     // The route walks on pavement, then steps onto the carriageway for the door and
     // stays there. What it must never do is cross grass -- that is what it did while
     // the stop had a one-metre strip of pavement and the shelter stood on a lawn.

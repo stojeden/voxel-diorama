@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
-import { access, open, readFile, unlink } from 'node:fs/promises';
+import { access, readFile } from 'node:fs/promises';
 import { renameSync, writeFileSync } from 'node:fs';
-import { spawn, spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { join } from 'node:path';
-import { loadavg, tmpdir } from 'node:os';
+import { loadavg } from 'node:os';
 import { chromium } from 'playwright';
+import { stopPreview } from './previewServer.mjs';
+import { releaseLock, verifyBuild } from './buildProvenance.mjs';
 
 const HOST = '127.0.0.1';
 const PORT = 4174;
@@ -50,16 +52,13 @@ const TTI_SAMPLES = Number(process.env.BENCH_TTI_SAMPLES ?? 3);
  * BENCH_REVISION has no provenance. A dirty tree is recorded too, because a number
  * measured on uncommitted code cannot be reproduced from the revision alone.
  */
-const CODE_REVISION = (() => {
-  const run = (args) => {
-    const out = spawnSync('git', args, { encoding: 'utf8' });
-    return out.status === 0 ? out.stdout.trim() : null;
-  };
-  return {
-    revision: process.env.BENCH_REVISION ?? run(['rev-parse', '--short', 'HEAD']),
-    dirty: (run(['status', '--porcelain']) ?? '') !== '',
-  };
-})();
+/**
+ * Before the preview server and before any frame: the shared render lock, and proof that
+ * `dist/` is the signed bundle built from this commit. This replaces the benchmark's own
+ * lock file -- one gate now covers the build and every harness, so a build can no longer
+ * slip in beside a measurement.
+ */
+const CODE_REVISION = verifyBuild();
 
 const PAGE_SETUP = (() => {
   const [width, height] = (process.env.BENCH_VIEWPORT ?? '1440x900').split('x').map(Number);
@@ -81,43 +80,6 @@ const RAINBOW_REPETITIONS = Number(
 );
 const DISABLE_SHADOWS = process.env.BENCH_DISABLE_SHADOWS === '1';
 const DISABLE_LOCAL_LIGHTS = process.env.BENCH_DISABLE_LOCAL_LIGHTS === '1';
-const LOCK_PATH = join(tmpdir(), 'voxel-diorama-performance-benchmark.lock');
-
-async function acquireBenchmarkLock() {
-  try {
-    const handle = await open(LOCK_PATH, 'wx');
-    await handle.writeFile(`${process.pid}\n`);
-    return handle;
-  } catch (error) {
-    if (error.code !== 'EEXIST') throw error;
-
-    const ownerPid = Number.parseInt(await readFile(LOCK_PATH, 'utf8'), 10);
-    if (Number.isInteger(ownerPid)) {
-      try {
-        process.kill(ownerPid, 0);
-        throw new Error(
-          `performance benchmark is already running (PID ${ownerPid}); ` +
-          'only one Diorama browser instance is allowed'
-        );
-      } catch (ownerError) {
-        if (ownerError.code !== 'ESRCH') throw ownerError;
-      }
-    }
-
-    await unlink(LOCK_PATH);
-    return acquireBenchmarkLock();
-  }
-}
-
-async function releaseBenchmarkLock(handle) {
-  await handle.close();
-  try {
-    await unlink(LOCK_PATH);
-  } catch (error) {
-    if (error.code !== 'ENOENT') throw error;
-  }
-}
-
 function round(value, precision = 1) {
   const scale = 10 ** precision;
   return Math.round(value * scale) / scale;
@@ -693,7 +655,6 @@ if (canarySource && scenarios.length > 1) {
 }
 assert.ok(['low', 'medium', 'high'].includes(QUALITY), `unknown benchmark quality: ${QUALITY}`);
 
-const benchmarkLock = await acquireBenchmarkLock();
 let preview;
 let previewLog = '';
 let browser;
@@ -701,6 +662,7 @@ try {
   preview = spawn(process.execPath, ['node_modules/vite/bin/vite.js', 'preview', '--host', HOST, '--port', String(PORT), '--strictPort'], {
     cwd: process.cwd(),
     stdio: ['ignore', 'pipe', 'pipe'],
+  detached: true,
     detached: process.platform !== 'win32',
   });
   preview.stdout.on('data', (chunk) => { previewLog += chunk.toString(); });
@@ -997,7 +959,10 @@ try {
 
   const report = {
     revision: CODE_REVISION.revision,
-    workingTreeDirty: CODE_REVISION.dirty,
+    revisionFull: CODE_REVISION.revisionFull,
+    workingTreeDirty: CODE_REVISION.workingTreeDirty,
+    // The bundle that actually served this run, not only what git says HEAD is.
+    build: CODE_REVISION.build,
     recordedAt: new Date().toISOString(),
     conditions: {
       viewport: `${PAGE_SETUP.viewport.width}x${PAGE_SETUP.viewport.height}`,
@@ -1239,12 +1204,8 @@ try {
   console.error(previewLog);
   throw error;
 } finally {
+  // First, so that a failure while stopping the preview cannot leave it held.
+  releaseLock();
   await browser?.close();
-  try {
-    if (preview?.pid && process.platform !== 'win32') process.kill(-preview.pid, 'SIGTERM');
-    else preview?.kill('SIGTERM');
-  } catch (error) {
-    if (error.code !== 'ESRCH') throw error;
-  }
-  await releaseBenchmarkLock(benchmarkLock);
+  console.log(`preview: ${await stopPreview(preview)}`);
 }
