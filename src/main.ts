@@ -1144,9 +1144,15 @@ const debugHandle: DioramaDebugHandle = {
       const { createFrameTiming } = await loadDiagnostics();
       frameTiming = createFrameTiming(env.renderer);
     }
-    frameTiming.start(count);
+    // A new series may only begin once the previous one is closed, so cancel first:
+    // that releases any queries still in flight instead of letting their results
+    // arrive inside the next measurement.
+    frameTiming.cancel();
+    return frameTiming.start(count);
   },
-  debugReadFrameTiming: () => frameTiming?.read() ?? { samples: [], disjoint: false, pending: 0 },
+  debugCancelFrameTiming: () => frameTiming?.cancel(),
+  /** Null until a diagnostic has asked for a series: the probe is a lazy import. */
+  debugReadFrameTiming: () => frameTiming?.read() ?? null,
   captureFrame: (width = 960, jpegQuality = 0.82, format: 'jpeg' | 'png' = 'jpeg') => {
     env.composer.render(0);
     const source = env.renderer.domElement;

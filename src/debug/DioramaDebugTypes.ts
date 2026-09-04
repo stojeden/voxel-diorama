@@ -1,3 +1,4 @@
+import type { FrameTimingReading } from './frameTiming';
 import type { QualityMode, QualitySnapshot } from '../performance/QualityManager';
 import type { CheckpointId } from '../experience/Checkpoints';
 
@@ -46,8 +47,9 @@ export interface DioramaDebugHandle {
   /** How many local lights are visible right now. */
   debugCountVisibleLocalLights: () => Promise<number>;
   /** Time `count` real animation frames on the GPU, without a second render. */
-  debugStartFrameTiming: (count: number) => Promise<void>;
-  debugReadFrameTiming: () => { samples: number[]; disjoint: boolean; pending: number };
+  debugStartFrameTiming: (count: number) => Promise<number>;
+  debugCancelFrameTiming: () => void;
+  debugReadFrameTiming: () => FrameTimingReading | null;
   captureFrame: (
     width?: number,
     jpegQuality?: number,

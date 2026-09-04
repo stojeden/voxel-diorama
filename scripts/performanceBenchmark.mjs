@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { access, open, readFile, unlink } from 'node:fs/promises';
 import { renameSync, writeFileSync } from 'node:fs';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import { loadavg, tmpdir } from 'node:os';
 import { chromium } from 'playwright';
@@ -44,6 +44,23 @@ const TTI_SAMPLES = Number(process.env.BENCH_TTI_SAMPLES ?? 3);
  * differed only here reported 48 FPS and 60 FPS for the same night street, which is
  * why this is one constant, and why it is written into every result file.
  */
+/**
+ * The revision this run measured, read from git rather than from an environment
+ * variable: a result whose provenance depends on the operator remembering to export
+ * BENCH_REVISION has no provenance. A dirty tree is recorded too, because a number
+ * measured on uncommitted code cannot be reproduced from the revision alone.
+ */
+const CODE_REVISION = (() => {
+  const run = (args) => {
+    const out = spawnSync('git', args, { encoding: 'utf8' });
+    return out.status === 0 ? out.stdout.trim() : null;
+  };
+  return {
+    revision: process.env.BENCH_REVISION ?? run(['rev-parse', '--short', 'HEAD']),
+    dirty: (run(['status', '--porcelain']) ?? '') !== '',
+  };
+})();
+
 const PAGE_SETUP = (() => {
   const [width, height] = (process.env.BENCH_VIEWPORT ?? '1440x900').split('x').map(Number);
   assert.ok(width > 0 && height > 0, `BENCH_VIEWPORT must be WxH, received ${process.env.BENCH_VIEWPORT}`);
@@ -204,18 +221,34 @@ async function clearDiagnosticOverrides(page) {
  */
 async function measureAnimationGpu(page, frames) {
   const raw = await page.evaluate(async (count) => {
-    await window.__diorama.debugStartFrameTiming(count);
-    const deadline = performance.now() + 8_000;
+    const series = await window.__diorama.debugStartFrameTiming(count);
+    const deadline = performance.now() + 12_000;
     let read = window.__diorama.debugReadFrameTiming();
-    while (read.samples.length < count && performance.now() < deadline) {
+    // The probe decides when a series is done; this loop only keeps frames coming.
+    while (read && read.status === 'measuring' && performance.now() < deadline) {
       await new Promise((resolve) => requestAnimationFrame(resolve));
       read = window.__diorama.debugReadFrameTiming();
     }
-    return read;
+    if (read && read.status === 'measuring') window.__diorama.debugCancelFrameTiming();
+    return { ...(window.__diorama.debugReadFrameTiming() ?? { status: 'unavailable', samples: [], usable: false, requested: count, dropped: 0, disjoint: false }), series };
   }, frames);
   const samples = [...raw.samples].sort((a, b) => a - b);
-  if (samples.length < 5) {
-    return { available: false, conclusive: false, reason: `only ${samples.length} of ${frames} frames timed`, samples };
+  // Only a series the probe itself calls complete may be read as a measurement. The
+  // rule this replaces accepted five samples out of ninety, so a run that timed out
+  // after five frames was quoted as if it had measured the whole window.
+  if (!raw.usable) {
+    return {
+      available: false,
+      conclusive: false,
+      status: raw.status,
+      series: raw.series,
+      requested: raw.requested,
+      sampleCount: samples.length,
+      dropped: raw.dropped,
+      disjoint: raw.disjoint,
+      reason: `series ${raw.series} ended as ${raw.status} with ${samples.length} of ${raw.requested} samples`,
+      samples,
+    };
   }
   const median = samples[Math.floor(samples.length / 2)];
   const spread = samples.at(-1) - samples[0];
@@ -229,6 +262,9 @@ async function measureAnimationGpu(page, frames) {
   const tolerance = 16.7 / 4;
   return {
     available: true,
+    status: raw.status,
+    series: raw.series,
+    requested: raw.requested,
     method: 'EXT_disjoint_timer_query_webgl2 around the animation frame in the render loop',
     sampleCount: samples.length,
     medianMs: Math.round(median * 100) / 100,
@@ -287,28 +323,63 @@ async function readMeasuredState(page) {
  * Sampled with `ps`, which needs no privileges; our own node, Chrome and vite
  * processes are excluded so that the figure is about foreign load.
  */
+/**
+ * What else the machine was doing while this scenario was measured.
+ *
+ * Read honestly, and with its limits on the label. This is CPU occupancy from `ps`,
+ * which needs no privileges; **it is not a GPU-load measurement**. macOS exposes no
+ * per-process GPU utilisation without privileged tooling, so when a run and a
+ * competing application share the GPU this sampler cannot say so, and a difference
+ * between runs must not be attributed to GPU contention on the strength of it.
+ *
+ * Our own headless Chrome is separated by process tree, not by name: the browser's own
+ * pid comes from Playwright, and rows whose pid or parent is that process are marked
+ * `ours`. A Chrome the user is running is therefore still visible as foreign load,
+ * which the previous version hid by excluding every process called "Google Chrome".
+ */
 async function machineState() {
-  const busiest = await new Promise((resolve) => {
-    const ps = spawn('ps', ['-Ao', 'pcpu,comm', '-r'], { stdio: ['ignore', 'pipe', 'ignore'] });
+  const rows = await new Promise((resolve) => {
+    const ps = spawn('ps', ['-Ao', 'pid,ppid,pcpu,command', '-r'], { stdio: ['ignore', 'pipe', 'ignore'] });
     let out = '';
     ps.stdout.on('data', (chunk) => { out += chunk.toString(); });
     ps.on('close', () => {
-      const rows = out.split('\n').slice(1)
-        .map((line) => line.trim().match(/^([\d.]+)\s+(.*)$/))
+      const parsed = out.split('\n').slice(1)
+        .map((line) => line.trim().match(/^(\d+)\s+(\d+)\s+([\d.]+)\s+(.*)$/))
         .filter(Boolean)
-        .map((match) => ({ cpu: Number(match[1]), command: match[2].split('/').pop() }))
-        .filter((row) => row.cpu >= 1 && !/^(node|ps|vite)$/.test(row.command));
-      resolve(rows.slice(0, 5));
+        .map((match) => ({
+          pid: Number(match[1]),
+          ppid: Number(match[2]),
+          cpu: Number(match[3]),
+          command: match[4],
+        }))
+        .filter((row) => row.cpu >= 1);
+      resolve(parsed);
     });
     ps.on('error', () => resolve([]));
   });
-  // Our own headless Chrome cannot be told from another Chrome by process name, so it
-  // is listed among the busiest but left out of the foreign total.
-  const ours = /^Google Chrome/;
+
+  // Our own browser is identified by the profile directory Playwright gives it, which
+  // is in its command line. Naming it by process name would also swallow a Chrome the
+  // user is running -- which is exactly what the previous version did.
+  const OURS = /playwright[_-]chromium|--remote-debugging-pipe/;
+  const mine = new Set([process.pid]);
+  for (const row of rows) if (OURS.test(row.command) || mine.has(row.ppid)) mine.add(row.pid);
+  for (const row of rows) if (mine.has(row.ppid)) mine.add(row.pid);
+  const tagged = rows.map((row) => ({
+    command: row.command.split(/\s/)[0].split('/').pop(),
+    cpu: row.cpu,
+    ours: mine.has(row.pid),
+  }));
+  const foreign = tagged.filter((row) => !row.ours);
   return {
+    method: 'ps -Ao pid,ppid,pcpu,command; CPU occupancy only',
+    ownership: "our browser identified by Playwright's profile flag in its command line, not by process name",
+    limitation: 'no per-process GPU utilisation without privileged tools: GPU contention cannot be measured here',
     loadAverage: loadavg().map((value) => round(value, 2)),
-    foreignCpuPercent: round(busiest.filter((row) => !ours.test(row.command)).reduce((total, row) => total + row.cpu, 0), 1),
-    busiest,
+    ownCpuPercent: round(tagged.filter((row) => row.ours).reduce((total, row) => total + row.cpu, 0), 1),
+    foreignCpuPercent: round(foreign.reduce((total, row) => total + row.cpu, 0), 1),
+    busiest: tagged.slice(0, 6),
+    foreignBusiest: foreign.slice(0, 4),
   };
 }
 
@@ -465,53 +536,87 @@ const rainbowScenarios = rainbowPair
   .map((name) => filteredScenarios.find((scenario) => scenario.name === name))
   .filter(Boolean);
 /**
- * Write the report only if it is complete, and never over a good file with a bad one.
- *
- * The previous flow was `node ... > bench-<tag>.json`, so the shell truncated the
- * target before node started: any crash -- an assertion, a timeout -- left a 0-byte
- * file where a valid result had been, which is how bench-voxel-low.json was lost.
- * Set BENCH_OUT to enable it; validation runs before the rename, so a rejected report
- * leaves the previous file untouched.
+ * Everything a result file has to carry to be worth reading later, returned as a list
+ * of problems rather than thrown -- an incomplete run is still written down, as a
+ * diagnostic artefact, never over the canonical file.
  */
-function writeReport(report, expected) {
-  const out = process.env.BENCH_OUT;
-  if (!out) return;
-  const got = report.results.map((result) => result.name);
-  const missing = expected.filter((name) => !got.includes(name));
-  assert.equal(missing.length, 0, `refusing to write ${out}: missing scenarios ${missing.join(', ')}`);
-  for (const result of report.results) {
-    assert.ok(
-      Array.isArray(result.timeToInteractiveSamples) && result.timeToInteractiveSamples.length === TTI_SAMPLES,
-      `refusing to write ${out}: ${result.name} has ${result.timeToInteractiveSamples?.length} of ${TTI_SAMPLES} TTI attempts`
-    );
-    assert.ok(
-      result.timing && Number.isFinite(result.timing.averageFps),
-      `refusing to write ${out}: ${result.name} has no timing`
-    );
+function completenessProblems(report, expected) {
+  const problems = [];
+  const say = (ok, message) => { if (!ok) problems.push(message); };
+
+  say(typeof report.revision === 'string' && report.revision.length > 0, 'no code revision recorded');
+  say(typeof report.recordedAt === 'string', 'no timestamp recorded');
+  say(typeof report.conditions?.vsync === 'string', 'no vsync/uncapped mode recorded');
+  say(typeof report.isolation?.order === 'string', 'no measurement order recorded');
+  say(Array.isArray(report.isolation?.series), 'no measurement series recorded');
+  say(typeof report.diagnosticShadowsDisabled === 'boolean', 'no shadow diagnostic switch recorded');
+  say(typeof report.diagnosticLocalLightsDisabled === 'boolean', 'no light diagnostic switch recorded');
+  say(report.diagnosticsAfter !== undefined && report.diagnosticsRestored !== undefined,
+    'diagnostic overrides were not read back after the run');
+  if (Array.isArray(report.isolation?.series) && report.isolation.series.length > 1) {
+    say(report.isolation.canary !== null && report.isolation.canary !== undefined,
+      'a multi-scenario run recorded no canary');
   }
-  const serialised = JSON.stringify(report, null, 2);
+
+  const got = report.results.map((result) => result.name);
+  for (const name of expected) say(got.includes(name), `missing scenario ${name}`);
+  for (const result of report.results) {
+    const where = result.name;
+    say(Array.isArray(result.timeToInteractiveSamples) && result.timeToInteractiveSamples.length === TTI_SAMPLES,
+      `${where}: ${result.timeToInteractiveSamples?.length} of ${TTI_SAMPLES} TTI attempts`);
+    say(result.timing && Number.isFinite(result.timing.averageFps), `${where}: no frame timing`);
+    say(Number.isFinite(result.timing?.frames) && result.timing.frames > 0, `${where}: no frames counted`);
+    say(typeof result.world === 'string' && result.world.length > 0, `${where}: no world recorded`);
+    say(result.measuredState?.quality === QUALITY,
+      `${where}: quality ${result.measuredState?.quality} is not ${QUALITY}`);
+    say(Number.isFinite(result.renderer?.pixelRatio) && result.renderer.pixelRatio > 0, `${where}: no pixel ratio`);
+    say(result.renderer?.canvasWidth > 0 && result.renderer?.canvasHeight > 0, `${where}: no canvas size`);
+    say(Number.isFinite(result.positionInSeries), `${where}: no position in the series`);
+    say(result.machine?.after !== undefined, `${where}: no machine state`);
+    // Raw attempts, not just the summary: a median with no samples behind it is a claim.
+    say(Array.isArray(result.animationGpu?.samples), `${where}: no raw GPU samples array`);
+  }
+  return problems;
+}
+
+/**
+ * Write the run.
+ *
+ * A run that passed every check replaces the canonical file, atomically. A run that
+ * failed anything is still written -- failures are evidence -- but to its own
+ * `.failed.json`, and an uncapped run to `.uncapped.json`, so the last good result
+ * stays the last good result. This used to run before the canary and the gates, so a
+ * run could overwrite a good file and only then discover it had failed.
+ */
+function writeRun(report, verdict, problems) {
+  const out = process.env.BENCH_OUT;
+  const serialised = JSON.stringify({ ...report, verdict, problems }, null, 2);
   JSON.parse(serialised);
-  writeFileSync(`${out}.partial`, serialised);
-  renameSync(`${out}.partial`, out);
+  if (!out) return null;
+  const suffix = verdict === 'passed' ? '' : verdict === 'inconclusive' ? '.uncapped.json' : '.failed.json';
+  const target = suffix ? out.replace(/\.json$/, '') + suffix : out;
+  writeFileSync(`${target}.partial`, serialised);
+  renameSync(`${target}.partial`, target);
+  return target;
 }
 
 /**
  * Order of the series, and a drift control around it.
  *
  * A run measures a dozen scenarios back to back in one browser process, so anything
- * that changes over a run -- clocks, caches, the GPU warming up -- lands on whichever
- * scenario happens to sit late in the list, and a fixed order makes "this scenario is
- * expensive" indistinguishable from "this scenario ran last". Two things fix that:
- * `BENCH_ORDER` can reverse or shuffle the series, and the same cheap scenario is
- * measured first and last as a canary. A run whose canary moved is not evidence, so
- * it cannot grant a PASS -- the assertions below reject it.
+ * that changes over a run -- clocks, caches, the GPU warming up, another application
+ * arriving -- lands on whichever scenario happens to sit late in the list, and a fixed
+ * order makes "this scenario is expensive" indistinguishable from "this scenario ran
+ * last". Two things address that: `BENCH_ORDER` can reverse or shuffle the series, and
+ * the same cheap scenario is measured first and last in every world as a canary. A run
+ * whose canary moved is not evidence, so it cannot grant a PASS.
  */
 const UNCAPPED = process.env.BENCH_UNCAPPED === '1';
 const ORDER = process.env.BENCH_ORDER ?? 'given';
 assert.ok(['given', 'reverse', 'shuffle'].includes(ORDER), `BENCH_ORDER must be given|reverse|shuffle, received ${ORDER}`);
 const CANARY_NAME = 'golden-clear-overview';
 /** Drift the canary is allowed between the start and the end of one run. */
-const CANARY_TOLERANCE = { fps: 2, p95Ms: 2 };
+const CANARY_TOLERANCE = { fps: 2, p95Ms: 2, frameMs: 0.5 };
 
 function orderSeries(list) {
   if (ORDER === 'reverse') return [...list].reverse();
@@ -533,6 +638,7 @@ function orderSeries(list) {
 }
 
 const canarySource = allScenarios.find((scenario) => scenario.name === CANARY_NAME);
+
 const scenarios = orderSeries(nonRainbowScenarios);
 if (rainbowScenarios.length === 2) {
   for (let repetition = 0; repetition < RAINBOW_REPETITIONS; repetition++) {
@@ -563,9 +669,15 @@ if (WORLDS.length > 1) {
 
 // The canary brackets the whole series, including the rainbow repetitions.
 if (canarySource && scenarios.length > 1) {
-  const canaryWorld = WORLDS[0];
-  scenarios.unshift({ ...canarySource, world: canaryWorld, name: 'canary-start', canary: 'start' });
-  scenarios.push({ ...canarySource, world: canaryWorld, name: 'canary-end', canary: 'end' });
+  // One canary pair per world: a run that compares two worlds has to bound the drift
+  // of both, not of whichever happened to be listed first.
+  const suffix = (world) => (WORLDS.length > 1 ? `@${world}` : '');
+  for (const world of [...WORLDS].reverse()) {
+    scenarios.unshift({ ...canarySource, world, name: `canary-start${suffix(world)}`, canary: 'start' });
+  }
+  for (const world of WORLDS) {
+    scenarios.push({ ...canarySource, world, name: `canary-end${suffix(world)}`, canary: 'end' });
+  }
 }
 assert.ok(['low', 'medium', 'high'].includes(QUALITY), `unknown benchmark quality: ${QUALITY}`);
 
@@ -814,27 +926,60 @@ try {
    * cheap reference scenario moved cannot separate a scenario's own cost from the
    * machine's drift, so it is not allowed to grant a PASS.
    */
+  /**
+   * What the canary did between the start and the end of the series, per world.
+   *
+   * Two things this had wrong. It only bracketed the first world, so a run comparing
+   * two worlds bounded the drift of one of them; and it compared FPS and p95, which
+   * under vsync are quantised and under `BENCH_UNCAPPED` mean nothing at all. Now
+   * every world gets its own canary pair, the compared quantity is the one the mode
+   * can actually resolve -- FPS and p95 for a vsync gate run, the continuous frame
+   * time for an uncapped headroom run -- and any world drifting fails the run.
+   */
   const canaryDrift = (() => {
-    const first = results.find((result) => result.canary === 'start');
-    const last = results.find((result) => result.canary === 'end');
-    if (!first || !last) return null;
-    const fps = round(last.timing.averageFps - first.timing.averageFps);
-    const p95Ms = round(last.timing.p95FrameMs - first.timing.p95FrameMs);
+    const pairs = [];
+    for (const world of WORLDS) {
+      const first = results.find((result) => result.canary === 'start' && result.world === world);
+      const last = results.find((result) => result.canary === 'end' && result.world === world);
+      if (!first || !last) continue;
+      const frameMs = round(last.timing.averageFrameMs - first.timing.averageFrameMs, 2);
+      const fps = round(last.timing.averageFps - first.timing.averageFps);
+      const p95Ms = round(last.timing.p95FrameMs - first.timing.p95FrameMs);
+      const drifted = UNCAPPED
+        ? Math.abs(frameMs) > Math.max(CANARY_TOLERANCE.frameMs, first.timing.averageFrameMs * 0.1)
+        : Math.abs(fps) > CANARY_TOLERANCE.fps || Math.abs(p95Ms) > CANARY_TOLERANCE.p95Ms;
+      pairs.push({
+        world,
+        startFps: round(first.timing.averageFps),
+        endFps: round(last.timing.averageFps),
+        startP95Ms: round(first.timing.p95FrameMs),
+        endP95Ms: round(last.timing.p95FrameMs),
+        startFrameMs: round(first.timing.averageFrameMs, 2),
+        endFrameMs: round(last.timing.averageFrameMs, 2),
+        fps,
+        p95Ms,
+        frameMs,
+        drifted,
+      });
+    }
+    if (!pairs.length) return null;
     return {
       scenario: CANARY_NAME,
-      startFps: round(first.timing.averageFps),
-      endFps: round(last.timing.averageFps),
-      startP95Ms: round(first.timing.p95FrameMs),
-      endP95Ms: round(last.timing.p95FrameMs),
-      fps,
-      p95Ms,
+      kind: UNCAPPED ? 'headroom (continuous frame time, vsync off)' : 'gate (FPS and p95 under vsync)',
       tolerance: CANARY_TOLERANCE,
-      drifted: Math.abs(fps) > CANARY_TOLERANCE.fps || Math.abs(p95Ms) > CANARY_TOLERANCE.p95Ms,
+      pairs,
+      drifted: pairs.some((pair) => pair.drifted),
+      report: pairs.map((pair) => (
+        UNCAPPED
+          ? `${pair.world} ${pair.startFrameMs.toFixed(2)} -> ${pair.endFrameMs.toFixed(2)} ms/frame`
+          : `${pair.world} ${pair.startFps.toFixed(1)} -> ${pair.endFps.toFixed(1)} FPS, p95 ${pair.startP95Ms.toFixed(1)} -> ${pair.endP95Ms.toFixed(1)} ms`
+      )).join('; '),
     };
   })();
 
   const report = {
-    revision: process.env.BENCH_REVISION ?? null,
+    revision: CODE_REVISION.revision,
+    workingTreeDirty: CODE_REVISION.dirty,
     recordedAt: new Date().toISOString(),
     conditions: {
       viewport: `${PAGE_SETUP.viewport.width}x${PAGE_SETUP.viewport.height}`,
@@ -877,9 +1022,35 @@ try {
     diagnosticsRestored,
     results,
   };
-  writeReport(report, scenarios.map((scenario) => scenario.name));
   console.log(JSON.stringify(report, null, 2));
-  assert.deepEqual(errors, [], `browser errors:\n${errors.join('\n')}`);
+
+  /**
+   * Checks are collected, not thrown, so the run is written down before the process
+   * exits. The order is fixed by what each check is worth: the result has to be
+   * complete before its diagnostics mean anything, the diagnostics have to have held
+   * before the canary means anything, and the canary has to be stable before a gate
+   * verdict means anything at all.
+   */
+  const problems = [];
+  const check = (ok, message) => { if (!ok) problems.push(message); return ok; };
+  const checkSame = (actual, expected, message) => check(
+    JSON.stringify(actual) === JSON.stringify(expected),
+    `${message}: got ${JSON.stringify(actual)}, expected ${JSON.stringify(expected)}`
+  );
+
+  // 1-2. the result itself: complete, with its provenance.
+  problems.push(...completenessProblems(report, scenarios.map((scenario) => scenario.name)));
+  check(errors.length === 0, `browser errors: ${errors.join(' | ')}`);
+
+  // 3. diagnostics: asked for, held for the whole run, and put back afterwards.
+  if (DISABLE_LOCAL_LIGHTS) {
+    check(diagnosticsAfter.visibleLocalLights === 0, 'local lights came back during the run');
+    check(diagnosticsRestored.visibleLocalLights > 0, 'local lights were not restored after the run');
+    for (const result of results) {
+      check(result.diagnosticsDuring?.visibleLocalLights === 0, `${result.name}: local lights on mid-scenario`);
+    }
+  }
+  if (DISABLE_SHADOWS) check(diagnosticsAfter.shadowsEnabled === false, 'shadows came back during the run');
   const contended = results.filter((result) => result.machine.after.foreignCpuPercent > 120);
   if (contended.length) {
     console.log(
@@ -895,42 +1066,42 @@ try {
       + `load ${result.machine.after.loadAverage[0]}  foreign ${result.machine.after.foreignCpuPercent}%`
     );
   }
+  // 4. the canary, which bounds what this run may claim at all.
   if (canaryDrift) {
-    console.log(
-      `canary ${CANARY_NAME}: ${canaryDrift.startFps.toFixed(1)} -> ${canaryDrift.endFps.toFixed(1)} FPS, `
-      + `p95 ${canaryDrift.startP95Ms.toFixed(1)} -> ${canaryDrift.endP95Ms.toFixed(1)} ms `
-      + `(${canaryDrift.drifted ? 'DRIFTED, this run is not evidence' : 'stable'}), order ${ORDER}`
-    );
-    assert.equal(
-      canaryDrift.drifted,
-      false,
-      `the canary moved ${canaryDrift.fps.toFixed(1)} FPS and ${canaryDrift.p95Ms.toFixed(1)} ms p95 between the `
-      + `start and the end of this run, so nothing measured in it can be attributed to a scenario`
+    console.log(`canary ${CANARY_NAME}: ${canaryDrift.report} `
+      + `(${canaryDrift.drifted ? 'DRIFTED, this run is not evidence' : 'stable'}), order ${ORDER}`);
+    check(
+      canaryDrift.drifted === false,
+      `the canary drifted between the start and the end of this run (${canaryDrift.report}), `
+      + 'so nothing measured in it can be attributed to a scenario'
     );
   }
-  assert.ok(
+
+  // 5. gates, and only the ones this mode can judge. An uncapped run measures cost,
+  // not compliance: its frames are not vsync-paced, so FPS, p95, p99 and hitches say
+  // nothing about the product's budget and are not evaluated. Such a run is never
+  // canonical either -- see the verdict at the end.
+  check(
     readiness.timeToInteractiveMs <= MAX_TTI_MS,
     `TTI ${readiness.timeToInteractiveMs.toFixed(1)} ms exceeds ${MAX_TTI_MS} ms`
-  );
-  assert.ok(
-    !(UNCAPPED && REQUIRED_FPS >= 58),
-    'an uncapped run cannot be judged against the 58 FPS gate: it measures cost, not compliance'
   );
   for (const result of results) {
     // The readiness above is measured on a load without ?world=, so on its own it
     // cannot fail a world that is slow to attach. Every scenario load is a real
     // first paint of that world and is held to the same budget.
-    assert.ok(
+    check(
       result.timeToInteractiveMs !== null && result.timeToInteractiveMs <= MAX_TTI_MS,
       `${result.name}: median TTI ${result.timeToInteractiveMs} ms of ${JSON.stringify(result.timeToInteractiveSamples)} exceeds ${MAX_TTI_MS} ms in world ${result.world}`
     );
-    assert.ok(
-      result.timing.averageFps >= REQUIRED_FPS,
-      `${result.name}: ${result.timing.averageFps.toFixed(1)} FPS, required ${REQUIRED_FPS}`
-    );
-    assert.ok(result.timing.p95FrameMs <= 20.5, `${result.name}: p95 ${result.timing.p95FrameMs.toFixed(1)} ms`);
-    assert.ok(result.timing.p99FrameMs <= 20.5, `${result.name}: p99 ${result.timing.p99FrameMs.toFixed(1)} ms`);
-    assert.equal(result.timing.hitchCount, 0, `${result.name}: animation hitch detected`);
+    if (!UNCAPPED) {
+      check(
+        result.timing.averageFps >= REQUIRED_FPS,
+        `${result.name}: ${result.timing.averageFps.toFixed(1)} FPS, required ${REQUIRED_FPS}`
+      );
+      check(result.timing.p95FrameMs <= 20.5, `${result.name}: p95 ${result.timing.p95FrameMs.toFixed(1)} ms`);
+      check(result.timing.p99FrameMs <= 20.5, `${result.name}: p99 ${result.timing.p99FrameMs.toFixed(1)} ms`);
+      check(result.timing.hitchCount === 0, `${result.name}: animation hitch detected`);
+    }
   }
   const rainbowOffResults = results.filter(
     (result) => result.name === 'post-rain-clear-lake'
@@ -939,9 +1110,8 @@ try {
     (result) => result.name === 'post-rain-rainbow-lake'
   );
   if (rainbowOffResults.length || rainbowOnResults.length) {
-    assert.equal(
-      rainbowOffResults.length,
-      rainbowOnResults.length,
+    check(
+      rainbowOffResults.length === rainbowOnResults.length,
       'rainbow benchmark requires an equal number of OFF and ON samples'
     );
     const pairDeltas = [];
@@ -952,7 +1122,7 @@ try {
       const rainbowOn = rainbowOnResults.find(
         (result) => (result.repetition ?? 0) === repetition
       );
-      assert.ok(rainbowOff && rainbowOn, `missing rainbow pair repetition ${repetition}`);
+      if (!check(Boolean(rainbowOff && rainbowOn), `missing rainbow pair repetition ${repetition}`)) continue;
       const comparableState = (result) => ({
         t01: result.measuredState.t01,
         theme: result.measuredState.theme,
@@ -971,38 +1141,37 @@ try {
         canvasWidth: result.renderer.canvasWidth,
         canvasHeight: result.renderer.canvasHeight,
       });
-      assert.deepEqual(
+      checkSame(
         comparableState(rainbowOn),
         comparableState(rainbowOff),
         `rainbow OFF/ON repetition ${repetition} differs outside atmospheric state`
       );
-      assert.equal(
-        rainbowOn.renderer.calls - rainbowOff.renderer.calls,
-        1,
+      check(
+        rainbowOn.renderer.calls - rainbowOff.renderer.calls === 1,
         `rainbow repetition ${repetition} must cost exactly one draw call`
       );
-      assert.equal(
-        rainbowOn.renderer.triangles - rainbowOff.renderer.triangles,
-        1,
+      check(
+        rainbowOn.renderer.triangles - rainbowOff.renderer.triangles === 1,
         `rainbow repetition ${repetition} must cost exactly one fullscreen triangle`
       );
       for (const field of ['geometries', 'textures', 'programs']) {
-        assert.equal(
-          rainbowOn.renderer[field] - rainbowOff.renderer[field],
-          0,
+        check(
+          rainbowOn.renderer[field] - rainbowOff.renderer[field] === 0,
           `rainbow repetition ${repetition} changed renderer ${field}`
         );
       }
-      assert.equal(rainbowOff.captureFrameGpu.available, true, 'OFF GPU timer query is required');
-      assert.equal(rainbowOn.captureFrameGpu.available, true, 'ON GPU timer query is required');
-      assert.ok(
-        rainbowOn.captureFrameGpu.medianRenderMsRaw < 16.7,
-        `rainbow repetition ${repetition} GPU median ${rainbowOn.captureFrameGpu.medianRenderMs} ms lacks 60 Hz headroom`
-      );
-      assert.ok(
-        rainbowOn.captureFrameGpu.p90RenderMsRaw <= 20.5,
-        `rainbow repetition ${repetition} GPU p90 ${rainbowOn.captureFrameGpu.p90RenderMs} ms exceeds frame budget`
-      );
+      check(rainbowOff.captureFrameGpu.available === true, 'OFF GPU timer query is required');
+      check(rainbowOn.captureFrameGpu.available === true, 'ON GPU timer query is required');
+      if (rainbowOn.captureFrameGpu.available) {
+        check(
+          rainbowOn.captureFrameGpu.medianRenderMsRaw < 16.7,
+          `rainbow repetition ${repetition} GPU median ${rainbowOn.captureFrameGpu.medianRenderMs} ms lacks 60 Hz headroom`
+        );
+        check(
+          rainbowOn.captureFrameGpu.p90RenderMsRaw <= 20.5,
+          `rainbow repetition ${repetition} GPU p90 ${rainbowOn.captureFrameGpu.p90RenderMs} ms exceeds frame budget`
+        );
+      }
       pairDeltas.push({
         repetition,
         order: repetition % 2 === 0 ? 'AB' : 'BA',
@@ -1016,9 +1185,9 @@ try {
     const medianP95Delta = median(pairDeltas.map((pair) => pair.p95FrameMs));
     const medianCpuDelta = median(pairDeltas.map((pair) => pair.cpuBusyPercent));
     const medianGpuDelta = median(pairDeltas.map((pair) => pair.gpuMedianMs));
-    assert.ok(medianP95Delta <= 2, `rainbow median p95 regression ${medianP95Delta.toFixed(1)} ms`);
-    assert.ok(medianCpuDelta <= 5, `rainbow median CPU regression ${medianCpuDelta.toFixed(1)} pp`);
-    assert.ok(medianGpuDelta <= 2, `rainbow median GPU regression ${medianGpuDelta.toFixed(1)} ms`);
+    check(medianP95Delta <= 2, `rainbow median p95 regression ${medianP95Delta.toFixed(1)} ms`);
+    check(medianCpuDelta <= 5, `rainbow median CPU regression ${medianCpuDelta.toFixed(1)} pp`);
+    check(medianGpuDelta <= 2, `rainbow median GPU regression ${medianGpuDelta.toFixed(1)} ms`);
     console.log(JSON.stringify({
       rainbowPairSummary: {
         repetitions: pairDeltas.length,
@@ -1035,6 +1204,19 @@ try {
       },
     }, null, 2));
   }
+
+  /**
+   * 6. Only now is anything written. An uncapped run is never canonical: it cannot
+   * judge the gates it would have to satisfy, so it lands as `inconclusive` beside the
+   * last good file instead of on top of it.
+   */
+  const verdict = problems.length > 0 ? 'failed' : UNCAPPED ? 'inconclusive' : 'passed';
+  const written = writeRun(report, verdict, problems);
+  console.log(
+    `verdict ${verdict}${written ? ` written to ${written}` : ' (BENCH_OUT unset, nothing written)'}`
+    + `${problems.length ? `\n  - ${problems.join('\n  - ')}` : ''}`
+  );
+  assert.deepEqual(problems, [], `run rejected:\n  - ${problems.join('\n  - ')}`);
 } catch (error) {
   console.error(previewLog);
   throw error;
