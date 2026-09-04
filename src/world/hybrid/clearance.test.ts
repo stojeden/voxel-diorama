@@ -354,7 +354,10 @@ describe('the stop is one street system', () => {
     }
     // And the route out of the shelter is not blocked by someone standing in it: the
     // first two waypoints are the pedestrian part, and a body must not straddle them.
-    const path = busStopWalkingPath(stop, waitingFigures[0].position, new THREE.Vector3(centre.x + 3.05, GROUND_SURFACE_Y, centre.z - stop.benchSign * 1.75));
+    // The first passenger's real route: this line held the last hand-made door in the
+    // file, 3.05 m off the shelter centre, so it checked a path the product never walks.
+    const [firstPlacement] = busStopWaitingPlacements(stop);
+    const path = busStopWalkingPath(stop, firstPlacement.waitPos, firstPlacement.doorPos);
     for (const figure of waitingFigures.slice(1)) {
       for (const point of path.slice(1, 3)) {
         const inside = point.x > figure.box.min.x && point.x < figure.box.max.x

@@ -107,6 +107,59 @@ function headState() {
   };
 }
 
+/**
+ * Every file the build produced, in a deterministic order, each with its size and digest,
+ * plus one hash over that whole list.
+ *
+ * Hashing only `index-*.js` left most of the build unsigned: the hybrid fragment, the
+ * diagnostic code and the rest arrive in their own lazy chunks, so a stale or swapped
+ * chunk would have passed unnoticed -- and the fragment is the thing being measured.
+ */
+function distManifest() {
+  const files = [];
+  const walk = (dir, prefix) => {
+    const entries = readdirSync(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      const path = join(dir, entry.name);
+      const relative = prefix ? `${prefix}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) walk(path, relative);
+      else {
+        files.push({
+          path: relative,
+          bytes: statSync(path).size,
+          sha256: createHash('sha256').update(readFileSync(path)).digest('hex'),
+        });
+      }
+    }
+  };
+  walk('dist', '');
+  files.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+  return {
+    fileCount: files.length,
+    totalBytes: files.reduce((sum, file) => sum + file.bytes, 0),
+    aggregateSha256: createHash('sha256')
+      .update(files.map((file) => `${file.path} ${file.bytes} ${file.sha256}`).join('\n'))
+      .digest('hex'),
+    files,
+  };
+}
+
+/** What changed between two dist manifests, in terms a failure message can use. */
+function distDifferences(expected, actual) {
+  const asMap = (list) => new Map(list.map((file) => [file.path, file]));
+  const before = asMap(expected.files);
+  const after = asMap(actual.files);
+  const problems = [];
+  for (const [path, file] of before) {
+    const now = after.get(path);
+    if (!now) problems.push(`missing: ${path}`);
+    else if (now.sha256 !== file.sha256) problems.push(`changed: ${path} (${file.sha256.slice(0, 12)} -> ${now.sha256.slice(0, 12)})`);
+    else if (now.bytes !== file.bytes) problems.push(`resized: ${path} (${file.bytes} -> ${now.bytes} B)`);
+  }
+  for (const path of after.keys()) if (!before.has(path)) problems.push(`unexpected: ${path}`);
+  return problems;
+}
+
 function entryChunk() {
   const assets = 'dist/assets';
   const names = readdirSync(assets).filter((name) => /^index-.*\.js$/.test(name));
@@ -132,10 +185,39 @@ export function prepareBuild() {
       );
     }
     execFileSync('npm', ['run', 'build'], { stdio: 'ignore' });
+
+    /**
+     * The state is read again *after* the build, not only before it.
+     *
+     * A build takes tens of seconds, and anything that moves HEAD or writes into the
+     * tree during it would leave a manifest describing a commit that never produced this
+     * bundle. If the commit, the source tree or the cleanliness changed, no manifest is
+     * written at all.
+     */
+    const afterBuild = headState();
+    assert.equal(
+      afterBuild.revisionFull,
+      head.revisionFull,
+      `HEAD moved during the build: ${head.revisionFull} -> ${afterBuild.revisionFull}. No manifest written.`
+    );
+    assert.equal(
+      afterBuild.sourceTreeSha,
+      head.sourceTreeSha,
+      `the source tree changed during the build: ${head.sourceTreeSha} -> ${afterBuild.sourceTreeSha}. No manifest written.`
+    );
+    if (!ALLOW_DIRTY) {
+      assert.deepEqual(
+        afterBuild.dirtyPaths,
+        [],
+        `the tree went dirty during the build:\n  ${afterBuild.dirtyPaths.join('\n  ')}\nNo manifest written.`
+      );
+    }
+
     const manifest = {
       revision: head.revision,
       revisionFull: head.revisionFull,
       sourceTreeSha: head.sourceTreeSha,
+      dist: distManifest(),
       ...entryChunk(),
       builtAt: new Date().toISOString(),
       builtBy: 'scripts/buildProvenance.mjs prepareBuild',
@@ -195,6 +277,24 @@ export function verifyBuild() {
       `the entry chunk in dist hashes to ${built.entrySha256}, the manifest says ${manifest.entrySha256}`
     );
     assert.equal(built.entryBytes, manifest.entryBytes, 'entry chunk size differs from the manifest');
+
+    // The whole build, not just its entry: a missing file, an extra one or a single
+    // changed byte anywhere in dist stops the measurement.
+    assert.ok(manifest.dist?.files, 'the manifest predates whole-build signing; rebuild it');
+    const dist = distManifest();
+    const differences = distDifferences(manifest.dist, dist);
+    assert.deepEqual(
+      differences,
+      [],
+      `dist does not match the signed build (${differences.length} difference(s)):\n  `
+      + differences.slice(0, 12).join('\n  ')
+    );
+    assert.equal(
+      dist.aggregateSha256,
+      manifest.dist.aggregateSha256,
+      `the build hashes to ${dist.aggregateSha256}, the manifest says ${manifest.dist.aggregateSha256}`
+    );
+    assert.equal(dist.fileCount, manifest.dist.fileCount, 'dist file count differs from the manifest');
     return {
       ...manifest,
       provisional: Boolean(manifest.provisional) || head.dirtyPaths.length > 0,

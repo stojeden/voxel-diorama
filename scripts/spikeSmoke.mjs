@@ -1402,8 +1402,20 @@ try {
   console.log(`\nbundles: entry ${bundles.entry} B, main ${bundles.main} B, hybrid-spike ${bundles.spike} B`);
   if (results.length > 0) console.log(`frames + ${SUMMARY} written to ${OUT_DIR}/`);
 } finally {
-  // The shared render lock, taken by verifyBuild before anything was measured.
-  releaseLock();
-  await browser?.close();
-  console.log(`preview: ${await stopPreview(preview)}`);
+  /**
+   * The lock is released last, and only once this run's renderer is really gone.
+   *
+   * It used to be released first, which meant the next harness could take it and start
+   * a browser while this one's Chrome and Vite were still alive -- the lock guaranteed
+   * that no two *measurements* overlapped, not that no two renderers did, which is the
+   * thing that actually corrupts a frame time. `stopPreview` has a bounded timeout and
+   * escalates to SIGKILL, so waiting for it cannot wedge the batch; the outer `finally`
+   * releases even if the shutdown throws.
+   */
+  try {
+    await browser?.close();
+    console.log(`preview: ${await stopPreview(preview)}`);
+  } finally {
+    releaseLock();
+  }
 }
