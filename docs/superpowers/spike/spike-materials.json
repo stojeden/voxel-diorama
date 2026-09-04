@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-03T15:19:12.755Z",
+  "generatedAt": "2026-09-04T10:04:03.440Z",
   "worlds": {
     "hybrid-direct": {
       "matrix": [
@@ -21,8 +21,8 @@
           "t01": 0.5,
           "pixels": {
             "lit": 174,
-            "bright": 246673,
-            "white": 246702,
+            "bright": 246677,
+            "white": 246709,
             "dark": 0,
             "total": 270400
           }
@@ -44,10 +44,10 @@
           "phase": "night",
           "t01": 0.94,
           "pixels": {
-            "lit": 1015,
-            "bright": 361,
-            "white": 59,
-            "dark": 248903,
+            "lit": 1014,
+            "bright": 364,
+            "white": 56,
+            "dark": 249006,
             "total": 270400
           }
         },
@@ -68,10 +68,10 @@
           "phase": "day",
           "t01": 0.5,
           "pixels": {
-            "lit": 1367,
-            "bright": 138401,
-            "white": 138857,
-            "dark": 11,
+            "lit": 1369,
+            "bright": 138395,
+            "white": 138855,
+            "dark": 12,
             "total": 270400
           }
         },
@@ -92,10 +92,10 @@
           "phase": "night",
           "t01": 0.94,
           "pixels": {
-            "lit": 5723,
-            "bright": 5789,
-            "white": 3292,
-            "dark": 135495,
+            "lit": 5719,
+            "bright": 5807,
+            "white": 3320,
+            "dark": 135446,
             "total": 270400
           }
         },
@@ -117,9 +117,9 @@
           "t01": 0.5,
           "pixels": {
             "lit": 0,
-            "bright": 23065,
-            "white": 31024,
-            "dark": 9275,
+            "bright": 23033,
+            "white": 31022,
+            "dark": 9274,
             "total": 270400
           }
         },
@@ -140,10 +140,10 @@
           "phase": "night",
           "t01": 0.94,
           "pixels": {
-            "lit": 39763,
-            "bright": 39868,
-            "white": 21102,
-            "dark": 1784,
+            "lit": 39754,
+            "bright": 39873,
+            "white": 21225,
+            "dark": 1765,
             "total": 270400
           }
         },
@@ -164,10 +164,10 @@
           "phase": "day",
           "t01": 0.5,
           "pixels": {
-            "lit": 21104,
-            "bright": 9707,
-            "white": 28426,
-            "dark": 3537,
+            "lit": 21105,
+            "bright": 9710,
+            "white": 28430,
+            "dark": 3601,
             "total": 270400
           }
         },
@@ -188,10 +188,10 @@
           "phase": "night",
           "t01": 0.94,
           "pixels": {
-            "lit": 49126,
-            "bright": 29826,
+            "lit": 49182,
+            "bright": 29848,
             "white": 24965,
-            "dark": 9365,
+            "dark": 9374,
             "total": 270400
           }
         },
@@ -212,9 +212,9 @@
           "phase": "day",
           "t01": 0.5,
           "pixels": {
-            "lit": 167,
-            "bright": 246617,
-            "white": 246673,
+            "lit": 168,
+            "bright": 246615,
+            "white": 246675,
             "dark": 0,
             "total": 270400
           }
@@ -236,10 +236,10 @@
           "phase": "night",
           "t01": 0.94,
           "pixels": {
-            "lit": 992,
-            "bright": 224,
+            "lit": 989,
+            "bright": 218,
             "white": 58,
-            "dark": 248938,
+            "dark": 248975,
             "total": 270400
           }
         },
@@ -260,9 +260,9 @@
           "phase": "day",
           "t01": 0.5,
           "pixels": {
-            "lit": 1126,
-            "bright": 138286,
-            "white": 138806,
+            "lit": 1124,
+            "bright": 138356,
+            "white": 138864,
             "dark": 5,
             "total": 270400
           }
@@ -284,10 +284,10 @@
           "phase": "night",
           "t01": 0.94,
           "pixels": {
-            "lit": 5607,
-            "bright": 5620,
-            "white": 3137,
-            "dark": 135454,
+            "lit": 5624,
+            "bright": 5636,
+            "white": 3200,
+            "dark": 135347,
             "total": 270400
           }
         },
@@ -309,9 +309,9 @@
           "t01": 0.5,
           "pixels": {
             "lit": 0,
-            "bright": 7978,
+            "bright": 7972,
             "white": 14177,
-            "dark": 11007,
+            "dark": 11009,
             "total": 270400
           }
         },
@@ -332,10 +332,10 @@
           "phase": "night",
           "t01": 0.94,
           "pixels": {
-            "lit": 41854,
-            "bright": 42434,
-            "white": 5906,
-            "dark": 12440,
+            "lit": 41850,
+            "bright": 42428,
+            "white": 5760,
+            "dark": 12450,
             "total": 270400
           }
         },
@@ -356,10 +356,10 @@
           "phase": "day",
           "t01": 0.5,
           "pixels": {
-            "lit": 25684,
-            "bright": 2496,
-            "white": 17168,
-            "dark": 3126,
+            "lit": 25683,
+            "bright": 2503,
+            "white": 17540,
+            "dark": 3125,
             "total": 270400
           }
         },
@@ -380,10 +380,10 @@
           "phase": "night",
           "t01": 0.94,
           "pixels": {
-            "lit": 55700,
-            "bright": 31819,
-            "white": 13100,
-            "dark": 12128,
+            "lit": 55586,
+            "bright": 31746,
+            "white": 13085,
+            "dark": 12204,
             "total": 270400
           }
         }
@@ -394,10 +394,10 @@
           "distance": "far",
           "lod": 0,
           "windows": {
-            "brighter": 814,
-            "warmer": 820,
+            "brighter": 813,
+            "warmer": 818,
             "darker": 269454,
-            "changed": 270346,
+            "changed": 270345,
             "total": 270400
           }
         },
@@ -406,10 +406,10 @@
           "distance": "band",
           "lod": 1,
           "windows": {
-            "brighter": 5315,
-            "warmer": 5087,
-            "darker": 168669,
-            "changed": 267258,
+            "brighter": 5310,
+            "warmer": 5097,
+            "darker": 168614,
+            "changed": 267272,
             "total": 270400
           }
         },
@@ -418,10 +418,10 @@
           "distance": "mid",
           "lod": 2,
           "windows": {
-            "brighter": 48602,
-            "warmer": 48938,
+            "brighter": 48587,
+            "warmer": 48925,
             "darker": 1718,
-            "changed": 249741,
+            "changed": 247895,
             "total": 270400
           }
         },
@@ -430,10 +430,10 @@
           "distance": "near",
           "lod": 2,
           "windows": {
-            "brighter": 32213,
-            "warmer": 32287,
+            "brighter": 32215,
+            "warmer": 32281,
             "darker": 4,
-            "changed": 255605,
+            "changed": 254868,
             "total": 270400
           }
         },
@@ -442,10 +442,10 @@
           "distance": "far",
           "lod": 0,
           "windows": {
-            "brighter": 770,
+            "brighter": 767,
             "warmer": 789,
             "darker": 269466,
-            "changed": 270337,
+            "changed": 270340,
             "total": 270400
           }
         },
@@ -454,10 +454,10 @@
           "distance": "band",
           "lod": 1,
           "windows": {
-            "brighter": 4875,
-            "warmer": 4778,
-            "darker": 173561,
-            "changed": 267098,
+            "brighter": 4975,
+            "warmer": 4839,
+            "darker": 172985,
+            "changed": 266804,
             "total": 270400
           }
         },
@@ -466,10 +466,10 @@
           "distance": "mid",
           "lod": 1,
           "windows": {
-            "brighter": 42242,
-            "warmer": 42142,
-            "darker": 1884,
-            "changed": 253047,
+            "brighter": 42247,
+            "warmer": 42145,
+            "darker": 1895,
+            "changed": 254399,
             "total": 270400
           }
         },
@@ -478,10 +478,10 @@
           "distance": "near",
           "lod": 1,
           "windows": {
-            "brighter": 31255,
-            "warmer": 31260,
-            "darker": 13,
-            "changed": 259203,
+            "brighter": 31256,
+            "warmer": 31256,
+            "darker": 37,
+            "changed": 261287,
             "total": 270400
           }
         }
@@ -493,13 +493,13 @@
         },
         "distance": 110,
         "mask": {
-          "footprint": 46923,
-          "fragmentLit": 168,
-          "productLit": 951,
-          "both": 20,
+          "footprint": 46734,
+          "fragmentLit": 165,
+          "productLit": 945,
+          "both": 18,
           "pixels": 308000,
-          "fragmentEnergy": 17663,
-          "productEnergy": 102193
+          "fragmentEnergy": 17454,
+          "productEnergy": 101885
         },
         "levels": {
           "building-3": 0,
@@ -547,8 +547,8 @@
             "pixels": {
               "lit": 5113,
               "bright": 59733,
-              "white": 60878,
-              "dark": 218,
+              "white": 60876,
+              "dark": 220,
               "total": 270400
             }
           },
@@ -559,34 +559,34 @@
               {
                 "cohort": 0,
                 "activity": 1,
-                "emissiveIntensity": 0.8034062036951948
+                "emissiveIntensity": 0.8035490908468491
               },
               {
                 "cohort": 1,
                 "activity": 1,
-                "emissiveIntensity": 0.8034062036951948
+                "emissiveIntensity": 0.8035490908468491
               },
               {
                 "cohort": 2,
                 "activity": 1,
-                "emissiveIntensity": 0.8034062036951948
+                "emissiveIntensity": 0.8035490908468491
               },
               {
                 "cohort": 3,
                 "activity": 1,
-                "emissiveIntensity": 0.8034062036951948
+                "emissiveIntensity": 0.8035490908468491
               },
               {
                 "cohort": 4,
                 "activity": 1,
-                "emissiveIntensity": 0.8034062036951948
+                "emissiveIntensity": 0.8035490908468491
               }
             ],
             "pixels": {
-              "lit": 5789,
-              "bright": 8289,
-              "white": 5686,
-              "dark": 57572,
+              "lit": 5783,
+              "bright": 8524,
+              "white": 5885,
+              "dark": 57574,
               "total": 270400
             }
           },
@@ -597,34 +597,34 @@
               {
                 "cohort": 0,
                 "activity": 1,
-                "emissiveIntensity": 1.1598054099166892
+                "emissiveIntensity": 1.1645262382809376
               },
               {
                 "cohort": 1,
                 "activity": 1,
-                "emissiveIntensity": 1.1598054099166892
+                "emissiveIntensity": 1.1645262382809376
               },
               {
                 "cohort": 2,
                 "activity": 1,
-                "emissiveIntensity": 1.1598054099166892
+                "emissiveIntensity": 1.1645262382809376
               },
               {
                 "cohort": 3,
                 "activity": 1,
-                "emissiveIntensity": 1.1598054099166892
+                "emissiveIntensity": 1.1645262382809376
               },
               {
                 "cohort": 4,
                 "activity": 1,
-                "emissiveIntensity": 1.1598054099166892
+                "emissiveIntensity": 1.1645262382809376
               }
             ],
             "pixels": {
-              "lit": 5478,
-              "bright": 13986,
-              "white": 2303,
-              "dark": 58453,
+              "lit": 5405,
+              "bright": 15727,
+              "white": 2269,
+              "dark": 58538,
               "total": 270400
             }
           },
@@ -645,33 +645,33 @@
               {
                 "cohort": 2,
                 "activity": 1,
-                "emissiveIntensity": 1.234482484031541
+                "emissiveIntensity": 1.2387355759142353
               },
               {
                 "cohort": 3,
                 "activity": 1,
-                "emissiveIntensity": 1.234482484031541
+                "emissiveIntensity": 1.2387355759142353
               },
               {
                 "cohort": 4,
                 "activity": 1,
-                "emissiveIntensity": 1.234482484031541
+                "emissiveIntensity": 1.2387355759142353
               }
             ],
             "pixels": {
-              "lit": 3792,
-              "bright": 2469,
-              "white": 2160,
-              "dark": 59334,
+              "lit": 3785,
+              "bright": 2453,
+              "white": 2167,
+              "dark": 59335,
               "total": 270400
             }
           }
         ],
         "lateNight": {
-          "brighter": 674,
-          "warmer": 264,
-          "darker": 5526,
-          "changed": 20159,
+          "brighter": 700,
+          "warmer": 283,
+          "darker": 5904,
+          "changed": 20102,
           "total": 270400
         }
       },
@@ -681,24 +681,24 @@
           "phase": "day",
           "t01": 0.5,
           "dry": {
-            "lit": 12101,
-            "bright": 16697,
-            "white": 25178,
-            "dark": 4796,
+            "lit": 12102,
+            "bright": 16740,
+            "white": 25108,
+            "dark": 4795,
             "total": 180000
           },
           "snowy": {
             "lit": 0,
-            "bright": 61949,
-            "white": 51724,
+            "bright": 61948,
+            "white": 51766,
             "dark": 0,
             "total": 180000
           },
           "wet": {
-            "lit": 173,
+            "lit": 180,
             "bright": 3,
             "white": 31,
-            "dark": 58350,
+            "dark": 58352,
             "total": 180000
           },
           "rain": 1
@@ -711,13 +711,13 @@
             "lit": 0,
             "bright": 0,
             "white": 14,
-            "dark": 57787,
+            "dark": 57705,
             "total": 180000
           },
           "snowy": {
             "lit": 0,
-            "bright": 17973,
-            "white": 16249,
+            "bright": 17992,
+            "white": 16262,
             "dark": 0,
             "total": 180000
           },
@@ -725,7 +725,7 @@
             "lit": 0,
             "bright": 0,
             "white": 4,
-            "dark": 64866,
+            "dark": 62813,
             "total": 180000
           },
           "rain": 1
@@ -735,24 +735,24 @@
           "phase": "day",
           "t01": 0.5,
           "dry": {
-            "lit": 12365,
-            "bright": 17097,
-            "white": 31928,
-            "dark": 4948,
+            "lit": 12103,
+            "bright": 17262,
+            "white": 32322,
+            "dark": 4846,
             "total": 180000
           },
           "snowy": {
             "lit": 0,
-            "bright": 62023,
-            "white": 66413,
+            "bright": 62034,
+            "white": 66459,
             "dark": 0,
             "total": 180000
           },
           "wet": {
-            "lit": 147,
+            "lit": 154,
             "bright": 1,
             "white": 42,
-            "dark": 56953,
+            "dark": 56870,
             "total": 180000
           },
           "rain": 1
@@ -764,14 +764,14 @@
           "dry": {
             "lit": 0,
             "bright": 0,
-            "white": 11,
-            "dark": 89529,
+            "white": 13,
+            "dark": 89424,
             "total": 180000
           },
           "snowy": {
             "lit": 0,
-            "bright": 18672,
-            "white": 16355,
+            "bright": 18662,
+            "white": 16335,
             "dark": 0,
             "total": 180000
           },
@@ -779,7 +779,7 @@
             "lit": 0,
             "bright": 0,
             "white": 1,
-            "dark": 93959,
+            "dark": 93910,
             "total": 180000
           },
           "rain": 1

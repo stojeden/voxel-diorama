@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-04T09:45:42.956Z",
+  "generatedAt": "2026-09-04T11:40:37.031Z",
   "world": "hybrid-direct",
   "found": {
     "x": -57.33277672497681,
@@ -11,13 +11,13 @@
       "name": "postman-side",
       "frame": "docs/superpowers/spike/frames/hybrid-direct-high-postman-side.jpg",
       "aimed": {
-        "x": -33.542327880762635,
+        "x": -33.54292769828883,
         "y": -0.5,
-        "z": -45.69953779267416,
+        "z": -45.69951834385678,
         "camera": [
-          -33.542327880762635,
+          -33.54292769828883,
           1.4,
-          -53.69953779267416
+          -53.69951834385678
         ]
       },
       "legibility": {
@@ -29,15 +29,19 @@
         },
         "wheels": {
           "meshes": 2,
-          "ownPixels": 7996,
-          "medianDelta": 2.3,
-          "readablePercent": 39.6
+          "ownPixels": 8142,
+          "medianDelta": 16.8,
+          "readablePercent": 72.2,
+          "medianOwnLuma": 19.6,
+          "medianBackgroundLuma": 3.4
         },
         "frame": {
           "meshes": 6,
-          "ownPixels": 1604,
-          "medianDelta": 12.2,
-          "readablePercent": 73.2
+          "ownPixels": 1815,
+          "medianDelta": 11.3,
+          "readablePercent": 66.3,
+          "medianOwnLuma": 10,
+          "medianBackgroundLuma": 22.2
         }
       },
       "active": true,
@@ -47,13 +51,13 @@
       "name": "postman-three-quarter",
       "frame": "docs/superpowers/spike/frames/hybrid-direct-high-postman-three-quarter.jpg",
       "aimed": {
-        "x": -31.242067568731517,
+        "x": -31.242666767586606,
         "y": -0.5,
-        "z": -45.773130041752545,
+        "z": -45.773111265893135,
         "camera": [
-          -26.242067568731517,
+          -26.242666767586606,
           1.5,
-          -53.773130041752545
+          -53.773111265893135
         ]
       },
       "legibility": {
@@ -65,15 +69,19 @@
         },
         "wheels": {
           "meshes": 2,
-          "ownPixels": 7294,
-          "medianDelta": 57.2,
-          "readablePercent": 60.4
+          "ownPixels": 5952,
+          "medianDelta": 23.1,
+          "readablePercent": 71.9,
+          "medianOwnLuma": 28.6,
+          "medianBackgroundLuma": 72.1
         },
         "frame": {
           "meshes": 6,
-          "ownPixels": 2597,
-          "medianDelta": 7.9,
-          "readablePercent": 49.9
+          "ownPixels": 3013,
+          "medianDelta": 4.9,
+          "readablePercent": 46.8,
+          "medianOwnLuma": 23.4,
+          "medianBackgroundLuma": 8.9
         }
       },
       "active": true,
@@ -83,13 +91,13 @@
       "name": "postman-in-world",
       "frame": "docs/superpowers/spike/frames/hybrid-direct-high-postman-in-world.jpg",
       "aimed": {
-        "x": -30.042736199535202,
+        "x": -29.041842814631806,
         "y": -0.5,
-        "z": -45.810078191673185,
+        "z": -45.83972258392511,
         "camera": [
-          -26.542736199535202,
+          -25.541842814631806,
           2,
-          -35.810078191673185
+          -35.83972258392511
         ]
       },
       "legibility": {
@@ -101,15 +109,19 @@
         },
         "wheels": {
           "meshes": 2,
-          "ownPixels": 9341,
-          "medianDelta": 45.8,
-          "readablePercent": 70.8
+          "ownPixels": 5878,
+          "medianDelta": 41.6,
+          "readablePercent": 68.6,
+          "medianOwnLuma": 61.5,
+          "medianBackgroundLuma": 0
         },
         "frame": {
           "meshes": 6,
-          "ownPixels": 1273,
-          "medianDelta": 10.4,
-          "readablePercent": 53.3
+          "ownPixels": 1395,
+          "medianDelta": 4.3,
+          "readablePercent": 43.7,
+          "medianOwnLuma": 23,
+          "medianBackgroundLuma": 33
         }
       },
       "active": true,

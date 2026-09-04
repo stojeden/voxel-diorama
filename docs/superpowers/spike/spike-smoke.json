@@ -1,9 +1,9 @@
 {
-  "generatedAt": "2026-09-03T10:22:28.152Z",
+  "generatedAt": "2026-09-04T10:04:03.441Z",
   "bundles": {
-    "entry": 238920,
+    "entry": 239888,
     "main": 33311,
-    "spike": 34271
+    "spike": 34305
   },
   "results": [
     {
@@ -12,22 +12,22 @@
       "checkpoint": "spike-overview",
       "frame": "docs/superpowers/spike/frames/hybrid-direct-high-spike-overview.jpg",
       "calls": 604,
-      "triangles": 578677,
-      "primaryTriangles": 578674,
+      "triangles": 578743,
+      "primaryTriangles": 578740,
       "primaryCalls": 601,
-      "programs": 156,
+      "programs": 136,
       "geometries": 434,
       "textures": 37,
       "hybrid": {
         "strategy": "direct",
-        "generationMs": 27.899999976158142,
+        "generationMs": 28.90000009536743,
         "triangles": [
-          3304,
+          3370,
           10820,
           8640
         ],
-        "vertices": 68292,
-        "bytes": 3278016,
+        "vertices": 68490,
+        "bytes": 3287520,
         "meshes": 33,
         "clusters": 8,
         "lodLevels": {
@@ -69,23 +69,23 @@
       "quality": "high",
       "checkpoint": "spike-street",
       "frame": "docs/superpowers/spike/frames/hybrid-direct-high-spike-street.jpg",
-      "calls": 471,
-      "triangles": 900229,
-      "primaryTriangles": 575732,
+      "calls": 470,
+      "triangles": 900247,
+      "primaryTriangles": 575798,
       "primaryCalls": 283,
-      "programs": 152,
+      "programs": 136,
       "geometries": 433,
       "textures": 37,
       "hybrid": {
         "strategy": "direct",
-        "generationMs": 25.399999976158142,
+        "generationMs": 32.30000019073486,
         "triangles": [
-          3304,
+          3370,
           10820,
           8640
         ],
-        "vertices": 68292,
-        "bytes": 3278016,
+        "vertices": 68490,
+        "bytes": 3287520,
         "meshes": 33,
         "clusters": 8,
         "lodLevels": {
@@ -125,25 +125,47 @@
     {
       "world": "hybrid-direct",
       "quality": "high",
+      "checkpoint": "bus-camera",
+      "cameraMode": {
+        "camera": "bus",
+        "automation": "bus",
+        "chapter": null
+      },
+      "frame": "docs/superpowers/spike/frames/hybrid-direct-high-bus-camera.jpg"
+    },
+    {
+      "world": "hybrid-direct",
+      "quality": "high",
+      "checkpoint": "tour-camera",
+      "cameraMode": {
+        "camera": "free",
+        "automation": "tour",
+        "chapter": "train"
+      },
+      "frame": "docs/superpowers/spike/frames/hybrid-direct-high-tour-camera.jpg"
+    },
+    {
+      "world": "hybrid-direct",
+      "quality": "high",
       "checkpoint": "spike-golden",
       "frame": "docs/superpowers/spike/frames/hybrid-direct-high-spike-golden.jpg",
       "calls": 606,
-      "triangles": 578711,
-      "primaryTriangles": 578708,
+      "triangles": 578777,
+      "primaryTriangles": 578774,
       "primaryCalls": 603,
-      "programs": 216,
+      "programs": 156,
       "geometries": 436,
       "textures": 37,
       "hybrid": {
         "strategy": "direct",
-        "generationMs": 23.399999976158142,
+        "generationMs": 27.600000381469727,
         "triangles": [
-          3304,
+          3370,
           10820,
           8640
         ],
-        "vertices": 68292,
-        "bytes": 3278016,
+        "vertices": 68490,
+        "bytes": 3287520,
         "meshes": 33,
         "clusters": 8,
         "lodLevels": {
@@ -185,23 +207,23 @@
       "quality": "high",
       "checkpoint": "spike-night-street",
       "frame": "docs/superpowers/spike/frames/hybrid-direct-high-spike-night-street.jpg",
-      "calls": 347,
-      "triangles": 642287,
+      "calls": 346,
+      "triangles": 642239,
       "primaryTriangles": 317722,
       "primaryCalls": 154,
-      "programs": 194,
+      "programs": 136,
       "geometries": 435,
       "textures": 35,
       "hybrid": {
         "strategy": "direct",
-        "generationMs": 23.899999976158142,
+        "generationMs": 43.700000047683716,
         "triangles": [
-          3304,
+          3370,
           10820,
           8640
         ],
-        "vertices": 68292,
-        "bytes": 3278016,
+        "vertices": 68490,
+        "bytes": 3287520,
         "meshes": 33,
         "clusters": 8,
         "lodLevels": {
@@ -247,19 +269,19 @@
       "triangles": 312135,
       "primaryTriangles": 312132,
       "primaryCalls": 148,
-      "programs": 75,
+      "programs": 62,
       "geometries": 432,
       "textures": 20,
       "hybrid": {
         "strategy": "direct",
-        "generationMs": 24.799999952316284,
+        "generationMs": 35.19999933242798,
         "triangles": [
-          2760,
+          2826,
           9824,
           8640
         ],
-        "vertices": 63672,
-        "bytes": 3056256,
+        "vertices": 63870,
+        "bytes": 3065760,
         "meshes": 32,
         "clusters": 8,
         "lodLevels": {
@@ -305,19 +327,19 @@
       "triangles": 326713,
       "primaryTriangles": 326710,
       "primaryCalls": 434,
-      "programs": 76,
+      "programs": 62,
       "geometries": 433,
       "textures": 20,
       "hybrid": {
         "strategy": "direct",
-        "generationMs": 22.899999976158142,
+        "generationMs": 27.200000286102295,
         "triangles": [
-          2760,
+          2826,
           9824,
           8640
         ],
-        "vertices": 63672,
-        "bytes": 3056256,
+        "vertices": 63870,
+        "bytes": 3065760,
         "meshes": 32,
         "clusters": 8,
         "lodLevels": {

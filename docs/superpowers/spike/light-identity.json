@@ -1,0 +1,58 @@
+{
+  "recordedAt": "2026-09-04T10:36:35.730Z",
+  "checkpoint": "spike-night-street",
+  "worlds": {
+    "voxel": {
+      "totalLights": 62,
+      "visibleLights": 14,
+      "shadowCastingVisible": 0,
+      "shadowCasters": [],
+      "removedFirstByACapOf16": [
+        "spot (unnamed) at 0.6,1.74,-3.25 castShadow=false",
+        "spot (unnamed) at 0.7,0.9,-4.1 castShadow=false"
+      ],
+      "ranking": [
+        "point bus-stop-safety-light-0 -11,2.24,27.55 shadow=false",
+        "point bus-stop-safety-light-2 38.55,2.24,-18 shadow=false",
+        "point station-platform-light-0 -54,2.18,3.56 shadow=false",
+        "point station-platform-light-1 23.09,7.18,8.33 shadow=false",
+        "point (unnamed) -6,3.08,50.7 shadow=false",
+        "point (unnamed) 14,3.08,50.7 shadow=false",
+        "point (unnamed) 24,3.08,21.3 shadow=false",
+        "point (unnamed) 34,3.08,50.7 shadow=false",
+        "point (unnamed) 4,3.08,21.3 shadow=false",
+        "point (unnamed) 44,3.08,21.3 shadow=false",
+        "spot (unnamed) -0.6,1.74,-3.25 shadow=false",
+        "spot (unnamed) -0.7,0.9,-4.1 shadow=false",
+        "spot (unnamed) 0.6,1.74,-3.25 shadow=false",
+        "spot (unnamed) 0.7,0.9,-4.1 shadow=false"
+      ]
+    },
+    "hybrid-direct": {
+      "totalLights": 62,
+      "visibleLights": 14,
+      "shadowCastingVisible": 0,
+      "shadowCasters": [],
+      "removedFirstByACapOf16": [
+        "spot (unnamed) at 0.6,1.74,-3.25 castShadow=false",
+        "spot (unnamed) at 0.7,0.9,-4.1 castShadow=false"
+      ],
+      "ranking": [
+        "point bus-stop-safety-light-0 -11,2.24,27.55 shadow=false",
+        "point bus-stop-safety-light-2 38.55,2.24,-18 shadow=false",
+        "point station-platform-light-0 -54,2.18,3.56 shadow=false",
+        "point station-platform-light-1 23.09,7.18,8.33 shadow=false",
+        "point (unnamed) -6,3.08,50.7 shadow=false",
+        "point (unnamed) 14,3.08,50.7 shadow=false",
+        "point (unnamed) 24,3.08,21.3 shadow=false",
+        "point (unnamed) 34,3.08,50.7 shadow=false",
+        "point (unnamed) 4,3.08,21.3 shadow=false",
+        "point (unnamed) 44,3.08,21.3 shadow=false",
+        "spot (unnamed) -0.6,1.74,-3.25 shadow=false",
+        "spot (unnamed) -0.7,0.9,-4.1 shadow=false",
+        "spot (unnamed) 0.6,1.74,-3.25 shadow=false",
+        "spot (unnamed) 0.7,0.9,-4.1 shadow=false"
+      ]
+    }
+  }
+}

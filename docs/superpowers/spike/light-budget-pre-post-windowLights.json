@@ -1,0 +1,493 @@
+{
+  "recordedAt": "2026-09-04T12:07:45.877Z",
+  "revision": "0e952ad",
+  "workingTreeDirty": true,
+  "dirtyPaths": [
+    "M docs/superpowers/spike/spike-materials.json",
+    " M docs/superpowers/spike/spike-postman.json",
+    " M docs/superpowers/spike/spike-semantics.json",
+    " M docs/superpowers/spike/spike-smoke.json",
+    " M docs/superpowers/spike/spike-train.json",
+    " M scripts/browserSmoke.mjs",
+    " M scripts/lightBudgetFrames.mjs",
+    " M scripts/lightCostExperiment.mjs",
+    " M scripts/spikeSmoke.mjs",
+    " M src/main.ts",
+    " M src/performance/QualityManager.ts",
+    " M src/world/Bus.ts",
+    " M src/world/BusStopNavigation.ts",
+    " M src/world/Postman.ts",
+    " M src/world/hybrid/clearance.test.ts",
+    " M src/world/hybrid/proportions.test.ts",
+    "?? docs/superpowers/spike/2026-09-04-hybrid-closeout.md",
+    "?? docs/superpowers/spike/final-bench-high.json",
+    "?? docs/superpowers/spike/final-bench-low.json",
+    "?? docs/superpowers/spike/light-budget-pre-post-streetLamps.json"
+  ],
+  "question": "What do the two window-pool lights the High profile gave up actually change in the picture?",
+  "method": {
+    "variant": "windowLights",
+    "baseline": "DayNightCycle.windowLightBudget = 2, lit by the runtime",
+    "adopted": "the lights that budget adds, withdrawn exactly as windowLightBudget = 0 withdraws them",
+    "held": [
+      "seed",
+      "checkpoint (clock, weather and actors frozen by it)",
+      "camera",
+      "viewport",
+      "device scale",
+      "quality profile High"
+    ],
+    "frozen": "requestAnimationFrame parked; renderFrame() with delta 0; the same frame rendered twice as a control",
+    "identification": "differential: visible local lights at budget 2 minus visible local lights at budget 0",
+    "note": "past 112 m of camera focus distance the runtime forces the window-pool budget to 0 (DayNightCycle.setCameraFocusDistance), so a wide frame cannot show a difference for that variant"
+  },
+  "world": "hybrid-direct",
+  "variant": "windowLights",
+  "budgetField": "windowLightBudget",
+  "shots": [
+    {
+      "name": "night-street",
+      "checkpoint": "spike-night-street",
+      "camera": null,
+      "canvas": "1655x1035",
+      "cameraFocusDistanceM": 17.9,
+      "wideViewForcesBudgetToZero": false,
+      "windowLightsUnderTestAtCheckpointCamera": {
+        "visibleAtAdoptedBudget": 14,
+        "visibleAtBaselineBudget": 16,
+        "added": [
+          {
+            "kind": "point",
+            "intensity": 32,
+            "distance": 20,
+            "color": "#ffcf86",
+            "position": [
+              52.5,
+              6,
+              63
+            ]
+          },
+          {
+            "kind": "point",
+            "intensity": 32,
+            "distance": 20,
+            "color": "#ffcf86",
+            "position": [
+              68,
+              6,
+              58.5
+            ]
+          }
+        ]
+      },
+      "windowLightsUnderTest": {
+        "visibleAtAdoptedBudget": 14,
+        "visibleAtBaselineBudget": 16,
+        "added": [
+          {
+            "kind": "point",
+            "intensity": 32,
+            "distance": 20,
+            "color": "#ffcf86",
+            "position": [
+              52.5,
+              6,
+              63
+            ]
+          },
+          {
+            "kind": "point",
+            "intensity": 32,
+            "distance": 20,
+            "color": "#ffcf86",
+            "position": [
+              68,
+              6,
+              58.5
+            ]
+          }
+        ]
+      },
+      "withdrawnRuntimeState": [
+        {
+          "wasVisible": true,
+          "intensity": 32,
+          "distance": 20
+        },
+        {
+          "wasVisible": true,
+          "intensity": 32,
+          "distance": 20
+        }
+      ],
+      "lightsVisibleInBaseline": 16,
+      "frames": {
+        "baseline": {
+          "file": "hybrid-direct-high-prepost-windowLights-night-street-baseline.png",
+          "renderedPixelsSha256": "bce28d023e6b43d11a76d4fc860d033f99462ec4eb2b5afbe58644084c2e9dde",
+          "pageScreenshotSha256": "d72d989c47edb8b540779a61a3cfdb4e615a18d7c7962d5a0b4476d802267184"
+        },
+        "adopted": {
+          "file": "hybrid-direct-high-prepost-windowLights-night-street-adopted.png",
+          "renderedPixelsSha256": "bce28d023e6b43d11a76d4fc860d033f99462ec4eb2b5afbe58644084c2e9dde",
+          "pageScreenshotSha256": "90b8b2de32e0b1a1328c186b4d03b720be283834e4a378e0bf1a966db02d3c50"
+        }
+      },
+      "controlDiff": {
+        "pixels": 1712925,
+        "changedPixels": 0,
+        "changedPercent": 0,
+        "meanDelta": 0,
+        "peakDelta": 0,
+        "changedBounds": null
+      },
+      "diff": {
+        "pixels": 1712925,
+        "changedPixels": 0,
+        "changedPercent": 0,
+        "meanDelta": 0,
+        "peakDelta": 0,
+        "changedBounds": null
+      },
+      "changeObservable": false
+    },
+    {
+      "name": "near-facade",
+      "checkpoint": "spike-night-street",
+      "camera": "facade",
+      "canvas": "1655x1035",
+      "cameraFocusDistanceM": 19.3,
+      "wideViewForcesBudgetToZero": false,
+      "windowLightsUnderTestAtCheckpointCamera": {
+        "visibleAtAdoptedBudget": 14,
+        "visibleAtBaselineBudget": 16,
+        "added": [
+          {
+            "kind": "point",
+            "intensity": 32,
+            "distance": 20,
+            "color": "#ffcf86",
+            "position": [
+              52.5,
+              6,
+              63
+            ]
+          },
+          {
+            "kind": "point",
+            "intensity": 32,
+            "distance": 20,
+            "color": "#ffcf86",
+            "position": [
+              68,
+              6,
+              58.5
+            ]
+          }
+        ]
+      },
+      "windowLightsUnderTest": {
+        "visibleAtAdoptedBudget": 14,
+        "visibleAtBaselineBudget": 16,
+        "added": [
+          {
+            "kind": "point",
+            "intensity": 32,
+            "distance": 20,
+            "color": "#ffcf86",
+            "position": [
+              52.5,
+              6,
+              63
+            ]
+          },
+          {
+            "kind": "point",
+            "intensity": 32,
+            "distance": 20,
+            "color": "#ffcf86",
+            "position": [
+              68,
+              6,
+              58.5
+            ]
+          }
+        ]
+      },
+      "withdrawnRuntimeState": [
+        {
+          "wasVisible": true,
+          "intensity": 32,
+          "distance": 20
+        },
+        {
+          "wasVisible": true,
+          "intensity": 32,
+          "distance": 20
+        }
+      ],
+      "lightsVisibleInBaseline": 16,
+      "frames": {
+        "baseline": {
+          "file": "hybrid-direct-high-prepost-windowLights-near-facade-baseline.png",
+          "renderedPixelsSha256": "52908632304b785d16e334c6d76ae92ce4c6c5edc06c9728a7e4aaa881b4f57b",
+          "pageScreenshotSha256": "8a660e5415272b597248c48a7a5035f1dcec8984b884055da8c255b288a05745"
+        },
+        "adopted": {
+          "file": "hybrid-direct-high-prepost-windowLights-near-facade-adopted.png",
+          "renderedPixelsSha256": "049f31c9ce8d91ba17495034663d894e85d89b88ca0ee4a0bea9d315dbbc0f75",
+          "pageScreenshotSha256": "f3e222453e29ca4f75aa3659449bb9f1ea8c9883413c6a8bdca44e37ca961e64"
+        }
+      },
+      "controlDiff": {
+        "pixels": 1712925,
+        "changedPixels": 0,
+        "changedPercent": 0,
+        "meanDelta": 0,
+        "peakDelta": 0,
+        "changedBounds": null
+      },
+      "diff": {
+        "pixels": 1712925,
+        "changedPixels": 497,
+        "changedPercent": 0.03,
+        "meanDelta": 0.017,
+        "peakDelta": 12,
+        "changedBounds": {
+          "minX": 598,
+          "minY": 188,
+          "maxX": 1146,
+          "maxY": 486
+        }
+      },
+      "changeObservable": true
+    },
+    {
+      "name": "stop-and-bus",
+      "checkpoint": "spike-night-street",
+      "camera": "stop",
+      "canvas": "1655x1035",
+      "cameraFocusDistanceM": 14.7,
+      "wideViewForcesBudgetToZero": false,
+      "windowLightsUnderTestAtCheckpointCamera": {
+        "visibleAtAdoptedBudget": 14,
+        "visibleAtBaselineBudget": 16,
+        "added": [
+          {
+            "kind": "point",
+            "intensity": 32,
+            "distance": 20,
+            "color": "#ffcf86",
+            "position": [
+              52.5,
+              6,
+              63
+            ]
+          },
+          {
+            "kind": "point",
+            "intensity": 32,
+            "distance": 20,
+            "color": "#ffcf86",
+            "position": [
+              68,
+              6,
+              58.5
+            ]
+          }
+        ]
+      },
+      "windowLightsUnderTest": {
+        "visibleAtAdoptedBudget": 14,
+        "visibleAtBaselineBudget": 16,
+        "added": [
+          {
+            "kind": "point",
+            "intensity": 32,
+            "distance": 20,
+            "color": "#ffcf86",
+            "position": [
+              52.5,
+              6,
+              63
+            ]
+          },
+          {
+            "kind": "point",
+            "intensity": 32,
+            "distance": 20,
+            "color": "#ffcf86",
+            "position": [
+              68,
+              6,
+              58.5
+            ]
+          }
+        ]
+      },
+      "withdrawnRuntimeState": [
+        {
+          "wasVisible": true,
+          "intensity": 32,
+          "distance": 20
+        },
+        {
+          "wasVisible": true,
+          "intensity": 32,
+          "distance": 20
+        }
+      ],
+      "lightsVisibleInBaseline": 16,
+      "frames": {
+        "baseline": {
+          "file": "hybrid-direct-high-prepost-windowLights-stop-and-bus-baseline.png",
+          "renderedPixelsSha256": "acb39c44a2195a7511505626b77c2b47d0bbc3de2511f0a178f06db86e0899f6",
+          "pageScreenshotSha256": "40666d7d222ecb422a76c7ff7ccc234c673ac13c88d05881dd2cc1f543c7a6de"
+        },
+        "adopted": {
+          "file": "hybrid-direct-high-prepost-windowLights-stop-and-bus-adopted.png",
+          "renderedPixelsSha256": "acb39c44a2195a7511505626b77c2b47d0bbc3de2511f0a178f06db86e0899f6",
+          "pageScreenshotSha256": "40666d7d222ecb422a76c7ff7ccc234c673ac13c88d05881dd2cc1f543c7a6de"
+        }
+      },
+      "controlDiff": {
+        "pixels": 1712925,
+        "changedPixels": 0,
+        "changedPercent": 0,
+        "meanDelta": 0,
+        "peakDelta": 0,
+        "changedBounds": null
+      },
+      "diff": {
+        "pixels": 1712925,
+        "changedPixels": 0,
+        "changedPercent": 0,
+        "meanDelta": 0,
+        "peakDelta": 0,
+        "changedBounds": null
+      },
+      "changeObservable": false
+    },
+    {
+      "name": "train",
+      "checkpoint": "night-snow-train",
+      "camera": null,
+      "canvas": "1440x900",
+      "cameraFocusDistanceM": 114.3,
+      "wideViewForcesBudgetToZero": true,
+      "windowLightsUnderTestAtCheckpointCamera": {
+        "visibleAtAdoptedBudget": 5,
+        "visibleAtBaselineBudget": 5,
+        "added": []
+      },
+      "windowLightsUnderTest": {
+        "visibleAtAdoptedBudget": 5,
+        "visibleAtBaselineBudget": 5,
+        "added": []
+      },
+      "withdrawnRuntimeState": [],
+      "lightsVisibleInBaseline": 5,
+      "frames": {
+        "baseline": {
+          "file": "hybrid-direct-high-prepost-windowLights-train-baseline.png",
+          "renderedPixelsSha256": "2aeb91e299e4f25582650fba8b2eab8f34e44ece4ad29808ffc5e83d19b55383",
+          "pageScreenshotSha256": "d58ef17a424c53efd088623c17b2f4b1761ce5a7ee60bd6b5678ee6360e6c421"
+        },
+        "adopted": {
+          "file": "hybrid-direct-high-prepost-windowLights-train-adopted.png",
+          "renderedPixelsSha256": "2aeb91e299e4f25582650fba8b2eab8f34e44ece4ad29808ffc5e83d19b55383",
+          "pageScreenshotSha256": "1ba178307ec7854d1428774a2bb37f2dfec2ce0ea3129ee0dbe626997a86b87c"
+        }
+      },
+      "controlDiff": {
+        "pixels": 1296000,
+        "changedPixels": 0,
+        "changedPercent": 0,
+        "meanDelta": 0,
+        "peakDelta": 0,
+        "changedBounds": null
+      },
+      "diff": {
+        "pixels": 1296000,
+        "changedPixels": 0,
+        "changedPercent": 0,
+        "meanDelta": 0,
+        "peakDelta": 0,
+        "changedBounds": null
+      },
+      "changeObservable": false
+    },
+    {
+      "name": "free-exploration",
+      "checkpoint": "spike-night-street",
+      "camera": "wide",
+      "canvas": "1440x900",
+      "cameraFocusDistanceM": 232.4,
+      "wideViewForcesBudgetToZero": true,
+      "windowLightsUnderTestAtCheckpointCamera": {
+        "visibleAtAdoptedBudget": 14,
+        "visibleAtBaselineBudget": 16,
+        "added": [
+          {
+            "kind": "point",
+            "intensity": 32,
+            "distance": 20,
+            "color": "#ffcf86",
+            "position": [
+              52.5,
+              6,
+              63
+            ]
+          },
+          {
+            "kind": "point",
+            "intensity": 32,
+            "distance": 20,
+            "color": "#ffcf86",
+            "position": [
+              68,
+              6,
+              58.5
+            ]
+          }
+        ]
+      },
+      "windowLightsUnderTest": {
+        "visibleAtAdoptedBudget": 5,
+        "visibleAtBaselineBudget": 5,
+        "added": []
+      },
+      "withdrawnRuntimeState": [],
+      "lightsVisibleInBaseline": 5,
+      "frames": {
+        "baseline": {
+          "file": "hybrid-direct-high-prepost-windowLights-free-exploration-baseline.png",
+          "renderedPixelsSha256": "854fe2b5c08b62db7c7212f306b323f1b3d4ed7a8edda597a0c00a741688dead",
+          "pageScreenshotSha256": "f15ee77e1b6fe955157ef816f8f40f5c1e153190b7d5565a98f113e1add3c50e"
+        },
+        "adopted": {
+          "file": "hybrid-direct-high-prepost-windowLights-free-exploration-adopted.png",
+          "renderedPixelsSha256": "854fe2b5c08b62db7c7212f306b323f1b3d4ed7a8edda597a0c00a741688dead",
+          "pageScreenshotSha256": "f15ee77e1b6fe955157ef816f8f40f5c1e153190b7d5565a98f113e1add3c50e"
+        }
+      },
+      "controlDiff": {
+        "pixels": 1296000,
+        "changedPixels": 0,
+        "changedPercent": 0,
+        "meanDelta": 0,
+        "peakDelta": 0,
+        "changedBounds": null
+      },
+      "diff": {
+        "pixels": 1296000,
+        "changedPixels": 0,
+        "changedPercent": 0,
+        "meanDelta": 0,
+        "peakDelta": 0,
+        "changedBounds": null
+      },
+      "changeObservable": false
+    }
+  ]
+}

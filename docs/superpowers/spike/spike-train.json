@@ -1,47 +1,40 @@
 {
-  "generatedAt": "2026-09-04T09:59:43.815Z",
+  "generatedAt": "2026-09-04T11:49:47.545Z",
   "world": "hybrid-direct",
+  "routeLengthM": 162.3,
+  "progressTolerance": 0.001,
   "shots": [
     {
       "name": "train-day",
-      "t01": 0.42,
+      "requestedT01": 0.42,
+      "actualT01": 0.5453,
+      "checkpointPinnedProgress": 0.68,
+      "shotAtProgress": 0.68013,
+      "progressErrorFromTarget": 0.00013,
+      "progressErrorMetres": 0.02,
+      "camera": [
+        52,
+        18,
+        23
+      ],
+      "target": [
+        30,
+        4,
+        2
+      ],
       "frame": "docs/superpowers/spike/frames/hybrid-direct-high-train-day.jpg",
-      "aimed": {
-        "x": 26.135696976693325,
-        "z": 3.054837748142059,
-        "distance": 4.005686024995285,
-        "camera": [
-          52,
-          18,
-          23
-        ],
-        "target": [
-          30,
-          4,
-          2
-        ]
-      },
-      "settledAfterReads": 11,
+      "settledAfterReads": 2,
       "ramp": [
-        0.246,
-        0.123,
-        0.062,
-        0.029,
-        0.013,
-        0.007,
-        0.003,
-        0.002,
-        0.001,
         0,
         0
       ],
       "glazing": [
         {
           "meshes": [
-            "batched-MeshStandardMaterial@-37,-6",
-            "batched-MeshStandardMaterial@-46,-4",
-            "batched-MeshStandardMaterial@-55,-2",
-            "batched-MeshStandardMaterial@-65,-1"
+            "batched-MeshStandardMaterial@29,4",
+            "batched-MeshStandardMaterial@20,1",
+            "batched-MeshStandardMaterial@11,-3",
+            "batched-MeshStandardMaterial@2,-6"
           ],
           "colorHex": "#24465f",
           "colorLuminance": 0.056,
@@ -56,36 +49,36 @@
     },
     {
       "name": "train-night",
-      "t01": 0.94,
+      "requestedT01": 0.94,
+      "actualT01": 0.0652,
+      "checkpointPinnedProgress": 0.68,
+      "shotAtProgress": 0.68015,
+      "progressErrorFromTarget": 0.00015,
+      "progressErrorMetres": 0.024,
+      "camera": [
+        52,
+        18,
+        23
+      ],
+      "target": [
+        30,
+        4,
+        2
+      ],
       "frame": "docs/superpowers/spike/frames/hybrid-direct-high-train-night.jpg",
-      "aimed": {
-        "x": 27.858775306759828,
-        "z": 3.672120357841695,
-        "distance": 2.7167682415049885,
-        "camera": [
-          52,
-          18,
-          23
-        ],
-        "target": [
-          30,
-          4,
-          2
-        ]
-      },
       "settledAfterReads": 3,
       "ramp": [
-        0.7,
+        0.864,
         1,
         1
       ],
       "glazing": [
         {
           "meshes": [
-            "batched-MeshStandardMaterial@34,5",
-            "batched-MeshStandardMaterial@26,3",
-            "batched-MeshStandardMaterial@16,-1",
-            "batched-MeshStandardMaterial@7,-4"
+            "batched-MeshStandardMaterial@29,4",
+            "batched-MeshStandardMaterial@20,1",
+            "batched-MeshStandardMaterial@11,-3",
+            "batched-MeshStandardMaterial@2,-6"
           ],
           "colorHex": "#24465f",
           "colorLuminance": 0.056,
