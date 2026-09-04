@@ -1,23 +1,101 @@
 {
-  "generatedAt": "2026-09-04T12:26:12.306Z",
+  "generatedAt": "2026-09-04T16:18:41.851Z",
+  "revision": "e4e28f7",
+  "revisionFull": "e4e28f7fdb206f33cd3dc67cb69ed8c444881a28",
+  "sourceTreeSha": "65714cd14e472f9a17aa135b75e334398d4480b4",
+  "dist": {
+    "fileCount": 12,
+    "totalBytes": 1337323,
+    "aggregateSha256": "eb11423fda8807a3d1a15b99e4e54a56833f26cda02942a28b184e2b5ad5c21a",
+    "files": [
+      {
+        "path": "assets/DevStats-Cl0jbNml.js",
+        "bytes": 805,
+        "sha256": "7a7ddfc6191734ebe2647cf9797d3c0ea38e6ed756e8ced08cf45bf33ca70197"
+      },
+      {
+        "path": "assets/RealTime-BkWCracX.js",
+        "bytes": 5305,
+        "sha256": "346150952f92ed33edfce22905a31f6af78c7a0d6ec7f08d77579b6ea8edb789"
+      },
+      {
+        "path": "assets/camera-controls-Cc3F_PvU.js",
+        "bytes": 44735,
+        "sha256": "600b7e3f7fb97b6e340826ded9737c990b24f8e7117341bde9104d97bfcfbacc"
+      },
+      {
+        "path": "assets/experience-signals-DgcgCeoE.js",
+        "bytes": 2880,
+        "sha256": "5c2481801f46e780cb4e4d21ad30bf5cdcfc36801ce97a3271cd01127669d467"
+      },
+      {
+        "path": "assets/frameTiming-D-LbedK8.js",
+        "bytes": 1972,
+        "sha256": "ce6f5ca34950d738de86923f68d0dcccd2cb4a84756e3cb8e7d3a9bbfdf95d0b"
+      },
+      {
+        "path": "assets/hybrid-spike-CaFIaPuy.js",
+        "bytes": 34305,
+        "sha256": "60203456a0ef7b41ca7bb8bdd1c7bf2ae2dfc8dcfb1156a5f1e722ca38dcae56"
+      },
+      {
+        "path": "assets/index-Dei4cSsb.js",
+        "bytes": 239960,
+        "sha256": "051a38bbe41eda1c01963f5c9f56738b5191c4836508ad82fa737da2c452c34e"
+      },
+      {
+        "path": "assets/main-DObyuU2g.js",
+        "bytes": 33311,
+        "sha256": "340e6a728ba11386765b66369b5113feb3a06d10307c39691bb2c1b207039e71"
+      },
+      {
+        "path": "assets/postprocessing-C58_BMDn.js",
+        "bytes": 216629,
+        "sha256": "aa7c2bfa5236772f8d048ca75b98d5e6a1446995aab2bc27d3474f69a608b44f"
+      },
+      {
+        "path": "assets/rolldown-runtime-BgaNhQyE.js",
+        "bytes": 785,
+        "sha256": "d43d78cdecb2fcc96488c7cf92e38b917085a254a60ff17a554163ace62c541c"
+      },
+      {
+        "path": "assets/three-B3nP0qx2.js",
+        "bytes": 740663,
+        "sha256": "b6dace67a10f8955b23f21ea7ab84e33f1c1f952ee9d1df2c2f80aba2caaef0c"
+      },
+      {
+        "path": "index.html",
+        "bytes": 15973,
+        "sha256": "064d979810bc678183911c5cfc9177b0f16d0cd294cc14bfc1d491be47ccd40e"
+      }
+    ]
+  },
+  "entryFile": "index-Dei4cSsb.js",
+  "entryBytes": 239960,
+  "entrySha256": "051a38bbe41eda1c01963f5c9f56738b5191c4836508ad82fa737da2c452c34e",
+  "builtAt": "2026-09-04T16:02:26.955Z",
+  "builtBy": "scripts/buildProvenance.mjs prepareBuild",
+  "provisional": false,
+  "verifiedAt": "2026-09-04T16:17:48.129Z",
+  "manifestPath": "/private/tmp/claude-502/-Users-piotr-Projekty-voxel-diorama/3d544d14-a513-451f-9afb-63d033d4414d/artefacts/build-manifest.json",
   "world": "hybrid-direct",
   "found": {
-    "x": -57.230891864134435,
+    "x": -56.640967123652715,
     "y": -0.5,
-    "z": -45.84465994258559
+    "z": -45.75257429470365
   },
   "shots": [
     {
       "name": "postman-side",
-      "frame": "docs/superpowers/spike/frames/hybrid-direct-high-postman-side.jpg",
+      "frame": "/private/tmp/claude-502/-Users-piotr-Projekty-voxel-diorama/3d544d14-a513-451f-9afb-63d033d4414d/artefacts/frames/hybrid-direct-high-postman-side.jpg",
       "aimed": {
-        "x": -33.44276014024581,
+        "x": -32.54349452616994,
         "y": -0.5,
-        "z": -45.702765293446845,
+        "z": -45.731792608240596,
         "camera": [
-          -33.44276014024581,
+          -32.54349452616994,
           1.4,
-          -53.702765293446845
+          -53.731792608240596
         ]
       },
       "legibility": {
@@ -29,19 +107,19 @@
         },
         "wheels": {
           "meshes": 2,
-          "ownPixels": 8241,
-          "medianDelta": 16.8,
-          "readablePercent": 72.9,
-          "medianOwnLuma": 19.9,
-          "medianBackgroundLuma": 3.6
+          "ownPixels": 5856,
+          "medianDelta": 17.1,
+          "readablePercent": 65.7,
+          "medianOwnLuma": 22,
+          "medianBackgroundLuma": 37.9
         },
         "frame": {
-          "meshes": 6,
-          "ownPixels": 1778,
-          "medianDelta": 11,
-          "readablePercent": 67.2,
-          "medianOwnLuma": 10,
-          "medianBackgroundLuma": 22.2
+          "meshes": 8,
+          "ownPixels": 5281,
+          "medianDelta": 10.1,
+          "readablePercent": 58.4,
+          "medianOwnLuma": 10.6,
+          "medianBackgroundLuma": 26.5
         }
       },
       "active": true,
@@ -49,15 +127,15 @@
     },
     {
       "name": "postman-three-quarter",
-      "frame": "docs/superpowers/spike/frames/hybrid-direct-high-postman-three-quarter.jpg",
+      "frame": "/private/tmp/claude-502/-Users-piotr-Projekty-voxel-diorama/3d544d14-a513-451f-9afb-63d033d4414d/artefacts/frames/hybrid-direct-high-postman-three-quarter.jpg",
       "aimed": {
-        "x": -31.942081528488064,
+        "x": -31.043800993078005,
         "y": -0.5,
-        "z": -45.75102116499002,
+        "z": -45.77932714290973,
         "camera": [
-          -26.942081528488064,
+          -26.043800993078005,
           1.5,
-          -53.75102116499002
+          -53.77932714290973
         ]
       },
       "legibility": {
@@ -69,19 +147,19 @@
         },
         "wheels": {
           "meshes": 2,
-          "ownPixels": 6794,
-          "medianDelta": 22.6,
-          "readablePercent": 71.8,
-          "medianOwnLuma": 27.7,
-          "medianBackgroundLuma": 62.3
+          "ownPixels": 4471,
+          "medianDelta": 18.4,
+          "readablePercent": 64.7,
+          "medianOwnLuma": 31,
+          "medianBackgroundLuma": 59.1
         },
         "frame": {
-          "meshes": 6,
-          "ownPixels": 3163,
-          "medianDelta": 4.7,
-          "readablePercent": 46.9,
-          "medianOwnLuma": 20.4,
-          "medianBackgroundLuma": 33.8
+          "meshes": 8,
+          "ownPixels": 6026,
+          "medianDelta": 10.2,
+          "readablePercent": 54.5,
+          "medianOwnLuma": 13.1,
+          "medianBackgroundLuma": 56.9
         }
       },
       "active": true,
@@ -89,15 +167,15 @@
     },
     {
       "name": "postman-in-world",
-      "frame": "docs/superpowers/spike/frames/hybrid-direct-high-postman-in-world.jpg",
+      "frame": "/private/tmp/claude-502/-Users-piotr-Projekty-voxel-diorama/3d544d14-a513-451f-9afb-63d033d4414d/artefacts/frames/hybrid-direct-high-postman-in-world.jpg",
       "aimed": {
-        "x": -29.141846560007078,
+        "x": -28.445599445164916,
         "y": -0.5,
-        "z": -45.836818277429934,
+        "z": -45.85674083767923,
         "camera": [
-          -25.641846560007078,
+          -24.945599445164916,
           2,
-          -35.836818277429934
+          -35.85674083767923
         ]
       },
       "legibility": {
@@ -109,19 +187,19 @@
         },
         "wheels": {
           "meshes": 2,
-          "ownPixels": 5224,
-          "medianDelta": 43.5,
-          "readablePercent": 70,
-          "medianOwnLuma": 61.8,
+          "ownPixels": 3649,
+          "medianDelta": 39.5,
+          "readablePercent": 67.5,
+          "medianOwnLuma": 58.3,
           "medianBackgroundLuma": 0
         },
         "frame": {
-          "meshes": 6,
-          "ownPixels": 1502,
-          "medianDelta": 6.9,
-          "readablePercent": 48.8,
-          "medianOwnLuma": 23,
-          "medianBackgroundLuma": 40.3
+          "meshes": 8,
+          "ownPixels": 3819,
+          "medianDelta": 8.1,
+          "readablePercent": 50.2,
+          "medianOwnLuma": 23.8,
+          "medianBackgroundLuma": 40.2
         }
       },
       "active": true,

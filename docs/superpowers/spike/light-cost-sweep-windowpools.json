@@ -1,29 +1,83 @@
 {
-  "recordedAt": "2026-09-04T12:04:51.361Z",
-  "revision": "0e952ad",
-  "workingTreeDirty": true,
-  "dirtyPaths": [
-    "M docs/superpowers/spike/spike-materials.json",
-    " M docs/superpowers/spike/spike-postman.json",
-    " M docs/superpowers/spike/spike-semantics.json",
-    " M docs/superpowers/spike/spike-smoke.json",
-    " M docs/superpowers/spike/spike-train.json",
-    " M scripts/browserSmoke.mjs",
-    " M scripts/lightBudgetFrames.mjs",
-    " M scripts/lightCostExperiment.mjs",
-    " M scripts/spikeSmoke.mjs",
-    " M src/main.ts",
-    " M src/world/Bus.ts",
-    " M src/world/BusStopNavigation.ts",
-    " M src/world/Postman.ts",
-    " M src/world/hybrid/clearance.test.ts",
-    " M src/world/hybrid/proportions.test.ts",
-    "?? docs/superpowers/spike/2026-09-04-hybrid-closeout.md",
-    "?? docs/superpowers/spike/final-bench-high.json",
-    "?? docs/superpowers/spike/final-bench-low.json",
-    "?? docs/superpowers/spike/final-light-budget-frames.json",
-    "?? docs/superpowers/spike/final-light-headroom.json"
-  ],
+  "recordedAt": "2026-09-04T16:27:39.157Z",
+  "revision": "e4e28f7",
+  "revisionFull": "e4e28f7fdb206f33cd3dc67cb69ed8c444881a28",
+  "sourceTreeSha": "65714cd14e472f9a17aa135b75e334398d4480b4",
+  "dist": {
+    "fileCount": 12,
+    "totalBytes": 1337323,
+    "aggregateSha256": "eb11423fda8807a3d1a15b99e4e54a56833f26cda02942a28b184e2b5ad5c21a",
+    "files": [
+      {
+        "path": "assets/DevStats-Cl0jbNml.js",
+        "bytes": 805,
+        "sha256": "7a7ddfc6191734ebe2647cf9797d3c0ea38e6ed756e8ced08cf45bf33ca70197"
+      },
+      {
+        "path": "assets/RealTime-BkWCracX.js",
+        "bytes": 5305,
+        "sha256": "346150952f92ed33edfce22905a31f6af78c7a0d6ec7f08d77579b6ea8edb789"
+      },
+      {
+        "path": "assets/camera-controls-Cc3F_PvU.js",
+        "bytes": 44735,
+        "sha256": "600b7e3f7fb97b6e340826ded9737c990b24f8e7117341bde9104d97bfcfbacc"
+      },
+      {
+        "path": "assets/experience-signals-DgcgCeoE.js",
+        "bytes": 2880,
+        "sha256": "5c2481801f46e780cb4e4d21ad30bf5cdcfc36801ce97a3271cd01127669d467"
+      },
+      {
+        "path": "assets/frameTiming-D-LbedK8.js",
+        "bytes": 1972,
+        "sha256": "ce6f5ca34950d738de86923f68d0dcccd2cb4a84756e3cb8e7d3a9bbfdf95d0b"
+      },
+      {
+        "path": "assets/hybrid-spike-CaFIaPuy.js",
+        "bytes": 34305,
+        "sha256": "60203456a0ef7b41ca7bb8bdd1c7bf2ae2dfc8dcfb1156a5f1e722ca38dcae56"
+      },
+      {
+        "path": "assets/index-Dei4cSsb.js",
+        "bytes": 239960,
+        "sha256": "051a38bbe41eda1c01963f5c9f56738b5191c4836508ad82fa737da2c452c34e"
+      },
+      {
+        "path": "assets/main-DObyuU2g.js",
+        "bytes": 33311,
+        "sha256": "340e6a728ba11386765b66369b5113feb3a06d10307c39691bb2c1b207039e71"
+      },
+      {
+        "path": "assets/postprocessing-C58_BMDn.js",
+        "bytes": 216629,
+        "sha256": "aa7c2bfa5236772f8d048ca75b98d5e6a1446995aab2bc27d3474f69a608b44f"
+      },
+      {
+        "path": "assets/rolldown-runtime-BgaNhQyE.js",
+        "bytes": 785,
+        "sha256": "d43d78cdecb2fcc96488c7cf92e38b917085a254a60ff17a554163ace62c541c"
+      },
+      {
+        "path": "assets/three-B3nP0qx2.js",
+        "bytes": 740663,
+        "sha256": "b6dace67a10f8955b23f21ea7ab84e33f1c1f952ee9d1df2c2f80aba2caaef0c"
+      },
+      {
+        "path": "index.html",
+        "bytes": 15973,
+        "sha256": "064d979810bc678183911c5cfc9177b0f16d0cd294cc14bfc1d491be47ccd40e"
+      }
+    ]
+  },
+  "entryFile": "index-Dei4cSsb.js",
+  "entryBytes": 239960,
+  "entrySha256": "051a38bbe41eda1c01963f5c9f56738b5191c4836508ad82fa737da2c452c34e",
+  "builtAt": "2026-09-04T16:02:26.955Z",
+  "builtBy": "scripts/buildProvenance.mjs prepareBuild",
+  "provisional": false,
+  "verifiedAt": "2026-09-04T16:25:36.396Z",
+  "manifestPath": "/private/tmp/claude-502/-Users-piotr-Projekty-voxel-diorama/3d544d14-a513-451f-9afb-63d033d4414d/artefacts/build-manifest.json",
   "budgetOverride": {
     "field": "windowLightBudget",
     "value": 2
@@ -71,17 +125,17 @@
       "uncappedLights": 16,
       "machine": {
         "loadAverage": [
-          4.81,
-          5.41,
-          5.49
+          3.52,
+          3.29,
+          2.92
         ]
       },
-      "frames": 265,
-      "frameMs": 11.388679245283019,
-      "medianMs": 11.5,
-      "p95Ms": 12.5,
-      "minMs": 9,
-      "maxMs": 13.599999999999909,
+      "frames": 271,
+      "frameMs": 11.132472324723249,
+      "medianMs": 11.200000000000273,
+      "p95Ms": 11.800000000000182,
+      "minMs": 9.5,
+      "maxMs": 12.800000000000182,
       "visibleLightsBefore": 16,
       "visibleSpotLights": 4,
       "visiblePointLights": 12,
@@ -103,17 +157,17 @@
       "uncappedLights": 16,
       "machine": {
         "loadAverage": [
-          4.77,
-          5.38,
-          5.48
+          3.48,
+          3.28,
+          2.92
         ]
       },
-      "frames": 214,
-      "frameMs": 14.100467289719626,
-      "medianMs": 14.199999999999818,
-      "p95Ms": 15.300000000000182,
-      "minMs": 11.600000000000364,
-      "maxMs": 16.199999999999818,
+      "frames": 220,
+      "frameMs": 13.727727272727275,
+      "medianMs": 13.900000000000091,
+      "p95Ms": 14.5,
+      "minMs": 12.099999999999909,
+      "maxMs": 14.700000000000728,
       "visibleLightsBefore": 16,
       "visibleSpotLights": 4,
       "visiblePointLights": 12,
@@ -135,17 +189,17 @@
       "uncappedLights": 16,
       "machine": {
         "loadAverage": [
-          4.95,
-          5.41,
-          5.49
+          3.28,
+          3.24,
+          2.91
         ]
       },
-      "frames": 335,
-      "frameMs": 8.994925373134329,
-      "medianMs": 9.100000000000364,
-      "p95Ms": 10.099999999999909,
-      "minMs": 7,
-      "maxMs": 11.599999999999909,
+      "frames": 343,
+      "frameMs": 8.776384839650145,
+      "medianMs": 8.800000000000182,
+      "p95Ms": 9.699999999999818,
+      "minMs": 7.199999999999818,
+      "maxMs": 10.5,
       "visibleLightsBefore": 14,
       "visibleSpotLights": 2,
       "visiblePointLights": 12,
@@ -167,113 +221,113 @@
       "uncappedLights": 16,
       "machine": {
         "loadAverage": [
-          4.87,
-          5.39,
-          5.48
+          3.52,
+          3.3,
+          2.94
         ]
       },
-      "frames": 468,
-      "frameMs": 6.432478632478632,
-      "medianMs": 6.399999999999636,
-      "p95Ms": 7.299999999999272,
-      "minMs": 5.400000000000091,
-      "maxMs": 8.199999999999818,
-      "visibleLightsBefore": 14,
-      "visibleSpotLights": 2,
-      "visiblePointLights": 12,
-      "visibleLightsAfter": 14,
-      "programs": 158,
-      "calls": 298,
-      "triangles": 669289,
-      "pixelRatio": 1.15,
-      "canvas": "1655x1035",
-      "megapixels": 1.712925,
-      "quality": "high",
-      "checkpoint": "spike-night-street"
-    },
-    {
-      "order": "given",
-      "rank": "default",
-      "cap": 12,
-      "world": "voxel",
-      "uncappedLights": 16,
-      "machine": {
-        "loadAverage": [
-          5.27,
-          5.46,
-          5.5
-        ]
-      },
-      "frames": 481,
-      "frameMs": 6.25987525987526,
-      "medianMs": 6.199999999999818,
-      "p95Ms": 7,
-      "minMs": 5.5,
-      "maxMs": 10.300000000000182,
-      "visibleLightsBefore": 12,
-      "visibleSpotLights": 0,
-      "visiblePointLights": 12,
-      "visibleLightsAfter": 12,
-      "programs": 158,
-      "calls": 298,
-      "triangles": 669289,
-      "pixelRatio": 1.15,
-      "canvas": "1655x1035",
-      "megapixels": 1.712925,
-      "quality": "high",
-      "checkpoint": "spike-night-street"
-    },
-    {
-      "order": "given",
-      "rank": "default",
-      "cap": 12,
-      "world": "hybrid-direct",
-      "uncappedLights": 16,
-      "machine": {
-        "loadAverage": [
-          5.24,
-          5.45,
-          5.5
-        ]
-      },
-      "frames": 380,
-      "frameMs": 7.924210526315789,
-      "medianMs": 8,
-      "p95Ms": 9.199999999999818,
-      "minMs": 5.699999999999818,
-      "maxMs": 11.199999999999818,
-      "visibleLightsBefore": 12,
-      "visibleSpotLights": 0,
-      "visiblePointLights": 12,
-      "visibleLightsAfter": 12,
-      "programs": 170,
-      "calls": 326,
-      "triangles": 641999,
-      "pixelRatio": 1.15,
-      "canvas": "1655x1035",
-      "megapixels": 1.712925,
-      "quality": "high",
-      "checkpoint": "spike-night-street"
-    },
-    {
-      "order": "reverse",
-      "rank": "default",
-      "cap": 12,
-      "world": "voxel",
-      "uncappedLights": 16,
-      "machine": {
-        "loadAverage": [
-          4.98,
-          5.39,
-          5.48
-        ]
-      },
-      "frames": 492,
-      "frameMs": 6.123170731707317,
+      "frames": 479,
+      "frameMs": 6.276617954070981,
       "medianMs": 6.100000000000364,
-      "p95Ms": 6.700000000000728,
-      "minMs": 5.399999999999636,
-      "maxMs": 7.300000000000182,
+      "p95Ms": 7.399999999999636,
+      "minMs": 5.400000000000091,
+      "maxMs": 7.600000000000364,
+      "visibleLightsBefore": 14,
+      "visibleSpotLights": 2,
+      "visiblePointLights": 12,
+      "visibleLightsAfter": 14,
+      "programs": 158,
+      "calls": 298,
+      "triangles": 669289,
+      "pixelRatio": 1.15,
+      "canvas": "1655x1035",
+      "megapixels": 1.712925,
+      "quality": "high",
+      "checkpoint": "spike-night-street"
+    },
+    {
+      "order": "given",
+      "rank": "default",
+      "cap": 12,
+      "world": "voxel",
+      "uncappedLights": 16,
+      "machine": {
+        "loadAverage": [
+          3.56,
+          3.31,
+          2.94
+        ]
+      },
+      "frames": 500,
+      "frameMs": 6.0188000000000015,
+      "medianMs": 6,
+      "p95Ms": 6.399999999999636,
+      "minMs": 5.599999999999909,
+      "maxMs": 6.800000000000182,
+      "visibleLightsBefore": 12,
+      "visibleSpotLights": 0,
+      "visiblePointLights": 12,
+      "visibleLightsAfter": 12,
+      "programs": 158,
+      "calls": 298,
+      "triangles": 669289,
+      "pixelRatio": 1.15,
+      "canvas": "1655x1035",
+      "megapixels": 1.712925,
+      "quality": "high",
+      "checkpoint": "spike-night-street"
+    },
+    {
+      "order": "given",
+      "rank": "default",
+      "cap": 12,
+      "world": "hybrid-direct",
+      "uncappedLights": 16,
+      "machine": {
+        "loadAverage": [
+          3.64,
+          3.33,
+          2.95
+        ]
+      },
+      "frames": 392,
+      "frameMs": 7.68545918367347,
+      "medianMs": 7.599999999999454,
+      "p95Ms": 8.899999999999636,
+      "minMs": 6.599999999999909,
+      "maxMs": 9.5,
+      "visibleLightsBefore": 12,
+      "visibleSpotLights": 0,
+      "visiblePointLights": 12,
+      "visibleLightsAfter": 12,
+      "programs": 170,
+      "calls": 326,
+      "triangles": 641999,
+      "pixelRatio": 1.15,
+      "canvas": "1655x1035",
+      "megapixels": 1.712925,
+      "quality": "high",
+      "checkpoint": "spike-night-street"
+    },
+    {
+      "order": "reverse",
+      "rank": "default",
+      "cap": 12,
+      "world": "voxel",
+      "uncappedLights": 16,
+      "machine": {
+        "loadAverage": [
+          3.59,
+          3.33,
+          2.95
+        ]
+      },
+      "frames": 514,
+      "frameMs": 5.857392996108949,
+      "medianMs": 5.800000000000182,
+      "p95Ms": 6.199999999999818,
+      "minMs": 5.5,
+      "maxMs": 6.799999999999727,
       "visibleLightsBefore": 12,
       "visibleSpotLights": 0,
       "visiblePointLights": 12,
@@ -295,17 +349,17 @@
       "uncappedLights": 16,
       "machine": {
         "loadAverage": [
-          5.53,
-          5.49,
-          5.51
+          3.54,
+          3.32,
+          2.95
         ]
       },
-      "frames": 381,
-      "frameMs": 7.912073490813647,
-      "medianMs": 8,
-      "p95Ms": 9,
-      "minMs": 5.900000000000546,
-      "maxMs": 10.100000000000364,
+      "frames": 391,
+      "frameMs": 7.696675191815857,
+      "medianMs": 7.599999999999909,
+      "p95Ms": 8.800000000000182,
+      "minMs": 6.599999999999909,
+      "maxMs": 9.299999999999272,
       "visibleLightsBefore": 12,
       "visibleSpotLights": 0,
       "visiblePointLights": 12,
@@ -327,17 +381,17 @@
       "uncappedLights": 16,
       "machine": {
         "loadAverage": [
-          5.81,
-          5.55,
-          5.53
+          3.46,
+          3.31,
+          2.95
         ]
       },
-      "frames": 335,
-      "frameMs": 8.994626865671641,
-      "medianMs": 9.099999999999454,
-      "p95Ms": 10.100000000000364,
-      "minMs": 6.899999999999636,
-      "maxMs": 11.800000000000182,
+      "frames": 343,
+      "frameMs": 8.793877551020408,
+      "medianMs": 8.800000000000182,
+      "p95Ms": 9.399999999999636,
+      "minMs": 7.300000000000182,
+      "maxMs": 10.5,
       "visibleLightsBefore": 14,
       "visibleSpotLights": 2,
       "visiblePointLights": 12,
@@ -359,17 +413,17 @@
       "uncappedLights": 16,
       "machine": {
         "loadAverage": [
-          5.42,
-          5.47,
-          5.51
+          3.5,
+          3.32,
+          2.96
         ]
       },
-      "frames": 466,
-      "frameMs": 6.465021459227468,
-      "medianMs": 6.399999999999636,
-      "p95Ms": 7.399999999999636,
-      "minMs": 5.599999999999454,
-      "maxMs": 8.5,
+      "frames": 479,
+      "frameMs": 6.28267223382046,
+      "medianMs": 6.100000000000364,
+      "p95Ms": 7.300000000000182,
+      "minMs": 5.399999999999636,
+      "maxMs": 7.699999999999818,
       "visibleLightsBefore": 14,
       "visibleSpotLights": 2,
       "visiblePointLights": 12,
@@ -391,17 +445,17 @@
       "uncappedLights": 16,
       "machine": {
         "loadAverage": [
-          5.03,
-          5.39,
-          5.48
+          3.7,
+          3.37,
+          2.98
         ]
       },
-      "frames": 265,
-      "frameMs": 11.390188679245282,
-      "medianMs": 11.5,
-      "p95Ms": 12.400000000000546,
-      "minMs": 8.800000000000182,
-      "maxMs": 13.100000000000364,
+      "frames": 271,
+      "frameMs": 11.135424354243543,
+      "medianMs": 11.199999999999818,
+      "p95Ms": 11.699999999999818,
+      "minMs": 9.699999999999818,
+      "maxMs": 12.599999999999454,
       "visibleLightsBefore": 16,
       "visibleSpotLights": 4,
       "visiblePointLights": 12,
@@ -423,17 +477,17 @@
       "uncappedLights": 16,
       "machine": {
         "loadAverage": [
-          4.87,
-          5.35,
-          5.46
+          3.44,
+          3.32,
+          2.97
         ]
       },
-      "frames": 215,
-      "frameMs": 14.07860465116279,
-      "medianMs": 14,
-      "p95Ms": 15.300000000000182,
-      "minMs": 12.299999999999272,
-      "maxMs": 15.800000000000182,
+      "frames": 220,
+      "frameMs": 13.73590909090909,
+      "medianMs": 13.900000000000546,
+      "p95Ms": 14.400000000000546,
+      "minMs": 11.699999999999818,
+      "maxMs": 14.800000000000182,
       "visibleLightsBefore": 16,
       "visibleSpotLights": 4,
       "visiblePointLights": 12,
@@ -455,17 +509,17 @@
       "uncappedLights": 16,
       "machine": {
         "loadAverage": [
-          5.44,
-          5.46,
-          5.5
+          3.48,
+          3.33,
+          2.97
         ]
       },
-      "frames": 472,
-      "frameMs": 6.378813559322034,
-      "medianMs": 6.399999999999636,
-      "p95Ms": 7.099999999999909,
-      "minMs": 5.5,
-      "maxMs": 8.099999999999909,
+      "frames": 479,
+      "frameMs": 6.277661795407098,
+      "medianMs": 6.199999999999818,
+      "p95Ms": 7.399999999999636,
+      "minMs": 5.300000000000182,
+      "maxMs": 7.699999999999818,
       "visibleLightsBefore": 14,
       "visibleSpotLights": 2,
       "visiblePointLights": 12,
@@ -487,17 +541,17 @@
       "uncappedLights": 16,
       "machine": {
         "loadAverage": [
-          5.53,
-          5.48,
-          5.5
+          3.44,
+          3.33,
+          2.97
         ]
       },
-      "frames": 334,
-      "frameMs": 9.024850299401196,
-      "medianMs": 9,
-      "p95Ms": 10.300000000000182,
-      "minMs": 6.899999999999636,
-      "maxMs": 11.600000000000364,
+      "frames": 343,
+      "frameMs": 8.784256559766762,
+      "medianMs": 8.800000000000182,
+      "p95Ms": 9.400000000000091,
+      "minMs": 7.199999999999818,
+      "maxMs": 10.100000000000364,
       "visibleLightsBefore": 14,
       "visibleSpotLights": 2,
       "visiblePointLights": 12,
@@ -519,17 +573,17 @@
       "uncappedLights": 16,
       "machine": {
         "loadAverage": [
-          5.33,
-          5.44,
-          5.49
+          3.52,
+          3.35,
+          2.98
         ]
       },
-      "frames": 380,
-      "frameMs": 7.9302631578947365,
-      "medianMs": 7.800000000000182,
-      "p95Ms": 9.300000000000182,
-      "minMs": 6.100000000000364,
-      "maxMs": 11.199999999999818,
+      "frames": 391,
+      "frameMs": 7.694884910485933,
+      "medianMs": 7.600000000000364,
+      "p95Ms": 8.899999999999636,
+      "minMs": 6,
+      "maxMs": 10.199999999999818,
       "visibleLightsBefore": 12,
       "visibleSpotLights": 0,
       "visiblePointLights": 12,
@@ -551,17 +605,17 @@
       "uncappedLights": 16,
       "machine": {
         "loadAverage": [
-          5.37,
-          5.44,
-          5.49
+          3.48,
+          3.34,
+          2.98
         ]
       },
-      "frames": 483,
-      "frameMs": 6.237474120082815,
-      "medianMs": 6.199999999999818,
-      "p95Ms": 6.800000000000182,
-      "minMs": 5.599999999999454,
-      "maxMs": 7.400000000000546,
+      "frames": 516,
+      "frameMs": 5.833527131782946,
+      "medianMs": 5.800000000000182,
+      "p95Ms": 6.199999999999818,
+      "minMs": 5.5,
+      "maxMs": 6.800000000000182,
       "visibleLightsBefore": 12,
       "visibleSpotLights": 0,
       "visiblePointLights": 12,
@@ -583,17 +637,17 @@
       "uncappedLights": 16,
       "machine": {
         "loadAverage": [
-          5.34,
-          5.43,
-          5.49
+          3.44,
+          3.34,
+          2.98
         ]
       },
-      "frames": 265,
-      "frameMs": 11.383018867924529,
-      "medianMs": 11.399999999999636,
-      "p95Ms": 12.699999999999818,
-      "minMs": 6.200000000000273,
-      "maxMs": 28.09999999999991,
+      "frames": 271,
+      "frameMs": 11.114391143911439,
+      "medianMs": 11.199999999999818,
+      "p95Ms": 11.700000000000273,
+      "minMs": 9.699999999999818,
+      "maxMs": 12.600000000000364,
       "visibleLightsBefore": 16,
       "visibleSpotLights": 4,
       "visiblePointLights": 12,
@@ -615,17 +669,17 @@
       "uncappedLights": 16,
       "machine": {
         "loadAverage": [
-          5.31,
-          5.43,
-          5.48
+          3.9,
+          3.44,
+          3.02
         ]
       },
-      "frames": 215,
-      "frameMs": 14.078604651162792,
-      "medianMs": 14.100000000000364,
-      "p95Ms": 15.199999999999818,
-      "minMs": 11.5,
-      "maxMs": 16.400000000000546,
+      "frames": 220,
+      "frameMs": 13.728181818181817,
+      "medianMs": 13.899999999999636,
+      "p95Ms": 14.599999999999454,
+      "minMs": 11.899999999999636,
+      "maxMs": 14.800000000000182,
       "visibleLightsBefore": 16,
       "visibleSpotLights": 4,
       "visiblePointLights": 12,
@@ -645,27 +699,27 @@
       "byCap": {
         "12": {
           "samples": [
-            6.26,
-            6.123,
-            6.237
+            6.019,
+            5.857,
+            5.834
           ],
-          "medianMs": 6.237
+          "medianMs": 5.857
         },
         "14": {
           "samples": [
-            6.432,
-            6.465,
-            6.379
+            6.277,
+            6.283,
+            6.278
           ],
-          "medianMs": 6.432
+          "medianMs": 6.278
         },
         "16": {
           "samples": [
-            11.389,
-            11.39,
-            11.383
+            11.132,
+            11.135,
+            11.114
           ],
-          "medianMs": 11.389
+          "medianMs": 11.132
         }
       },
       "marginal": [
@@ -673,15 +727,15 @@
           "from": 16,
           "to": 14,
           "lightsRemoved": 2,
-          "savedMs": 4.956,
-          "perLightMs": 2.478
+          "savedMs": 4.855,
+          "perLightMs": 2.427
         },
         {
           "from": 14,
           "to": 12,
           "lightsRemoved": 2,
-          "savedMs": 0.195,
-          "perLightMs": 0.098
+          "savedMs": 0.42,
+          "perLightMs": 0.21
         }
       ]
     },
@@ -689,27 +743,27 @@
       "byCap": {
         "12": {
           "samples": [
-            7.924,
-            7.912,
-            7.93
+            7.685,
+            7.697,
+            7.695
           ],
-          "medianMs": 7.924
+          "medianMs": 7.695
         },
         "14": {
           "samples": [
-            8.995,
-            8.995,
-            9.025
+            8.776,
+            8.794,
+            8.784
           ],
-          "medianMs": 8.995
+          "medianMs": 8.784
         },
         "16": {
           "samples": [
-            14.1,
-            14.079,
-            14.079
+            13.728,
+            13.736,
+            13.728
           ],
-          "medianMs": 14.079
+          "medianMs": 13.728
         }
       },
       "marginal": [
@@ -717,15 +771,15 @@
           "from": 16,
           "to": 14,
           "lightsRemoved": 2,
-          "savedMs": 5.084,
-          "perLightMs": 2.542
+          "savedMs": 4.944,
+          "perLightMs": 2.472
         },
         {
           "from": 14,
           "to": 12,
           "lightsRemoved": 2,
-          "savedMs": 1.071,
-          "perLightMs": 0.535
+          "savedMs": 1.089,
+          "perLightMs": 0.545
         }
       ]
     }
