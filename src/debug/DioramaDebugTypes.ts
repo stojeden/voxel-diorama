@@ -45,7 +45,6 @@ export interface DioramaDebugHandle {
   /** Diagnostic only: hold every local light off for a whole measurement window. */
   debugSetLocalLightsEnabled: (enabled: boolean) => void;
   /** How many local lights are visible right now. */
-  debugCountVisibleLocalLights: () => Promise<number>;
   /** Time `count` real animation frames on the GPU, without a second render. */
   debugStartFrameTiming: (count: number) => Promise<number>;
   debugCancelFrameTiming: () => void;

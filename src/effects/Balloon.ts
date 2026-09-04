@@ -90,6 +90,8 @@ export class Balloon {
     // The burner flame lights the envelope from below at dusk.
     this.burnerLight = new THREE.PointLight(0xff9a2e, 0, 16, 1.6);
     this.burnerLight.position.y = -3.2;
+    // Same reason as the UFO glow: a dark light is still an iteration per pixel.
+    this.burnerLight.visible = false;
     this.balloonGroup.add(this.burnerLight);
 
     // Tiny waving passenger
@@ -204,6 +206,7 @@ export class Balloon {
       const flicker = burst ? 1 + Math.sin(elapsed * 30) * 0.3 : 0;
       this.burnerMaterial.emissiveIntensity = 0.35 + flicker * 2.2;
       this.burnerLight.intensity = flicker * (8 + night * 90);
+      this.burnerLight.visible = flicker > 0;
       this.envelopeMaterial.emissive.setHex(0xff5a20);
       this.envelopeMaterial.emissiveIntensity = flicker * (0.04 + night * 0.5);
 

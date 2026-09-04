@@ -1,0 +1,84 @@
+{
+  "note": "per-region luminance difference between the night frames at 16 and 14 physical local lights. Two compositions of 14 were measured: cutting two street lamps (rejected, see streetLampCut) and cutting the two window pools (adopted). Lamps and windows keep their emissive materials in both.",
+  "regions": {
+    "street": [
+      300,
+      430,
+      1140,
+      770
+    ],
+    "stop and bus": [
+      760,
+      380,
+      1240,
+      640
+    ],
+    "near buildings": [
+      0,
+      80,
+      420,
+      600
+    ],
+    "whole frame": [
+      0,
+      0,
+      1440,
+      900
+    ]
+  },
+  "streetLampCut": {
+    "night-street": {
+      "street": 28.16,
+      "stop and bus": 22.34,
+      "near buildings": 41.86,
+      "whole frame": 28.36
+    },
+    "verdict": "rejected: the nearest tenement went black"
+  },
+  "windowPoolCut": {
+    "night-street": {
+      "street": {
+        "changedPercent": 0.0,
+        "meanDelta": 0.06,
+        "peakDelta": 23
+      },
+      "stop and bus": {
+        "changedPercent": 0.0,
+        "meanDelta": 0.08,
+        "peakDelta": 4
+      },
+      "near buildings": {
+        "changedPercent": 0.0,
+        "meanDelta": 0.18,
+        "peakDelta": 7
+      },
+      "whole frame": {
+        "changedPercent": 0.29,
+        "meanDelta": 0.15,
+        "peakDelta": 52
+      }
+    },
+    "night-train": {
+      "street": {
+        "changedPercent": 0.0,
+        "meanDelta": 0.0,
+        "peakDelta": 0
+      },
+      "stop and bus": {
+        "changedPercent": 0.0,
+        "meanDelta": 0.0,
+        "peakDelta": 0
+      },
+      "near buildings": {
+        "changedPercent": 0.0,
+        "meanDelta": 0.0,
+        "peakDelta": 0
+      },
+      "whole frame": {
+        "changedPercent": 0.04,
+        "meanDelta": 0.02,
+        "peakDelta": 114
+      }
+    }
+  }
+}

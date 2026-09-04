@@ -1054,7 +1054,6 @@ const debugHandle: DioramaDebugHandle = {
     weather.debugSetSnowCover(1);
     fisherman.debugSetWinterFishing();
   },
-  debugShoreFisherman: () => fisherman.debugSetShoreFishing(),
   debugSetSnowCover: (cover: number) => weather.debugSetSnowCover(cover),
   fishermanState: () => fisherman.getDebugState(),
   debugBusStop: (label: string) => bus.debugStartDwell(label),
@@ -1124,19 +1123,10 @@ const debugHandle: DioramaDebugHandle = {
    * holds all of them off for a whole measurement window, and restores them.
    */
   debugSetLocalLightsEnabled: (enabled: boolean) => {
+    // The frame loop already derives the bus and train headlamps from this flag every
+    // frame, so setting them here as well only duplicated that a frame earlier.
     diagnosticLocalLights = enabled;
     dayNight.setLocalLightsEnabled(enabled);
-    bus.setHeadlightsEnabled(enabled);
-    train.setHeadlightsEnabled(enabled);
-  },
-  /**
-   * Lights actually visible right now, counted by walking the scene rather than by
-   * trusting any list: this is the number a diagnostic verifies against, so it has to
-   * be ground truth and has to include the bus and train headlamps.
-   */
-  debugCountVisibleLocalLights: async () => {
-    const { countVisibleLocalLights } = await loadDiagnostics();
-    return countVisibleLocalLights(env.scene);
   },
   /** Begin timing `count` real animation frames on the GPU. */
   debugStartFrameTiming: async (count: number) => {

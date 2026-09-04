@@ -218,6 +218,11 @@ function buildUfo(): { parts: UfoParts; disposables: Array<{ dispose: () => void
 
   const glow = new THREE.PointLight(0x8ef4ff, 0, 30, 1.8);
   glow.position.y = -1;
+  // three.js compiles the number of *visible* lights into every shader in the scene and
+  // loops over all of them per pixel, so a glow parked at the origin with no intensity
+  // was an iteration paid by every lit pixel in the city for nothing. `update` keeps
+  // this in step with the intensity.
+  glow.visible = false;
   group.add(glow);
 
   group.visible = false;
@@ -317,6 +322,7 @@ export class LakesideCow {
   }
 
   update(delta: number, elapsed: number, night: number): void {
+    this.ufo.glow.visible = this.ufo.glow.intensity > 0;
     if (this.suppressed) return;
     this.updateNightSchedule(delta, night);
     this.updateUfo(delta, elapsed);

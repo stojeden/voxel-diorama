@@ -254,33 +254,3 @@ export function createFrameTiming(source: GlSource | THREE.WebGLRenderer): Frame
     },
   };
 }
-
-/**
- * Ground truth for a light diagnostic: walk the finished scene instead of trusting the
- * switch that was flipped. Counts every point and spot light that is visible with a
- * non-zero intensity, so the bus and train headlamps are included.
- */
-export function countVisibleLocalLights(scene: THREE.Scene): number {
-  let visible = 0;
-  scene.traverse((object) => {
-    const light = object as THREE.PointLight | THREE.SpotLight;
-    if (!(light as THREE.PointLight).isPointLight && !(light as THREE.SpotLight).isSpotLight) return;
-    if (light.visible && light.intensity > 0) visible++;
-  });
-  return visible;
-}
-
-/**
- * Physical lights the renderer will compile into its shader: `visible` decides that,
- * intensity does not. Counting both separately is what showed that zeroing eight of
- * sixteen intensities changed no cost at all -- the shader still looped sixteen.
- */
-export function countCompiledLocalLights(scene: THREE.Scene): number {
-  let compiled = 0;
-  scene.traverse((object) => {
-    const light = object as THREE.PointLight | THREE.SpotLight;
-    if (!(light as THREE.PointLight).isPointLight && !(light as THREE.SpotLight).isSpotLight) return;
-    if (light.visible) compiled++;
-  });
-  return compiled;
-}

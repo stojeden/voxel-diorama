@@ -99,10 +99,28 @@ export const QUALITY_PROFILES: Record<QualityLevel, QualityProfile> = {
     labels: true,
     pmremInterval: 8,
     optionalActorHz: 24,
+    /**
+     * Fourteen physical local lights at night, not sixteen, and which two go is chosen
+     * on the picture.
+     *
+     * The cost is neither linear nor per light: measured with vsync off at this
+     * profile's pixel ratio, sixteen visible lights cost 20.6 ms in the hybrid world
+     * and 15.9 in the product, fourteen cost 11.0 and 7.5, twelve cost 8.8 and 6.2 --
+     * a 9.6 ms step between sixteen and fourteen, then about a millisecond a light,
+     * then nothing (docs/superpowers/spike/light-cost-experiment.json). Fourteen is
+     * therefore the budget worth having; below it there is nothing left to win.
+     *
+     * Cutting two street lamps to get there was tried first and rejected on the frames:
+     * it took 28% of the night street's pixels down with it and left the nearest
+     * tenement black (docs/superpowers/spike/light-budget-image-diff.json). The two
+     * window pools go instead. A lit flat keeps its emissive window -- that is what
+     * makes it read as lit -- and loses only the pool of light it cast on its own
+     * facade, which no camera in this diorama is close enough to miss.
+     */
     streetLightBudget: 6,
     busStopLightBudget: 2,
     stationLightBudget: 2,
-    windowLightBudget: 2,
+    windowLightBudget: 0,
   },
 };
 

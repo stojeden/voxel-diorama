@@ -1,0 +1,1151 @@
+{
+  "recordedAt": "2026-09-04T08:33:27.307Z",
+  "question": "What does one physical local light cost, and is the cost linear in the count?",
+  "rank": "spotsFirst",
+  "method": {
+    "rank": "spot lights kept, point lights removed first",
+    "vsync": "disabled: a marginal millisecond is invisible under a 16.7 ms quantum",
+    "lightControl": "renderer.render wrapped to re-apply a deterministic cap immediately before each draw, because DayNightCycle reassigns visible every frame",
+    "lampsUntouched": "emissive shades and window materials are not changed: a capped variant still shows every lamp lit",
+    "held": [
+      "seed",
+      "checkpoint",
+      "camera",
+      "quality profile High",
+      "pixel ratio 1.15",
+      "directional light",
+      "SSAO",
+      "postprocessing",
+      "viewport",
+      "deviceScaleFactor"
+    ],
+    "worlds": "both in one browser session, alternating which goes first",
+    "orders": [
+      "given",
+      "reverse",
+      "shuffle"
+    ],
+    "warmupFrames": 45,
+    "measureSeconds": 3,
+    "samplesPerVariant": 3
+  },
+  "caps": [
+    18,
+    16,
+    12,
+    2,
+    0
+  ],
+  "rows": [
+    {
+      "order": "given",
+      "rank": "spotsFirst",
+      "cap": 18,
+      "world": "voxel",
+      "uncappedLights": 18,
+      "machine": {
+        "loadAverage": [
+          5.9,
+          6.09,
+          6.15
+        ]
+      },
+      "frames": 191,
+      "frameMs": 15.772251308900524,
+      "medianMs": 15.800000000000182,
+      "p95Ms": 30.600000000000364,
+      "minMs": 0.3000000000001819,
+      "maxMs": 34.80000000000018,
+      "visibleLightsBefore": 18,
+      "visibleSpotLights": 4,
+      "visiblePointLights": 14,
+      "visibleLightsAfter": 18,
+      "programs": 182,
+      "calls": 318,
+      "triangles": 669529,
+      "pixelRatio": 1.15,
+      "canvas": "1655x1035",
+      "megapixels": 1.712925,
+      "quality": "high",
+      "checkpoint": "spike-night-street"
+    },
+    {
+      "order": "given",
+      "rank": "spotsFirst",
+      "cap": 18,
+      "world": "hybrid-direct",
+      "uncappedLights": 18,
+      "machine": {
+        "loadAverage": [
+          6.68,
+          6.25,
+          6.21
+        ]
+      },
+      "frames": 146,
+      "frameMs": 20.79931506849315,
+      "medianMs": 20.899999999999636,
+      "p95Ms": 23.199999999999818,
+      "minMs": 5.199999999999818,
+      "maxMs": 35.29999999999927,
+      "visibleLightsBefore": 18,
+      "visibleSpotLights": 4,
+      "visiblePointLights": 14,
+      "visibleLightsAfter": 18,
+      "programs": 194,
+      "calls": 346,
+      "triangles": 642239,
+      "pixelRatio": 1.15,
+      "canvas": "1655x1035",
+      "megapixels": 1.712925,
+      "quality": "high",
+      "checkpoint": "spike-night-street"
+    },
+    {
+      "order": "given",
+      "rank": "spotsFirst",
+      "cap": 16,
+      "world": "hybrid-direct",
+      "uncappedLights": 18,
+      "machine": {
+        "loadAverage": [
+          6.71,
+          6.27,
+          6.21
+        ]
+      },
+      "frames": 247,
+      "frameMs": 12.235222672064776,
+      "medianMs": 12.300000000000182,
+      "p95Ms": 14,
+      "minMs": 8.800000000000182,
+      "maxMs": 16.100000000000364,
+      "visibleLightsBefore": 16,
+      "visibleSpotLights": 4,
+      "visiblePointLights": 12,
+      "visibleLightsAfter": 16,
+      "programs": 211,
+      "calls": 346,
+      "triangles": 642239,
+      "pixelRatio": 1.15,
+      "canvas": "1655x1035",
+      "megapixels": 1.712925,
+      "quality": "high",
+      "checkpoint": "spike-night-street"
+    },
+    {
+      "order": "given",
+      "rank": "spotsFirst",
+      "cap": 16,
+      "world": "voxel",
+      "uncappedLights": 18,
+      "machine": {
+        "loadAverage": [
+          6.44,
+          6.22,
+          6.19
+        ]
+      },
+      "frames": 360,
+      "frameMs": 8.369722222222222,
+      "medianMs": 8.300000000000182,
+      "p95Ms": 10.5,
+      "minMs": 6,
+      "maxMs": 12.900000000000091,
+      "visibleLightsBefore": 16,
+      "visibleSpotLights": 4,
+      "visiblePointLights": 12,
+      "visibleLightsAfter": 16,
+      "programs": 197,
+      "calls": 318,
+      "triangles": 669529,
+      "pixelRatio": 1.15,
+      "canvas": "1655x1035",
+      "megapixels": 1.712925,
+      "quality": "high",
+      "checkpoint": "spike-night-street"
+    },
+    {
+      "order": "given",
+      "rank": "spotsFirst",
+      "cap": 12,
+      "world": "voxel",
+      "uncappedLights": 18,
+      "machine": {
+        "loadAverage": [
+          6.57,
+          6.25,
+          6.21
+        ]
+      },
+      "frames": 459,
+      "frameMs": 6.553159041394335,
+      "medianMs": 6.599999999999454,
+      "p95Ms": 7.300000000000182,
+      "minMs": 5.400000000000546,
+      "maxMs": 7.700000000000728,
+      "visibleLightsBefore": 12,
+      "visibleSpotLights": 4,
+      "visiblePointLights": 8,
+      "visibleLightsAfter": 12,
+      "programs": 197,
+      "calls": 318,
+      "triangles": 669529,
+      "pixelRatio": 1.15,
+      "canvas": "1655x1035",
+      "megapixels": 1.712925,
+      "quality": "high",
+      "checkpoint": "spike-night-street"
+    },
+    {
+      "order": "given",
+      "rank": "spotsFirst",
+      "cap": 12,
+      "world": "hybrid-direct",
+      "uncappedLights": 18,
+      "machine": {
+        "loadAverage": [
+          7.19,
+          6.41,
+          6.26
+        ]
+      },
+      "frames": 464,
+      "frameMs": 6.485129310344829,
+      "medianMs": 6.5,
+      "p95Ms": 7,
+      "minMs": 5.599999999999454,
+      "maxMs": 10.799999999999272,
+      "visibleLightsBefore": 12,
+      "visibleSpotLights": 4,
+      "visiblePointLights": 8,
+      "visibleLightsAfter": 12,
+      "programs": 211,
+      "calls": 346,
+      "triangles": 642239,
+      "pixelRatio": 1.15,
+      "canvas": "1655x1035",
+      "megapixels": 1.712925,
+      "quality": "high",
+      "checkpoint": "spike-night-street"
+    },
+    {
+      "order": "given",
+      "rank": "spotsFirst",
+      "cap": 2,
+      "world": "hybrid-direct",
+      "uncappedLights": 18,
+      "machine": {
+        "loadAverage": [
+          6.56,
+          6.29,
+          6.22
+        ]
+      },
+      "frames": 452,
+      "frameMs": 6.653097345132743,
+      "medianMs": 6.600000000000364,
+      "p95Ms": 7.300000000000182,
+      "minMs": 5.799999999999272,
+      "maxMs": 8,
+      "visibleLightsBefore": 2,
+      "visibleSpotLights": 2,
+      "visiblePointLights": 0,
+      "visibleLightsAfter": 2,
+      "programs": 211,
+      "calls": 346,
+      "triangles": 642239,
+      "pixelRatio": 1.15,
+      "canvas": "1655x1035",
+      "megapixels": 1.712925,
+      "quality": "high",
+      "checkpoint": "spike-night-street"
+    },
+    {
+      "order": "given",
+      "rank": "spotsFirst",
+      "cap": 2,
+      "world": "voxel",
+      "uncappedLights": 18,
+      "machine": {
+        "loadAverage": [
+          6.51,
+          6.29,
+          6.22
+        ]
+      },
+      "frames": 470,
+      "frameMs": 6.407659574468086,
+      "medianMs": 6.399999999999636,
+      "p95Ms": 7.199999999999818,
+      "minMs": 5.5,
+      "maxMs": 8.900000000000546,
+      "visibleLightsBefore": 2,
+      "visibleSpotLights": 2,
+      "visiblePointLights": 0,
+      "visibleLightsAfter": 2,
+      "programs": 197,
+      "calls": 318,
+      "triangles": 669529,
+      "pixelRatio": 1.15,
+      "canvas": "1655x1035",
+      "megapixels": 1.712925,
+      "quality": "high",
+      "checkpoint": "spike-night-street"
+    },
+    {
+      "order": "given",
+      "rank": "spotsFirst",
+      "cap": 0,
+      "world": "voxel",
+      "uncappedLights": 18,
+      "machine": {
+        "loadAverage": [
+          6.79,
+          6.35,
+          6.24
+        ]
+      },
+      "frames": 460,
+      "frameMs": 6.541086956521739,
+      "medianMs": 6.5,
+      "p95Ms": 7.200000000000728,
+      "minMs": 5.5,
+      "maxMs": 8.100000000000364,
+      "visibleLightsBefore": 0,
+      "visibleSpotLights": 0,
+      "visiblePointLights": 0,
+      "visibleLightsAfter": 0,
+      "programs": 197,
+      "calls": 318,
+      "triangles": 669529,
+      "pixelRatio": 1.15,
+      "canvas": "1655x1035",
+      "megapixels": 1.712925,
+      "quality": "high",
+      "checkpoint": "spike-night-street"
+    },
+    {
+      "order": "given",
+      "rank": "spotsFirst",
+      "cap": 0,
+      "world": "hybrid-direct",
+      "uncappedLights": 18,
+      "machine": {
+        "loadAverage": [
+          7.55,
+          6.52,
+          6.3
+        ]
+      },
+      "frames": 433,
+      "frameMs": 6.955658198614319,
+      "medianMs": 6.900000000000546,
+      "p95Ms": 7.700000000000728,
+      "minMs": 5.699999999999818,
+      "maxMs": 9.199999999999818,
+      "visibleLightsBefore": 0,
+      "visibleSpotLights": 0,
+      "visiblePointLights": 0,
+      "visibleLightsAfter": 0,
+      "programs": 211,
+      "calls": 346,
+      "triangles": 642239,
+      "pixelRatio": 1.15,
+      "canvas": "1655x1035",
+      "megapixels": 1.712925,
+      "quality": "high",
+      "checkpoint": "spike-night-street"
+    },
+    {
+      "order": "reverse",
+      "rank": "spotsFirst",
+      "cap": 0,
+      "world": "voxel",
+      "uncappedLights": 18,
+      "machine": {
+        "loadAverage": [
+          7.43,
+          6.51,
+          6.3
+        ]
+      },
+      "frames": 476,
+      "frameMs": 6.322689075630252,
+      "medianMs": 6.300000000000182,
+      "p95Ms": 7,
+      "minMs": 5.5,
+      "maxMs": 7.400000000000546,
+      "visibleLightsBefore": 0,
+      "visibleSpotLights": 0,
+      "visiblePointLights": 0,
+      "visibleLightsAfter": 0,
+      "programs": 197,
+      "calls": 318,
+      "triangles": 669529,
+      "pixelRatio": 1.15,
+      "canvas": "1655x1035",
+      "megapixels": 1.712925,
+      "quality": "high",
+      "checkpoint": "spike-night-street"
+    },
+    {
+      "order": "reverse",
+      "rank": "spotsFirst",
+      "cap": 0,
+      "world": "hybrid-direct",
+      "uncappedLights": 18,
+      "machine": {
+        "loadAverage": [
+          7.07,
+          6.46,
+          6.29
+        ]
+      },
+      "frames": 457,
+      "frameMs": 6.583588621444201,
+      "medianMs": 6.5,
+      "p95Ms": 7.300000000000182,
+      "minMs": 5.599999999999454,
+      "maxMs": 13.099999999999454,
+      "visibleLightsBefore": 0,
+      "visibleSpotLights": 0,
+      "visiblePointLights": 0,
+      "visibleLightsAfter": 0,
+      "programs": 211,
+      "calls": 346,
+      "triangles": 642239,
+      "pixelRatio": 1.15,
+      "canvas": "1655x1035",
+      "megapixels": 1.712925,
+      "quality": "high",
+      "checkpoint": "spike-night-street"
+    },
+    {
+      "order": "reverse",
+      "rank": "spotsFirst",
+      "cap": 2,
+      "world": "hybrid-direct",
+      "uncappedLights": 18,
+      "machine": {
+        "loadAverage": [
+          7.06,
+          6.47,
+          6.29
+        ]
+      },
+      "frames": 452,
+      "frameMs": 6.6632743362831865,
+      "medianMs": 6.699999999999818,
+      "p95Ms": 7.400000000000546,
+      "minMs": 5.599999999999454,
+      "maxMs": 8.199999999999818,
+      "visibleLightsBefore": 2,
+      "visibleSpotLights": 2,
+      "visiblePointLights": 0,
+      "visibleLightsAfter": 2,
+      "programs": 211,
+      "calls": 346,
+      "triangles": 642239,
+      "pixelRatio": 1.15,
+      "canvas": "1655x1035",
+      "megapixels": 1.712925,
+      "quality": "high",
+      "checkpoint": "spike-night-street"
+    },
+    {
+      "order": "reverse",
+      "rank": "spotsFirst",
+      "cap": 2,
+      "world": "voxel",
+      "uncappedLights": 18,
+      "machine": {
+        "loadAverage": [
+          7.14,
+          6.5,
+          6.3
+        ]
+      },
+      "frames": 473,
+      "frameMs": 6.368498942917547,
+      "medianMs": 6.399999999999636,
+      "p95Ms": 7,
+      "minMs": 5.5,
+      "maxMs": 7.800000000000182,
+      "visibleLightsBefore": 2,
+      "visibleSpotLights": 2,
+      "visiblePointLights": 0,
+      "visibleLightsAfter": 2,
+      "programs": 197,
+      "calls": 318,
+      "triangles": 669529,
+      "pixelRatio": 1.15,
+      "canvas": "1655x1035",
+      "megapixels": 1.712925,
+      "quality": "high",
+      "checkpoint": "spike-night-street"
+    },
+    {
+      "order": "reverse",
+      "rank": "spotsFirst",
+      "cap": 12,
+      "world": "voxel",
+      "uncappedLights": 18,
+      "machine": {
+        "loadAverage": [
+          6.74,
+          6.43,
+          6.28
+        ]
+      },
+      "frames": 444,
+      "frameMs": 6.781306306306307,
+      "medianMs": 6.699999999999818,
+      "p95Ms": 7.699999999999818,
+      "minMs": 5.599999999999454,
+      "maxMs": 8.5,
+      "visibleLightsBefore": 12,
+      "visibleSpotLights": 4,
+      "visiblePointLights": 8,
+      "visibleLightsAfter": 12,
+      "programs": 197,
+      "calls": 318,
+      "triangles": 669529,
+      "pixelRatio": 1.15,
+      "canvas": "1655x1035",
+      "megapixels": 1.712925,
+      "quality": "high",
+      "checkpoint": "spike-night-street"
+    },
+    {
+      "order": "reverse",
+      "rank": "spotsFirst",
+      "cap": 12,
+      "world": "hybrid-direct",
+      "uncappedLights": 18,
+      "machine": {
+        "loadAverage": [
+          6.52,
+          6.39,
+          6.26
+        ]
+      },
+      "frames": 420,
+      "frameMs": 7.170238095238095,
+      "medianMs": 7.100000000000364,
+      "p95Ms": 8,
+      "minMs": 6,
+      "maxMs": 11.699999999999818,
+      "visibleLightsBefore": 12,
+      "visibleSpotLights": 4,
+      "visiblePointLights": 8,
+      "visibleLightsAfter": 12,
+      "programs": 211,
+      "calls": 346,
+      "triangles": 642239,
+      "pixelRatio": 1.15,
+      "canvas": "1655x1035",
+      "megapixels": 1.712925,
+      "quality": "high",
+      "checkpoint": "spike-night-street"
+    },
+    {
+      "order": "reverse",
+      "rank": "spotsFirst",
+      "cap": 16,
+      "world": "hybrid-direct",
+      "uncappedLights": 18,
+      "machine": {
+        "loadAverage": [
+          7.65,
+          6.64,
+          6.35
+        ]
+      },
+      "frames": 248,
+      "frameMs": 12.161290322580646,
+      "medianMs": 12.100000000000364,
+      "p95Ms": 14.199999999999818,
+      "minMs": 9.099999999999454,
+      "maxMs": 15.899999999999636,
+      "visibleLightsBefore": 16,
+      "visibleSpotLights": 4,
+      "visiblePointLights": 12,
+      "visibleLightsAfter": 16,
+      "programs": 211,
+      "calls": 346,
+      "triangles": 642239,
+      "pixelRatio": 1.15,
+      "canvas": "1655x1035",
+      "megapixels": 1.712925,
+      "quality": "high",
+      "checkpoint": "spike-night-street"
+    },
+    {
+      "order": "reverse",
+      "rank": "spotsFirst",
+      "cap": 16,
+      "world": "voxel",
+      "uncappedLights": 18,
+      "machine": {
+        "loadAverage": [
+          8.56,
+          6.84,
+          6.43
+        ]
+      },
+      "frames": 358,
+      "frameMs": 8.407821229050278,
+      "medianMs": 8.399999999999636,
+      "p95Ms": 10.199999999999818,
+      "minMs": 6.099999999999454,
+      "maxMs": 13,
+      "visibleLightsBefore": 16,
+      "visibleSpotLights": 4,
+      "visiblePointLights": 12,
+      "visibleLightsAfter": 16,
+      "programs": 197,
+      "calls": 318,
+      "triangles": 669529,
+      "pixelRatio": 1.15,
+      "canvas": "1655x1035",
+      "megapixels": 1.712925,
+      "quality": "high",
+      "checkpoint": "spike-night-street"
+    },
+    {
+      "order": "reverse",
+      "rank": "spotsFirst",
+      "cap": 18,
+      "world": "voxel",
+      "uncappedLights": 18,
+      "machine": {
+        "loadAverage": [
+          7.71,
+          6.72,
+          6.39
+        ]
+      },
+      "frames": 190,
+      "frameMs": 15.862105263157895,
+      "medianMs": 15.799999999999272,
+      "p95Ms": 32,
+      "minMs": 0.1000000000003638,
+      "maxMs": 33.69999999999982,
+      "visibleLightsBefore": 18,
+      "visibleSpotLights": 4,
+      "visiblePointLights": 14,
+      "visibleLightsAfter": 18,
+      "programs": 182,
+      "calls": 318,
+      "triangles": 669529,
+      "pixelRatio": 1.15,
+      "canvas": "1655x1035",
+      "megapixels": 1.712925,
+      "quality": "high",
+      "checkpoint": "spike-night-street"
+    },
+    {
+      "order": "reverse",
+      "rank": "spotsFirst",
+      "cap": 18,
+      "world": "hybrid-direct",
+      "uncappedLights": 18,
+      "machine": {
+        "loadAverage": [
+          7.33,
+          6.66,
+          6.37
+        ]
+      },
+      "frames": 146,
+      "frameMs": 20.635616438356166,
+      "medianMs": 20.799999999999272,
+      "p95Ms": 22.599999999999454,
+      "minMs": 17.699999999999818,
+      "maxMs": 23.199999999999818,
+      "visibleLightsBefore": 18,
+      "visibleSpotLights": 4,
+      "visiblePointLights": 14,
+      "visibleLightsAfter": 18,
+      "programs": 194,
+      "calls": 346,
+      "triangles": 642239,
+      "pixelRatio": 1.15,
+      "canvas": "1655x1035",
+      "megapixels": 1.712925,
+      "quality": "high",
+      "checkpoint": "spike-night-street"
+    },
+    {
+      "order": "shuffle",
+      "rank": "spotsFirst",
+      "cap": 2,
+      "world": "voxel",
+      "uncappedLights": 18,
+      "machine": {
+        "loadAverage": [
+          6.91,
+          6.58,
+          6.35
+        ]
+      },
+      "frames": 469,
+      "frameMs": 6.410660980810236,
+      "medianMs": 6.399999999999636,
+      "p95Ms": 7.100000000000364,
+      "minMs": 5.5,
+      "maxMs": 8.400000000000091,
+      "visibleLightsBefore": 2,
+      "visibleSpotLights": 2,
+      "visiblePointLights": 0,
+      "visibleLightsAfter": 2,
+      "programs": 197,
+      "calls": 318,
+      "triangles": 669529,
+      "pixelRatio": 1.15,
+      "canvas": "1655x1035",
+      "megapixels": 1.712925,
+      "quality": "high",
+      "checkpoint": "spike-night-street"
+    },
+    {
+      "order": "shuffle",
+      "rank": "spotsFirst",
+      "cap": 2,
+      "world": "hybrid-direct",
+      "uncappedLights": 18,
+      "machine": {
+        "loadAverage": [
+          6.75,
+          6.56,
+          6.34
+        ]
+      },
+      "frames": 428,
+      "frameMs": 7.030841121495328,
+      "medianMs": 7,
+      "p95Ms": 8,
+      "minMs": 5.5,
+      "maxMs": 9.100000000000364,
+      "visibleLightsBefore": 2,
+      "visibleSpotLights": 2,
+      "visiblePointLights": 0,
+      "visibleLightsAfter": 2,
+      "programs": 211,
+      "calls": 346,
+      "triangles": 642239,
+      "pixelRatio": 1.15,
+      "canvas": "1655x1035",
+      "megapixels": 1.712925,
+      "quality": "high",
+      "checkpoint": "spike-night-street"
+    },
+    {
+      "order": "shuffle",
+      "rank": "spotsFirst",
+      "cap": 0,
+      "world": "hybrid-direct",
+      "uncappedLights": 18,
+      "machine": {
+        "loadAverage": [
+          7.25,
+          6.67,
+          6.38
+        ]
+      },
+      "frames": 450,
+      "frameMs": 6.6866666666666665,
+      "medianMs": 6.699999999999818,
+      "p95Ms": 7.5,
+      "minMs": 5.699999999999818,
+      "maxMs": 8.300000000000182,
+      "visibleLightsBefore": 0,
+      "visibleSpotLights": 0,
+      "visiblePointLights": 0,
+      "visibleLightsAfter": 0,
+      "programs": 211,
+      "calls": 346,
+      "triangles": 642239,
+      "pixelRatio": 1.15,
+      "canvas": "1655x1035",
+      "megapixels": 1.712925,
+      "quality": "high",
+      "checkpoint": "spike-night-street"
+    },
+    {
+      "order": "shuffle",
+      "rank": "spotsFirst",
+      "cap": 0,
+      "world": "voxel",
+      "uncappedLights": 18,
+      "machine": {
+        "loadAverage": [
+          8.68,
+          6.99,
+          6.49
+        ]
+      },
+      "frames": 462,
+      "frameMs": 6.514718614718614,
+      "medianMs": 6.5,
+      "p95Ms": 7.299999999999272,
+      "minMs": 5.599999999999454,
+      "maxMs": 8,
+      "visibleLightsBefore": 0,
+      "visibleSpotLights": 0,
+      "visiblePointLights": 0,
+      "visibleLightsAfter": 0,
+      "programs": 197,
+      "calls": 318,
+      "triangles": 669529,
+      "pixelRatio": 1.15,
+      "canvas": "1655x1035",
+      "megapixels": 1.712925,
+      "quality": "high",
+      "checkpoint": "spike-night-street"
+    },
+    {
+      "order": "shuffle",
+      "rank": "spotsFirst",
+      "cap": 12,
+      "world": "voxel",
+      "uncappedLights": 18,
+      "machine": {
+        "loadAverage": [
+          9.26,
+          7.14,
+          6.55
+        ]
+      },
+      "frames": 463,
+      "frameMs": 6.494384449244062,
+      "medianMs": 6.5,
+      "p95Ms": 7.200000000000728,
+      "minMs": 5.5,
+      "maxMs": 7.900000000000546,
+      "visibleLightsBefore": 12,
+      "visibleSpotLights": 4,
+      "visiblePointLights": 8,
+      "visibleLightsAfter": 12,
+      "programs": 197,
+      "calls": 318,
+      "triangles": 669529,
+      "pixelRatio": 1.15,
+      "canvas": "1655x1035",
+      "megapixels": 1.712925,
+      "quality": "high",
+      "checkpoint": "spike-night-street"
+    },
+    {
+      "order": "shuffle",
+      "rank": "spotsFirst",
+      "cap": 12,
+      "world": "hybrid-direct",
+      "uncappedLights": 18,
+      "machine": {
+        "loadAverage": [
+          8.77,
+          7.1,
+          6.54
+        ]
+      },
+      "frames": 456,
+      "frameMs": 6.601315789473684,
+      "medianMs": 6.599999999999454,
+      "p95Ms": 7.300000000000182,
+      "minMs": 5.699999999999818,
+      "maxMs": 8.800000000000182,
+      "visibleLightsBefore": 12,
+      "visibleSpotLights": 4,
+      "visiblePointLights": 8,
+      "visibleLightsAfter": 12,
+      "programs": 211,
+      "calls": 346,
+      "triangles": 642239,
+      "pixelRatio": 1.15,
+      "canvas": "1655x1035",
+      "megapixels": 1.712925,
+      "quality": "high",
+      "checkpoint": "spike-night-street"
+    },
+    {
+      "order": "shuffle",
+      "rank": "spotsFirst",
+      "cap": 18,
+      "world": "hybrid-direct",
+      "uncappedLights": 18,
+      "machine": {
+        "loadAverage": [
+          8.47,
+          7.07,
+          6.53
+        ]
+      },
+      "frames": 149,
+      "frameMs": 20.245637583892613,
+      "medianMs": 20.399999999999636,
+      "p95Ms": 22.899999999999636,
+      "minMs": 5,
+      "maxMs": 35.69999999999982,
+      "visibleLightsBefore": 18,
+      "visibleSpotLights": 4,
+      "visiblePointLights": 14,
+      "visibleLightsAfter": 18,
+      "programs": 194,
+      "calls": 346,
+      "triangles": 642239,
+      "pixelRatio": 1.15,
+      "canvas": "1655x1035",
+      "megapixels": 1.712925,
+      "quality": "high",
+      "checkpoint": "spike-night-street"
+    },
+    {
+      "order": "shuffle",
+      "rank": "spotsFirst",
+      "cap": 18,
+      "world": "voxel",
+      "uncappedLights": 18,
+      "machine": {
+        "loadAverage": [
+          8.1,
+          7.03,
+          6.53
+        ]
+      },
+      "frames": 191,
+      "frameMs": 15.856544502617803,
+      "medianMs": 15.799999999999272,
+      "p95Ms": 32.100000000000364,
+      "minMs": 0.1000000000003638,
+      "maxMs": 34.100000000000364,
+      "visibleLightsBefore": 18,
+      "visibleSpotLights": 4,
+      "visiblePointLights": 14,
+      "visibleLightsAfter": 18,
+      "programs": 182,
+      "calls": 318,
+      "triangles": 669529,
+      "pixelRatio": 1.15,
+      "canvas": "1655x1035",
+      "megapixels": 1.712925,
+      "quality": "high",
+      "checkpoint": "spike-night-street"
+    },
+    {
+      "order": "shuffle",
+      "rank": "spotsFirst",
+      "cap": 16,
+      "world": "voxel",
+      "uncappedLights": 18,
+      "machine": {
+        "loadAverage": [
+          7.85,
+          7,
+          6.52
+        ]
+      },
+      "frames": 358,
+      "frameMs": 8.425977653631286,
+      "medianMs": 8.300000000000182,
+      "p95Ms": 10.200000000000728,
+      "minMs": 5.799999999999272,
+      "maxMs": 12.300000000000182,
+      "visibleLightsBefore": 16,
+      "visibleSpotLights": 4,
+      "visiblePointLights": 12,
+      "visibleLightsAfter": 16,
+      "programs": 197,
+      "calls": 318,
+      "triangles": 669529,
+      "pixelRatio": 1.15,
+      "canvas": "1655x1035",
+      "megapixels": 1.712925,
+      "quality": "high",
+      "checkpoint": "spike-night-street"
+    },
+    {
+      "order": "shuffle",
+      "rank": "spotsFirst",
+      "cap": 16,
+      "world": "hybrid-direct",
+      "uncappedLights": 18,
+      "machine": {
+        "loadAverage": [
+          8.5,
+          7.15,
+          6.57
+        ]
+      },
+      "frames": 249,
+      "frameMs": 12.111646586345381,
+      "medianMs": 12,
+      "p95Ms": 13.800000000000182,
+      "minMs": 1.7000000000007276,
+      "maxMs": 30.599999999999454,
+      "visibleLightsBefore": 16,
+      "visibleSpotLights": 4,
+      "visiblePointLights": 12,
+      "visibleLightsAfter": 16,
+      "programs": 211,
+      "calls": 346,
+      "triangles": 642239,
+      "pixelRatio": 1.15,
+      "canvas": "1655x1035",
+      "megapixels": 1.712925,
+      "quality": "high",
+      "checkpoint": "spike-night-street"
+    }
+  ],
+  "summary": {
+    "voxel": {
+      "byCap": {
+        "0": {
+          "samples": [
+            6.541,
+            6.323,
+            6.515
+          ],
+          "medianMs": 6.515
+        },
+        "2": {
+          "samples": [
+            6.408,
+            6.368,
+            6.411
+          ],
+          "medianMs": 6.408
+        },
+        "12": {
+          "samples": [
+            6.553,
+            6.781,
+            6.494
+          ],
+          "medianMs": 6.553
+        },
+        "16": {
+          "samples": [
+            8.37,
+            8.408,
+            8.426
+          ],
+          "medianMs": 8.408
+        },
+        "18": {
+          "samples": [
+            15.772,
+            15.862,
+            15.857
+          ],
+          "medianMs": 15.857
+        }
+      },
+      "marginal": [
+        {
+          "from": 18,
+          "to": 16,
+          "lightsRemoved": 2,
+          "savedMs": 7.449,
+          "perLightMs": 3.724
+        },
+        {
+          "from": 16,
+          "to": 12,
+          "lightsRemoved": 4,
+          "savedMs": 1.855,
+          "perLightMs": 0.464
+        },
+        {
+          "from": 12,
+          "to": 2,
+          "lightsRemoved": 10,
+          "savedMs": 0.145,
+          "perLightMs": 0.015
+        },
+        {
+          "from": 2,
+          "to": 0,
+          "lightsRemoved": 2,
+          "savedMs": -0.107,
+          "perLightMs": -0.054
+        }
+      ]
+    },
+    "hybrid-direct": {
+      "byCap": {
+        "0": {
+          "samples": [
+            6.956,
+            6.584,
+            6.687
+          ],
+          "medianMs": 6.687
+        },
+        "2": {
+          "samples": [
+            6.653,
+            6.663,
+            7.031
+          ],
+          "medianMs": 6.663
+        },
+        "12": {
+          "samples": [
+            6.485,
+            7.17,
+            6.601
+          ],
+          "medianMs": 6.601
+        },
+        "16": {
+          "samples": [
+            12.235,
+            12.161,
+            12.112
+          ],
+          "medianMs": 12.161
+        },
+        "18": {
+          "samples": [
+            20.799,
+            20.636,
+            20.246
+          ],
+          "medianMs": 20.636
+        }
+      },
+      "marginal": [
+        {
+          "from": 18,
+          "to": 16,
+          "lightsRemoved": 2,
+          "savedMs": 8.474,
+          "perLightMs": 4.237
+        },
+        {
+          "from": 16,
+          "to": 12,
+          "lightsRemoved": 4,
+          "savedMs": 5.56,
+          "perLightMs": 1.39
+        },
+        {
+          "from": 12,
+          "to": 2,
+          "lightsRemoved": 10,
+          "savedMs": -0.062,
+          "perLightMs": -0.006
+        },
+        {
+          "from": 2,
+          "to": 0,
+          "lightsRemoved": 2,
+          "savedMs": -0.023,
+          "perLightMs": -0.012
+        }
+      ]
+    }
+  }
+}

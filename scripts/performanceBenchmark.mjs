@@ -181,7 +181,13 @@ async function applyDiagnosticOverrides(page) {
     for (let i = 0; i < 4; i++) await new Promise((resolve) => requestAnimationFrame(resolve));
     return {
       shadowsEnabled: window.__diorama.renderer.shadowMap.enabled,
-      visibleLocalLights: await window.__diorama.debugCountVisibleLocalLights(),
+      visibleLocalLights: (() => {
+      let n = 0;
+      window.__diorama.scene.traverse((node) => {
+        if ((node.isPointLight || node.isSpotLight) && node.visible && node.intensity > 0) n += 1;
+      });
+      return n;
+    })(),
     };
   }, { disableShadows: DISABLE_SHADOWS, disableLocalLights: DISABLE_LOCAL_LIGHTS });
   if (DISABLE_SHADOWS) assert.equal(state.shadowsEnabled, false, 'shadow diagnostic override was not applied');
@@ -193,7 +199,13 @@ async function applyDiagnosticOverrides(page) {
 async function confirmDiagnosticOverrides(page, when) {
   const state = await page.evaluate(async () => ({
     shadowsEnabled: window.__diorama.renderer.shadowMap.enabled,
-    visibleLocalLights: await window.__diorama.debugCountVisibleLocalLights(),
+    visibleLocalLights: (() => {
+      let n = 0;
+      window.__diorama.scene.traverse((node) => {
+        if ((node.isPointLight || node.isSpotLight) && node.visible && node.intensity > 0) n += 1;
+      });
+      return n;
+    })(),
   }));
   if (DISABLE_SHADOWS) {
     assert.equal(state.shadowsEnabled, false, `shadows came back ${when}`);
@@ -918,7 +930,13 @@ try {
   const diagnosticsRestored = await page.evaluate(async () => {
     // The gate is read inside the light update, so the restore lands on a later frame.
     for (let i = 0; i < 4; i++) await new Promise((resolve) => requestAnimationFrame(resolve));
-    return { visibleLocalLights: await window.__diorama.debugCountVisibleLocalLights() };
+    return { visibleLocalLights: (() => {
+      let n = 0;
+      window.__diorama.scene.traverse((node) => {
+        if ((node.isPointLight || node.isSpotLight) && node.visible && node.intensity > 0) n += 1;
+      });
+      return n;
+    })() };
   });
 
   /**

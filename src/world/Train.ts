@@ -139,14 +139,23 @@ function buildSharedMaterials() {
   const make = (color: number, opts: Partial<THREE.MeshStandardMaterialParameters> = {}) =>
     new THREE.MeshStandardMaterial({ color, roughness: 0.72, metalness: 0.12, ...opts });
 
+  // Glass, not a lit panel. These windows carried the `windowLit` cream as their own
+  // colour with a constant 0.4 emissive, so a daylight train showed rows of glowing
+  // cream rectangles and a night train showed exactly the same ones. The pane is dark
+  // and takes the sky; the lit interior is a night state and ramps with it.
+  //
+  // Not the bus's numbers: a carriage window is a large flat pane seen side-on from
+  // almost every camera in this diorama, which is the angle where a smooth pane blows
+  // out to white, so it is rougher and reflects less than the bus's glass. The pane
+  // colour is the product's own unlit window, which is what this is.
   const windowGlass = new THREE.MeshStandardMaterial({
-    color: COLORS.windowLit,
+    color: COLORS.window,
     emissive: COLORS.windowLit,
-    emissiveIntensity: 0.4,
-    roughness: 0.1,
-    metalness: 0.5,
+    emissiveIntensity: 0,
+    roughness: 0.2,
+    metalness: 0.4,
   });
-  windowGlass.envMapIntensity = 1.6;
+  windowGlass.envMapIntensity = 1;
 
   return {
     locomotive: make(PASTEL_COLORS.locomotive, { roughness: 0.45, metalness: 0.3 }),
@@ -730,6 +739,8 @@ export function createTrain(scene: THREE.Scene): TrainHandle {
       // plus a faintly visible beam cone. A small base level keeps the lamps
       // alive at dusk.
       const beamStrength = Math.min(1, nightFactor * 1.4);
+      // The carriages light up from inside as the sun goes down, like the flats do.
+      mats.windowLit.emissiveIntensity = beamStrength;
       for (const lamp of headLights) {
         lamp.visible = headlightsEnabled;
         lamp.intensity = 6 + beamStrength * 340;
@@ -780,6 +791,12 @@ export function createTrain(scene: THREE.Scene): TrainHandle {
       mats.passenger.color.setHex(palette.passenger);
       mats.passengerAccent.color.setHex(palette.passengerAccent);
       mats.passengerDark.color.setHex(palette.passengerDark);
+      // The pane and the interior are two different colours, and Cyberpunk changes
+      // both -- lerping the interior from the pane is what made the night bus glow navy.
+      // The pane keeps its own dark glass in every livery -- what a livery changes is
+      // the light inside it, cyan under Cyberpunk and warm otherwise. No hand-picked
+      // hexes: both come from colours the world already defines.
+      mats.windowLit.emissive.setHex(livery === 'cyber' ? palette.locomotiveAccent : COLORS.windowLit);
     },
     setHeadlightsEnabled(enabled) {
       headlightsEnabled = enabled;

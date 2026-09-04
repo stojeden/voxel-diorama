@@ -384,7 +384,13 @@ async function runMaterials(page, worlds) {
       // matrix, verified in the scene and not just requested.
       await page.evaluate(() => window.__diorama.debugSetLocalLightsEnabled(false));
       await settle(page, 4);
-      const litLamps = await page.evaluate(() => window.__diorama.debugCountVisibleLocalLights());
+      const litLamps = await page.evaluate(() => (() => {
+      let n = 0;
+      window.__diorama.scene.traverse((node) => {
+        if ((node.isPointLight || node.isSpotLight) && node.visible && node.intensity > 0) n += 1;
+      });
+      return n;
+    })());
       assert.equal(litLamps, 0, `${world}/${quality}: local lights still on for the material matrix`);
 
       for (const [label, distance] of DISTANCES) {
@@ -393,7 +399,13 @@ async function runMaterials(page, worlds) {
         for (const [phase, t01] of [['day', 0.5], ['night', 0.94]]) {
           await page.evaluate((t) => window.__diorama.setTime(t), t01);
           await settle(page, 6);
-          const after = await page.evaluate(() => window.__diorama.debugCountVisibleLocalLights());
+          const after = await page.evaluate(() => (() => {
+      let n = 0;
+      window.__diorama.scene.traverse((node) => {
+        if ((node.isPointLight || node.isSpotLight) && node.visible && node.intensity > 0) n += 1;
+      });
+      return n;
+    })());
           assert.equal(after, 0, `${world}/${quality}/${label}/${phase}: local lights came back mid-matrix`);
           shots[phase] = await captureRegion(page, FRAGMENT_BOX);
           entry.matrix.push({

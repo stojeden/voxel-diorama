@@ -1,0 +1,257 @@
+{
+  "recordedAt": "2026-09-04T08:47:41.413Z",
+  "question": "What does one physical local light cost, and is the cost linear in the count?",
+  "rank": "default",
+  "method": {
+    "rank": "point lights kept, spot lights removed first",
+    "vsync": "disabled: a marginal millisecond is invisible under a 16.7 ms quantum",
+    "lightControl": "renderer.render wrapped to re-apply a deterministic cap immediately before each draw, because DayNightCycle reassigns visible every frame",
+    "lampsUntouched": "emissive shades and window materials are not changed: a capped variant still shows every lamp lit",
+    "held": [
+      "seed",
+      "checkpoint",
+      "camera",
+      "quality profile High",
+      "pixel ratio 1.15",
+      "directional light",
+      "SSAO",
+      "postprocessing",
+      "viewport",
+      "deviceScaleFactor"
+    ],
+    "worlds": "both in one browser session, alternating which goes first",
+    "orders": [
+      "given",
+      "reverse",
+      "shuffle"
+    ],
+    "warmupFrames": 45,
+    "measureSeconds": 3,
+    "samplesPerVariant": 3
+  },
+  "caps": [
+    18
+  ],
+  "rows": [
+    {
+      "order": "given",
+      "rank": "default",
+      "cap": 18,
+      "world": "voxel",
+      "uncappedLights": 14,
+      "machine": {
+        "loadAverage": [
+          6.44,
+          6.67,
+          6.75
+        ]
+      },
+      "frames": 429,
+      "frameMs": 7.018414918414918,
+      "medianMs": 7,
+      "p95Ms": 8.100000000000364,
+      "minMs": 5.600000000000364,
+      "maxMs": 8.899999999999636,
+      "visibleLightsBefore": 14,
+      "visibleSpotLights": 4,
+      "visiblePointLights": 10,
+      "visibleLightsAfter": 14,
+      "programs": 182,
+      "calls": 318,
+      "triangles": 669529,
+      "pixelRatio": 1.15,
+      "canvas": "1655x1035",
+      "megapixels": 1.712925,
+      "quality": "high",
+      "checkpoint": "spike-night-street"
+    },
+    {
+      "order": "given",
+      "rank": "default",
+      "cap": 18,
+      "world": "hybrid-direct",
+      "uncappedLights": 14,
+      "machine": {
+        "loadAverage": [
+          6.13,
+          6.6,
+          6.72
+        ]
+      },
+      "frames": 322,
+      "frameMs": 9.375155279503106,
+      "medianMs": 9.399999999999636,
+      "p95Ms": 10.300000000000182,
+      "minMs": 7.799999999999727,
+      "maxMs": 11.100000000000364,
+      "visibleLightsBefore": 14,
+      "visibleSpotLights": 4,
+      "visiblePointLights": 10,
+      "visibleLightsAfter": 14,
+      "programs": 194,
+      "calls": 346,
+      "triangles": 642239,
+      "pixelRatio": 1.15,
+      "canvas": "1655x1035",
+      "megapixels": 1.712925,
+      "quality": "high",
+      "checkpoint": "spike-night-street"
+    },
+    {
+      "order": "reverse",
+      "rank": "default",
+      "cap": 18,
+      "world": "voxel",
+      "uncappedLights": 14,
+      "machine": {
+        "loadAverage": [
+          5.8,
+          6.52,
+          6.69
+        ]
+      },
+      "frames": 422,
+      "frameMs": 7.1298578199052125,
+      "medianMs": 7,
+      "p95Ms": 8.399999999999636,
+      "minMs": 5.300000000000182,
+      "maxMs": 14,
+      "visibleLightsBefore": 14,
+      "visibleSpotLights": 4,
+      "visiblePointLights": 10,
+      "visibleLightsAfter": 14,
+      "programs": 182,
+      "calls": 318,
+      "triangles": 669529,
+      "pixelRatio": 1.15,
+      "canvas": "1655x1035",
+      "megapixels": 1.712925,
+      "quality": "high",
+      "checkpoint": "spike-night-street"
+    },
+    {
+      "order": "reverse",
+      "rank": "default",
+      "cap": 18,
+      "world": "hybrid-direct",
+      "uncappedLights": 14,
+      "machine": {
+        "loadAverage": [
+          5.35,
+          6.4,
+          6.65
+        ]
+      },
+      "frames": 322,
+      "frameMs": 9.36086956521739,
+      "medianMs": 9.300000000000182,
+      "p95Ms": 10,
+      "minMs": 8,
+      "maxMs": 11.099999999999454,
+      "visibleLightsBefore": 14,
+      "visibleSpotLights": 4,
+      "visiblePointLights": 10,
+      "visibleLightsAfter": 14,
+      "programs": 194,
+      "calls": 346,
+      "triangles": 642239,
+      "pixelRatio": 1.15,
+      "canvas": "1655x1035",
+      "megapixels": 1.712925,
+      "quality": "high",
+      "checkpoint": "spike-night-street"
+    },
+    {
+      "order": "shuffle",
+      "rank": "default",
+      "cap": 18,
+      "world": "voxel",
+      "uncappedLights": 14,
+      "machine": {
+        "loadAverage": [
+          5.33,
+          6.38,
+          6.64
+        ]
+      },
+      "frames": 427,
+      "frameMs": 7.046370023419203,
+      "medianMs": 7,
+      "p95Ms": 8.199999999999818,
+      "minMs": 5.799999999999272,
+      "maxMs": 9,
+      "visibleLightsBefore": 14,
+      "visibleSpotLights": 4,
+      "visiblePointLights": 10,
+      "visibleLightsAfter": 14,
+      "programs": 182,
+      "calls": 318,
+      "triangles": 669529,
+      "pixelRatio": 1.15,
+      "canvas": "1655x1035",
+      "megapixels": 1.712925,
+      "quality": "high",
+      "checkpoint": "spike-night-street"
+    },
+    {
+      "order": "shuffle",
+      "rank": "default",
+      "cap": 18,
+      "world": "hybrid-direct",
+      "uncappedLights": 14,
+      "machine": {
+        "loadAverage": [
+          5.14,
+          6.32,
+          6.62
+        ]
+      },
+      "frames": 322,
+      "frameMs": 9.359006211180123,
+      "medianMs": 9.300000000000182,
+      "p95Ms": 10.100000000000364,
+      "minMs": 8,
+      "maxMs": 10.800000000000182,
+      "visibleLightsBefore": 14,
+      "visibleSpotLights": 4,
+      "visiblePointLights": 10,
+      "visibleLightsAfter": 14,
+      "programs": 194,
+      "calls": 346,
+      "triangles": 642239,
+      "pixelRatio": 1.15,
+      "canvas": "1655x1035",
+      "megapixels": 1.712925,
+      "quality": "high",
+      "checkpoint": "spike-night-street"
+    }
+  ],
+  "summary": {
+    "voxel": {
+      "byCap": {
+        "18": {
+          "samples": [
+            7.018,
+            7.13,
+            7.046
+          ],
+          "medianMs": 7.046
+        }
+      },
+      "marginal": []
+    },
+    "hybrid-direct": {
+      "byCap": {
+        "18": {
+          "samples": [
+            9.375,
+            9.361,
+            9.359
+          ],
+          "medianMs": 9.361
+        }
+      },
+      "marginal": []
+    }
+  }
+}

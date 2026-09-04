@@ -47,6 +47,14 @@ const QUALITY = 'high';
 const WORLDS = ['voxel', 'hybrid-direct'];
 const CAPS = (process.env.LIGHT_CAPS ?? '16,12,8,4,0').split(',').map(Number);
 const ORDERS = (process.env.LIGHT_ORDERS ?? 'given,reverse,shuffle').split(',');
+/**
+ * Which lights survive a cap, so "how many" can be told apart from "which kind".
+ * `default` ranks point lights before spot lights, so a cap removes the spots first;
+ * `spotsFirst` keeps the spots and removes point lights instead. The main run showed
+ * two lights costing 8-9 ms and the other sixteen almost nothing, and those two are the
+ * spot lights -- this is how that is confirmed rather than inferred from the ordering.
+ */
+const RANK = process.env.LIGHT_RANK ?? 'default';
 const VIEWPORT = { width: 1440, height: 900 };
 const DEVICE_SCALE = 2;
 /** Frames rendered after a cap change before anything is measured, for the recompile. */
@@ -73,7 +81,7 @@ const orderCaps = (order) => {
 };
 
 /** Installed once per page: a cap re-applied immediately before every draw. */
-const INSTALL_CAP = () => {
+const INSTALL_CAP = (rank) => {
   const renderer = window.__diorama.renderer;
   if (window.__lightCap !== undefined) return 'already';
   window.__lightCap = null;
@@ -86,7 +94,9 @@ const INSTALL_CAP = () => {
     // is reproducible and does not flicker between two sets of lamps.
     lights.sort((a, b) => {
       const key = (light) => [
-        light.isSpotLight ? 'spot' : 'point',
+        rank === 'spotsFirst'
+          ? (light.isSpotLight ? 'a-spot' : 'b-point')
+          : (light.isSpotLight ? 'b-spot' : 'a-point'),
         light.name || '',
         light.position.x.toFixed(2),
         light.position.y.toFixed(2),
@@ -161,7 +171,7 @@ try {
         consoleErrors.length = 0;
         await page.goto(`${URL}/?seed=${SEED}&world=${world}&checkpoint=${CHECKPOINT}&quality=${QUALITY}`, { waitUntil: 'load' });
         await page.waitForFunction(() => window.__diorama?.ready === true, null, { timeout: 90_000 });
-        assert.equal(await page.evaluate(INSTALL_CAP), 'installed');
+        assert.equal(await page.evaluate(INSTALL_CAP, RANK), 'installed');
         await page.waitForTimeout(1_200);
 
         const before = await page.evaluate(() => {
@@ -179,6 +189,8 @@ try {
         const sample = await page.evaluate(async (seconds) => {
           const lights = window.__lightRank();
           const visibleBefore = lights.filter((light) => light.visible).length;
+          const spots = lights.filter((light) => light.isSpotLight && light.visible).length;
+          const points = lights.filter((light) => light.isPointLight && light.visible).length;
           const deltas = [];
           let previous = 0;
           const deadline = performance.now() + seconds * 1000;
@@ -203,6 +215,8 @@ try {
             minMs: deltas[0],
             maxMs: deltas[deltas.length - 1],
             visibleLightsBefore: visibleBefore,
+            visibleSpotLights: spots,
+            visiblePointLights: points,
             visibleLightsAfter: after.filter((light) => light.visible).length,
             programs: metrics.renderer.programs,
             calls: metrics.renderer.calls,
@@ -227,9 +241,9 @@ try {
         assert.ok(Math.abs(sample.pixelRatio - 1.15) < 1e-6, `${world} cap ${cap}: pixel ratio ${sample.pixelRatio}`);
         assert.deepEqual(consoleErrors, [], `${world} cap ${cap}: console errors ${JSON.stringify(consoleErrors)}`);
 
-        rows.push({ order, cap, world, uncappedLights: before.visible, machine: machine(), ...sample });
+        rows.push({ order, rank: RANK, cap, world, uncappedLights: before.visible, machine: machine(), ...sample });
         console.log(
-          `${order.padEnd(8)} cap ${String(cap).padStart(2)} ${world.padEnd(14)}`
+          `${order.padEnd(8)} ${RANK.padEnd(10)} cap ${String(cap).padStart(2)} ${world.padEnd(14)}`
           + `${sample.frameMs.toFixed(2)} ms/frame (median ${sample.medianMs.toFixed(2)}, p95 ${sample.p95Ms.toFixed(2)})  `
           + `lights ${sample.visibleLightsAfter}/${before.visible}  programs ${sample.programs}  calls ${sample.calls}  `
           + `${sample.canvas}  load ${machine().loadAverage[0]}`
@@ -268,7 +282,11 @@ try {
   await writeFile(OUT, JSON.stringify({
     recordedAt: new Date().toISOString(),
     question: 'What does one physical local light cost, and is the cost linear in the count?',
+    rank: RANK,
     method: {
+      rank: RANK === 'spotsFirst'
+        ? 'spot lights kept, point lights removed first'
+        : 'point lights kept, spot lights removed first',
       vsync: 'disabled: a marginal millisecond is invisible under a 16.7 ms quantum',
       lightControl: 'renderer.render wrapped to re-apply a deterministic cap immediately before each draw, because DayNightCycle reassigns visible every frame',
       lampsUntouched: 'emissive shades and window materials are not changed: a capped variant still shows every lamp lit',
