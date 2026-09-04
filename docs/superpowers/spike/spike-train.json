@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-04T11:49:47.545Z",
+  "generatedAt": "2026-09-04T12:27:15.209Z",
   "world": "hybrid-direct",
   "routeLengthM": 162.3,
   "progressTolerance": 0.001,
@@ -9,9 +9,9 @@
       "requestedT01": 0.42,
       "actualT01": 0.5453,
       "checkpointPinnedProgress": 0.68,
-      "shotAtProgress": 0.68013,
-      "progressErrorFromTarget": 0.00013,
-      "progressErrorMetres": 0.02,
+      "shotAtProgress": 0.68014,
+      "progressErrorFromTarget": 0.00014,
+      "progressErrorMetres": 0.022,
       "camera": [
         52,
         18,
@@ -52,9 +52,9 @@
       "requestedT01": 0.94,
       "actualT01": 0.0652,
       "checkpointPinnedProgress": 0.68,
-      "shotAtProgress": 0.68015,
-      "progressErrorFromTarget": 0.00015,
-      "progressErrorMetres": 0.024,
+      "shotAtProgress": 0.68014,
+      "progressErrorFromTarget": 0.00014,
+      "progressErrorMetres": 0.023,
       "camera": [
         52,
         18,
@@ -68,7 +68,7 @@
       "frame": "docs/superpowers/spike/frames/hybrid-direct-high-train-night.jpg",
       "settledAfterReads": 3,
       "ramp": [
-        0.864,
+        0.835,
         1,
         1
       ],

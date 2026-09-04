@@ -1,23 +1,23 @@
 {
-  "generatedAt": "2026-09-04T11:40:37.031Z",
+  "generatedAt": "2026-09-04T12:26:12.306Z",
   "world": "hybrid-direct",
   "found": {
-    "x": -57.33277672497681,
+    "x": -57.230891864134435,
     "y": -0.5,
-    "z": -45.86263659031921
+    "z": -45.84465994258559
   },
   "shots": [
     {
       "name": "postman-side",
       "frame": "docs/superpowers/spike/frames/hybrid-direct-high-postman-side.jpg",
       "aimed": {
-        "x": -33.54292769828883,
+        "x": -33.44276014024581,
         "y": -0.5,
-        "z": -45.69951834385678,
+        "z": -45.702765293446845,
         "camera": [
-          -33.54292769828883,
+          -33.44276014024581,
           1.4,
-          -53.69951834385678
+          -53.702765293446845
         ]
       },
       "legibility": {
@@ -29,17 +29,17 @@
         },
         "wheels": {
           "meshes": 2,
-          "ownPixels": 8142,
+          "ownPixels": 8241,
           "medianDelta": 16.8,
-          "readablePercent": 72.2,
-          "medianOwnLuma": 19.6,
-          "medianBackgroundLuma": 3.4
+          "readablePercent": 72.9,
+          "medianOwnLuma": 19.9,
+          "medianBackgroundLuma": 3.6
         },
         "frame": {
           "meshes": 6,
-          "ownPixels": 1815,
-          "medianDelta": 11.3,
-          "readablePercent": 66.3,
+          "ownPixels": 1778,
+          "medianDelta": 11,
+          "readablePercent": 67.2,
           "medianOwnLuma": 10,
           "medianBackgroundLuma": 22.2
         }
@@ -51,13 +51,13 @@
       "name": "postman-three-quarter",
       "frame": "docs/superpowers/spike/frames/hybrid-direct-high-postman-three-quarter.jpg",
       "aimed": {
-        "x": -31.242666767586606,
+        "x": -31.942081528488064,
         "y": -0.5,
-        "z": -45.773111265893135,
+        "z": -45.75102116499002,
         "camera": [
-          -26.242666767586606,
+          -26.942081528488064,
           1.5,
-          -53.773111265893135
+          -53.75102116499002
         ]
       },
       "legibility": {
@@ -69,19 +69,19 @@
         },
         "wheels": {
           "meshes": 2,
-          "ownPixels": 5952,
-          "medianDelta": 23.1,
-          "readablePercent": 71.9,
-          "medianOwnLuma": 28.6,
-          "medianBackgroundLuma": 72.1
+          "ownPixels": 6794,
+          "medianDelta": 22.6,
+          "readablePercent": 71.8,
+          "medianOwnLuma": 27.7,
+          "medianBackgroundLuma": 62.3
         },
         "frame": {
           "meshes": 6,
-          "ownPixels": 3013,
-          "medianDelta": 4.9,
-          "readablePercent": 46.8,
-          "medianOwnLuma": 23.4,
-          "medianBackgroundLuma": 8.9
+          "ownPixels": 3163,
+          "medianDelta": 4.7,
+          "readablePercent": 46.9,
+          "medianOwnLuma": 20.4,
+          "medianBackgroundLuma": 33.8
         }
       },
       "active": true,
@@ -91,13 +91,13 @@
       "name": "postman-in-world",
       "frame": "docs/superpowers/spike/frames/hybrid-direct-high-postman-in-world.jpg",
       "aimed": {
-        "x": -29.041842814631806,
+        "x": -29.141846560007078,
         "y": -0.5,
-        "z": -45.83972258392511,
+        "z": -45.836818277429934,
         "camera": [
-          -25.541842814631806,
+          -25.641846560007078,
           2,
-          -35.83972258392511
+          -35.836818277429934
         ]
       },
       "legibility": {
@@ -109,19 +109,19 @@
         },
         "wheels": {
           "meshes": 2,
-          "ownPixels": 5878,
-          "medianDelta": 41.6,
-          "readablePercent": 68.6,
-          "medianOwnLuma": 61.5,
+          "ownPixels": 5224,
+          "medianDelta": 43.5,
+          "readablePercent": 70,
+          "medianOwnLuma": 61.8,
           "medianBackgroundLuma": 0
         },
         "frame": {
           "meshes": 6,
-          "ownPixels": 1395,
-          "medianDelta": 4.3,
-          "readablePercent": 43.7,
+          "ownPixels": 1502,
+          "medianDelta": 6.9,
+          "readablePercent": 48.8,
           "medianOwnLuma": 23,
-          "medianBackgroundLuma": 33
+          "medianBackgroundLuma": 40.3
         }
       },
       "active": true,
