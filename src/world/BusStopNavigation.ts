@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import {
   BENCH_DIMENSIONS,
+  BUS_ROUTE_CURVE,
   BUS_SHELTER_POST_SIZE,
   BUS_SHELTER_SIGN_SIZE,
   GROUND_SURFACE_Y,
@@ -90,20 +91,72 @@ export function isPointClear(point: THREE.Vector3, colliders: readonly Collision
 /**
  * Four deterministic waiting spots in one row under the roof, behind the bench.
  *
- * The spacing comes from the finished bodies, not from the figure's nominal width. A
- * waiting figure is 0.874 m across its arms facing forward, but it stands turned toward
- * the bus door, and turned it measures 0.55 to 0.77 m across the street and 0.82 to
- * 0.91 m along it -- the shoulders rotate into the depth. So the row that failed was
- * not too long, it was too deep: two staggered rows 0.47 m apart put bodies 0.9 m deep
- * through each other, which a distance-between-centres test could not see.
+ * The spacing comes from the finished bodies, not from the figure's nominal width, and
+ * the count comes from what those bodies leave room for.
  *
- * One row of four at 0.9 m centres, 0.25 m in front of the post line: measured gaps
- * between the finished boxes are 0.34, 0.29 and 0.19 m, everyone is inside the 3.84 m
- * clear span between the posts, 0.5 m clear of the bench, and under the 2.0 m roof.
- * `clearance.test.ts` checks the boxes themselves, with rotation, at a 0.05 m clearance.
+ * A waiting figure is 0.874 m across its arms facing forward, but it stands turned
+ * toward the bus door it will walk to. Turned, and measured on its own vertices at the
+ * placement the runtime gives it, it is 0.83 to 0.90 m across the row and 0.48 to
+ * 0.75 m deep -- the shoulders rotate into the depth. The figures cannot be narrow
+ * along the row, because the doors are perpendicular to it.
+ *
+ * Four at 0.9 m centres therefore do not fit: at the runtime facing the two widest
+ * neighbours measured 0.90 and 0.91 m across and overlapped by 0.002 m. Widening to
+ * 1.0 m centres pushes the outermost body past the 3.84 m clear span between the posts.
+ * So three, at 1.2 m centres, 0.25 m in front of the post line: measured gaps between
+ * the finished boxes are 0.336 m and 0.359 m, the three of them occupy 3.28 m of the
+ * 3.84 m clear span, and all are clear of the bench and under the 2.0 m roof.
+ *
+ * `clearance.test.ts` checks the boxes themselves, at the placement
+ * `busStopWaitingPlacements` gives the runtime, with a 0.05 m clearance.
  */
 export function busStopWaitingPositions(stop: BusStop): THREE.Vector3[] {
-  return ([-1.35, -0.45, 0.45, 1.35] as const).map((along) => localToWorld(stop, along, -0.25));
+  return ([-1.2, 0, 1.2] as const).map((along) => localToWorld(stop, along, -0.25));
+}
+
+/** Where a waiting passenger stands, which door it walks to, and which way it looks. */
+export interface WaitingPlacement {
+  index: number;
+  waitPos: THREE.Vector3;
+  doorPos: THREE.Vector3;
+  facing: number;
+}
+
+/** Half the gap between the two door queues, along the lane. */
+const DOOR_QUEUE_OFFSET = 1.6;
+
+/**
+ * The one placement the crowd is built from -- and therefore the one a test may check.
+ *
+ * `Bus.ts` used to compute this inline and `clearance.test.ts` computed its own version
+ * beside it: one shared door invented from the shelter centre, and one facing formula
+ * written twice. They disagreed. The runtime derives the door from the lane curve and
+ * gives every other passenger the *other* door, so the four figures do not all face the
+ * same way -- which is exactly what a clearance test has to know, because facing decides
+ * how deep a turned body is. Runtime and test now call this.
+ */
+export function busStopWaitingPlacements(stop: BusStop): WaitingPlacement[] {
+  const lanePoint = BUS_ROUTE_CURVE.getPointAt(stop.atT);
+  const tangent = BUS_ROUTE_CURVE.getTangentAt(stop.atT).normalize();
+  const centre = busShelterCenter(stop);
+  const towardShelter = new THREE.Vector3(centre.x, GROUND_SURFACE_Y, centre.z)
+    .sub(lanePoint)
+    .setY(0)
+    .normalize();
+  const doorBase = lanePoint.clone().addScaledVector(towardShelter, BUS_DOOR_APPROACH_DISTANCE);
+  doorBase.y = 0.5;
+  return busStopWaitingPositions(stop).map((waitPos, index) => {
+    const doorPos = doorBase
+      .clone()
+      .addScaledVector(tangent, index % 2 === 0 ? -DOOR_QUEUE_OFFSET : DOOR_QUEUE_OFFSET);
+    doorPos.y = 0.5;
+    return {
+      index,
+      waitPos,
+      doorPos,
+      facing: Math.atan2(doorPos.x - waitPos.x, doorPos.z - waitPos.z),
+    };
+  });
 }
 
 /**

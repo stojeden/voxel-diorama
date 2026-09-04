@@ -1037,6 +1037,13 @@ const debugHandle: DioramaDebugHandle = {
   scene: env.scene,
   renderer: env.renderer,
   controls: env.controls,
+  /**
+   * Exposed for one reason: a light budget cannot be compared before and after unless a
+   * harness can put the runtime back into the old configuration and let it light the
+   * scene itself. Reconstructing the intensities outside the runtime would be a
+   * different scene wearing the same numbers.
+   */
+  dayNight,
   cameraPose: () => {
     env.controls.getTarget(postFocusTarget, false);
     return {
@@ -1045,10 +1052,7 @@ const debugHandle: DioramaDebugHandle = {
       distance: env.camera.position.distanceTo(postFocusTarget),
     };
   },
-  summonUfo: (event?: 'abduct' | 'return' | 'kioskRaid') => lakesideCow.debugSummonUfo(event),
   placeCowAtMeadow: () => lakesideCow.debugPlaceCowAtMeadow(),
-  farmerPhase: () => lakesideCow.getFarmerPhase(),
-  cowController: lakesideCow as unknown,
   debugWinterFisherman: () => {
     weather.setExternal('snow');
     weather.debugSetSnowCover(1);

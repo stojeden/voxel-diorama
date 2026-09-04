@@ -20,6 +20,7 @@ import {
   BUS_DOOR_APPROACH_DISTANCE,
   PEDESTRIAN_RADIUS,
   busShelterColliders,
+  busStopWaitingPlacements,
   busStopWaitingPositions,
   busStopWalkingPath,
 } from '../BusStopNavigation';
@@ -278,15 +279,21 @@ describe('the stop is one street system', () => {
    * Bounds come from the vertices, so the arms are in them.
    */
   const waitingFigures = (() => {
-    const positions = busStopWaitingPositions(stop);
-    const centre = busShelterCenter(stop);
-    // The crowd faces each waiting passenger at the door it will walk to; the door
-    // side is what matters here, and it is the same for all four.
-    const door = new THREE.Vector3(centre.x + 3.05, GROUND_SURFACE_Y, centre.z - stop.benchSign * 1.75);
-    return positions.map((position, index) => {
+    /**
+     * The placement the product uses, not one written again here.
+     *
+     * This test used to invent its own door -- one point offset from the shelter centre,
+     * shared by all four figures -- and its own facing formula. The runtime derives the
+     * door from the lane curve and alternates the four passengers between two door
+     * queues 3.2 m apart, so they do *not* all face the same way. Facing decides how
+     * deep a turned body is, which is the whole subject of this file, so a test on a
+     * different facing was measuring different bodies. `busStopWaitingPlacements` is now
+     * the single source for both.
+     */
+    return busStopWaitingPlacements(stop).map(({ index, waitPos: position, facing }) => {
       const build = buildPassenger();
       build.group.position.copy(position);
-      build.group.rotation.y = Math.atan2(door.x - position.x, door.z - position.z);
+      build.group.rotation.y = facing;
       build.group.updateWorldMatrix(true, true);
       const box = new THREE.Box3();
       const vertex = new THREE.Vector3();
@@ -298,7 +305,7 @@ describe('the stop is one street system', () => {
           box.expandByPoint(vertex.fromBufferAttribute(attribute, i).applyMatrix4(mesh.matrixWorld));
         }
       });
-      return { index, position, box, size: box.getSize(new THREE.Vector3()) };
+      return { index, position, facing, box, size: box.getSize(new THREE.Vector3()) };
     });
   })();
 
@@ -316,7 +323,9 @@ describe('the stop is one street system', () => {
     // tenth of a body and says nothing about the arms.
     const CLEARANCE = 0.05;
     // Three: what fits between the posts once the bodies are turned toward the door.
-    expect(waitingFigures.length).toBe(4);
+    // Four at 0.9 m centres overlapped by 2 mm at the runtime facing -- the version of
+    // this test that passed with four was using a facing the product does not use.
+    expect(waitingFigures.length).toBe(3);
     for (const a of waitingFigures) {
       for (const b of waitingFigures) {
         if (b.index <= a.index) continue;

@@ -36,7 +36,27 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { writeFile } from 'node:fs/promises';
 import { loadavg } from 'node:os';
+import { execFileSync } from 'node:child_process';
 import { chromium } from 'playwright';
+/**
+ * Which code produced these numbers, and whether anything was uncommitted while it did.
+ * A measurement without a revision cannot be quoted in a comment or a report: that is
+ * how "eleven milliseconds at sixteen lights" ended up in a source comment describing a
+ * configuration nobody had measured.
+ */
+const revisionOf = () => {
+  const run = (args) => execFileSync('git', args, { encoding: 'utf8' }).trim();
+  try {
+    return {
+      revision: run(['rev-parse', '--short', 'HEAD']),
+      workingTreeDirty: run(['status', '--porcelain']).length > 0,
+      dirtyPaths: run(['status', '--porcelain']).split('\n').filter(Boolean).slice(0, 20),
+    };
+  } catch {
+    return { revision: 'unknown', workingTreeDirty: null, dirtyPaths: [] };
+  }
+};
+
 
 const PORT = Number(process.env.LIGHT_PORT ?? 4211);
 const URL = `http://127.0.0.1:${PORT}`;
@@ -46,6 +66,18 @@ const CHECKPOINT = 'spike-night-street';
 const QUALITY = 'high';
 const WORLDS = ['voxel', 'hybrid-direct'];
 const CAPS = (process.env.LIGHT_CAPS ?? '16,12,8,4,0').split(',').map(Number);
+/**
+ * Optional: put the runtime back into a different light configuration before measuring,
+ * by setting one of DayNightCycle's own budgets.
+ *
+ * A cap above the natural count removes nothing, so a sweep of 18/16/14 on a profile
+ * that naturally lights 14 measures the same scene three times. To measure a *larger*
+ * configuration -- the one the profile had before the window pools were given up -- the
+ * budget has to be raised first, and then the caps bite again. `LIGHT_BUDGET=field:n`.
+ */
+const BUDGET_OVERRIDE = process.env.LIGHT_BUDGET
+  ? (([field, value]) => ({ field, value: Number(value) }))(process.env.LIGHT_BUDGET.split(':'))
+  : null;
 const ORDERS = (process.env.LIGHT_ORDERS ?? 'given,reverse,shuffle').split(',');
 /**
  * Which lights survive a cap, so "how many" can be told apart from "which kind".
@@ -172,6 +204,15 @@ try {
         await page.goto(`${URL}/?seed=${SEED}&world=${world}&checkpoint=${CHECKPOINT}&quality=${QUALITY}`, { waitUntil: 'load' });
         await page.waitForFunction(() => window.__diorama?.ready === true, null, { timeout: 90_000 });
         assert.equal(await page.evaluate(INSTALL_CAP, RANK), 'installed');
+        if (BUDGET_OVERRIDE) {
+          const applied = await page.evaluate((override) => {
+            const dayNight = window.__diorama.dayNight;
+            if (!(override.field in dayNight)) return null;
+            dayNight[override.field] = override.value;
+            return { field: override.field, value: dayNight[override.field] };
+          }, BUDGET_OVERRIDE);
+          assert.ok(applied, `DayNightCycle has no budget field ${BUDGET_OVERRIDE.field}`);
+        }
         await page.waitForTimeout(1_200);
 
         const before = await page.evaluate(() => {
@@ -281,6 +322,8 @@ try {
 
   await writeFile(OUT, JSON.stringify({
     recordedAt: new Date().toISOString(),
+    ...revisionOf(),
+    budgetOverride: BUDGET_OVERRIDE,
     question: 'What does one physical local light cost, and is the cost linear in the count?',
     rank: RANK,
     method: {

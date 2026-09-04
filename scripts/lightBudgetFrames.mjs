@@ -17,7 +17,27 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { mkdir, writeFile } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
 import { chromium } from 'playwright';
+/**
+ * Which code produced these numbers, and whether anything was uncommitted while it did.
+ * A measurement without a revision cannot be quoted in a comment or a report: that is
+ * how "eleven milliseconds at sixteen lights" ended up in a source comment describing a
+ * configuration nobody had measured.
+ */
+const revisionOf = () => {
+  const run = (args) => execFileSync('git', args, { encoding: 'utf8' }).trim();
+  try {
+    return {
+      revision: run(['rev-parse', '--short', 'HEAD']),
+      workingTreeDirty: run(['status', '--porcelain']).length > 0,
+      dirtyPaths: run(['status', '--porcelain']).split('\n').filter(Boolean).slice(0, 20),
+    };
+  } catch {
+    return { revision: 'unknown', workingTreeDirty: null, dirtyPaths: [] };
+  }
+};
+
 
 const PORT = Number(process.env.FRAMES_PORT ?? 4213);
 const URL = `http://127.0.0.1:${PORT}`;
@@ -127,7 +147,7 @@ const waitForServer = async () => {
 };
 
 let browser;
-const report = { recordedAt: new Date().toISOString(), world: WORLD, caps: CAPS, regions: REGIONS, shots: [] };
+const report = { recordedAt: new Date().toISOString(), ...revisionOf(), world: WORLD, caps: CAPS, regions: REGIONS, shots: [] };
 try {
   await waitForServer();
   await mkdir(OUT_DIR, { recursive: true });

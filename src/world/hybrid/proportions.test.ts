@@ -342,7 +342,7 @@ describe('one metric system', () => {
   test('the postman rides his bicycle instead of hovering over it', () => {
     const { bike, named, unnamedBy, toBike } = postmanRig;
     const rig = trueBounds(bike, () => true, toBike);
-    const wheels = unnamedBy((mesh) => mesh.geometry.type === 'CylinderGeometry');
+    const wheels = unnamedBy((mesh) => mesh.geometry.type === 'TorusGeometry');
     const wheelSize = sizeOf(wheels);
     const bars = unnamedBy((mesh) => mesh.geometry.type === 'BoxGeometry' && mesh.position.y > 0.9);
     const saddle = unnamedBy((mesh) => mesh.geometry.type === 'BoxGeometry' && Math.abs(mesh.position.z - 0.32) < 0.01 && mesh.position.y > 0.8);

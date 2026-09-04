@@ -484,16 +484,35 @@ async function runPostman(page, world) {
       const shown = window.__shots[second];
       const luma = (d, i) => 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2];
       const deltas = [];
+      // Not just how big the difference is, but which way: a group can fail this gate
+      // because it is too dark for its background or too light for it, and the two want
+      // opposite fixes. Lightening the tyre once moved the median the wrong way, which
+      // a signed reading would have predicted.
+      const own = [];
+      const behind = [];
       for (let i = 0; i < shown.length; i += 4) {
-        const delta = Math.abs(luma(shown, i) - luma(background, i));
-        if (delta > 0.5) deltas.push(delta);
+        const front = luma(shown, i);
+        const back = luma(background, i);
+        const delta = Math.abs(front - back);
+        if (delta > 0.5) {
+          deltas.push(delta);
+          own.push(front);
+          behind.push(back);
+        }
       }
+      const median = (list) => {
+        if (!list.length) return 0;
+        const sorted = [...list].sort((x, y) => x - y);
+        return Math.round(sorted[sorted.length >> 1] * 10) / 10;
+      };
       deltas.sort((x, y) => x - y);
       if (!deltas.length) return { ownPixels: 0, medianDelta: 0, readablePercent: 0 };
       return {
         ownPixels: deltas.length,
         medianDelta: Math.round(deltas[deltas.length >> 1] * 10) / 10,
         readablePercent: Math.round((deltas.filter((delta) => delta >= 8).length / deltas.length) * 1000) / 10,
+        medianOwnLuma: median(own),
+        medianBackgroundLuma: median(behind),
       };
     }, [a, b]);
 
@@ -515,7 +534,7 @@ async function runPostman(page, world) {
         const off = [];
         bike.traverse((node) => {
           if (!node.isMesh || node.name.startsWith('postman-')) return;
-          const isWheel = node.geometry.type === 'CylinderGeometry';
+          const isWheel = node.geometry.type === 'TorusGeometry';
           if (onlyWheels === isWheel) { node.visible = false; off.push(node); }
         });
         window.__hiddenBikeParts = off;
@@ -535,7 +554,8 @@ async function runPostman(page, world) {
     });
     console.log(
       `${' '.repeat(21)}control ${legibility.control.ownPixels} px  ` +
-      `wheels ${legibility.wheels.ownPixels} px median dL ${legibility.wheels.medianDelta} ${legibility.wheels.readablePercent}% >=8  ` +
+      `wheels ${legibility.wheels.ownPixels} px dL ${legibility.wheels.medianDelta} ${legibility.wheels.readablePercent}% >=8 ` +
+      `(wheel ${legibility.wheels.medianOwnLuma} on bg ${legibility.wheels.medianBackgroundLuma})  ` +
       `frame ${legibility.frame.ownPixels} px median dL ${legibility.frame.medianDelta} ${legibility.frame.readablePercent}% >=8`
     );
     assert.ok(
@@ -570,14 +590,27 @@ async function runPostman(page, world) {
  * frame, so a frame that looks right for the wrong reason is still caught.
  */
 async function runTrain(page, world) {
-  // No checkpoint. A loaded checkpoint freezes presentation time so that a frame stays
-  // reproducible, and DayNightCycle eases its night factor with that same delta: with
-  // `checkpoint=train` the HUD read 22:33 over a black sky while the light, the street
-  // lamps and the carriage interiors were all still at the checkpoint's mid-morning.
-  // The first "night" train frame was a day-lit city under a night sky.
-  await page.goto(`${URL}/?seed=${SEED}&world=${world}&quality=high`, { waitUntil: 'load' });
-  await page.waitForFunction(() => window.__diorama?.ready === true, null, { timeout: 90_000 });
-  await settle(page, 4);
+  /**
+   * Day and night on the same train, at the same place, from the same camera.
+   *
+   * The `train` checkpoint pins the consist's route position (0.68) and a camera that
+   * frames it, so both are taken from the product rather than invented. But a locked
+   * checkpoint sets the presentation delta to zero (`main.ts`:
+   * `experience.isCheckpointLocked() ? 0 : rawDelta`), and DayNightCycle eases its night
+   * factor with that delta -- which is why the first night frame was a day-lit city
+   * under a black sky. So each shot loads the checkpoint for its camera and its train
+   * position, then releases it so the clock runs, then waits for two things to settle:
+   * the value the shot is judged on, and the train's own position on the route.
+   *
+   * The tolerance is fixed here, before the run: 0.001 of a 162.3 m route is 0.16 m, so
+   * both frames show the same carriage at the same spot to within a sixth of a metre.
+   * The achieved positions are recorded, and the two shots are asserted against each
+   * other, not against a hope.
+   */
+  const TARGET_PROGRESS = 0.68;
+  const PROGRESS_TOLERANCE = 0.001;
+  const CAMERA = [52, 18, 23];
+  const TARGET = [30, 4, 2];
 
   const readGlazing = () => page.evaluate(() => {
     // Identified by the parameters this round chose for it, and asserted to be unique.
@@ -625,63 +658,106 @@ async function runTrain(page, world) {
 
   const shots = [];
   for (const [name, t01] of [['train-day', 0.42], ['train-night', 0.94]]) {
-    await page.evaluate((t) => window.__diorama.setTime(t), t01);
-    // The sky follows the clock at once; the light does not. DayNightCycle eases its
-    // night factor with the presentation delta, so three frames after setTime the HUD
-    // said 22:33 while the lighting was still mid-morning and the carriages were dark
-    // for a reason that had nothing to do with their material. Wait for the value this
-    // shot is about to be judged on to stop moving, and record how long that took.
-    const settled = { ms: 0, reads: [] };
+    await page.goto(`${URL}/?seed=${SEED}&world=${world}&checkpoint=train&quality=high`, { waitUntil: 'load' });
+    await page.waitForFunction(() => window.__diorama?.ready === true, null, { timeout: 90_000 });
+    await settle(page, 4);
+    const pinned = await page.evaluate(() => window.__diorama.getState().trainProgress);
+
+    // Release the lock so the clock runs, and hold the weather where the checkpoint had
+    // it: releasing also hands the weather back to automatic.
+    await page.evaluate((t) => {
+      window.__diorama.releaseCheckpoint();
+      window.__diorama.setWeather('clear');
+      window.__diorama.setTime(t);
+    }, t01);
+
+    // Wait for the value this shot is about to be judged on to stop moving.
+    const ramp = [];
     for (let i = 0; i < 60; i++) {
       const before = (await readGlazing()).materials[0]?.emissiveIntensity ?? 0;
       await settle(page, 3);
       const after = (await readGlazing()).materials[0]?.emissiveIntensity ?? 0;
-      settled.reads.push(after);
-      if (Math.abs(after - before) < 0.001 && i > 0) break;
-      settled.ms += 200;
+      ramp.push(after);
+      if (i > 0 && Math.abs(after - before) < 0.001) break;
     }
-    const reading = await readGlazing();
-    const glazing = reading.materials;
-    const clock = await page.evaluate(() => ({ t01: window.__diorama.getState().t01, checkpoint: window.__diorama.getState().checkpoint }));
-    console.log(`${' '.repeat(21)}asked t=${t01} -> t01 ${clock.t01?.toFixed?.(3)}, emissive settled after ${settled.reads.length} reads: ${settled.reads.map((r) => r.toFixed(2)).join(' ')}`);
-    // The product's own train composition, not a camera invented here. Two attempts at
-    // inventing one failed: a fixed offset put the camera inside a block of flats, and
-    // choosing a viewpoint by ray against world boxes cannot work in this scene --
-    // mergeStaticMeshes folds whole blocks into single meshes whose boxes are mostly
-    // empty air, and the catenary's box spans the entire route. So instead: wait for
-    // the train to reach the level crossing the `train` checkpoint frames, then use
-    // that checkpoint's camera. Both shots then share a camera *and* a train position,
-    // which is what makes them a comparison rather than two pictures.
-    const CROSSING = { x: 30, z: 2 };
-    const arrival = await page.waitForFunction((where) => {
-      const scene = window.__diorama.scene;
-      const Vector3 = scene.position.constructor;
-      scene.updateMatrixWorld(true);
-      let best = null;
-      scene.traverse((node) => {
-        if (node.name !== 'bogie' || !node.visible) return;
-        const p = node.getWorldPosition(new Vector3());
-        const distance = Math.hypot(p.x - where.x, p.z - where.z);
-        if (!best || distance < best.distance) best = { x: p.x, z: p.z, distance };
-      });
-      return best && best.distance < 6 ? best : null;
-    }, CROSSING, { timeout: 180_000, polling: 250 }).then((handle) => handle.jsonValue());
-    await page.evaluate(() => window.__diorama.controls.setLookAt(52, 18, 23, 30, 4, 2, false));
-    const aimed = { ...arrival, camera: [52, 18, 23], target: [30, 4, 2] };
-    console.log(`${' '.repeat(21)}train reached the crossing at ${arrival.x.toFixed(1)},${arrival.z.toFixed(1)} (${arrival.distance.toFixed(1)} m from it)`);
-    await settle(page, 4);
+
+    await page.evaluate(([camera, target]) => {
+      window.__diorama.controls.setLookAt(camera[0], camera[1], camera[2], target[0], target[1], target[2], false);
+    }, [CAMERA, TARGET]);
+    await settle(page, 3);
+    const pose = await page.evaluate(() => window.__diorama.cameraPose());
+    for (const [axis, index] of [['x', 0], ['y', 1], ['z', 2]]) {
+      assert.ok(
+        Math.abs(pose.position[index] - CAMERA[index]) < 0.01,
+        `${world}: the ${name} camera drifted on ${axis}: ${pose.position[index]} vs ${CAMERA[index]}`
+      );
+    }
+
+    // Then the train's own position, immediately before the shutter.
+    const arrival = await page.waitForFunction((wanted) => {
+      const progress = window.__diorama.getState().trainProgress;
+      const delta = Math.abs(((progress - wanted.target) % 1 + 1.5) % 1 - 0.5);
+      return delta < wanted.tolerance ? { progress, delta } : null;
+    }, { target: TARGET_PROGRESS, tolerance: PROGRESS_TOLERANCE }, { timeout: 180_000, polling: 16 })
+      .then((handle) => handle.jsonValue());
+
+    // Freeze before the shutter so nothing moves between the read and the frame.
+    await page.evaluate(() => {
+      window.__parked = [];
+      window.__raf = window.requestAnimationFrame.bind(window);
+      window.requestAnimationFrame = (callback) => { window.__parked.push(callback); return 0; };
+    });
+    await page.waitForTimeout(200);
+    await page.evaluate(() => window.__diorama.renderFrame());
     const frame = `${FRAME_DIR}/${world}-high-${name}.jpg`;
     await page.screenshot({ path: frame, type: 'jpeg', quality: 88 });
-    shots.push({ name, t01, frame, aimed, settledAfterReads: settled.reads.length, ramp: settled.reads, glazing });
-    console.log(`${world.padEnd(14)} high  ${name.padEnd(12)} t=${t01}  ${glazing.map((g) => `pane ${g.colorHex} L${g.colorLuminance} emissive ${g.emissiveHex} x${g.emissiveIntensity} rough ${g.roughness} env ${g.envMapIntensity} on ${g.meshes.join('+')}`).join(' | ') || 'GLAZING NOT FOUND'}`);
+    const reading = await readGlazing();
+    const glazing = reading.materials;
+    const clock = await page.evaluate(() => window.__diorama.getState().t01);
+    await page.evaluate(() => {
+      window.requestAnimationFrame = window.__raf;
+      for (const callback of window.__parked) window.requestAnimationFrame(callback);
+      window.__parked = [];
+    });
+
+    shots.push({
+      name,
+      requestedT01: t01,
+      actualT01: Math.round(clock * 10000) / 10000,
+      checkpointPinnedProgress: Math.round(pinned * 100000) / 100000,
+      shotAtProgress: Math.round(arrival.progress * 100000) / 100000,
+      progressErrorFromTarget: Math.round(arrival.delta * 100000) / 100000,
+      progressErrorMetres: Math.round(arrival.delta * 162.3 * 1000) / 1000,
+      camera: CAMERA,
+      target: TARGET,
+      frame,
+      settledAfterReads: ramp.length,
+      ramp,
+      glazing,
+    });
+    console.log(
+      `${world.padEnd(14)} high  ${name.padEnd(12)} t01 ${clock.toFixed(3)}  progress ${arrival.progress.toFixed(5)} ` +
+      `(${(arrival.delta * 162.3).toFixed(2)} m from target)  ` +
+      `${glazing.map((g) => `pane ${g.colorHex} L${g.colorLuminance} emissive ${g.emissiveHex} x${g.emissiveIntensity}`).join(' | ') || 'GLAZING NOT FOUND'}`
+    );
     assert.equal(glazing.length, 1, `${world}: expected exactly one train glazing material, found ${glazing.length}`);
   }
+
   const [day, night] = shots;
+  // The two frames must show the same train in the same place, and that is asserted
+  // between the shots rather than each against a target.
+  const between = Math.abs(day.shotAtProgress - night.shotAtProgress);
+  console.log(`${' '.repeat(21)}day and night shot ${(between * 162.3).toFixed(2)} m apart on a 162.3 m route`);
+  assert.ok(
+    between < PROGRESS_TOLERANCE * 2,
+    `train day and night were shot ${(between * 162.3).toFixed(2)} m apart, tolerance ${(PROGRESS_TOLERANCE * 2 * 162.3).toFixed(2)} m`
+  );
+  assert.equal(day.checkpointPinnedProgress, night.checkpointPinnedProgress, 'the checkpoint pinned a different train position between shots');
   // The claim, as numbers: dark glass by day, a lit interior by night, one pane.
   assert.ok(day.glazing[0].emissiveIntensity < 0.05, `train glass glows by day (${day.glazing[0].emissiveIntensity})`);
   assert.ok(night.glazing[0].emissiveIntensity > 0.9, `train interior stays dark at night (${night.glazing[0].emissiveIntensity})`);
   assert.ok(night.glazing[0].colorLuminance < 0.2, 'the night pane itself has to stay dark');
-  return { world, shots };
+  return { world, routeLengthM: 162.3, progressTolerance: PROGRESS_TOLERANCE, shots };
 }
 
 async function runMaterials(page, worlds) {

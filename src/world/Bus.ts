@@ -5,7 +5,6 @@ import {
   COLORS,
   GROUND_SURFACE_Y,
   LEVEL_CROSSING,
-  busShelterCenter,
   nearestCurveT,
   type BusStop,
 } from './WorldLayout';
@@ -27,8 +26,7 @@ import {
 } from '../environment/CityRhythm';
 import {
   busShelterColliders,
-  BUS_DOOR_APPROACH_DISTANCE,
-  busStopWaitingPositions,
+  busStopWaitingPlacements,
   busStopWalkingPath,
   isPointClear,
   polylineLengths,
@@ -280,30 +278,19 @@ interface StopCrowd {
 }
 
 function buildStopCrowd(scene: THREE.Scene, stop: BusStop, random: RandomSource): StopCrowd {
-  const lanePoint = BUS_ROUTE_CURVE.getPointAt(stop.atT);
-  const tangent = BUS_ROUTE_CURVE.getTangentAt(stop.atT).normalize();
-  const c = busShelterCenter(stop);
-  const shelterCenter = new THREE.Vector3(c.x, GROUND_SURFACE_Y, c.z);
-  const towardShelter = shelterCenter.clone().sub(lanePoint).setY(0).normalize();
-  const doorBase = lanePoint.clone().addScaledVector(towardShelter, BUS_DOOR_APPROACH_DISTANCE);
-  doorBase.y = 0.5;
-  const waitPositions = busStopWaitingPositions(stop);
   const colliders = busShelterColliders(stop);
-
   const passengers: BusPassenger[] = [];
   // As many as there are waiting spots: the number is decided by what fits under the
-  // shelter without the figures intersecting, not by a literal here.
-  for (let i = 0; i < waitPositions.length; i++) {
-    const waitPos = waitPositions[i];
-    const doorPos = doorBase.clone().addScaledVector(tangent, (i % 2 === 0 ? -1.6 : 1.6));
-    doorPos.y = 0.5;
+  // shelter without the figures intersecting, not by a literal here. Where they stand
+  // and which way they look comes from `busStopWaitingPlacements`, which is also what
+  // `clearance.test.ts` measures -- one algorithm, not two that drift apart.
+  for (const { index: i, waitPos, doorPos, facing } of busStopWaitingPlacements(stop)) {
     const path = busStopWalkingPath(stop, waitPos, doorPos);
     const pathMetrics = polylineLengths(path);
 
     const build = buildPassenger(random);
     build.group.name = `bus-passenger-${stop.label}-${i}`;
     build.group.position.copy(waitPos);
-    const facing = Math.atan2(doorPos.x - waitPos.x, doorPos.z - waitPos.z);
     build.group.rotation.y = facing;
     scene.add(build.group);
 

@@ -214,15 +214,19 @@ function buildBike(): { group: THREE.Group; wheels: THREE.Mesh[]; rider: Postman
   // tyre a shade *lighter* than the asphalt (0x4a4c52) so the wheels stay visible as
   // shapes when the road goes dark.
   const frameMat = new THREE.MeshStandardMaterial({ color: 0xd94f36, metalness: 0.35, roughness: 0.45 });
-  const wheelMat = new THREE.MeshStandardMaterial({ color: 0x7d766b, roughness: 0.75 });
+  const wheelMat = new THREE.MeshStandardMaterial({ color: 0x7d766b, roughness: 0.75, emissive: 0x2a2a2a });
   const bagMat = new THREE.MeshStandardMaterial({ color: 0xd8b25c, roughness: 0.85 });
   mats.push(frameMat, wheelMat, bagMat);
 
   const wheels: THREE.Mesh[] = [];
-  const wheelGeo = new THREE.CylinderGeometry(WHEEL_RADIUS, WHEEL_RADIUS, 0.14, 16);
+  // A tyre, not a disc. The street bicycles this one is sized against are tori, and a
+  // ring reads as a wheel where a solid disc does not: you see the road, the kerb and
+  // the markings through it, so the shape survives a frame where its own value and the
+  // asphalt's are the same. Outer radius unchanged, so the wheel is the same 0.70 m.
+  const wheelGeo = new THREE.TorusGeometry(WHEEL_RADIUS - 0.07, 0.07, 8, 16);
   for (const z of [-WHEELBASE / 2, WHEELBASE / 2]) {
     const wheel = new THREE.Mesh(wheelGeo, wheelMat);
-    wheel.rotation.z = Math.PI / 2;
+    wheel.rotation.y = Math.PI / 2;
     // Hub at exactly the wheel radius, so the tread meets the road the group sits on.
     wheel.position.set(0, WHEEL_RADIUS, z);
     group.add(wheel);

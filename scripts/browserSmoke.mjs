@@ -1,10 +1,22 @@
 import assert from 'node:assert/strict';
-import { access, readdir, stat } from 'node:fs/promises';
+import { access, readdir, readFile, stat } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { chromium } from 'playwright';
 
 /** Top of the voxel ground layer: the surface every actor stands or drives on. */
 const ROAD_SURFACE_Y = -0.5;
+/**
+ * Read from the source of truth rather than copied here. This assertion exists to catch
+ * the uniform losing its material -- turning into skin, or into a default white -- and a
+ * literal did that job right up until the postal blue was deliberately lightened, at
+ * which point it failed a colour change instead of a regression.
+ */
+const POSTMAN_UNIFORM_COLOR = await readFile('src/world/Postman.ts', 'utf8')
+  .then((source) => source.match(/POSTMAN_UNIFORM_COLOR = (0x[0-9a-f]+)/i)?.[1])
+  .then((hex) => {
+    assert.ok(hex, 'could not read POSTMAN_UNIFORM_COLOR out of src/world/Postman.ts');
+    return Number(hex);
+  });
 
 const HOST = '127.0.0.1';
 const PORT = 4173;
@@ -951,7 +963,7 @@ try {
     riderOverRoad > 1.3 && riderOverRoad < 2.1,
     `postman rider head ${riderOverRoad.toFixed(2)} m over the road, expected 1.3..2.1`
   );
-  assert.equal(postmanRenderState.uniformColor, 0x2368a2, 'postman uniform must use postal blue');
+  assert.equal(postmanRenderState.uniformColor, POSTMAN_UNIFORM_COLOR, 'postman uniform must use postal blue');
   assert.equal(postmanRenderState.hasCap, true, 'postman cap is missing');
   assert.equal(postmanRenderState.hasSatchel, true, 'postman satchel is missing');
   assert.equal(postmanRenderState.riderAttachedToBike, true, 'postman rider must remain attached to the bicycle');
