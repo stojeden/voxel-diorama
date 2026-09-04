@@ -390,6 +390,16 @@ describe('one metric system', () => {
     expect(-arms.min.z, 'rece nie dosiegaja kierownicy').toBeGreaterThan(-bars.max.z - 0.1);
     expect(legs.min.y, `stopa ${legs.min.y.toFixed(3)} m`).toBeGreaterThan(0.05);
     expect(legs.min.y).toBeLessThan(saddleTop);
+    // Feet on the pedals, and there is something to put them on. The pose said
+    // pedalling while the picture showed a leg ending above nothing between the two
+    // wheels, which is a thing a frame shows and a bounding box does not.
+    const crank = unnamedBy((mesh) => mesh.geometry.type === 'BoxGeometry' && mesh.position.y < 0.5);
+    const foot = { y: legs.min.y, z: (legs.min.z + legs.max.z) / 2 };
+    const crankCentre = { y: (crank.min.y + crank.max.y) / 2, z: (crank.min.z + crank.max.z) / 2 };
+    expect(crank.max.y, `korba ${crankCentre.y.toFixed(3)} m nad droga`).toBeLessThan(saddleTop - 0.3);
+    expect(crank.min.y).toBeGreaterThan(0.15);
+    const reach = Math.hypot(foot.y - crankCentre.y, foot.z - crankCentre.z);
+    expect(reach, `stopa ${reach.toFixed(3)} m od korby`).toBeLessThan(0.3);
 
     // He is one of this world's people, not a bigger species.
     const crown = rig.max.y;

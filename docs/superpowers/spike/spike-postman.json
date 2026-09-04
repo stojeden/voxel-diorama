@@ -1,40 +1,116 @@
 {
-  "generatedAt": "2026-09-03T15:16:09.606Z",
+  "generatedAt": "2026-09-04T09:45:42.956Z",
   "world": "hybrid-direct",
   "found": {
-    "x": -57.23027293983355,
+    "x": -57.33277672497681,
     "y": -0.5,
-    "z": -45.84455280513271
+    "z": -45.86263659031921
   },
   "shots": [
     {
-      "name": "postman",
-      "frame": "docs/superpowers/spike/frames/hybrid-direct-high-postman.jpg",
+      "name": "postman-side",
+      "frame": "docs/superpowers/spike/frames/hybrid-direct-high-postman-side.jpg",
       "aimed": {
-        "x": -33.44276014024578,
+        "x": -33.542327880762635,
         "y": -0.5,
-        "z": -45.70276529344685,
+        "z": -45.69953779267416,
         "camera": [
-          -28.94276014024578,
-          1.7000000000000002,
-          -52.70276529344685
+          -33.542327880762635,
+          1.4,
+          -53.69953779267416
         ]
+      },
+      "legibility": {
+        "control": {
+          "ownPixels": 0,
+          "medianDelta": 0,
+          "readablePercent": 0,
+          "canvas": "1440x900"
+        },
+        "wheels": {
+          "meshes": 2,
+          "ownPixels": 7996,
+          "medianDelta": 2.3,
+          "readablePercent": 39.6
+        },
+        "frame": {
+          "meshes": 6,
+          "ownPixels": 1604,
+          "medianDelta": 12.2,
+          "readablePercent": 73.2
+        }
       },
       "active": true,
       "dogMode": "home"
     },
     {
-      "name": "postman-close",
-      "frame": "docs/superpowers/spike/frames/hybrid-direct-high-postman-close.jpg",
+      "name": "postman-three-quarter",
+      "frame": "docs/superpowers/spike/frames/hybrid-direct-high-postman-three-quarter.jpg",
       "aimed": {
-        "x": -31.942081528488043,
+        "x": -31.242067568731517,
         "y": -0.5,
-        "z": -45.75102116499002,
+        "z": -45.773130041752545,
         "camera": [
-          -31.442081528488043,
-          1.6,
-          -50.25102116499002
+          -26.242067568731517,
+          1.5,
+          -53.773130041752545
         ]
+      },
+      "legibility": {
+        "control": {
+          "ownPixels": 0,
+          "medianDelta": 0,
+          "readablePercent": 0,
+          "canvas": "1440x900"
+        },
+        "wheels": {
+          "meshes": 2,
+          "ownPixels": 7294,
+          "medianDelta": 57.2,
+          "readablePercent": 60.4
+        },
+        "frame": {
+          "meshes": 6,
+          "ownPixels": 2597,
+          "medianDelta": 7.9,
+          "readablePercent": 49.9
+        }
+      },
+      "active": true,
+      "dogMode": "home"
+    },
+    {
+      "name": "postman-in-world",
+      "frame": "docs/superpowers/spike/frames/hybrid-direct-high-postman-in-world.jpg",
+      "aimed": {
+        "x": -30.042736199535202,
+        "y": -0.5,
+        "z": -45.810078191673185,
+        "camera": [
+          -26.542736199535202,
+          2,
+          -35.810078191673185
+        ]
+      },
+      "legibility": {
+        "control": {
+          "ownPixels": 0,
+          "medianDelta": 0,
+          "readablePercent": 0,
+          "canvas": "1440x900"
+        },
+        "wheels": {
+          "meshes": 2,
+          "ownPixels": 9341,
+          "medianDelta": 45.8,
+          "readablePercent": 70.8
+        },
+        "frame": {
+          "meshes": 6,
+          "ownPixels": 1273,
+          "medianDelta": 10.4,
+          "readablePercent": 53.3
+        }
       },
       "active": true,
       "dogMode": "home"

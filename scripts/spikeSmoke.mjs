@@ -330,30 +330,220 @@ async function runPostman(page, world) {
 
   const shots = [];
   // Let him ride clear of the block he starts beside: at 6 m/s four seconds puts him
-  // 24 m down the road, out of the building's shadow, where his tyres are not black on
-  // black.
+  // 24 m down the road.
   await page.waitForTimeout(4_000);
-  for (const [name, side, ahead, height] of [
-    ['postman', 7, 4.5, 1.3],
-    ['postman-close', 4.5, 0.5, 1.2],
+  /**
+   * Three frames, and the third one on purpose does not choose its side by the sun.
+   * `sunlit` is how a silhouette is *shown*; `in-world` is how it actually appears to
+   * someone standing on the pavement, contrast problem included.
+   */
+  // Distances that show a bicycle rather than fill the frame with a shoulder: at six
+  // metres and a 50 degree field of view he is cropped, not framed.
+  for (const [name, side, ahead, height, sunlit] of [
+    ['postman-side', 8, 0, 1.0, true],
+    ['postman-three-quarter', 8, 5, 1.1, true],
+    ['postman-in-world', 10, 3.5, 1.6, false],
   ]) {
     // Aim one frame before the shot: at 6 m/s he moves 10 cm per frame.
-    const aimed = await page.evaluate(({ side: s, ahead: a, height: h }) => {
+    const aimed = await page.evaluate(({ side: s, ahead: a, height: h, lit }) => {
       const bike = window.__diorama.scene.getObjectByName('postman-bike');
       const p = bike.getWorldPosition(new bike.position.constructor());
       // He rides the south road along x, so the camera stands off in z and looks back
       // along his direction of travel.
-      // Stand on the sunlit side: the blocks along the south road throw shadows across
-      // it late in his round, and from the shaded side the whole frame is one black wedge.
-      const dz = -s;
+      // The two silhouette frames stand on the sunlit side; the in-world frame stands
+      // on the pavement side whatever the sun is doing.
+      const dz = lit ? -s : s;
       window.__diorama.controls.setLookAt(p.x + a, p.y + h + 0.55, p.z + dz, p.x, p.y + h, p.z, false);
       return { x: p.x, y: p.y, z: p.z, camera: [p.x + a, p.y + h + 0.9, p.z + dz] };
-    }, { side, ahead, height });
+    }, { side, ahead, height, lit: sunlit });
     await settle(page, 2);
+    // Line of sight, proved rather than assumed: the first framing of this shot put
+    // the camera inside a tenement, and the run reported success while the file held
+    // a flat red wall and nothing else. Ray against every other mesh's world box,
+    // in plain arithmetic so the page needs no debug API for it. Box tests are
+    // conservative -- a ray through a gap in a tree still counts as blocked -- which
+    // errs toward moving the camera, the safe direction.
+    const sight = await page.evaluate(() => {
+      const diorama = window.__diorama;
+      const bike = diorama.scene.getObjectByName('postman-bike');
+      const Vector3 = bike.position.constructor;
+      diorama.scene.updateMatrixWorld(true);
+      const rig = new Set();
+      bike.traverse((node) => { if (node.isMesh) rig.add(node); });
+
+      const worldBox = (mesh) => {
+        const geometry = mesh.geometry;
+        if (!geometry.boundingBox) geometry.computeBoundingBox();
+        const b = geometry.boundingBox;
+        if (!b) return null;
+        const e = mesh.matrixWorld.elements;
+        const min = [Infinity, Infinity, Infinity];
+        const max = [-Infinity, -Infinity, -Infinity];
+        for (const x of [b.min.x, b.max.x]) for (const y of [b.min.y, b.max.y]) for (const z of [b.min.z, b.max.z]) {
+          const p = [
+            e[0] * x + e[4] * y + e[8] * z + e[12],
+            e[1] * x + e[5] * y + e[9] * z + e[13],
+            e[2] * x + e[6] * y + e[10] * z + e[14],
+          ];
+          for (let i = 0; i < 3; i++) { if (p[i] < min[i]) min[i] = p[i]; if (p[i] > max[i]) max[i] = p[i]; }
+        }
+        return { min, max };
+      };
+      /** Slab test; returns the near hit distance along a unit direction, or null. */
+      const hit = (origin, dir, box) => {
+        let near = -Infinity;
+        let far = Infinity;
+        for (let i = 0; i < 3; i++) {
+          if (Math.abs(dir[i]) < 1e-9) {
+            if (origin[i] < box.min[i] || origin[i] > box.max[i]) return null;
+            continue;
+          }
+          let t1 = (box.min[i] - origin[i]) / dir[i];
+          let t2 = (box.max[i] - origin[i]) / dir[i];
+          if (t1 > t2) { const t = t1; t1 = t2; t2 = t; }
+          if (t1 > near) near = t1;
+          if (t2 < far) far = t2;
+          if (near > far) return null;
+        }
+        return far < 0 ? null : Math.max(near, 0);
+      };
+
+      /** Does a box enclose a point? A box holding both camera and rider is a
+       *  container -- the 2000 m sky shell, the ground slab -- not an occluder. */
+      const contains = (box, p) => p.every((v, i) => v >= box.min[i] - 1e-6 && v <= box.max[i] + 1e-6);
+      const others = [];
+      diorama.scene.traverse((node) => {
+        if (!node.isMesh || rig.has(node) || !node.visible || !node.geometry) return;
+        let parent = node.parent;
+        let hidden = false;
+        while (parent) { if (!parent.visible) hidden = true; parent = parent.parent; }
+        if (hidden) return;
+        const box = worldBox(node);
+        if (box) others.push({ name: node.name || node.geometry.type, kind: node.isInstancedMesh ? `inst${node.count}` : 'mesh', box });
+      });
+
+      const camera = diorama.controls.camera ?? diorama.camera;
+      const eye = camera.getWorldPosition(new Vector3());
+      const origin = [eye.x, eye.y, eye.z];
+      const blocked = [];
+      // Instanced meshes are excluded: their box is the union of every instance, so
+      // for the tree and window pools it spans the map and says nothing about any one
+      // instance. Stated as a limit of this check rather than worked around.
+      const candidates = others.filter((other) => other.kind === 'mesh');
+      for (const part of ['postman-head', 'postman-uniform', 'postman-legs']) {
+        const node = bike.getObjectByName(part);
+        if (!node) continue;
+        const target = node.getWorldPosition(new Vector3());
+        const raw = [target.x - eye.x, target.y - eye.y, target.z - eye.z];
+        const length = Math.hypot(...raw);
+        const dir = raw.map((v) => v / length);
+        for (const other of candidates) {
+          if (contains(other.box, origin) && contains(other.box, [target.x, target.y, target.z])) continue;
+          const distance = hit(origin, dir, other.box);
+          if (distance !== null && distance < length - 0.3) {
+            const size = other.box.max.map((v, i) => (v - other.box.min[i]).toFixed(1)).join('x');
+            blocked.push(`${part} behind ${other.name}[${other.kind}] ${size} m at ${distance.toFixed(1)} m of ${length.toFixed(1)} m`);
+            break;
+          }
+        }
+      }
+      return blocked;
+    });
+    assert.deepEqual(sight, [], `${world}: the ${name} camera has no clear view of the rider`);
     const frame = `${FRAME_DIR}/${world}-high-${name}.jpg`;
     await page.screenshot({ path: frame, type: 'jpeg', quality: 88 });
+
+    // Is the bicycle actually readable, or does it only look readable to whoever
+    // picked the colour? Hide a group of meshes, render again, and the pixels that
+    // changed are exactly that group's own pixels -- with the background it has to
+    // separate from sitting underneath. Contrast is then measured, not deduced from
+    // the diffuse colours, which is where the earlier reasoning went wrong: in a
+    // multiplicative lighting model a colour difference scales with the light, so a
+    // tyre chosen to sit lighter than sunlit asphalt sits on top of it in shadow.
+    //
+    // The city has to hold still for this. The first attempt let the animation loop
+    // run between the two shots and measured 596 131 changed pixels for two wheels --
+    // the whole moving frame. So: stop the loop, render on demand with delta 0, and
+    // prove the instrument by shooting the same scene twice before touching anything.
+    // Pixels never leave the page: shipping two 2880x1800 PNGs per comparison through
+    // page.evaluate as base64 was 20 MB a call and did not finish. Snapshot the WebGL
+    // canvas into an ImageData in the same tick as the render -- the drawing buffer is
+    // still valid then -- keep it in a page global, and return only statistics.
+    const shoot = async (slot) => page.evaluate((into) => {
+      window.__diorama.renderFrame();
+      const gl = window.__diorama.renderer.domElement;
+      const canvas = new OffscreenCanvas(gl.width, gl.height);
+      const context = canvas.getContext('2d');
+      context.drawImage(gl, 0, 0);
+      window.__shots = window.__shots ?? {};
+      window.__shots[into] = context.getImageData(0, 0, gl.width, gl.height).data;
+      return { width: gl.width, height: gl.height };
+    }, slot);
+    const deltasOf = async (a, b) => page.evaluate(([first, second]) => {
+      const background = window.__shots[first];
+      const shown = window.__shots[second];
+      const luma = (d, i) => 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2];
+      const deltas = [];
+      for (let i = 0; i < shown.length; i += 4) {
+        const delta = Math.abs(luma(shown, i) - luma(background, i));
+        if (delta > 0.5) deltas.push(delta);
+      }
+      deltas.sort((x, y) => x - y);
+      if (!deltas.length) return { ownPixels: 0, medianDelta: 0, readablePercent: 0 };
+      return {
+        ownPixels: deltas.length,
+        medianDelta: Math.round(deltas[deltas.length >> 1] * 10) / 10,
+        readablePercent: Math.round((deltas.filter((delta) => delta >= 8).length / deltas.length) * 1000) / 10,
+      };
+    }, [a, b]);
+
+    await page.evaluate(() => {
+      window.__parked = [];
+      window.__raf = window.requestAnimationFrame.bind(window);
+      window.requestAnimationFrame = (callback) => { window.__parked.push(callback); return 0; };
+    });
+    // No settle() while the loop is parked: settle awaits requestAnimationFrame, which
+    // is exactly what the freeze swallows, so the first attempt deadlocked on itself.
+    await page.waitForTimeout(300);
+    const size = await shoot('still');
+    await shoot('again');
+    const control = { ...(await deltasOf('still', 'again')), canvas: `${size.width}x${size.height}` };
+    const legibility = { control };
+    for (const [group, wheelsOnly] of [['wheels', true], ['frame', false]]) {
+      const meshes = await page.evaluate((onlyWheels) => {
+        const bike = window.__diorama.scene.getObjectByName('postman-bike');
+        const off = [];
+        bike.traverse((node) => {
+          if (!node.isMesh || node.name.startsWith('postman-')) return;
+          const isWheel = node.geometry.type === 'CylinderGeometry';
+          if (onlyWheels === isWheel) { node.visible = false; off.push(node); }
+        });
+        window.__hiddenBikeParts = off;
+        return off.length;
+      }, wheelsOnly);
+      await shoot('without');
+      await page.evaluate(() => {
+        for (const node of window.__hiddenBikeParts) node.visible = true;
+        window.__hiddenBikeParts = [];
+      });
+      legibility[group] = { meshes, ...(await deltasOf('without', 'still')) };
+    }
+    await page.evaluate(() => {
+      window.requestAnimationFrame = window.__raf;
+      for (const callback of window.__parked) window.requestAnimationFrame(callback);
+      window.__parked = [];
+    });
+    console.log(
+      `${' '.repeat(21)}control ${legibility.control.ownPixels} px  ` +
+      `wheels ${legibility.wheels.ownPixels} px median dL ${legibility.wheels.medianDelta} ${legibility.wheels.readablePercent}% >=8  ` +
+      `frame ${legibility.frame.ownPixels} px median dL ${legibility.frame.medianDelta} ${legibility.frame.readablePercent}% >=8`
+    );
+    assert.ok(
+      legibility.control.ownPixels < legibility.wheels.ownPixels / 20,
+      `${world}: the frozen scene moved between shots (${legibility.control.ownPixels} px), so the ${name} legibility numbers mean nothing`
+    );
     const state = await page.evaluate(() => window.__diorama.postmanState());
-    shots.push({ name, frame, aimed, active: state.active, dogMode: state.dogMode });
+    shots.push({ name, frame, aimed, legibility, active: state.active, dogMode: state.dogMode });
     console.log(`${world.padEnd(14)} high  ${name.padEnd(19)} at (${aimed.x.toFixed(1)}, ${aimed.z.toFixed(1)})  active ${state.active}  dog ${state.dogMode}`);
     assert.equal(state.active, true, `${world}: the postman stopped riding before the ${name} frame`);
   }
@@ -370,6 +560,74 @@ async function runPostman(page, world) {
  * material's own emissive and nothing else, and the gate that holds them off is read
  * back from the scene rather than assumed.
  */
+/**
+ * The carriage glazing, in the picture rather than in a unit test.
+ *
+ * Same camera, same weather, same train position by day and by night: the only
+ * variable is the clock, which is the whole claim being checked -- daylight glass is
+ * dark and takes its brightness from the sky, a lit interior is a night state. The
+ * material's own numbers are read off the finished mesh in the same breath as the
+ * frame, so a frame that looks right for the wrong reason is still caught.
+ */
+async function runTrain(page, world) {
+  await page.goto(`${URL}/?seed=${SEED}&world=${world}&checkpoint=train&quality=high`, { waitUntil: 'load' });
+  await page.waitForFunction(() => window.__diorama?.ready === true, null, { timeout: 90_000 });
+  await settle(page, 4);
+
+  const readGlazing = () => page.evaluate(() => {
+    const found = new Set();
+    window.__diorama.scene.traverse((node) => {
+      if (!node.isMesh || !node.material) return;
+      const list = Array.isArray(node.material) ? node.material : [node.material];
+      for (const material of list) {
+        if (node.name === 'train-window' || (material.name === 'train-window')) found.add(material);
+      }
+    });
+    // No name to lean on: the glazing is the train material whose own colour is the
+    // product's unlit window, exactly as Train.test.ts finds it.
+    if (!found.size) {
+      const train = window.__diorama.scene.getObjectByName('train') ?? window.__diorama.scene;
+      train.traverse((node) => {
+        if (!node.isMesh || !node.material) return;
+        const list = Array.isArray(node.material) ? node.material : [node.material];
+        for (const material of list) {
+          if (material.emissive && material.color && material.roughness !== undefined
+            && material.color.getHex() === 0x24465f) found.add(material);
+        }
+      });
+    }
+    const luminance = (color) => Math.round((0.2126 * color.r + 0.7152 * color.g + 0.0722 * color.b) * 1000) / 1000;
+    return [...found].map((material) => ({
+      colorHex: `#${material.color.getHexString()}`,
+      colorLuminance: luminance(material.color),
+      emissiveHex: `#${material.emissive.getHexString()}`,
+      emissiveLuminance: luminance(material.emissive),
+      emissiveIntensity: Math.round(material.emissiveIntensity * 1000) / 1000,
+      roughness: material.roughness,
+      metalness: material.metalness,
+      envMapIntensity: material.envMapIntensity,
+    }));
+  });
+
+  const shots = [];
+  for (const [name, t01] of [['train-day', 0.42], ['train-night', 0.94]]) {
+    await page.evaluate((t) => window.__diorama.setTime(t), t01);
+    await settle(page, 3);
+    const glazing = await readGlazing();
+    const frame = `${FRAME_DIR}/${world}-high-${name}.jpg`;
+    await page.screenshot({ path: frame, type: 'jpeg', quality: 88 });
+    shots.push({ name, t01, frame, glazing });
+    console.log(`${world.padEnd(14)} high  ${name.padEnd(12)} t=${t01}  ${glazing.map((g) => `pane ${g.colorHex} L${g.colorLuminance} emissive ${g.emissiveHex} x${g.emissiveIntensity}`).join(' | ') || 'GLAZING NOT FOUND'}`);
+    assert.equal(glazing.length, 1, `${world}: expected exactly one train glazing material, found ${glazing.length}`);
+  }
+  const [day, night] = shots;
+  // The claim, as numbers: dark glass by day, a lit interior by night, one pane.
+  assert.ok(day.glazing[0].emissiveIntensity < 0.05, `train glass glows by day (${day.glazing[0].emissiveIntensity})`);
+  assert.ok(night.glazing[0].emissiveIntensity > 0.9, `train interior stays dark at night (${night.glazing[0].emissiveIntensity})`);
+  assert.ok(night.glazing[0].colorLuminance < 0.2, 'the night pane itself has to stay dark');
+  return { world, shots };
+}
+
 async function runMaterials(page, worlds) {
   const report = { worlds: {} };
   for (const world of worlds) {
@@ -943,6 +1201,11 @@ try {
   if (postman) {
     await writeFile(`${OUT_DIR}/spike-postman.json`, JSON.stringify({ generatedAt: new Date().toISOString(), ...postman }, null, 2));
     console.log(`postman frames written to ${FRAME_DIR}/`);
+  }
+  const train = PHASE === 'train' || PHASE === 'all' ? await runTrain(page, hybridWorlds[0] ?? 'voxel') : null;
+  if (train) {
+    await writeFile(`${OUT_DIR}/spike-train.json`, JSON.stringify({ generatedAt: new Date().toISOString(), ...train }, null, 2));
+    console.log(`train frames written to ${FRAME_DIR}/`);
   }
   const materials = PHASE === 'materials' || PHASE === 'all' ? await runMaterials(page, hybridWorlds) : null;
   if (materials) {

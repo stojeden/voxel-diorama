@@ -40,7 +40,7 @@ const RIDE_SPEED = 6;
 const MORNING_START = 0.28;
 const MORNING_END = 0.5;
 const STOP_DURATION = 2;
-export const POSTMAN_UNIFORM_COLOR = 0x2368a2;
+export const POSTMAN_UNIFORM_COLOR = 0x2f77b8;
 
 export const POSTMAN_STOP_TS = MAIL_STOPS.map(([x, z]) => {
   let bestT = 0;
@@ -77,7 +77,9 @@ function buildPostmanRider(satchelMaterial: THREE.Material): PostmanRider {
 
   const uniformMaterial = opaqueMaterial({ color: POSTMAN_UNIFORM_COLOR, roughness: 0.72 });
   const skinMaterial = opaqueMaterial({ color: 0xe0b487, roughness: 0.82 });
-  const trousersMaterial = opaqueMaterial({ color: 0x18324a, roughness: 0.9 });
+  // Slate, not navy: at 0x18324a and even at 0x24313d the trousers rendered as pure
+  // black beside the jacket, so rider and legs were one dark mass in every frame.
+  const trousersMaterial = opaqueMaterial({ color: 0x3b4652, roughness: 0.9 });
   const badgeMaterial = opaqueMaterial({ color: 0xe8e1c5, roughness: 0.66 });
   const materials = [uniformMaterial, skinMaterial, trousersMaterial, badgeMaterial];
 
@@ -98,7 +100,9 @@ function buildPostmanRider(satchelMaterial: THREE.Material): PostmanRider {
   // Limbs pivot at the joint, not at the centre of their box: with the old centre
   // pivot the pedalling legs swung their feet up as much as forward and the arms
   // could not reach the handlebars at all.
-  const legGeometry = new THREE.BoxGeometry(0.58, 0.92, 0.52);
+  // 0.40 across, not 0.58: as wide as the torso the pair of legs read as a second
+  // body, which is most of why the figure looked like a bent block.
+  const legGeometry = new THREE.BoxGeometry(0.4, 0.92, 0.44);
   legGeometry.translate(0, -0.46, 0);
   const legs = makePart('postman-legs', legGeometry, trousersMaterial);
   legs.position.y = RIDER_HIP_Y;
@@ -120,7 +124,9 @@ function buildPostmanRider(satchelMaterial: THREE.Material): PostmanRider {
   head.position.y = 2.2;
   group.add(head);
 
-  const armGeometry = new THREE.BoxGeometry(0.23, 0.86, 0.34);
+  // Thin, because arm and torso share the uniform's colour: only the silhouette
+  // separates them, and a 0.34 deep arm merged into the 0.54 deep chest.
+  const armGeometry = new THREE.BoxGeometry(0.16, 0.86, 0.22);
   armGeometry.translate(0, -0.43, 0);
   const leftArm = makePart('postman-left-arm', armGeometry, uniformMaterial);
   leftArm.position.set(-0.47, RIDER_SHOULDER_Y, 0);
@@ -160,16 +166,12 @@ function buildPostmanRider(satchelMaterial: THREE.Material): PostmanRider {
     new THREE.BoxGeometry(0.52, 0.48, 0.3),
     satchelMaterial
   );
-  satchel.position.set(0.56, 1.18, 0.04);
+  // Over the rear wheel, where a postman's bag actually rides: at his hip it read as
+  // a second leg and on his back as a slab on his shoulder. Negative z, because the
+  // rider group is turned by PI -- at +0.72 the bag rendered in front of the
+  // handlebars, which the frames showed and the arithmetic explains.
+  satchel.position.set(0.1, 0.86, -0.58);
   group.add(satchel);
-  const strap = makePart(
-    'postman-satchel-strap',
-    new THREE.BoxGeometry(0.08, 1.3, 0.07),
-    satchelMaterial
-  );
-  strap.position.set(0.08, 1.52, 0.29);
-  strap.rotation.z = 0.48;
-  group.add(strap);
 
   // The rider is the product's own figure, so he is scaled like the product's
   // figures (PASSENGER_SCALE) rather than 0.85: at 0.85 he stood 2.24 m against
@@ -206,16 +208,18 @@ function buildBike(): { group: THREE.Group; wheels: THREE.Mesh[]; rider: Postman
   group.name = 'postman-bike';
   group.rotation.order = 'YXZ';
   const mats: THREE.Material[] = [];
-  const frameMat = new THREE.MeshStandardMaterial({ color: 0xb33a2e, metalness: 0.5, roughness: 0.4 });
-  // The same tyre colour as the fragment's own bicycles (0x3b332c): two bikes in one
-  // world had two different blacks, and at 0x202020 his tyres were darker than the
-  // asphalt, which in a building's shadow left him riding on nothing.
-  const wheelMat = new THREE.MeshStandardMaterial({ color: 0x3b332c, roughness: 0.7 });
-  const bagMat = new THREE.MeshStandardMaterial({ color: 0xc9a14e, roughness: 0.85 });
+  // Read against asphalt, in sunlight and in a building's shadow. The frame was a
+  // brick red barely separable from a dark road, and the tyres were darker than the
+  // road itself, so in shadow he rode on nothing: a postal red for the frame, and a
+  // tyre a shade *lighter* than the asphalt (0x4a4c52) so the wheels stay visible as
+  // shapes when the road goes dark.
+  const frameMat = new THREE.MeshStandardMaterial({ color: 0xd94f36, metalness: 0.35, roughness: 0.45 });
+  const wheelMat = new THREE.MeshStandardMaterial({ color: 0x7d766b, roughness: 0.75 });
+  const bagMat = new THREE.MeshStandardMaterial({ color: 0xd8b25c, roughness: 0.85 });
   mats.push(frameMat, wheelMat, bagMat);
 
   const wheels: THREE.Mesh[] = [];
-  const wheelGeo = new THREE.CylinderGeometry(WHEEL_RADIUS, WHEEL_RADIUS, 0.1, 14);
+  const wheelGeo = new THREE.CylinderGeometry(WHEEL_RADIUS, WHEEL_RADIUS, 0.14, 16);
   for (const z of [-WHEELBASE / 2, WHEELBASE / 2]) {
     const wheel = new THREE.Mesh(wheelGeo, wheelMat);
     wheel.rotation.z = Math.PI / 2;
@@ -229,13 +233,17 @@ function buildBike(): { group: THREE.Group; wheels: THREE.Mesh[]; rider: Postman
     mesh.position.set(0, y, z);
     group.add(mesh);
   };
-  member(0.07, 0.07, WHEELBASE, 0.6, 0);            // top tube
-  member(0.07, 0.44, 0.07, SADDLE_Y - 0.22, SADDLE_Z);
+  member(0.08, 0.08, WHEELBASE, 0.6, 0);            // top tube
+  member(0.08, 0.44, 0.08, SADDLE_Y - 0.22, SADDLE_Z);
   // The saddle he actually sits on: without it the seat post ended in mid-air.
   member(0.24, 0.06, 0.16, SADDLE_Y - 0.03, SADDLE_Z);
-  member(0.07, 0.44, 0.07, BAR_Y - 0.22, BAR_Z);    // head tube
+  member(0.08, 0.44, 0.08, BAR_Y - 0.22, BAR_Z);    // head tube
   // 0.66 m across, so the figure's hands land over the grips rather than outboard of them.
   member(0.66, 0.06, 0.06, BAR_Y, BAR_Z);           // handlebars
+  // Crank and pedals. His feet ended in mid-air between the wheels: the pose said
+  // pedalling, the picture showed a leg stopping above nothing. This is what the
+  // strap mesh was traded for -- a strap 8 cm wide never read at any distance.
+  member(0.42, 0.05, 0.05, 0.3, 0.02);
   const rider = buildPostmanRider(bagMat);
   group.add(rider.group);
 

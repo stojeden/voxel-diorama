@@ -132,9 +132,22 @@ oba światy w jednym procesie, powtórzenia zgodne do 0,1 ms (`night-attribution
 
 Z tego, wszystko z pomiaru:
 
-- **Szesnaście świateł lokalnych to 11,2 ms z 14,8 ms klatki**, 0,71 ms na światło — i
-  produkt płaci to samo (11,9 z 12,0 ms swojej nocnej klatki). Noc jest droga od świateł,
-  nie od fragmentu.
+- **Szesnaście świateł lokalnych to 11,2 ms z 14,8 ms klatki** — i produkt płaci za
+  światła tyle samo. Noc jest droga od świateł, nie od fragmentu.
+
+  > **Sprostowanie z 2026-09-04.** To zdanie miało dalej „0,71 ms na światło" i „produkt
+  > płaci 11,9 z 12,0 ms". Oba są błędne. 0,71 to 11,2 podzielone przez 16, czyli
+  > założenie liniowości, którego nikt nie zmierzył: eksperyment
+  > `light-cost-experiment.json` pokazuje próg, nie prostą — 18 → 16 świateł oddaje
+  > 9,43 ms (4,72 ms na światło), 16 → 12 oddaje 4,37 ms (1,09 ms), a 12 → 8, 8 → 4 i
+  > 4 → 0 nie oddają nic (0,02, −0,04 i 0,10 ms, wszystko w szumie). „11,9 z 12,0 ms"
+  > sparowało dwie liczby z różnych trybów pomiaru i wyszło z niego, że światła są
+  > praktycznie całą klatką. W jednym kontrolowanym przebiegu bez vsync produkt ma
+  > 15,83 ms przy 18 światłach i 6,70 ms przy zerowej liczbie: **koszt świateł w
+  > produkcie to ≈9,1 ms z ≈15,8 ms, a nie 11,9 z 12,0**. Arytmetyka właściciela na
+  > starszych liczbach (12 − 3,34 ≈ 8,6 ms) wypada w tym samym miejscu; wspólny wniosek
+  > jest ten sam — poza światłami zostaje jeszcze ok. 6,7 ms klatki, której żaden budżet
+  > świateł nie tknie.
 - **Fragment dokłada 2,85 ms przy zapalonych światłach i 0,25 ms przy zgaszonych.** Jego
   koszt *to* jego piksele cieniowane szesnastoma światłami w rendererze forward.
 - Klatka skaluje się z liczbą pikseli: 14,8 ms przy 1,71 Mpx wobec 10,94 ms przy
@@ -168,7 +181,10 @@ te 0,5 ms.
 |---|---|---|
 | bez proceduralnego szumu | 0,5 ms | płaski fragment |
 | bez warstw szkła | 0,15 ms | okna przestają być szkłem |
-| jedno światło lokalne mniej | 0,71 ms | ciemniejsza ulica, w całym mieście, na High |
+| ~~jedno światło lokalne mniej~~ | ~~0,71 ms~~ | **wycofane 2026-09-04: koszt nie jest liniowy, patrz niżej** |
+| 18 → 16 świateł | 9,43 ms | dwa ciemne światła, których nie widać w obrazie |
+| 16 → 12 świateł | 4,37 ms | pule okien gasną, latarnie świecą dalej emisyjnie |
+| 12 → 8 świateł | 0,02 ms | nic nie kupuje, a zabiera światło z ulicy |
 | pixel ratio 1,15 → 1,00 | 3,9 ms | 13% mniej rozdzielczości liniowej |
 
 Zapas dziś: **1,9 ms z fragmentem, 4,7 ms bez niego.**

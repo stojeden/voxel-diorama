@@ -55,7 +55,8 @@ describe('postman and dog interaction', () => {
       expect(state.riderVisible).toBe(state.active);
       expect(state.riderOpacity).toBe(1);
       expect(state.riderHiddenParts).toBe(0);
-      expect(state.riderMeshCount).toBeGreaterThanOrEqual(10);
+      // Nine: legs, torso, head, two arms, cap crown, cap brim, badge, satchel.
+      expect(state.riderMeshCount).toBeGreaterThanOrEqual(9);
       if (state.active) {
         expect(state.riderWorldY - GROUND_SURFACE_Y).toBeGreaterThan(1.3);
         expect(state.riderWorldY - GROUND_SURFACE_Y).toBeLessThan(2.1);
@@ -101,7 +102,9 @@ describe('postman and dog interaction', () => {
     expect(scene.getObjectByName('postman-cap')).toBeTruthy();
     expect(scene.getObjectByName('postman-cap-brim')).toBeTruthy();
     expect(scene.getObjectByName('postman-satchel')).toBeTruthy();
-    expect(scene.getObjectByName('postman-satchel-strap')).toBeTruthy();
+    // No strap: 8 cm across, it did not read at any distance the diorama shows him
+    // at, and its budget went to the crank his feet now rest on.
+    expect(scene.getObjectByName('postman-satchel-strap')).toBeUndefined();
     expect(scene.getObjectByName('postman-badge')).toBeTruthy();
 
     const bike = scene.getObjectByName('postman-bike') as THREE.Group;
