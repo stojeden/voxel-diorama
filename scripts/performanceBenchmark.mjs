@@ -958,11 +958,15 @@ try {
   })();
 
   const report = {
-    revision: CODE_REVISION.revision,
-    revisionFull: CODE_REVISION.revisionFull,
-    workingTreeDirty: CODE_REVISION.workingTreeDirty,
-    // The bundle that actually served this run, not only what git says HEAD is.
-    build: CODE_REVISION.build,
+    /**
+     * The whole verified stamp, spread rather than copied field by field.
+     *
+     * Copying it by hand is how this artefact quietly lost `workingTreeDirty` and the
+     * build hashes: the field names changed when provenance moved to buildProvenance,
+     * the old names became `undefined`, and JSON.stringify dropped them -- leaving a
+     * benchmark result that named a commit but said nothing about the bundle.
+     */
+    ...CODE_REVISION,
     recordedAt: new Date().toISOString(),
     conditions: {
       viewport: `${PAGE_SETUP.viewport.width}x${PAGE_SETUP.viewport.height}`,
