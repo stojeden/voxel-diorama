@@ -272,30 +272,88 @@ describe('the stop is one street system', () => {
     b.max.y - b.min.y < 0.3 && (b.max.x - b.min.x) * (b.max.z - b.min.z) > 4 ? b : a
   ));
 
-  test('the waiting figures do not stand inside each other', () => {
-    // The product's figure is 0.874 m across with its arms, measured off the finished
-    // mesh. Four of them in one row between posts 4 m apart stood 0.67 m apart and
-    // overlapped; two loose rows put the nearest pair 0.84 m apart.
-    // Width of the finished figure, arms included, off its own mesh.
-    const body = new THREE.Box3().setFromObject(buildPassenger().group).getSize(new THREE.Vector3()).x;
+  /**
+   * The finished figures, built and placed exactly where the crowd puts them: at the
+   * waiting positions, turned to face the bus door the way `createBus` turns them.
+   * Bounds come from the vertices, so the arms are in them.
+   */
+  const waitingFigures = (() => {
     const positions = busStopWaitingPositions(stop);
-    expect(positions.length).toBe(4);
-    let nearest = Infinity;
-    for (const a of positions) {
-      for (const b of positions) {
-        if (a === b) continue;
-        nearest = Math.min(nearest, Math.hypot(a.x - b.x, a.z - b.z));
+    const centre = busShelterCenter(stop);
+    // The crowd faces each waiting passenger at the door it will walk to; the door
+    // side is what matters here, and it is the same for all four.
+    const door = new THREE.Vector3(centre.x + 3.05, GROUND_SURFACE_Y, centre.z - stop.benchSign * 1.75);
+    return positions.map((position, index) => {
+      const build = buildPassenger();
+      build.group.position.copy(position);
+      build.group.rotation.y = Math.atan2(door.x - position.x, door.z - position.z);
+      build.group.updateWorldMatrix(true, true);
+      const box = new THREE.Box3();
+      const vertex = new THREE.Vector3();
+      build.group.traverse((node) => {
+        const mesh = node as THREE.Mesh;
+        if (!mesh.isMesh || !mesh.geometry) return;
+        const attribute = mesh.geometry.getAttribute('position') as THREE.BufferAttribute;
+        for (let i = 0; i < attribute.count; i++) {
+          box.expandByPoint(vertex.fromBufferAttribute(attribute, i).applyMatrix4(mesh.matrixWorld));
+        }
+      });
+      return { index, position, box, size: box.getSize(new THREE.Vector3()) };
+    });
+  })();
+
+  /** Overlap of two boxes on each axis; positive on all three means they intersect. */
+  const overlapOf = (a: THREE.Box3, b: THREE.Box3) => ({
+    x: Math.min(a.max.x, b.max.x) - Math.max(a.min.x, b.min.x),
+    y: Math.min(a.max.y, b.max.y) - Math.max(a.min.y, b.min.y),
+    z: Math.min(a.max.z, b.max.z) - Math.max(a.min.z, b.min.z),
+  });
+
+  test('the waiting figures do not intersect each other', () => {
+    // Not a distance between centres with a tolerance: the finished bodies, rotated as
+    // they stand, must have a positive gap. The version this replaces compared centre
+    // distances against 90% of the figure's width, which is a licence to overlap by a
+    // tenth of a body and says nothing about the arms.
+    const CLEARANCE = 0.05;
+    // Three: what fits between the posts once the bodies are turned toward the door.
+    expect(waitingFigures.length).toBe(4);
+    for (const a of waitingFigures) {
+      for (const b of waitingFigures) {
+        if (b.index <= a.index) continue;
+        const overlap = overlapOf(a.box, b.box);
+        const gap = Math.max(-overlap.x, -overlap.z);
+        expect(
+          gap,
+          `oczekujacy ${a.index} i ${b.index} zachodza na siebie: przekrycie x ${overlap.x.toFixed(3)} `
+          + `z ${overlap.z.toFixed(3)} (odstep ${gap.toFixed(3)} m)`
+        ).toBeGreaterThan(CLEARANCE);
       }
     }
-    expect(nearest, `najblizsza para ${nearest.toFixed(2)} m przy figurze ${body.toFixed(3)} m`)
-      .toBeGreaterThan(body * 0.9);
-    // And none of them stands in the shelter.
-    const colliders = busShelterColliders(stop);
-    for (const position of positions) {
-      const inside = colliders.filter((rect) => (
-        position.x > rect.minX && position.x < rect.maxX && position.z > rect.minZ && position.z < rect.maxZ
-      ));
-      expect(inside.map((rect) => rect.id), `oczekujacy w kolizji`).toEqual([]);
+  });
+
+  test('no waiting figure intersects the shelter, the bench, the sign or the path', () => {
+    // The shelter as built, in three dimensions: a roof over their heads is not a
+    // collision, a post through a shoulder is.
+    const solids = boxes.map((box, index) => ({ id: `shelter-${index}`, box }));
+    for (const figure of waitingFigures) {
+      for (const solid of solids) {
+        const overlap = overlapOf(figure.box, solid.box);
+        const intersects = overlap.x > 0 && overlap.y > 0 && overlap.z > 0;
+        expect(
+          intersects,
+          `oczekujacy ${figure.index} przecina ${solid.id}: x ${overlap.x.toFixed(2)} y ${overlap.y.toFixed(2)} z ${overlap.z.toFixed(2)}`
+        ).toBe(false);
+      }
+    }
+    // And the route out of the shelter is not blocked by someone standing in it: the
+    // first two waypoints are the pedestrian part, and a body must not straddle them.
+    const path = busStopWalkingPath(stop, waitingFigures[0].position, new THREE.Vector3(centre.x + 3.05, GROUND_SURFACE_Y, centre.z - stop.benchSign * 1.75));
+    for (const figure of waitingFigures.slice(1)) {
+      for (const point of path.slice(1, 3)) {
+        const inside = point.x > figure.box.min.x && point.x < figure.box.max.x
+          && point.z > figure.box.min.z && point.z < figure.box.max.z;
+        expect(inside, `trasa przechodzi przez oczekujacego ${figure.index} w (${point.x.toFixed(1)}, ${point.z.toFixed(1)})`).toBe(false);
+      }
     }
   });
 

@@ -291,7 +291,9 @@ function buildStopCrowd(scene: THREE.Scene, stop: BusStop, random: RandomSource)
   const colliders = busShelterColliders(stop);
 
   const passengers: BusPassenger[] = [];
-  for (let i = 0; i < 4; i++) {
+  // As many as there are waiting spots: the number is decided by what fits under the
+  // shelter without the figures intersecting, not by a literal here.
+  for (let i = 0; i < waitPositions.length; i++) {
     const waitPos = waitPositions[i];
     const doorPos = doorBase.clone().addScaledVector(tangent, (i % 2 === 0 ? -1.6 : 1.6));
     doorPos.y = 0.5;

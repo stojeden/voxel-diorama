@@ -88,21 +88,22 @@ export function isPointClear(point: THREE.Vector3, colliders: readonly Collision
 }
 
 /**
- * Four deterministic waiting spots under the roof, behind the bench.
+ * Four deterministic waiting spots in one row under the roof, behind the bench.
  *
- * Two loose rows rather than one line. The product's figure is 0.874 m across with its
- * arms, and the space between the shelter posts is 4 m, so four figures in a single
- * row stood 0.67 m apart and their arms passed through each other. Staggered in two
- * rows the nearest pair is 0.84 m apart, which reads as a group waiting rather than a
- * rank, and every body still falls inside the 2 m roof.
+ * The spacing comes from the finished bodies, not from the figure's nominal width. A
+ * waiting figure is 0.874 m across its arms facing forward, but it stands turned toward
+ * the bus door, and turned it measures 0.55 to 0.77 m across the street and 0.82 to
+ * 0.91 m along it -- the shoulders rotate into the depth. So the row that failed was
+ * not too long, it was too deep: two staggered rows 0.47 m apart put bodies 0.9 m deep
+ * through each other, which a distance-between-centres test could not see.
+ *
+ * One row of four at 0.9 m centres, 0.25 m in front of the post line: measured gaps
+ * between the finished boxes are 0.34, 0.29 and 0.19 m, everyone is inside the 3.84 m
+ * clear span between the posts, 0.5 m clear of the bench, and under the 2.0 m roof.
+ * `clearance.test.ts` checks the boxes themselves, with rotation, at a 0.05 m clearance.
  */
 export function busStopWaitingPositions(stop: BusStop): THREE.Vector3[] {
-  return ([
-    [-0.95, -0.05],
-    [0.45, -0.05],
-    [-0.25, -0.52],
-    [1.15, -0.52],
-  ] as const).map(([along, outward]) => localToWorld(stop, along, outward));
+  return ([-1.35, -0.45, 0.45, 1.35] as const).map((along) => localToWorld(stop, along, -0.25));
 }
 
 /**

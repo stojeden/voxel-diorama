@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import * as THREE from 'three';
 import { createBus } from './Bus';
+import { busStopWaitingPositions } from './BusStopNavigation';
 import { BUS_STOPS } from './WorldLayout';
 
 const at = (hours: number, minutes = 0) => (hours * 60 + minutes) / (24 * 60);
@@ -35,7 +36,7 @@ describe('bus service clock', () => {
     expect(bus.getServiceDebugState()).toMatchObject({
       mode: 'final-loop',
       visible: true,
-      waitingPassengers: BUS_STOPS.length * 4,
+      waitingPassengers: BUS_STOPS.reduce((total, stop) => total + busStopWaitingPositions(stop).length, 0),
       remainingStops: BUS_STOPS.length,
     });
     bus.dispose();
@@ -80,7 +81,7 @@ describe('bus service clock', () => {
     expect(bus.getServiceDebugState()).toMatchObject({
       mode: 'normal',
       visible: true,
-      waitingPassengers: BUS_STOPS.length * 4,
+      waitingPassengers: BUS_STOPS.reduce((total, stop) => total + busStopWaitingPositions(stop).length, 0),
       remainingStops: 0,
     });
     bus.dispose();
