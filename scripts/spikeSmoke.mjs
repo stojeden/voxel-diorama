@@ -316,269 +316,273 @@ async function lookFromDistance(page, distance) {
 }
 
 /**
- * The postman, in a frame. He rides at dawn on the south road, checkpoints freeze
- * actors, and there is no free-camera hook, so the previous round verified him by
- * measurement alone. The camera can be placed through `controls.setLookAt` and the
- * scene walked through `window.__diorama.scene`, so this phase runs the live
- * simulation, waits for him to appear, and aims at where he actually is.
+ * Is the bicycle legible, measured against its own silhouette?
+ *
+ * The metric this replaces was inflated, and inflated in a way that flattered the answer.
+ * It compared a frame with the bicycle to a frame without it and counted only pixels whose
+ * luminance moved by more than 0.5 -- so a wheel pixel that is *completely invisible*,
+ * identical to the road behind it, never entered the denominator at all. The fraction was
+ * therefore "of the pixels where the object already shows, how many show well", which is
+ * close to a tautology. It also printed the percentage without ever asserting it.
+ *
+ * The denominator now comes from an independent mask:
+ *
+ *   1. the scene is frozen and the postman placed at a fixed position, heading, wheel
+ *      angle and limb pose -- the old harness let him ride, which is why the same code
+ *      reported anywhere between 43.7 % and 58.4 %;
+ *   2. a flat mask pass renders the target group white on black, through the plain
+ *      renderer rather than the composer, with an emissive override material, everything
+ *      else hidden and the background cleared -- so the mask depends on the geometry
+ *      alone, not on the object's colour, the lighting or what is behind it;
+ *   3. every mask pixel is then compared between the normal frame with the object and the
+ *      normal frame without it, *including the pixels that do not differ at all*;
+ *   4. the denominator is the full mask, and the gate -- half the object's own pixels
+ *      differing from their background by at least 8/255 -- is a real assertion, per
+ *      group, that fails the run.
+ *
+ * The two-render control stays: the frozen scene must produce byte-identical frames, or
+ * the numbers mean nothing.
  */
 async function runPostman(page, world) {
+  /** Half the object's own pixels must separate from their background. Fixed before measuring. */
+  const GATE = 50;
+  /** A luminance step of 8/255 is where an edge stops being invisible on a dark ground. */
+  const SEPARATION = 8;
+  /**
+   * Where he stands for every shot, chosen once and hard-coded so the frames are
+   * comparable between runs. On the south road, mid-block, clear of the level crossing.
+   */
+  // y is the walkable surface (GROUND_SURFACE_Y in WorldLayout); the bicycle's group
+  // sits on it with its tyres touching.
+  const POSE = { x: -29, y: -0.5, z: -45.8, yaw: Math.PI / 2, legs: -0.5, arms: -1.05 };
+
   await page.goto(`${URL}/?seed=${SEED}&world=${world}&quality=high`, { waitUntil: 'load' });
   await page.waitForFunction(() => window.__diorama?.ready === true, null, { timeout: 90_000 });
-  // 11:17, near the end of his round, because that is where the light is: at 07:12 and
-  // even at 08:40 the south road is in shadow and his dark tyres disappear into it, so
-  // a frame meant to judge geometry could not.
+  await settle(page, 4);
+  // Morning: the only window in which he exists at all.
   await page.evaluate(() => window.__diorama.setTime(0.47));
-  // He starts at dawn and rides a 240 m loop at 6 m/s, so he is somewhere on the south
-  // road within a few seconds of the clock reaching the morning window.
   const found = await page.waitForFunction(() => {
     const bike = window.__diorama.scene.getObjectByName('postman-bike');
-    if (!bike || !bike.visible) return null;
-    const p = bike.getWorldPosition(new bike.position.constructor());
-    return { x: p.x, y: p.y, z: p.z };
-  }, null, { timeout: 60_000, polling: 100 }).then((handle) => handle.jsonValue());
+    return bike && bike.visible ? true : null;
+  }, null, { timeout: 60_000, polling: 100 }).then(() => true);
+  await settle(page, 6);
+
+  // Freeze, then place him. Nothing may move between the mask and the two frames.
+  await page.evaluate(() => {
+    window.__parked = [];
+    window.__raf = window.requestAnimationFrame.bind(window);
+    window.requestAnimationFrame = (callback) => { window.__parked.push(callback); return 0; };
+  });
+  await page.waitForTimeout(300);
+
+  const placed = await page.evaluate((pose) => {
+    const bike = window.__diorama.scene.getObjectByName('postman-bike');
+    bike.position.set(pose.x, pose.y, pose.z);
+    bike.rotation.set(0, pose.yaw, 0);
+    bike.getObjectByName('postman-rider').rotation.z = 0;
+    bike.getObjectByName('postman-head').rotation.z = 0;
+    bike.getObjectByName('postman-legs').rotation.x = pose.legs;
+    bike.getObjectByName('postman-left-arm').rotation.x = pose.arms;
+    bike.getObjectByName('postman-right-arm').rotation.x = pose.arms;
+    let wheels = 0;
+    bike.traverse((node) => {
+      if (node.isMesh && node.geometry.type === 'TorusGeometry') { node.rotation.x = 0; wheels += 1; }
+    });
+    bike.updateMatrixWorld(true);
+    return {
+      position: [bike.position.x, bike.position.y, bike.position.z],
+      yaw: bike.rotation.y,
+      wheelsReset: wheels,
+    };
+  }, POSE);
+  assert.equal(placed.wheelsReset, 2, `${world}: expected two wheels to reset, found ${placed.wheelsReset}`);
+
+  /** One composer frame into a named slot, pixels kept in the page. */
+  const shoot = async (slot) => page.evaluate((into) => {
+    window.__diorama.renderFrame();
+    const gl = window.__diorama.renderer.domElement;
+    const canvas = new OffscreenCanvas(gl.width, gl.height);
+    const context = canvas.getContext('2d');
+    context.drawImage(gl, 0, 0);
+    window.__shots = window.__shots ?? {};
+    window.__shots[into] = context.getImageData(0, 0, gl.width, gl.height).data;
+    return { width: gl.width, height: gl.height };
+  }, slot);
+
+  /**
+   * The mask: the target group rendered flat white on black, geometry only.
+   *
+   * Through `renderer.render` rather than the composer, because bloom would spread the
+   * white past the silhouette and inflate the very denominator this exists to fix.
+   */
+  const maskOf = async (group) => page.evaluate((which) => {
+    const diorama = window.__diorama;
+    const scene = diorama.scene;
+    const renderer = diorama.renderer;
+    const bike = scene.getObjectByName('postman-bike');
+
+    const targets = [];
+    bike.traverse((node) => {
+      if (!node.isMesh || node.name.startsWith('postman-')) return;
+      const isWheel = node.geometry.type === 'TorusGeometry';
+      if (which === 'wheels' ? isWheel : !isWheel) targets.push(node);
+    });
+    const wanted = new Set(targets);
+
+    const hidden = [];
+    scene.traverse((node) => {
+      if (node.isMesh && !wanted.has(node) && node.visible) { node.visible = false; hidden.push(node); }
+    });
+    const background = scene.background;
+    const environment = scene.environment;
+    scene.background = null;
+    scene.environment = null;
+
+    const Colour = targets[0].material.color.constructor;
+    const previousClear = renderer.getClearColor(new Colour());
+    const previousAlpha = renderer.getClearAlpha();
+    // Emissive white on a standard material: light-independent, so a tyre in deep shade
+    // masks exactly as brightly as one in the sun.
+    const flat = new targets[0].material.constructor({
+      color: 0x000000, emissive: 0xffffff, emissiveIntensity: 1, fog: false,
+    });
+    scene.overrideMaterial = flat;
+    renderer.setClearColor(0x000000, 1);
+    renderer.render(scene, diorama.controls.camera ?? diorama.camera);
+
+    const gl = renderer.domElement;
+    const canvas = new OffscreenCanvas(gl.width, gl.height);
+    const context = canvas.getContext('2d');
+    context.drawImage(gl, 0, 0);
+    const data = context.getImageData(0, 0, gl.width, gl.height).data;
+
+    scene.overrideMaterial = null;
+    flat.dispose();
+    renderer.setClearColor(previousClear, previousAlpha);
+    scene.background = background;
+    scene.environment = environment;
+    for (const node of hidden) node.visible = true;
+
+    window.__masks = window.__masks ?? {};
+    window.__masks[which] = data;
+    let pixels = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      if (0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2] > 20) pixels += 1;
+    }
+    return { meshes: targets.length, maskPixels: pixels };
+  }, group);
+
+  /** Hide one group, shoot the frame without it, put it back. */
+  const shootWithout = async (group, slot) => {
+    const hiddenCount = await page.evaluate((which) => {
+      const bike = window.__diorama.scene.getObjectByName('postman-bike');
+      const off = [];
+      bike.traverse((node) => {
+        if (!node.isMesh || node.name.startsWith('postman-')) return;
+        const isWheel = node.geometry.type === 'TorusGeometry';
+        if ((which === 'wheels') === isWheel) { node.visible = false; off.push(node); }
+      });
+      window.__hiddenGroup = off;
+      return off.length;
+    }, group);
+    await shoot(slot);
+    await page.evaluate(() => {
+      for (const node of window.__hiddenGroup ?? []) node.visible = true;
+      window.__hiddenGroup = [];
+    });
+    return hiddenCount;
+  };
+
+  /** Every mask pixel, including the ones that do not differ at all. */
+  const separationOf = async (group, withSlot, withoutSlot) => page.evaluate(([which, a, b, minimum]) => {
+    const mask = window.__masks[which];
+    const shown = window.__shots[a];
+    const gone = window.__shots[b];
+    const luma = (d, i) => 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2];
+    const deltas = [];
+    for (let i = 0; i < mask.length; i += 4) {
+      if (0.2126 * mask[i] + 0.7152 * mask[i + 1] + 0.0722 * mask[i + 2] <= 20) continue;
+      deltas.push(Math.abs(luma(shown, i) - luma(gone, i)));
+    }
+    if (!deltas.length) return { maskPixels: 0, separatedPercent: 0, medianDelta: 0, invisiblePixels: 0 };
+    const sorted = [...deltas].sort((x, y) => x - y);
+    const separated = deltas.filter((delta) => delta >= minimum).length;
+    return {
+      maskPixels: deltas.length,
+      separatedPixels: separated,
+      separatedPercent: Math.round((separated / deltas.length) * 1000) / 10,
+      medianDelta: Math.round(sorted[sorted.length >> 1] * 10) / 10,
+      // How much of the object is literally indistinguishable from its background.
+      invisiblePixels: deltas.filter((delta) => delta < 1).length,
+    };
+  }, [group, withSlot, withoutSlot, SEPARATION]);
 
   const shots = [];
-  // Let him ride clear of the block he starts beside: at 6 m/s four seconds puts him
-  // 24 m down the road.
-  await page.waitForTimeout(4_000);
-  /**
-   * Three frames, and the third one on purpose does not choose its side by the sun.
-   * `sunlit` is how a silhouette is *shown*; `in-world` is how it actually appears to
-   * someone standing on the pavement, contrast problem included.
-   */
-  // Distances that show a bicycle rather than fill the frame with a shoulder: at six
-  // metres and a 50 degree field of view he is cropped, not framed.
   for (const [name, side, ahead, height, sunlit] of [
     ['postman-side', 8, 0, 1.0, true],
     ['postman-three-quarter', 8, 5, 1.1, true],
     ['postman-in-world', 10, 3.5, 1.6, false],
   ]) {
-    // Aim one frame before the shot: at 6 m/s he moves 10 cm per frame.
-    const aimed = await page.evaluate(({ side: s, ahead: a, height: h, lit }) => {
-      const bike = window.__diorama.scene.getObjectByName('postman-bike');
-      const p = bike.getWorldPosition(new bike.position.constructor());
-      // He rides the south road along x, so the camera stands off in z and looks back
-      // along his direction of travel.
-      // The two silhouette frames stand on the sunlit side; the in-world frame stands
-      // on the pavement side whatever the sun is doing.
+    const camera = await page.evaluate(({ pose, s, a, h, lit }) => {
       const dz = lit ? -s : s;
-      window.__diorama.controls.setLookAt(p.x + a, p.y + h + 0.55, p.z + dz, p.x, p.y + h, p.z, false);
-      return { x: p.x, y: p.y, z: p.z, camera: [p.x + a, p.y + h + 0.9, p.z + dz] };
-    }, { side, ahead, height, lit: sunlit });
-    await settle(page, 2);
-    // Line of sight, proved rather than assumed: the first framing of this shot put
-    // the camera inside a tenement, and the run reported success while the file held
-    // a flat red wall and nothing else. Ray against every other mesh's world box,
-    // in plain arithmetic so the page needs no debug API for it. Box tests are
-    // conservative -- a ray through a gap in a tree still counts as blocked -- which
-    // errs toward moving the camera, the safe direction.
-    const sight = await page.evaluate(() => {
-      const diorama = window.__diorama;
-      const bike = diorama.scene.getObjectByName('postman-bike');
-      const Vector3 = bike.position.constructor;
-      diorama.scene.updateMatrixWorld(true);
-      const rig = new Set();
-      bike.traverse((node) => { if (node.isMesh) rig.add(node); });
+      window.__diorama.controls.setLookAt(pose.x + a, pose.y + h + 0.55, pose.z + dz, pose.x, pose.y + h, pose.z, false);
+      // The parked loop never calls controls.update(), and that is where camera-controls
+      // writes the pose into the camera object.
+      window.__diorama.controls.update(0);
+      return window.__diorama.cameraPose();
+    }, { pose: POSE, s: side, a: ahead, h: height, lit: sunlit });
 
-      const worldBox = (mesh) => {
-        const geometry = mesh.geometry;
-        if (!geometry.boundingBox) geometry.computeBoundingBox();
-        const b = geometry.boundingBox;
-        if (!b) return null;
-        const e = mesh.matrixWorld.elements;
-        const min = [Infinity, Infinity, Infinity];
-        const max = [-Infinity, -Infinity, -Infinity];
-        for (const x of [b.min.x, b.max.x]) for (const y of [b.min.y, b.max.y]) for (const z of [b.min.z, b.max.z]) {
-          const p = [
-            e[0] * x + e[4] * y + e[8] * z + e[12],
-            e[1] * x + e[5] * y + e[9] * z + e[13],
-            e[2] * x + e[6] * y + e[10] * z + e[14],
-          ];
-          for (let i = 0; i < 3; i++) { if (p[i] < min[i]) min[i] = p[i]; if (p[i] > max[i]) max[i] = p[i]; }
-        }
-        return { min, max };
-      };
-      /** Slab test; returns the near hit distance along a unit direction, or null. */
-      const hit = (origin, dir, box) => {
-        let near = -Infinity;
-        let far = Infinity;
-        for (let i = 0; i < 3; i++) {
-          if (Math.abs(dir[i]) < 1e-9) {
-            if (origin[i] < box.min[i] || origin[i] > box.max[i]) return null;
-            continue;
-          }
-          let t1 = (box.min[i] - origin[i]) / dir[i];
-          let t2 = (box.max[i] - origin[i]) / dir[i];
-          if (t1 > t2) { const t = t1; t1 = t2; t2 = t; }
-          if (t1 > near) near = t1;
-          if (t2 < far) far = t2;
-          if (near > far) return null;
-        }
-        return far < 0 ? null : Math.max(near, 0);
-      };
-
-      /** Does a box enclose a point? A box holding both camera and rider is a
-       *  container -- the 2000 m sky shell, the ground slab -- not an occluder. */
-      const contains = (box, p) => p.every((v, i) => v >= box.min[i] - 1e-6 && v <= box.max[i] + 1e-6);
-      const others = [];
-      diorama.scene.traverse((node) => {
-        if (!node.isMesh || rig.has(node) || !node.visible || !node.geometry) return;
-        let parent = node.parent;
-        let hidden = false;
-        while (parent) { if (!parent.visible) hidden = true; parent = parent.parent; }
-        if (hidden) return;
-        const box = worldBox(node);
-        if (box) others.push({ name: node.name || node.geometry.type, kind: node.isInstancedMesh ? `inst${node.count}` : 'mesh', box });
-      });
-
-      const camera = diorama.controls.camera ?? diorama.camera;
-      const eye = camera.getWorldPosition(new Vector3());
-      const origin = [eye.x, eye.y, eye.z];
-      const blocked = [];
-      // Instanced meshes are excluded: their box is the union of every instance, so
-      // for the tree and window pools it spans the map and says nothing about any one
-      // instance. Stated as a limit of this check rather than worked around.
-      const candidates = others.filter((other) => other.kind === 'mesh');
-      for (const part of ['postman-head', 'postman-uniform', 'postman-legs']) {
-        const node = bike.getObjectByName(part);
-        if (!node) continue;
-        const target = node.getWorldPosition(new Vector3());
-        const raw = [target.x - eye.x, target.y - eye.y, target.z - eye.z];
-        const length = Math.hypot(...raw);
-        const dir = raw.map((v) => v / length);
-        for (const other of candidates) {
-          if (contains(other.box, origin) && contains(other.box, [target.x, target.y, target.z])) continue;
-          const distance = hit(origin, dir, other.box);
-          if (distance !== null && distance < length - 0.3) {
-            const size = other.box.max.map((v, i) => (v - other.box.min[i]).toFixed(1)).join('x');
-            blocked.push(`${part} behind ${other.name}[${other.kind}] ${size} m at ${distance.toFixed(1)} m of ${length.toFixed(1)} m`);
-            break;
-          }
-        }
+    const size = await shoot('with');
+    await shoot('control');
+    const control = await page.evaluate(() => {
+      const a = window.__shots.with;
+      const b = window.__shots.control;
+      let changed = 0;
+      for (let i = 0; i < a.length; i += 4) {
+        const luma = (d) => 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2];
+        if (Math.abs(luma(b) - luma(a)) > 0.5) changed += 1;
       }
-      return blocked;
+      return changed;
     });
-    assert.deepEqual(sight, [], `${world}: the ${name} camera has no clear view of the rider`);
+
+    const legibility = {};
+    for (const group of ['wheels', 'frame']) {
+      const mask = await maskOf(group);
+      const hiddenCount = await shootWithout(group, 'without');
+      // The mask pass rendered over the canvas, so the frame with the object is retaken.
+      await shoot('with');
+      const separation = await separationOf(group, 'with', 'without');
+      legibility[group] = { ...mask, hiddenMeshes: hiddenCount, ...separation, gate: GATE, separationThreshold: SEPARATION };
+    }
+
     const frame = `${FRAME_DIR}/${world}-high-${name}.jpg`;
     await page.screenshot({ path: frame, type: 'jpeg', quality: 88 });
+    shots.push({ name, frame, camera: camera.position, target: camera.target, canvas: `${size.width}x${size.height}`, controlChangedPixels: control, legibility });
 
-    // Is the bicycle actually readable, or does it only look readable to whoever
-    // picked the colour? Hide a group of meshes, render again, and the pixels that
-    // changed are exactly that group's own pixels -- with the background it has to
-    // separate from sitting underneath. Contrast is then measured, not deduced from
-    // the diffuse colours, which is where the earlier reasoning went wrong: in a
-    // multiplicative lighting model a colour difference scales with the light, so a
-    // tyre chosen to sit lighter than sunlit asphalt sits on top of it in shadow.
-    //
-    // The city has to hold still for this. The first attempt let the animation loop
-    // run between the two shots and measured 596 131 changed pixels for two wheels --
-    // the whole moving frame. So: stop the loop, render on demand with delta 0, and
-    // prove the instrument by shooting the same scene twice before touching anything.
-    // Pixels never leave the page: shipping two 2880x1800 PNGs per comparison through
-    // page.evaluate as base64 was 20 MB a call and did not finish. Snapshot the WebGL
-    // canvas into an ImageData in the same tick as the render -- the drawing buffer is
-    // still valid then -- keep it in a page global, and return only statistics.
-    const shoot = async (slot) => page.evaluate((into) => {
-      window.__diorama.renderFrame();
-      const gl = window.__diorama.renderer.domElement;
-      const canvas = new OffscreenCanvas(gl.width, gl.height);
-      const context = canvas.getContext('2d');
-      context.drawImage(gl, 0, 0);
-      window.__shots = window.__shots ?? {};
-      window.__shots[into] = context.getImageData(0, 0, gl.width, gl.height).data;
-      return { width: gl.width, height: gl.height };
-    }, slot);
-    const deltasOf = async (a, b) => page.evaluate(([first, second]) => {
-      const background = window.__shots[first];
-      const shown = window.__shots[second];
-      const luma = (d, i) => 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2];
-      const deltas = [];
-      // Not just how big the difference is, but which way: a group can fail this gate
-      // because it is too dark for its background or too light for it, and the two want
-      // opposite fixes. Lightening the tyre once moved the median the wrong way, which
-      // a signed reading would have predicted.
-      const own = [];
-      const behind = [];
-      for (let i = 0; i < shown.length; i += 4) {
-        const front = luma(shown, i);
-        const back = luma(background, i);
-        const delta = Math.abs(front - back);
-        if (delta > 0.5) {
-          deltas.push(delta);
-          own.push(front);
-          behind.push(back);
-        }
-      }
-      const median = (list) => {
-        if (!list.length) return 0;
-        const sorted = [...list].sort((x, y) => x - y);
-        return Math.round(sorted[sorted.length >> 1] * 10) / 10;
-      };
-      deltas.sort((x, y) => x - y);
-      if (!deltas.length) return { ownPixels: 0, medianDelta: 0, readablePercent: 0 };
-      return {
-        ownPixels: deltas.length,
-        medianDelta: Math.round(deltas[deltas.length >> 1] * 10) / 10,
-        readablePercent: Math.round((deltas.filter((delta) => delta >= 8).length / deltas.length) * 1000) / 10,
-        medianOwnLuma: median(own),
-        medianBackgroundLuma: median(behind),
-      };
-    }, [a, b]);
-
-    await page.evaluate(() => {
-      window.__parked = [];
-      window.__raf = window.requestAnimationFrame.bind(window);
-      window.requestAnimationFrame = (callback) => { window.__parked.push(callback); return 0; };
-    });
-    // No settle() while the loop is parked: settle awaits requestAnimationFrame, which
-    // is exactly what the freeze swallows, so the first attempt deadlocked on itself.
-    await page.waitForTimeout(300);
-    const size = await shoot('still');
-    await shoot('again');
-    const control = { ...(await deltasOf('still', 'again')), canvas: `${size.width}x${size.height}` };
-    const legibility = { control };
-    for (const [group, wheelsOnly] of [['wheels', true], ['frame', false]]) {
-      const meshes = await page.evaluate((onlyWheels) => {
-        const bike = window.__diorama.scene.getObjectByName('postman-bike');
-        const off = [];
-        bike.traverse((node) => {
-          if (!node.isMesh || node.name.startsWith('postman-')) return;
-          const isWheel = node.geometry.type === 'TorusGeometry';
-          if (onlyWheels === isWheel) { node.visible = false; off.push(node); }
-        });
-        window.__hiddenBikeParts = off;
-        return off.length;
-      }, wheelsOnly);
-      await shoot('without');
-      await page.evaluate(() => {
-        for (const node of window.__hiddenBikeParts) node.visible = true;
-        window.__hiddenBikeParts = [];
-      });
-      legibility[group] = { meshes, ...(await deltasOf('without', 'still')) };
-    }
-    await page.evaluate(() => {
-      window.requestAnimationFrame = window.__raf;
-      for (const callback of window.__parked) window.requestAnimationFrame(callback);
-      window.__parked = [];
-    });
     console.log(
-      `${' '.repeat(21)}control ${legibility.control.ownPixels} px  ` +
-      `wheels ${legibility.wheels.ownPixels} px dL ${legibility.wheels.medianDelta} ${legibility.wheels.readablePercent}% >=8 ` +
-      `(wheel ${legibility.wheels.medianOwnLuma} on bg ${legibility.wheels.medianBackgroundLuma})  ` +
-      `frame ${legibility.frame.ownPixels} px median dL ${legibility.frame.medianDelta} ${legibility.frame.readablePercent}% >=8`
+      `${world.padEnd(14)} high  ${name.padEnd(21)} control ${control} px  ` +
+      `koło ${legibility.wheels.separatedPercent}% z ${legibility.wheels.maskPixels} px maski (niewidocznych ${legibility.wheels.invisiblePixels})  ` +
+      `rama ${legibility.frame.separatedPercent}% z ${legibility.frame.maskPixels} px (niewidocznych ${legibility.frame.invisiblePixels})`
     );
-    assert.ok(
-      legibility.control.ownPixels < legibility.wheels.ownPixels / 20,
-      `${world}: the frozen scene moved between shots (${legibility.control.ownPixels} px), so the ${name} legibility numbers mean nothing`
-    );
-    const state = await page.evaluate(() => window.__diorama.postmanState());
-    shots.push({ name, frame, aimed, legibility, active: state.active, dogMode: state.dogMode });
-    console.log(`${world.padEnd(14)} high  ${name.padEnd(19)} at (${aimed.x.toFixed(1)}, ${aimed.z.toFixed(1)})  active ${state.active}  dog ${state.dogMode}`);
-    assert.equal(state.active, true, `${world}: the postman stopped riding before the ${name} frame`);
+
+    assert.equal(control, 0, `${world}: the frozen scene moved between two renders (${control} px) in ${name}`);
+    for (const group of ['wheels', 'frame']) {
+      const value = legibility[group];
+      assert.ok(value.maskPixels > 500, `${world}: ${name} ${group} mask is only ${value.maskPixels} px -- the mask pass is wrong`);
+      assert.ok(
+        value.separatedPercent >= GATE,
+        `${world}: ${name} ${group} separates on ${value.separatedPercent}% of its ${value.maskPixels} mask pixels, gate ${GATE}%`
+      );
+    }
   }
+
+  await page.evaluate(() => {
+    window.requestAnimationFrame = window.__raf;
+    for (const callback of window.__parked) window.requestAnimationFrame(callback);
+    window.__parked = [];
+  });
   assert.ok(found, 'the postman never appeared');
-  return { world, found, shots };
+  return { world, found, gate: GATE, separationThreshold: SEPARATION, pose: POSE, shots };
 }
 
 /**
