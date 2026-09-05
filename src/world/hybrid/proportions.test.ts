@@ -190,8 +190,18 @@ describe('one metric system', () => {
   });
 
   test('what a person walks past is at a human height', () => {
+    /**
+     * Doors, by the glass only a door is made of.
+     *
+     * "Any cohort-less glass pane" also catches the walkup's stairwell landing window --
+     * 0.8 by 1.1 m, correct for a stairwell and wrong for a door. Nothing had noticed
+     * because no walkup stood inside the five-block fragment these tests used to see.
+     * `P.glassWarm` is used by `doorAt` and by nothing else.
+     */
     const doors = model.buildings.flatMap((b) =>
-      emitBuilding(b).primitives.filter((p) => p.cls === 'glass' && p.cohort < 0 && p.kind === 'plane')
+      emitBuilding(b).primitives.filter(
+        (p) => p.cls === 'glass' && p.cohort < 0 && p.kind === 'plane' && p.palette === P.glassWarm
+      )
     );
     expect(doors.length).toBeGreaterThan(0);
     for (const door of doors) {

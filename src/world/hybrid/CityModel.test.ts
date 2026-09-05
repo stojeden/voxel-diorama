@@ -6,18 +6,30 @@ import { floorPlan } from './families';
 describe('hybrid city model', () => {
   const model = buildCityModel();
 
-  test('keeps every block height in metres and grows only the flagged point tower', () => {
-    expect(model.buildings).toHaveLength(5);
+  test('keeps every block height in metres, grows only point towers, keeps walkups low', () => {
+    expect(model.buildings).toHaveLength(BLOCK_CONFIGS.length);
     for (const b of model.buildings) {
       const block = BLOCK_CONFIGS[b.index];
       expect(b.heightMetres).toBe(block.h);
       if (b.pointTower) {
-        expect(b.index).toBe(5);
+        expect([5, 10, 30]).toContain(b.index);
         expect(b.bodyHeight).toBeCloseTo(Math.round((block.h * 1.8) / 2.8) * 2.8, 5);
+      } else if (b.family === 'walkup') {
+        /**
+         * The one family that deliberately does not fill its plot.
+         *
+         * A walkup is the low building at the edge of town, so the layout height is an
+         * envelope it sits inside rather than a target it meets: two or three storeys at
+         * 2.75 m. It has to stay under the estate blocks, which start at 11.2 m.
+         */
+        expect(b.floors).toBeGreaterThanOrEqual(2);
+        expect(b.floors).toBeLessThanOrEqual(3);
+        expect(b.bodyHeight + b.roofHeight).toBeLessThan(11.2);
+        expect(b.bodyHeight).toBeLessThanOrEqual(block.h);
       } else {
         expect(Math.abs(b.bodyHeight - block.h)).toBeLessThanOrEqual(1.5);
+        expect(b.floors).toBeGreaterThanOrEqual(3);
       }
-      expect(b.floors).toBeGreaterThanOrEqual(3);
     }
   });
 
@@ -26,7 +38,11 @@ describe('hybrid city model', () => {
     expect(floorPlan('tenement', 15, false)).toMatchObject({ groundFloorHeight: 3.7, floorHeight: 3.3, floors: 4, roof: 'hip' });
     expect(floorPlan('tower', 16, true).bodyHeight).toBeCloseTo(28, 5);
     expect(floorPlan('tower', 16, false).bodyHeight).toBeCloseTo(16.8, 5);
-    expect(floorPlan('walkup', 10, false)).toMatchObject({ floors: 4, roof: 'gable' });
+    // Derived from the plot now, not fixed at four: a 10 m plot takes two storeys, a
+    // 13 m plot three, and neither reaches the 11.2 m where the estate blocks start.
+    expect(floorPlan('walkup', 10, false)).toMatchObject({ floors: 2, roof: 'gable' });
+    expect(floorPlan('walkup', 13, false)).toMatchObject({ floors: 3, roof: 'gable' });
+    expect(floorPlan('walkup', 13, false).bodyHeight + 1.9).toBeLessThan(11.2);
   });
 
   test('footprints never change', () => {

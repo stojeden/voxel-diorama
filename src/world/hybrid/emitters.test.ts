@@ -28,12 +28,16 @@ describe('architecture emitter', () => {
     expect(primitives.filter((p) => p.palette === P.goodsA || p.palette === P.goodsB).length).toBeGreaterThan(0);
   });
 
-  test('the flagged point tower is the tallest cluster and the only grown one', () => {
+  test('the point towers stand above everything that is not one', () => {
+    // There are three of them now, so "the tallest cluster" is a set rather than one
+    // building: what matters is that nothing unflagged reaches a flagged tower's height.
     const clusters = model.buildings.map((b) => ({ b, c: emitBuilding(b) }));
-    const tower = clusters.find(({ b }) => b.pointTower)!;
+    const towers = clusters.filter(({ b }) => b.pointTower);
+    expect(towers.length).toBe(3);
+    const lowestTower = Math.min(...towers.map(({ c }) => c.center[1]));
     for (const { b, c } of clusters) {
-      if (b === tower.b) continue;
-      expect(c.center[1]).toBeLessThan(tower.c.center[1]);
+      if (b.pointTower) continue;
+      expect(c.center[1], `blok ${b.index} (${b.family})`).toBeLessThan(lowestTower);
     }
   });
 

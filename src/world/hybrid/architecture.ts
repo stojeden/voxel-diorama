@@ -316,7 +316,10 @@ function walkup(E: Emitter, b: BuildingSpec): void {
     doorAt(E, F, stairSide, a, GROUND, 1.1, 2.1, accent, false);
     for (let f = 0; f < b.floors - 1; f++) {
       const yc = GROUND + (f + 1) * floorH + 0.2;
-      sidePlane(E, P.glass, F, stairSide, a, yc, 0.015, 0.8, 1.1, { layer: 1, cls: 'glass', style: STYLE.glass });
+      // Layer 0 like every other pane: at distance a walkup loses the frames and sills
+      // around its stairwell window, not the window. This sat in layer 1 while no walkup
+      // was inside the rendered fragment, so nothing had ever drawn it far away.
+      sidePlane(E, P.glass, F, stairSide, a, yc, 0.015, 0.8, 1.1, { layer: 0, cls: 'glass', style: STYLE.glass });
       sideBox(E, P.trim, F, stairSide, a, yc - 0.6, 0.05, 1.0, 0.07, 0.16, { layer: 2 });
     }
   }
