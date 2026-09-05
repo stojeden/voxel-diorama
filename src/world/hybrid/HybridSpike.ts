@@ -40,8 +40,31 @@ export interface HybridMetrics {
   low: boolean;
 }
 
+/**
+ * What the hybrid needs from one frame.
+ *
+ * `sunT` and `clockT` are the same number in simulation and different numbers in real
+ * time, and telling them apart is the whole point of the split: real-time mode warps the
+ * lighting phase so the viewer's real sunrise lands on 0.25 and their real sunset on 0.75,
+ * which is right for the sky and useless as a clock. Anything about *light* reads `sunT`;
+ * anything about an *hour* reads `clockT`.
+ */
+export interface HybridFrame {
+  camera: THREE.PerspectiveCamera;
+  viewportHeightPx: number;
+  /** Lighting phase, 0..1 of the cycle. Warped against the wall clock in real time. */
+  sunT: number;
+  /** Hour of day, 0..1 of a real 24 h. The hour the HUD prints, in either mode. */
+  clockT: number;
+  night: number;
+  /** Real seconds since the previous frame. Zero while a checkpoint is locked. */
+  dt: number;
+  /** Real seconds of presentation time -- the app's own clock, which checkpoints define. */
+  elapsed: number;
+}
+
 export interface HybridHandle {
-  update(camera: THREE.PerspectiveCamera, viewportHeightPx: number, t01: number, night: number, dt: number): void;
+  update(frame: HybridFrame): void;
   setTheme(palette: Record<number, number>): void;
   setSnowCover(cover: number): void;
   setWetness(wetness: number): void;
@@ -170,15 +193,16 @@ export function attachHybridSpike(options: HybridSpikeOptions): HybridHandle {
   const awnings = new Awnings(options.scene, model.buildings, materials.opaque);
 
   return {
-    update(camera, viewportHeightPx, t01, night, dt) {
+    update({ camera, viewportHeightPx, sunT, clockT, night, dt, elapsed }) {
+      const t01 = sunT;
       uniforms.uNight.value = night;
-      // The chimney and the mast flash half a period apart, so the skyline never blinks
-      // as one object.
-      uniforms.uEmissive.value[P.aviationRed] = beaconGlow(t01, night, 0);
-      uniforms.uEmissive.value[P.aviationRedAlt] = beaconGlow(t01, night, 0.5);
-      // One call for every awning in the city, and it returns early unless the fold
-      // actually moved.
-      awnings.update(t01);
+      // Real seconds, not fractions of the day: a warning light keeps its own rate
+      // whatever the clock over it is doing. The chimney and the mast flash half a period
+      // apart, so the skyline never blinks as one object.
+      uniforms.uEmissive.value[P.aviationRed] = beaconGlow(elapsed, night, 0);
+      uniforms.uEmissive.value[P.aviationRedAlt] = beaconGlow(elapsed, night, 0.5);
+      // One call for every awning in the city, on the hour and the frame's own delta.
+      awnings.update(clockT, dt);
       for (let cohort = 0; cohort < WINDOW_COHORT_COUNT; cohort++) {
         uniforms.uCohort.value[cohort] = residentialWindowActivityAt(t01, cohort);
       }

@@ -66,6 +66,25 @@ const ROUTE_LENGTH = BUS_ROUTE_CURVE.getLength();
 /** Route parameter of the railway level crossing — the bus yields to trains. */
 const CROSSING_T = nearestCurveT(BUS_ROUTE_CURVE, LEVEL_CROSSING.x, LEVEL_CROSSING.z);
 
+/**
+ * Yielding at the level crossing, measured from the bumper rather than from a point.
+ *
+ * `leadT` is the middle of the body, so a hold line quoted from it says nothing about
+ * where the front of the bus ends up: four metres from the centre is the front bumper
+ * exactly on the rails. These are the numbers the geometry actually implies.
+ */
+const BUS_HALF_LENGTH = BUS_LENGTH / 2;
+/** Room the bumper leaves in front of the rails. */
+const CROSSING_CLEARANCE = 2.5;
+/** Where the middle of the bus stands when the bumper is clear of the rails. */
+export const CROSSING_HOLD_LINE = BUS_HALF_LENGTH + CROSSING_CLEARANCE;
+/** Beyond this the crossing is somebody else's problem. */
+const CROSSING_WATCH = 22;
+/** Speed decay per second in the throttle model — the stopping distance follows from it. */
+const SPEED_LAG = 1.8;
+/** Half the body plus the rails: any less and part of the bus is over the track. */
+export const CROSSING_BODY_SPAN = BUS_HALF_LENGTH + 1.5;
+
 type BusState =
   | { kind: 'cruising' }
   | { kind: 'braking'; stop: BusStop }
@@ -324,6 +343,8 @@ export interface BusHandle {
   getRouteProgress: () => number;
   seekRouteProgress: (progress: number) => void;
   getStopState: () => { dwelling: boolean; label: string };
+  /** Level-crossing state, for the behaviour test and for showing the stop in the app. */
+  getCrossingState: () => { held: boolean; toCrossing: number; speed: number; onCrossing: boolean };
   debugStartDwell: (label: string) => boolean;
   getPassengerDebugState: () => Array<{
     stop: string;
@@ -370,6 +391,8 @@ export function createBus(scene: THREE.Scene, random = fallbackRandom('bus')): B
   let doorOpen = 0;
   let clock = 0;
   let state: BusState = { kind: 'cruising' };
+  /** Latched while the bus is waiting out a train; cleared only when the crossing frees. */
+  let crossingHeld = false;
   let serviceMode: BusServiceMode = 'normal';
   let headlightsEnabled = true;
   let serviceInitialized = false;
@@ -600,11 +623,29 @@ export function createBus(scene: THREE.Scene, random = fallbackRandom('bus')): B
 
       // ── Level crossing: yield to the train ──
       const toCrossing = forwardDelta(leadT, CROSSING_T) * ROUTE_LENGTH;
-      // Wait clear of the rails, not on them. The crossing point used to be 5.4 m short
-      // of the track, so half a metre of margin was really six; now that it is the
-      // intersection itself, the margin has to say so. Past it the bus keeps going --
-      // stopping on a crossing is worse than crossing it.
-      const holdForTrain = crossingBlocked && toCrossing < 18 && toCrossing > 4;
+      /**
+       * The hold is LATCHED, and that is the whole point.
+       *
+       * It used to be recomputed every frame as `toCrossing > 4`. A bus that started
+       * braking and then drifted past that mark lost the condition, went back to cruise
+       * speed and accelerated onto an occupied crossing -- the brake switched off in the
+       * middle of the stop. Once the bus has committed to waiting it waits until the
+       * crossing is clear, wherever it has come to rest.
+       *
+       * It commits only if there is room to stop. `currentSpeed / SPEED_LAG` is the
+       * distance the throttle model needs to bring it down; with less than that in hand
+       * the bus is past its commit point and drives across, because stopping on a
+       * crossing is worse than crossing it.
+       */
+      const room = toCrossing - CROSSING_HOLD_LINE;
+      if (!crossingBlocked) crossingHeld = false;
+      else if (
+        !crossingHeld &&
+        toCrossing < CROSSING_WATCH &&
+        room > currentSpeed / SPEED_LAG + 1
+      ) {
+        crossingHeld = true;
+      }
 
       if (state.kind === 'cruising') {
         const stop = nextStop(leadT);
@@ -618,7 +659,14 @@ export function createBus(scene: THREE.Scene, random = fallbackRandom('bus')): B
       } else if (state.kind === 'dwelling') {
         targetSpeed = 0;
       }
-      if (holdForTrain) targetSpeed = 0;
+      if (crossingHeld) {
+        // Ease down onto the hold line the same way the bus eases into a stop, so it
+        // comes to rest beside the rails instead of gliding to a halt fifteen metres
+        // short of them.
+        const fraction = Math.min(1, Math.max(0, room / brakingDistance));
+        targetSpeed = Math.min(targetSpeed, cruiseSpeed * fraction * fraction);
+        distanceToStop = Math.min(distanceToStop, Math.max(0, room));
+      }
 
       const k = 1 - Math.exp(-1.8 * Math.max(delta, 0.0001));
       currentSpeed += (targetSpeed - currentSpeed) * k;
@@ -738,6 +786,19 @@ export function createBus(scene: THREE.Scene, random = fallbackRandom('bus')): B
       state = { kind: 'cruising' };
       serviceMode = 'normal';
     },
+    getCrossingState() {
+      const toCrossing = forwardDelta(leadT, CROSSING_T) * ROUTE_LENGTH;
+      return {
+        held: crossingHeld,
+        toCrossing,
+        speed: currentSpeed,
+        // Some part of the body is over the rails: measured from the bumpers, not the
+        // centre, and true whether the crossing is just ahead or just behind.
+        onCrossing:
+          toCrossing < CROSSING_BODY_SPAN || toCrossing > ROUTE_LENGTH - CROSSING_BODY_SPAN,
+      };
+    },
+
     getStopState() {
       if (state.kind === 'dwelling') return { dwelling: true, label: state.stop.label };
       return { dwelling: false, label: '' };

@@ -97,6 +97,19 @@ export class RealTimeSync {
     });
   }
 
+  /**
+   * The viewer's local hour, as a fraction of a 24-hour day.
+   *
+   * Deliberately NOT `getCycleT`. That one warps the day so the real sunrise lands on
+   * t=0.25 and the real sunset on t=0.75, which is right for the sun and wrong for a
+   * clock: at 0.75 the sky is correct and the hour is anything from half past three in
+   * December to nine in June. Anything that means an *hour* -- a shop opening, a shop
+   * closing -- has to read this instead, and it is the same hour the HUD prints.
+   */
+  getDayFraction(now: Date = new Date()): number {
+    return (now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds()) / 86_400;
+  }
+
   getMoon(now: Date = new Date()): { phase: number; fraction: number } {
     const illumination = SunCalc.getMoonIllumination(now);
     return { phase: illumination.phase, fraction: illumination.fraction };

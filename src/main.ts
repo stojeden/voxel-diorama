@@ -61,7 +61,7 @@ import type { DevStatsHandle } from './performance/DevStats';
 import type { FrameTiming } from './debug/frameTiming';
 import type { DioramaDebugHandle } from './debug/DioramaDebugTypes';
 import { isSpikeGroundCell, parseWorldMode, SPIKE_BLOCK_SET, strategyOf } from './world/hybrid/spikeFlag';
-import type { HybridHandle } from './world/hybrid/HybridSpike';
+import type { HybridFrame, HybridHandle } from './world/hybrid/HybridSpike';
 
 const query = new URLSearchParams(window.location.search);
 const requestedCheckpoint = getCheckpoint(query.get('checkpoint'));
@@ -91,6 +91,8 @@ const world = createWorld(
   hybridStrategy ? { excludeBlocks: SPIKE_BLOCK_SET, excludeGroundCell: isSpikeGroundCell } : {}
 );
 let hybrid: HybridHandle | null = null;
+/** One mutable frame object for the hybrid, like `FrameContext`: no per-frame allocation. */
+const hybridFrame = { sunT: 0, clockT: 0, night: 0, dt: 0, elapsed: 0 } as unknown as HybridFrame;
 ui.setLoadingProgress(10, 'MIASTO I KRAJOBRAZ');
 const train = createTrain(env.scene);
 const bus = createBus(env.scene, worldRandom.stream('bus'));
@@ -673,6 +675,14 @@ function animate(timestamp?: number) {
     experienceState = experience.getState();
   }
   const t01 = experienceState.t01;
+  /**
+   * The hour of day, which is not the lighting phase.
+   *
+   * In simulation they are the same number -- the HUD prints `t01 * 24`. In real time
+   * `t01` is warped onto the viewer's real sunrise and sunset, so 0.75 is *sunset*, not
+   * six in the evening; anything that means an hour has to ask the wall clock instead.
+   */
+  const clockT = realTime?.isActive() ? realTime.getDayFraction() : t01;
 
   // Natural eclipses are world events, not camera commands. Day zero is quiet;
   // later days use a deterministic named RNG stream and never occur back-to-back.
@@ -778,7 +788,14 @@ function animate(timestamp?: number) {
   if (hybrid) {
     hybrid.setSnowCover(weather.getSnowCover());
     hybrid.setWetness(weather.getWetness());
-    hybrid.update(env.camera, env.renderer.domElement.clientHeight || window.innerHeight, t01, light.night, presentationDelta);
+    hybridFrame.camera = env.camera;
+    hybridFrame.viewportHeightPx = env.renderer.domElement.clientHeight || window.innerHeight;
+    hybridFrame.sunT = t01;
+    hybridFrame.clockT = clockT;
+    hybridFrame.night = light.night;
+    hybridFrame.dt = presentationDelta;
+    hybridFrame.elapsed = frame.elapsedSimulation;
+    hybrid.update(hybridFrame);
   }
   world.setEclipseReflection(
     eclipseState.corona * (0.45 + eclipseState.totality * 0.55),

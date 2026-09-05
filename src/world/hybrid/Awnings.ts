@@ -12,10 +12,24 @@ import { attachAttributes } from './strategies/strategy';
  * other bay: decoration, and unable to move. These are real objects on a handful of
  * shops, and they fold and unfold with the city's own clock.
  *
- * **The state is a function of world time, never of a timer.** `awningFold(t01)` is pure,
- * so arriving at any hour, dragging the clock in either direction, loading a checkpoint or
- * a postcard, switching time mode and coming back all give the same answer: whatever the
- * hour says, with no history to get out of step. Nothing here waits for opening time.
+ * **Three different clocks meet here, and conflating them is what went wrong first.**
+ *
+ *  - *The hour* decides whether the shop is open. It is a fraction of a real 24-hour day
+ *    (`clockT`), which in simulation is the world clock and in real time is the viewer's
+ *    local hour -- the same one the HUD prints. It used to be `t01`, the *lighting* phase,
+ *    which real-time mode warps so that sunset lands on 0.75: with `CLOSE_AT = 18/24` the
+ *    shop was closing at sunset, whatever hour that happened to be.
+ *  - *The travel* is a movement, so it is measured in seconds and driven by the frame's
+ *    own delta. It used to be 0.012 of a day, which is a couple of seconds only while a
+ *    day takes 240 s; in real time the same number is seventeen minutes of creep.
+ *  - *The sun* is not this file's business at all.
+ *
+ * **The open/closed state is a function of the hour, never of a timer.** Nothing here
+ * waits for opening time, and any jump in the clock -- a drag in either direction, a
+ * checkpoint, a postcard, a change of time mode, a tab coming back -- snaps the awning to
+ * whatever the hour says instead of letting it travel across the jump. So the state after
+ * a restore is defined by the hour alone, and the travel is only ever seen when time is
+ * actually passing.
  *
  * They are the only moving things in the hybrid that are not baked into a cluster, and
  * they still take the shared hybrid material and its attribute contract, so a theme, the
@@ -23,15 +37,20 @@ import { attachAttributes } from './strategies/strategy';
  * they hang on.
  */
 
-/** Ten in the morning, as a fraction of the day. */
-export const OPEN_AT = 10 / 24;
+/** Ten in the morning. A real hour, not a phase of the sun. */
+export const OPEN_HOUR = 10;
 /** Six in the evening. */
-export const CLOSE_AT = 18 / 24;
+export const CLOSE_HOUR = 18;
+/** How long the awning takes to run out or in, in seconds. Short and calm. */
+export const TRAVEL_SECONDS = 1.6;
 /**
- * How much of the day the movement takes: about seventeen minutes of world time, which
- * at the diorama's default clock is a couple of seconds of calm travel.
+ * A step in the hour bigger than this is a jump, not the passage of time.
+ *
+ * Six minutes of the day. At the fastest clock the diorama offers, one frame advances the
+ * world by about eleven seconds of world time, so nothing that is merely *time passing*
+ * can trip this; a drag of the time slider, a checkpoint or a change of mode always does.
  */
-export const TRAVEL = 0.012;
+export const CLOCK_JUMP = 0.004;
 
 const smooth = (t: number) => {
   const k = Math.min(1, Math.max(0, t));
@@ -39,16 +58,21 @@ const smooth = (t: number) => {
 };
 
 /**
- * How far the awning is out at a given time of day: 0 folded, 1 fully extended.
+ * Is the shop open at this hour of the day?
  *
- * Open from OPEN_AT up to CLOSE_AT, with a short ramp at each end. Outside that it is
- * flat zero, including across midnight -- the function never looks at anything but `t01`.
+ * The nanosecond of slack is there because callers build the hour both ways -- `10 / 24`
+ * and `10 * (1 / 24)` are not the same double -- and which of them lands on the boundary
+ * is not something a shop's opening time should depend on.
  */
-export function awningFold(t01: number): number {
-  const t = ((t01 % 1) + 1) % 1;
-  if (t < OPEN_AT) return 0;
-  if (t >= CLOSE_AT + TRAVEL) return 0;
-  return smooth((t - OPEN_AT) / TRAVEL) - smooth((t - CLOSE_AT) / TRAVEL);
+export function isOpenAt(clockT: number): boolean {
+  const hour = (((clockT % 1) + 1) % 1) * 24;
+  return hour >= OPEN_HOUR - 1e-9 && hour < CLOSE_HOUR - 1e-9;
+}
+
+/** Shortest distance between two hours of the day, across midnight. */
+export function clockDistance(a: number, b: number): number {
+  const raw = Math.abs((((a - b) % 1) + 1) % 1);
+  return Math.min(raw, 1 - raw);
 }
 
 /** Which shops have one. Deliberately few: an awning is a shop's signal, not street furniture. */
@@ -104,7 +128,10 @@ export class Awnings {
   private readonly group = new THREE.Group();
   private readonly items: Awning[] = [];
   private readonly geometries = new Map<number, THREE.BufferGeometry>();
+  /** Linear progress of the movement, 0 folded to 1 out. The eased shape is derived. */
+  private travel = 0;
   private applied = -1;
+  private lastClockT: number | null = null;
 
   constructor(scene: THREE.Scene, buildings: readonly BuildingSpec[], material: THREE.Material) {
     this.group.name = 'shop-awnings';
@@ -148,7 +175,6 @@ export class Awnings {
     }
 
     scene.add(this.group);
-    this.update(0);
   }
 
   /** How many shops actually have one, for tests and for the report. */
@@ -156,15 +182,41 @@ export class Awnings {
     return this.items.length;
   }
 
+  /** Where the movement is, 0 folded to 1 out. The checkpoint story reads this. */
+  get progress(): number {
+    return this.travel;
+  }
+
   /**
-   * Set every awning from the clock. One call for all of them, not a loop per shop.
+   * Set every awning from the hour and the frame's own delta. One call for all of them.
    *
-   * The whole assembly is derived from one number, so it cannot come apart: the sheet
-   * runs from the roller to the leading edge, the skirt hangs off that edge, and each arm
-   * runs from the wall to the same edge. Folded, all three collapse into the housing.
+   * `clockT` is the hour of day as a fraction of 24 h; `dt` is real seconds. A jump in the
+   * hour, or a frame with no time in it, puts the awning straight where the hour says --
+   * the state after a checkpoint or a time drag is the hour's state, with no travel left
+   * over from before the jump.
    */
-  update(t01: number): void {
-    const fold = awningFold(t01);
+  update(clockT: number, dt: number): void {
+    const target = isOpenAt(clockT) ? 1 : 0;
+    const jumped = this.lastClockT === null || clockDistance(clockT, this.lastClockT) > CLOCK_JUMP;
+    this.lastClockT = clockT;
+
+    if (jumped || !(dt > 0)) {
+      this.travel = target;
+    } else {
+      const limit = dt / TRAVEL_SECONDS;
+      this.travel += Math.max(-limit, Math.min(limit, target - this.travel));
+    }
+    this.apply(smooth(this.travel));
+  }
+
+  /**
+   * Put the whole assembly at one fold value, 0 folded to 1 out.
+   *
+   * The assembly is derived from that one number, so it cannot come apart: the sheet runs
+   * from the roller to the leading edge, the skirt hangs off that edge, and each arm runs
+   * from the wall to the same edge. Folded, all three collapse into the housing.
+   */
+  private apply(fold: number): void {
     if (Math.abs(fold - this.applied) < 0.001) return;
     this.applied = fold;
 
