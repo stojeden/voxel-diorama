@@ -1,8 +1,8 @@
 {
-  "generatedAt": "2026-09-04T16:18:41.851Z",
-  "revision": "e4e28f7",
-  "revisionFull": "e4e28f7fdb206f33cd3dc67cb69ed8c444881a28",
-  "sourceTreeSha": "65714cd14e472f9a17aa135b75e334398d4480b4",
+  "generatedAt": "2026-09-05T05:52:32.289Z",
+  "revision": "4dc6e13",
+  "revisionFull": "4dc6e13d603a24f5f79177e3fc210848087dbff5",
+  "sourceTreeSha": "c459cdcb6d62aec5a642d22c50f9911560375bdf",
   "dist": {
     "fileCount": 12,
     "totalBytes": 1337323,
@@ -73,137 +73,143 @@
   "entryFile": "index-Dei4cSsb.js",
   "entryBytes": 239960,
   "entrySha256": "051a38bbe41eda1c01963f5c9f56738b5191c4836508ad82fa737da2c452c34e",
-  "builtAt": "2026-09-04T16:02:26.955Z",
+  "builtAt": "2026-09-05T05:52:14.790Z",
   "builtBy": "scripts/buildProvenance.mjs prepareBuild",
   "provisional": false,
-  "verifiedAt": "2026-09-04T16:17:48.129Z",
-  "manifestPath": "/private/tmp/claude-502/-Users-piotr-Projekty-voxel-diorama/3d544d14-a513-451f-9afb-63d033d4414d/artefacts/build-manifest.json",
+  "verifiedAt": "2026-09-05T05:52:28.716Z",
+  "manifestPath": "/private/tmp/claude-502/-Users-piotr-Projekty-voxel-diorama/3d544d14-a513-451f-9afb-63d033d4414d/scratchpad/final-pm-manifest.json",
   "world": "hybrid-direct",
-  "found": {
-    "x": -56.640967123652715,
+  "found": true,
+  "gate": 50,
+  "separationThreshold": 8,
+  "pose": {
+    "x": -29,
     "y": -0.5,
-    "z": -45.75257429470365
+    "z": -45.8,
+    "yaw": 1.5707963267948966,
+    "legs": -0.5,
+    "arms": -1.05
   },
   "shots": [
     {
       "name": "postman-side",
-      "frame": "/private/tmp/claude-502/-Users-piotr-Projekty-voxel-diorama/3d544d14-a513-451f-9afb-63d033d4414d/artefacts/frames/hybrid-direct-high-postman-side.jpg",
-      "aimed": {
-        "x": -32.54349452616994,
-        "y": -0.5,
-        "z": -45.731792608240596,
-        "camera": [
-          -32.54349452616994,
-          1.4,
-          -53.731792608240596
-        ]
-      },
+      "frame": "/private/tmp/claude-502/-Users-piotr-Projekty-voxel-diorama/3d544d14-a513-451f-9afb-63d033d4414d/artefacts-postman/frames/hybrid-direct-high-postman-side.jpg",
+      "camera": [
+        -29,
+        1.0499999999999994,
+        -53.8
+      ],
+      "target": [
+        -29,
+        0.5,
+        -45.8
+      ],
+      "canvas": "1440x900",
+      "controlChangedPixels": 0,
       "legibility": {
-        "control": {
-          "ownPixels": 0,
-          "medianDelta": 0,
-          "readablePercent": 0,
-          "canvas": "1440x900"
-        },
         "wheels": {
           "meshes": 2,
-          "ownPixels": 5856,
-          "medianDelta": 17.1,
-          "readablePercent": 65.7,
-          "medianOwnLuma": 22,
-          "medianBackgroundLuma": 37.9
+          "maskPixels": 4788,
+          "hiddenMeshes": 2,
+          "separatedPixels": 3186,
+          "separatedPercent": 66.5,
+          "medianDelta": 20.2,
+          "invisiblePixels": 1176,
+          "gate": 50,
+          "separationThreshold": 8
         },
         "frame": {
           "meshes": 8,
-          "ownPixels": 5281,
-          "medianDelta": 10.1,
-          "readablePercent": 58.4,
-          "medianOwnLuma": 10.6,
-          "medianBackgroundLuma": 26.5
+          "maskPixels": 5079,
+          "hiddenMeshes": 8,
+          "separatedPixels": 2652,
+          "separatedPercent": 52.2,
+          "medianDelta": 9.2,
+          "invisiblePixels": 1815,
+          "gate": 50,
+          "separationThreshold": 8
         }
-      },
-      "active": true,
-      "dogMode": "home"
+      }
     },
     {
       "name": "postman-three-quarter",
-      "frame": "/private/tmp/claude-502/-Users-piotr-Projekty-voxel-diorama/3d544d14-a513-451f-9afb-63d033d4414d/artefacts/frames/hybrid-direct-high-postman-three-quarter.jpg",
-      "aimed": {
-        "x": -31.043800993078005,
-        "y": -0.5,
-        "z": -45.77932714290973,
-        "camera": [
-          -26.043800993078005,
-          1.5,
-          -53.77932714290973
-        ]
-      },
+      "frame": "/private/tmp/claude-502/-Users-piotr-Projekty-voxel-diorama/3d544d14-a513-451f-9afb-63d033d4414d/artefacts-postman/frames/hybrid-direct-high-postman-three-quarter.jpg",
+      "camera": [
+        -24,
+        1.1500000000000004,
+        -53.8
+      ],
+      "target": [
+        -29,
+        0.6000000000000001,
+        -45.8
+      ],
+      "canvas": "1440x900",
+      "controlChangedPixels": 0,
       "legibility": {
-        "control": {
-          "ownPixels": 0,
-          "medianDelta": 0,
-          "readablePercent": 0,
-          "canvas": "1440x900"
-        },
         "wheels": {
           "meshes": 2,
-          "ownPixels": 4471,
-          "medianDelta": 18.4,
-          "readablePercent": 64.7,
-          "medianOwnLuma": 31,
-          "medianBackgroundLuma": 59.1
+          "maskPixels": 3143,
+          "hiddenMeshes": 2,
+          "separatedPixels": 2070,
+          "separatedPercent": 65.9,
+          "medianDelta": 18.1,
+          "invisiblePixels": 765,
+          "gate": 50,
+          "separationThreshold": 8
         },
         "frame": {
           "meshes": 8,
-          "ownPixels": 6026,
-          "medianDelta": 10.2,
-          "readablePercent": 54.5,
-          "medianOwnLuma": 13.1,
-          "medianBackgroundLuma": 56.9
+          "maskPixels": 3932,
+          "hiddenMeshes": 8,
+          "separatedPixels": 2237,
+          "separatedPercent": 56.9,
+          "medianDelta": 9.6,
+          "invisiblePixels": 1399,
+          "gate": 50,
+          "separationThreshold": 8
         }
-      },
-      "active": true,
-      "dogMode": "home"
+      }
     },
     {
       "name": "postman-in-world",
-      "frame": "/private/tmp/claude-502/-Users-piotr-Projekty-voxel-diorama/3d544d14-a513-451f-9afb-63d033d4414d/artefacts/frames/hybrid-direct-high-postman-in-world.jpg",
-      "aimed": {
-        "x": -28.445599445164916,
-        "y": -0.5,
-        "z": -45.85674083767923,
-        "camera": [
-          -24.945599445164916,
-          2,
-          -35.85674083767923
-        ]
-      },
+      "frame": "/private/tmp/claude-502/-Users-piotr-Projekty-voxel-diorama/3d544d14-a513-451f-9afb-63d033d4414d/artefacts-postman/frames/hybrid-direct-high-postman-in-world.jpg",
+      "camera": [
+        -25.5,
+        1.6500000000000008,
+        -35.8
+      ],
+      "target": [
+        -29,
+        1.1,
+        -45.8
+      ],
+      "canvas": "1440x900",
+      "controlChangedPixels": 0,
       "legibility": {
-        "control": {
-          "ownPixels": 0,
-          "medianDelta": 0,
-          "readablePercent": 0,
-          "canvas": "1440x900"
-        },
         "wheels": {
           "meshes": 2,
-          "ownPixels": 3649,
-          "medianDelta": 39.5,
-          "readablePercent": 67.5,
-          "medianOwnLuma": 58.3,
-          "medianBackgroundLuma": 0
+          "maskPixels": 2589,
+          "hiddenMeshes": 2,
+          "separatedPixels": 1939,
+          "separatedPercent": 74.9,
+          "medianDelta": 43.7,
+          "invisiblePixels": 595,
+          "gate": 50,
+          "separationThreshold": 8
         },
         "frame": {
           "meshes": 8,
-          "ownPixels": 3819,
-          "medianDelta": 8.1,
-          "readablePercent": 50.2,
-          "medianOwnLuma": 23.8,
-          "medianBackgroundLuma": 40.2
+          "maskPixels": 3105,
+          "hiddenMeshes": 8,
+          "separatedPixels": 1977,
+          "separatedPercent": 63.7,
+          "medianDelta": 20,
+          "invisiblePixels": 1048,
+          "gate": 50,
+          "separationThreshold": 8
         }
-      },
-      "active": true,
-      "dogMode": "home"
+      }
     }
   ]
 }

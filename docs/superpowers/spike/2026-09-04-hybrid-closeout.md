@@ -3,21 +3,34 @@
 Gałąź `spike-hybrid-osiedle-centralne`, drzewo robocze `.claude/worktrees/spike-hybrid-osiedle-centralne`.
 **Nic nie zmergowane, nic nie wypchnięte, nic nie wdrożone.** `main` nietknięty.
 
-Wszystkie liczby pochodzą z jednego sekwencyjnego przebiegu na rewizji **`e4e28f7`**, z
-czystego drzewa, z jednej podpisanej paczki:
+Liczby pochodzą z **dwóch** rewizji i to jest celowe:
+
+- **`e4e28f7`** — benchmarki wydajności, oba smoke'i, oba porównania przed/po świateł, oba
+  sweepy kosztu i odczyt tożsamości świateł. Jeden sekwencyjny przebieg, czyste drzewo.
+- **`4dc6e13`** — wyłącznie poprawiony dowód czytelności roweru, przemierzony po
+  przebudowie metryki. Zmiana dotyczyła **tylko harnessu**, więc paczka produkcyjna jest
+  bit w bit ta sama: hash zbiorczy `dist` `eb11423fda88…` i entry `index-Dei4cSsb.js`
+  239 960 B są identyczne na obu rewizjach, co każdy artefakt nosi w środku.
+
+Benchmarki **nie zostały** powtórzone przy tej poprawce — nie było po co, skoro mierzą tę
+samą paczkę.
+
+Podpisana paczka, wspólna dla obu rewizji:
 
 | | |
 |---|---|
-| commit | `e4e28f7fdb206f33cd3dc67cb69ed8c444881a28` |
-| drzewo źródeł | `65714cd14e472f9a17aa135b75e334398d4480b4` |
+| commit pomiarów wydajności | `e4e28f7fdb206f33cd3dc67cb69ed8c444881a28` |
+| commit dowodu wizualnego | `4dc6e13d603a24f5f79177e3fc210848087dbff5` |
 | entry chunk | `index-Dei4cSsb.js`, 239 960 B, `sha256 051a38bb…` |
 | cały `dist` | 12 plików, 1 337 323 B, hash zbiorczy `eb11423fda88` |
 | paczki | entry 239 960 B / **limit 240 000**, main 33 311 B, hybrid-spike 34 305 B |
 
-Dwanaście z trzynastu artefaktów nosi ten stempel w środku; każdy pomiar sprawdził go
-przed wyrenderowaniem klatki. Jeden renderer naraz, wymuszony plikowym lockiem, który
-obejmuje też build. Manifest i indeks dowodów: `build-manifest.json`,
-`evidence-index.json`.
+**Wszystkie dwanaście artefaktów zestawu końcowego** nosi stempel w środku — rewizję,
+drzewo źródeł i hash całego `dist` — i każdy pomiar sprawdził go przed wyrenderowaniem
+klatki. Artefakt bez stempla (`spike-semantics.json`) został z zestawu usunięty.
+
+Jeden renderer naraz, wymuszony plikowym lockiem, który obejmuje też build. Manifest i
+indeks dowodów: `build-manifest.json`, `evidence-index.json`.
 
 ---
 
@@ -180,28 +193,54 @@ Plik: `spike-train.json`.
 
 ---
 
-## 5. Rower listonosza
+## 5. Rower listonosza: pomiar przeciw własnej sylwetce
 
-Bramka ustalona **przed** pomiarem i nietknięta: połowa własnych pikseli grupy musi różnić
-się od tła o co najmniej 8/255 luminancji. Kontrola instrumentu: 0 zmienionych pikseli
-między dwoma renderami zamrożonej sceny, w każdym kadrze.
+**Poprzednia metryka była zawyżona.** Porównywała kadr z rowerem i bez niego, ale liczyła
+wyłącznie piksele, których luminancja drgnęła o więcej niż 0,5 — więc piksel koła
+*całkowicie niewidoczny*, identyczny z jezdnią za nim, w ogóle nie trafiał do mianownika.
+Mierzyła zatem „spośród pikseli, na których obiekt już widać, ile widać dobrze", co jest
+bliskie tautologii. Do tego wypisywała procent, nie asertując go.
 
-| kadr | koło | rama | koło / tło |
-|---|---|---|---|
-| z boku, w cieniu bloku | **65,7 %** | **58,4 %** | 22,0 / 37,9 |
-| trzy czwarte | **64,7 %** | **54,5 %** | 31,0 / 59,1 |
-| w świecie, neutralne światło | **67,5 %** | **50,2 %** | 58,3 / 0 |
+Mianownik pochodzi teraz z **niezależnej maski**:
 
-Co zostało zmienione, żeby to osiągnąć: koła są torusami o przekroju 0,045 m (poprzednie
-0,07 czytało się jak obwarzanek), rury ramy mają 0,10 m zamiast 0,08, czerwień jest
-jednoznacznie pocztowa (`0xe0392b`) zamiast brunatnej, opona ma podłogę emisyjną
-`0x2a2a2a` niezależną od orientacji normalnej, a **widelec do przedniej piasty i dolna
-rura od piasty do piasty** domykają sylwetkę — wcześniej przednie koło wisiało pół metra
-pod główką ramy przyczepione do niczego. Promień koła, rozstaw osi i skala człowieka bez
-zmian. Listonosz jeździ tylko między t 0,28 i 0,50, więc emisja nigdy nie jest widziana na
-tle nocy.
+1. scena zamrożona, listonosz ustawiony na sztywno — pozycja, kurs, kąt kół i poza kończyn
+   (wcześniej jechał, i stąd rozrzut od 43,7 % do 58,4 % na tym samym kodzie);
+2. osobny **płaski mask pass** renderuje jedną grupę na biało na czarnym tle, przez zwykły
+   renderer zamiast composera (bloom rozlałby biel poza sylwetkę i napompował właśnie ten
+   mianownik), z materiałem emisyjnym, wszystkim innym ukrytym i wyczyszczonym tłem — więc
+   maska zależy wyłącznie od geometrii, nie od koloru obiektu, światła ani tła;
+3. każdy piksel maski jest porównywany między kadrem z obiektem i bez niego, **łącznie z
+   tymi, które nie różnią się wcale**;
+4. mianownikiem jest pełna maska, a próg 50 % to **prawdziwa asercja**, osobna dla kół i
+   dla ramy, która wywala przebieg.
 
-Plik: `spike-postman.json`.
+Kontrola instrumentu bez zmian: dwa rendery zamrożonej sceny różnią się **0 pikseli** w
+każdym kadrze.
+
+| kadr | koło ≥ 8/255 | pikseli niewidocznych | rama ≥ 8/255 | pikseli niewidocznych |
+|---|---|---|---|---|
+| z boku, w cieniu bloku | **66,5 %** z 4788 px | 1176 | **52,2 %** z 5079 px | 1815 |
+| trzy czwarte | **65,9 %** z 3143 px | 765 | **56,9 %** z 3932 px | 1399 |
+| w świecie, neutralne światło | **74,9 %** z 2589 px | 595 | **63,7 %** z 3105 px | 1048 |
+
+Maska pokazuje też to, co stara metryka ukrywała: 1176, 765 i 595 pikseli koła oraz
+1815, 1399 i 1048 pikseli ramy jest nieodróżnialnych od tła. Teraz są w mianowniku.
+
+**Determinizm zmierzony, nie założony.** W dwóch przebiegach liczby pikseli maski wychodzą
+identyczne co do piksela — 4788, 5079, 3143, 3932, 2589, 3105 — a procenty różnią się
+najwyżej o 0,3 punktu. To, co zostaje, bierze się stąd, że inni aktorzy stoją w innych
+miejscach między wczytaniami strony, zmieniając tło za częścią pikseli obiektu.
+
+Co zostało zmienione w samym rowerze, żeby to osiągnąć: koła są torusami o przekroju
+0,045 m (poprzednie 0,07 czytało się jak obwarzanek), rury ramy mają 0,10 m zamiast 0,08,
+czerwień jest jednoznacznie pocztowa (`0xe0392b`) zamiast brunatnej, opona ma podłogę
+emisyjną `0x2a2a2a` niezależną od orientacji normalnej, a **widelec do przedniej piasty i
+dolna rura od piasty do piasty** domykają sylwetkę — wcześniej przednie koło wisiało pół
+metra pod główką ramy przyczepione do niczego. Promień koła, rozstaw osi i skala człowieka
+bez zmian. Listonosz jeździ tylko między t 0,28 i 0,50, więc emisja nigdy nie jest widziana
+na tle nocy.
+
+Plik: `spike-postman.json` (rewizja `4dc6e13`).
 
 ---
 
@@ -264,7 +303,8 @@ i brudne drzewo również przerywają pomiar.
 
 | sprawdzenie | stan | oparte na |
 |---|---|---|
-| Wszystkie artefakty z jednej czystej rewizji | **PASS** | 12 z 13 nosi `e4e28f7` / tree `65714cd14e47` / dist `eb11423fda88`; wyjątek w punkcie 8 |
+| Każdy artefakt zestawu ostemplowany i z czystego drzewa | **PASS** | 12 z 12; niestemplowany `spike-semantics.json` usunięty z zestawu |
+| Dwie rewizje, ta sama paczka produkcyjna | **PASS** | `e4e28f7` (wydajność) i `4dc6e13` (dowód wizualny), oba z dist `eb11423fda88` |
 | Build powiązany z rewizją, nie tylko polem `revision` | **PASS** | manifest 12 plików + hash zbiorczy, kontrola negatywna na lazy chunku |
 | Jeden renderer naraz, lock obejmuje build i sprzątanie | **PASS** | lock plikowy, zwalniany po `stopPreview` w zewnętrznym `finally` |
 | Benchmark High, vsync | **PASS** | `passed`, 60,00 FPS, p95 16,8 ms, TTI 964 ms, pixel ratio 1,15 |
@@ -278,7 +318,7 @@ i brudne drzewo również przerywają pomiar.
 | Szyba wagonu: ciemna dniem, ciepła nocą | **PASS** | emisja 0 → 1 na unikalnym materiale |
 | Kadry dowodowe śledzone w repo | **PASS** | 11 plików w `frames/evidence/`, hashe w `evidence-index.json` |
 | Drzewo czyste, nic nie zmergowane | **PASS** | `git status --porcelain` pusty |
-| Rower: bramka 50 % w trzech kadrach | **PASS, ale z cienkim marginesem** | 65,7 / 64,7 / 67,5 % (koło) i 58,4 / 54,5 / **50,2** % (rama) — patrz punkt 8 |
+| Rower: bramka 50 % egzekwowana asercją, mianownik z maski | **PASS** | koło 66,5 / 65,9 / 74,9 %, rama 52,2 / 56,9 / 63,7 % |
 
 ---
 
@@ -286,12 +326,11 @@ i brudne drzewo również przerywają pomiar.
 
 Te punkty **nie są** techniczną porażką — wymagają oceny właściciela.
 
-1. **Rama roweru: margines bramki jest cienki i niestabilny.** W tym przebiegu wychodzi
-   58,4 / 54,5 / 50,2 %, czyli w kadrze „w świecie" zaledwie 0,2 punktu nad progiem. W
-   poprzednich przebiegach na tym samym kodzie ta grupa dawała od 43,7 % do 58,4 %, bo
-   listonosz stoi za każdym razem w innym miejscu, a rurki stoją raz na asfalcie, raz na
-   trawie o podobnej luminancji. **Bramkę uznaję za zdaną w tym przebiegu, ale nie za
-   zdaną pewnie.** Decyzja: czy to wystarczy, czy rama wymaga jeszcze jednej zmiany.
+1. **Rama roweru ma najcieńszy margines na bramce: 52,2 %** przy progu 50 %, w kadrze
+   z boku, w cieniu bloku. Margines jest teraz **stabilny** — powtarzalność ±0,3 punktu,
+   maski identyczne co do piksela — więc to nie jest już loteria, ale zapas jest mały, a
+   1815 z 5079 pikseli ramy w tym kadrze pozostaje nieodróżnialnych od tła. Decyzja: czy
+   dwa punkty zapasu wystarczą, czy rama zasługuje na jeszcze jedną zmianę.
 2. **Sylwetka roweru wymaga akceptacji wzrokowej.** Metryka mówi, że rura odróżnia się od
    tła; nie mówi, że rower wygląda jak rower. Moja ocena: w normalnym kadrze Dioramy
    czyta się jako rozpoznawalny rower z domkniętą ramą — ale to **Twoja** ocena rozstrzyga.
@@ -304,10 +343,10 @@ Te punkty **nie są** techniczną porażką — wymagają oceny właściciela.
 5. **Trzech pasażerów zamiast czterech** to zmiana widoczna na przystanku. Wymuszona
    geometrią, ale to zmiana wyglądu.
 
-**Znana luka techniczna, świadomie niezałatana:** `spike-semantics.json` pochodzi z
-finalnego batcha, ale writer tej jednej fazy nie rozsypuje stempla, więc plik nie potwierdza
-tego sam z siebie. Żadna liczba w tym raporcie z niego nie pochodzi. Do naprawy w
-następnej rundzie, gdy wolno będzie zmieniać kod.
+**Znana luka techniczna:** writer fazy `gate3` w `scripts/spikeSmoke.mjs` jako jedyny nie
+rozsypuje stempla buildu, więc `spike-semantics.json` nie potwierdzałby swojego pochodzenia
+sam z siebie. Plik został **usunięty z zestawu końcowego**, żaden wynik z niego nie jest
+cytowany, a sama luka w harnessie zostaje do naprawy w następnej rundzie.
 
 **Adaptacyjna rozdzielczość** pozostaje wyłącznie projektem — nic nie zaimplementowane.
 Przesłanka do jej włączenia nie jest spełniona: zapas przy vsync jest dodatni w obu
@@ -347,8 +386,8 @@ Odbiór techniczny i wizualny odbywa się osobno, po tym raporcie.
 
 Wszystkie śledzone w repozytorium. `sha256` to suma pliku takiego, jaki leży w gicie;
 `render` to suma wyrenderowanych pikseli, na których policzono diff. Para, której
-render się zgadza, a plik nie, różni się HUD-em, nie sceną. Pełne sumy:
-`docs/superpowers/spike/evidence-index.json`.
+render się zgadza, a plik nie, różni się HUD-em, nie sceną. Pełne sumy i proweniencja
+obu rewizji: `docs/superpowers/spike/evidence-index.json`.
 
 | plik (w `docs/superpowers/spike/frames/evidence/`) | bajty | `sha256` | `render` |
 |---|---|---|---|
@@ -358,14 +397,14 @@ render się zgadza, a plik nie, różni się HUD-em, nie sceną. Pełne sumy:
 | `hybrid-direct-high-prepost-windowLights-free-exploration-adopted.png` | 248 499 | `f15ee77e1b6fe955…` | `854fe2b5c08b62db…` |
 | `hybrid-direct-high-prepost-streetLamps-night-street-baseline.png` | 3 093 897 | `a27f450051726e7a…` | `c0d6bf2be0a35c0f…` |
 | `hybrid-direct-high-prepost-streetLamps-night-street-adopted.png` | 1 675 449 | `3c22a3035a99780d…` | `2d4d2f1ebcbb6709…` |
-| `hybrid-direct-high-postman-side.jpg` | 131 950 | `e163f9a386fbc10a…` | — |
-| `hybrid-direct-high-postman-three-quarter.jpg` | 131 220 | `a9996cc089b28d00…` | — |
-| `hybrid-direct-high-postman-in-world.jpg` | 114 943 | `5afb8b1ff5c12bbb…` | — |
+| `hybrid-direct-high-postman-side.jpg` | 126 356 | `ca65274e3ed141a7…` | — |
+| `hybrid-direct-high-postman-three-quarter.jpg` | 134 294 | `2b283930a95c63b5…` | — |
+| `hybrid-direct-high-postman-in-world.jpg` | 121 338 | `ffb8a530773c43fd…` | — |
 | `hybrid-direct-high-train-day.jpg` | 233 861 | `bf1e70be5e8d6d12…` | — |
 | `hybrid-direct-high-train-night.jpg` | 207 457 | `0214428cc8765864…` | — |
 
-JSON-y zestawu końcowego, wszystkie ze stemplem `e4e28f7` / tree `65714cd14e47` /
-dist `eb11423fda88` w środku:
+JSON-y zestawu końcowego. Wszystkie niosą w środku hash `dist` `eb11423fda88…`;
+jedenaście z rewizji `e4e28f7`, `spike-postman.json` z `4dc6e13`:
 
 - `docs/superpowers/spike/build-manifest.json` — 2 678 B  `sha256 7f46a17d3c44ee88…`
 - `docs/superpowers/spike/final-bench-high.json` — 445 256 B  `sha256 2ffb35abc684c5c8…`
@@ -375,12 +414,8 @@ dist `eb11423fda88` w środku:
 - `docs/superpowers/spike/light-cost-sweep.json` — 40 736 B  `sha256 d25724f716036b3b…`
 - `docs/superpowers/spike/light-cost-sweep-windowpools.json` — 19 857 B  `sha256 bab7ab3f9bb3a12e…`
 - `docs/superpowers/spike/light-identity.json` — 5 742 B  `sha256 b8fb6ab9af9e6917…`
-- `docs/superpowers/spike/spike-postman.json` — 6 349 B  `sha256 ae453018d8526fba…`
+- `docs/superpowers/spike/spike-postman.json` — 6 402 B  `sha256 16061bb6b08bfd25…` *(rewizja `4dc6e13`)*
 - `docs/superpowers/spike/spike-train.json` — 6 370 B  `sha256 a674328841086e83…`
 - `docs/superpowers/spike/spike-materials.json` — 22 217 B  `sha256 3895ebfa9838d175…`
-- `docs/superpowers/spike/spike-semantics.json` — 34 713 B  `sha256 0432c26dae79c2c7…`
 - `docs/superpowers/spike/spike-smoke.json` — 13 943 B  `sha256 22cd44d44808f451…`
-
-Wyjątek: `spike-semantics.json` nie nosi stempla w środku (punkt 8) i nic z niego nie
-jest cytowane.
 
