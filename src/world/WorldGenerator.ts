@@ -632,7 +632,7 @@ function buildKioskSigns(group: THREE.Group): Array<{ dispose: () => void }> {
   ctx.font = '700 52px system-ui, sans-serif';
   ctx.fillText('SKLEP', 62, 61);
   ctx.font = '600 25px system-ui, sans-serif';
-  ctx.fillText('SPOZYWCZY', 64, 101);
+  ctx.fillText('SPOŻYWCZY', 64, 101);
   ctx.fillStyle = '#f0d45c';
   ctx.beginPath();
   ctx.arc(448, 64, 22, 0, Math.PI * 2);
@@ -655,7 +655,10 @@ function buildKioskSigns(group: THREE.Group): Array<{ dispose: () => void }> {
     const kiosk = KIOSK_SPECS[i];
     const sign = new THREE.Mesh(geometry, material);
     sign.name = `neighborhood-grocery-sign-${i}`;
-    sign.position.set(kiosk.x + 1.5, 2.25, kiosk.z - 0.515);
+    // Clear of the wall in both worlds: the voxel shell's front face is at z-0.5 and the
+    // hybrid pavilion's green fascia stands 0.12 m proud of it, so a sign 15 mm off the
+    // legacy wall ended up buried inside the new one.
+    sign.position.set(kiosk.x + 1.5, 2.25, kiosk.z - 0.72);
     sign.rotation.y = Math.PI;
     sign.castShadow = false;
     group.add(sign);
@@ -1076,7 +1079,7 @@ function generateLake(): VoxelData[] {
   return voxels;
 }
 
-function generateCityProps(): VoxelData[] {
+function generateCityProps(excludeKiosks?: boolean): VoxelData[] {
   const voxels: VoxelData[] = [];
 
   for (const station of STATION_STOPS) {
@@ -1087,7 +1090,7 @@ function generateCityProps(): VoxelData[] {
     voxels.push(...generateBusShelter(stop.shelterX, stop.shelterZ, stop.axis, stop.benchSign));
   }
 
-  for (const kiosk of KIOSK_SPECS) voxels.push(...generateKiosk(kiosk.x, kiosk.z));
+  if (!excludeKiosks) for (const kiosk of KIOSK_SPECS) voxels.push(...generateKiosk(kiosk.x, kiosk.z));
   for (const fence of FENCE_SPECS) {
     voxels.push(...generateFenceLine(fence.x, fence.z, fence.length, fence.alongX));
   }
@@ -1445,6 +1448,14 @@ export interface WorldGeneratorOptions {
   excludeBlocks?: ReadonlySet<number>;
   /** Ground cells rendered by another system. */
   excludeGroundCell?: (x: number, z: number) => boolean;
+  /**
+   * The neighbourhood grocery and its twin are drawn by another system.
+   *
+   * The signs are not: they are canvas text, they read "SPOŻYWCZY" whichever world is
+   * running, and both worlds put the shopfront in the same place on purpose -- the UFO's
+   * hover point, its crate and its "ZAMKNIĘTE" barrier are pinned to `KIOSK_MAIN`.
+   */
+  excludeKiosks?: boolean;
 }
 
 export function createWorld(
@@ -1474,7 +1485,7 @@ export function createWorld(
   }
 
   allVoxels.push(...generatePlayground(PLAYGROUND.x, PLAYGROUND.z));
-  allVoxels.push(...generateCityProps());
+  allVoxels.push(...generateCityProps(options.excludeKiosks));
   allVoxels.push(...generateLake());
 
   // Keep a candidate at every physical lamp. DayNightCycle activates only the

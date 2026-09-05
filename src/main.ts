@@ -9,7 +9,7 @@ import { createBus } from './world/Bus';
 import { Birds } from './world/Birds';
 import { PassengerCrowd } from './world/PassengerCrowd';
 import { LakeLife } from './world/LakeLife';
-import { LakesideCow } from './world/LakesideCow';
+import { LakesideCow, type UfoEvent } from './world/LakesideCow';
 import { RailSignals } from './world/RailSignals';
 import { DayNightCycle } from './environment/DayNightCycle';
 import { Weather } from './environment/Weather';
@@ -88,7 +88,9 @@ const windUniforms: WindUniforms = { uTime: { value: 0 }, uWind: { value: 0 } };
 const world = createWorld(
   env.scene,
   windUniforms,
-  hybridStrategy ? { excludeBlocks: SPIKE_BLOCK_SET, excludeGroundCell: isSpikeGroundCell } : {}
+  hybridStrategy
+    ? { excludeBlocks: SPIKE_BLOCK_SET, excludeGroundCell: isSpikeGroundCell, excludeKiosks: true }
+    : {}
 );
 let hybrid: HybridHandle | null = null;
 /** One mutable frame object for the hybrid, like `FrameContext`: no per-frame allocation. */
@@ -1077,6 +1079,7 @@ const debugHandle: DioramaDebugHandle = {
     };
   },
   placeCowAtMeadow: () => lakesideCow.debugPlaceCowAtMeadow(),
+  summonUfo: (event?: UfoEvent) => lakesideCow.debugSummonUfo(event),
   debugWinterFisherman: () => {
     weather.setExternal('snow');
     weather.debugSetSnowCover(1);

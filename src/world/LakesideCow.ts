@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { COW_MEADOW, GROUND_SURFACE_Y, KIOSK_MAIN, LAKE } from './WorldLayout';
+import { COW_MEADOW, GROUND_SURFACE_Y, KIOSK_MAIN, KIOSK_RAID, LAKE } from './WorldLayout';
 import { buildPassenger, easeInOut, type PassengerBuild } from './PassengerCrowd';
 import { fallbackRandom, type RandomSource } from '../core/Random';
 
@@ -37,11 +37,19 @@ function clampOutsideLake(point: THREE.Vector3, margin = 3.5): void {
   point.z = LAKE.z + (nz / d) * rz;
 }
 const HOVER_Y = 20;
+/**
+ * The tractor beam's cone: this wide where it meets the ground, this tall to the saucer.
+ *
+ * Exported because the raid has to be aimed around a building now, and the thing that
+ * must clear the roof is the beam, not the crate: at three metres up the cone is still
+ * two metres across.
+ */
+export const UFO_BEAM = { groundRadius: 2.4, height: HOVER_Y } as const;
 const BEAM_TOP_OFFSET = 2.2; // cow disappears this far below the saucer
 
 type CowMode = 'graze' | 'walk' | 'sleep' | 'lifted' | 'absent';
 type UfoMode = 'hidden' | 'arriving' | 'beamFadeIn' | 'beaming' | 'beamFadeOut' | 'leaving';
-type UfoEvent = 'abduct' | 'return' | 'kioskRaid';
+export type UfoEvent = 'abduct' | 'return' | 'kioskRaid';
 
 // ── Farmer ──
 // Door of the building right next to the meadow (block at x:-14, z:56).
@@ -210,7 +218,7 @@ function buildUfo(): { parts: UfoParts; disposables: Array<{ dispose: () => void
     depthWrite: false,
     side: THREE.DoubleSide,
   });
-  const beamGeo = new THREE.ConeGeometry(2.4, HOVER_Y, 20, 1, true);
+  const beamGeo = new THREE.ConeGeometry(UFO_BEAM.groundRadius, UFO_BEAM.height, 20, 1, true);
   disposables.push(beamMaterial, beamGeo);
   const beam = new THREE.Mesh(beamGeo, beamMaterial);
   beam.position.y = -HOVER_Y / 2 - 0.2;
@@ -295,7 +303,7 @@ export class LakesideCow {
     this.disposables.push(crateMat, crateGeo);
     this.crate = new THREE.Mesh(crateGeo, crateMat);
     this.crate.castShadow = true;
-    this.crate.position.set(KIOSK_MAIN.x - 1.4, 0.5, KIOSK_MAIN.z + 1);
+    this.crate.position.set(KIOSK_RAID.x, 0.5, KIOSK_RAID.z);
     scene.add(this.crate);
 
     this.closedSign = new THREE.Group();
@@ -403,7 +411,7 @@ export class LakesideCow {
         this.kioskClosed = false;
         this.closedSign.visible = false;
         this.crate.visible = true;
-        this.crate.position.set(KIOSK_MAIN.x - 1.4, 0.5, KIOSK_MAIN.z + 1);
+        this.crate.position.set(KIOSK_RAID.x, 0.5, KIOSK_RAID.z);
       }
     } else if (night < 0.4 && this.nightArmed) {
       this.nightArmed = false;
@@ -419,8 +427,11 @@ export class LakesideCow {
   }
 
   private startUfoArrival(): void {
-    const targetX = this.pendingEvent === 'kioskRaid' ? KIOSK_MAIN.x + 1 : MEADOW.x;
-    const targetZ = this.pendingEvent === 'kioskRaid' ? KIOSK_MAIN.z + 1 : MEADOW.z;
+    // The saucer hovers over the crate, not over the roof: the beam and the thing it
+    // lifts have to be the same place, or the lift starts by putting the crate inside
+    // the building.
+    const targetX = this.pendingEvent === 'kioskRaid' ? KIOSK_RAID.x : MEADOW.x;
+    const targetZ = this.pendingEvent === 'kioskRaid' ? KIOSK_RAID.z : MEADOW.z;
     this.ufoHover.set(targetX, HOVER_Y, targetZ);
     this.ufoFrom.set(targetX - 110, HOVER_Y + 38, targetZ + 70);
     this.ufoAway.set(targetX + 90, HOVER_Y + 55, targetZ - 90);

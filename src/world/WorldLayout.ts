@@ -119,9 +119,6 @@ export const TRAIN_ROUTE_POINTS: THREE.Vector3[] = [
   new THREE.Vector3(79, 0, 0),
 ];
 
-/** Kept for backwards compatibility with tests/tools. */
-export const TRAIN_ROUTE_VISIBLE_POINTS = TRAIN_ROUTE_POINTS;
-
 export const TRAIN_ROUTE_CURVE = new THREE.CatmullRomCurve3(
   TRAIN_ROUTE_POINTS,
   false,
@@ -822,6 +819,20 @@ export const FISHERMAN_HOME = { x: -62, z: 60 } as const;
 
 /** The main kiosk — also the target of occasional alien "shopping" raids. */
 export const KIOSK_MAIN = { x: -30, z: 16 } as const;
+
+/**
+ * Where the goods crate stands, and where the saucer hovers to lift it.
+ *
+ * In front of the shop, clear of it. The beam used to come down on the middle of the roof
+ * while the crate rested beside the west wall -- and the lift *teleported* the crate under
+ * the roof to the hover point before raising it, so it rose through the building. That was
+ * invisible enough in a voxel box with a flat lid; it is not something to keep.
+ *
+ * The shopfront faces -z, so this is on the grass in front of it, and far enough out that
+ * the *beam* clears the building and not merely the crate: the cone is still two metres
+ * across at roof height, so two metres of margin would have drawn it through the hood.
+ */
+export const KIOSK_RAID = { x: KIOSK_MAIN.x + 1, z: KIOSK_MAIN.z - 3.4 } as const;
 
 /** Dog's yard — it chases the postman when he cycles past. */
 export const DOG_HOME = { x: 24, z: -43 } as const;

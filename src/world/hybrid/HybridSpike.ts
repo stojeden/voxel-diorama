@@ -7,8 +7,10 @@ import { emitBuilding } from './architecture';
 import { Awnings } from './Awnings';
 import { emitStreetscape } from './streetscape';
 import { emitDominant } from './dominants';
+import { emitGroceries } from './grocery';
 import { createHybridMaterial, createHybridUniforms } from './HybridMaterial';
 import { beaconGlow } from './beacons';
+import { groceryGlow } from './shopHours';
 import { P, resolvePalette } from './palette';
 import { LodSelector, pixelsPerMetre } from './ScreenSpaceLod';
 import { checkModel, checkProbes, type GroundContactReport, type ProbeInput } from './GroundContact';
@@ -137,6 +139,7 @@ export function attachHybridSpike(options: HybridSpikeOptions): HybridHandle {
     const clusters: Cluster[] = [
       ...model.buildings.map(emitBuilding),
       emitStreetscape(model),
+      emitGroceries(low),
       ...model.dominants.map((dominant) => emitDominant(dominant, low)),
     ];
     for (const cluster of clusters) {
@@ -201,6 +204,9 @@ export function attachHybridSpike(options: HybridSpikeOptions): HybridHandle {
       // apart, so the skyline never blinks as one object.
       uniforms.uEmissive.value[P.aviationRed] = beaconGlow(elapsed, night, 0);
       uniforms.uEmissive.value[P.aviationRedAlt] = beaconGlow(elapsed, night, 0.5);
+      // The grocery keeps its own hours -- six in the morning to eleven at night -- and
+      // the light inside is on while it is open, brighter once it is dark out.
+      uniforms.uEmissive.value[P.shopGlow] = groceryGlow(clockT, night);
       // One call for every awning in the city, on the hour and the frame's own delta.
       awnings.update(clockT, dt);
       for (let cohort = 0; cohort < WINDOW_COHORT_COUNT; cohort++) {

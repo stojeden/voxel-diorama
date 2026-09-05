@@ -21,11 +21,13 @@ export interface PaletteEntry {
 }
 
 /**
- * Room for two more entries than the palette uses. The spare slot is what let the RTV
- * tower's aviation lights take a colour of their own: two structures whose beacons flash
- * on the same phase read as one machine, which is not how the sky over a city looks.
+ * Room for two more entries than the palette uses.
+ *
+ * The spares are what let things be driven separately: the RTV tower's beacons flash on
+ * their own phase because they have their own entry, and the grocery's windows light up
+ * on shop hours because theirs are not the `glassWarm` every door in the city shares.
  */
-export const PALETTE_SIZE = 34;
+export const PALETTE_SIZE = 36;
 
 const M = (key: string, base: number, o: Partial<PaletteEntry> = {}): PaletteEntry => ({
   key,
@@ -78,6 +80,9 @@ export const PALETTE: readonly PaletteEntry[] = [
   M('aviationRed', 0xff2a1e, { roughness: 0.5, emissive: 1.6 }),
   M('aviationRedAlt', 0xff2a1e, { roughness: 0.5, emissive: 1.6 }),
   M('lamp', 0xfff1cc, { roughness: 0.6, emissive: 0.6 }),
+  // The grocery's display glass. Its own entry, not `glassWarm`, because its emissive is
+  // driven by the shop's opening hours and every door in the city uses `glassWarm`.
+  M('shopGlow', 0xffe6b4, { roughness: 0.12, metalness: 0.35, emissive: 0 }),
 ];
 
 /** Palette key → uniform index. */
