@@ -88,6 +88,15 @@ describe('the night raid and the rebuilt shop', () => {
     ).toBeLessThan(box.minZ);
   });
 
+  test('the crate stands beside the entrance, not in front of the display', () => {
+    // The beam clears the building from dead centre too. That is not enough: for the
+    // twenty-three hours a day when nothing is being stolen, a crate parked square in
+    // front of the windows is just a crate parked in front of the windows.
+    const cx = KIOSK_MAIN.x + 1.5;
+    const offset = Math.abs(KIOSK_RAID.x - cx);
+    expect(offset, `skrzynka ${offset.toFixed(2)} m od osi witryny`).toBeGreaterThan(GROCERY_SHELL.width / 2);
+  });
+
   test('the lift rises past nothing solid', () => {
     // The crate is raised straight up from where it stands, so if its column is clear of
     // the footprint it is clear of the roof, the parapet and the hood as well.

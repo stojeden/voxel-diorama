@@ -831,8 +831,12 @@ export const KIOSK_MAIN = { x: -30, z: 16 } as const;
  * The shopfront faces -z, so this is on the grass in front of it, and far enough out that
  * the *beam* clears the building and not merely the crate: the cone is still two metres
  * across at roof height, so two metres of margin would have drawn it through the hood.
+ *
+ * It is also off to the side of the entrance rather than square in front of the windows.
+ * Dead centre cleared the beam perfectly well and stood a crate in front of the display
+ * for the twenty-three hours a day when nothing is being stolen.
  */
-export const KIOSK_RAID = { x: KIOSK_MAIN.x + 1, z: KIOSK_MAIN.z - 3.4 } as const;
+export const KIOSK_RAID = { x: KIOSK_MAIN.x + 4.6, z: KIOSK_MAIN.z - 3.4 } as const;
 
 /** Dog's yard — it chases the postman when he cycles past. */
 export const DOG_HOME = { x: 24, z: -43 } as const;
