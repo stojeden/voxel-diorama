@@ -9,22 +9,27 @@ import { Emitter, type Cluster } from './surface';
  *
  * These were the last two things in the city still drawn as plain voxel boxes: a 4×3×3
  * shell with three lit cells for a window, next to blocks that had been rebuilt in the
- * accepted language. They are rebuilt in it here -- plinth, plastered body, framed
- * display windows with goods behind them, a green fascia, a flat roof with a parapet --
- * while staying the same small building in the same place.
+ * accepted language. They are pavilions now -- plinth, plastered body, a glazed shopfront
+ * with goods behind it, a green fascia under a concrete hood, a flat roof with a parapet.
  *
  * **The footprint is deliberately unchanged.** The old shell spanned x-0.5..x+3.5 and
  * z-0.5..z+2.5 with its front on -z, and three things are pinned to that: the static prop
- * footprints the layout tests check, the canvas "SPOŻYWCZY" sign the generator still hangs
- * at (x+1.5, 2.25, z-0.515), and the whole night raid -- the UFO hovers over
- * `KIOSK_MAIN + (1, 1)`, the goods crate stands at `KIOSK_MAIN + (-1.4, 1)` and the
- * "ZAMKNIĘTE" barrier goes up at `KIOSK_MAIN + (2, -1.2)`. Moving the shopfront by half a
- * metre would leave the beam pulling a crate through a wall.
+ * footprints the layout tests check, the canvas "SPOŻYWCZY" sign the generator hangs on the
+ * fascia, and the whole night raid.
  *
  * **No awning.** The shops on the tenements have one because they keep shop hours; this
  * one is open from six in the morning to eleven at night and its shopfront is sheltered by
  * a concrete hood, which is structure rather than fabric and never moves. The 10-to-6
  * hours belong to the other shops and are not imposed here.
+ *
+ * **The shopfront is a wall with holes in it, and that is the correction.** The first
+ * version stood a solid `frame` panel in each opening, hung a transparent pane on the
+ * front of it, and put the goods and the lit back *inside the solid body behind the wall*.
+ * So there was nothing to see through the glass, the pane and the panel shared an outer
+ * plane and fought for every pixel, and a window came out looking like a damaged patch of
+ * render rather than a window. The body is set back from the frontage now, the frontage is
+ * piers and a lintel with real openings between them, and the pane is recessed inside its
+ * reveal -- no two faces are coplanar and the shop's interior is actually behind the glass.
  */
 
 /** Where the front wall stands, relative to a kiosk's anchor. */
@@ -38,6 +43,30 @@ const FASCIA_BOTTOM = 1.86;
 const ROOF_TOP = 2.95;
 /** How far the concrete hood over the shopfront reaches out. */
 const HOOD_REACH = 0.42;
+/** Thickness of the front leaf: the piers, the lintel and the cills. */
+const LEAF = 0.16;
+/** How far behind the frontage the solid body starts, leaving the shop window its depth. */
+const RECESS = 0.62;
+/** Glazing, measured from the ground. */
+const GLASS_BOTTOM = 0.62;
+const GLASS_TOP = FASCIA_BOTTOM - 0.14;
+/** The door is glazed too, but down to the step. */
+const DOOR_BOTTOM = 0.06;
+
+/**
+ * The frontage, as widths across the four metres: pier, opening, pier, opening, pier,
+ * door, pier. The outer piers are deep enough to close the ends of the window reveal;
+ * the ones between openings are mullions and only as thick as the leaf.
+ */
+const FRONTAGE = [
+  { kind: 'pier', width: 0.34 },
+  { kind: 'window', width: 1.02 },
+  { kind: 'pier', width: 0.18 },
+  { kind: 'window', width: 1.02 },
+  { kind: 'pier', width: 0.18 },
+  { kind: 'door', width: 0.92 },
+  { kind: 'pier', width: 0.34 },
+] as const;
 
 /** Which of the two is the one the aliens visit. Only its interior is worth dressing. */
 export const GROCERY_INDEX = 0;
@@ -57,6 +86,14 @@ export const GROCERY_SHELL = {
   hoodReach: HOOD_REACH,
   /** How far the widest trim stands out from the body sides. */
   overhang: 0.15,
+  /** Where the shop's name board hangs, relative to the anchor: on the fascia. */
+  signZ: FRONT_Z - 0.16,
+  signCentreY: GROUND + (FASCIA_BOTTOM + BODY_TOP) / 2,
+  signHeight: 0.68,
+  signWidth: 3,
+  /** The band the board has to stay inside, so the hood cannot cut across it. */
+  fasciaBottomY: GROUND + FASCIA_BOTTOM,
+  fasciaTopY: GROUND + BODY_TOP,
 } as const;
 
 export function emitGroceries(low: boolean): Cluster {
@@ -73,10 +110,12 @@ function shop(E: Emitter, spec: { x: number; z: number }, index: number, low: bo
   // Two neighbours, not two copies: one sand, one rose, the way two estate pavilions
   // built in the same year and painted in different decades look.
   const wall = index === GROCERY_INDEX ? P.plasterSand : P.plasterRose;
+  const bodyDepth = DEPTH - RECESS;
 
-  // ── Plinth, body, roof ──
+  // ── Plinth, body, roof. The body starts behind the frontage; the plinth, the roof and
+  //    the parapet still span the full depth, so the silhouette is unchanged. ──
   E.box(P.plinth, cx, GROUND + PLINTH / 2, cz, WIDTH + 0.12, PLINTH, DEPTH + 0.12, { layer: 0 });
-  E.box(wall, cx, GROUND + (PLINTH + BODY_TOP) / 2, cz, WIDTH, BODY_TOP - PLINTH, DEPTH, {
+  E.box(wall, cx, GROUND + (PLINTH + BODY_TOP) / 2, front + RECESS + bodyDepth / 2, WIDTH, BODY_TOP - PLINTH, bodyDepth, {
     layer: 0,
     style: STYLE.seams,
   });
@@ -86,67 +125,88 @@ function shop(E: Emitter, spec: { x: number; z: number }, index: number, low: bo
   // A parapet lip, so the roof reads as flat rather than as a lid.
   E.box(P.trim, cx, GROUND + ROOF_TOP + 0.05, cz, WIDTH + 0.3, 0.1, DEPTH + 0.3, { layer: 1 });
 
-  // ── Fascia: the green band the place is recognised by, and the sign sits on it ──
+  // ── Fascia and hood. The fascia is the band the name board is mounted on, so it and the
+  //    hood above it must not share any height: the board lives entirely between them. ──
   E.box(P.goodsB, cx, GROUND + (FASCIA_BOTTOM + BODY_TOP) / 2, front - 0.06, WIDTH - 0.1, BODY_TOP - FASCIA_BOTTOM, 0.12, {
     layer: 0,
   });
-  E.box(P.trim, cx, GROUND + FASCIA_BOTTOM - 0.04, front - 0.08, WIDTH - 0.1, 0.08, 0.16, { layer: 1 });
+  E.box(P.trim, cx, GROUND + FASCIA_BOTTOM - 0.08, front - 0.08, WIDTH - 0.1, 0.08, 0.16, { layer: 1 });
   // Concrete hood over the shopfront. Structure, not fabric: it does not move, and it is
   // the reason this shop needs no awning.
   E.box(P.concrete, cx, GROUND + BODY_TOP + 0.06, front - HOOD_REACH / 2, WIDTH + 0.16, 0.12, HOOD_REACH, {
     layer: 0,
   });
+  // A single amber accent at the end of the fascia: the shop's own colour note.
+  E.box(P.goodsA, cx - 1.92, GROUND + (FASCIA_BOTTOM + BODY_TOP) / 2, front - 0.07, 0.22, BODY_TOP - FASCIA_BOTTOM, 0.14, {
+    layer: 1,
+  });
+  // Lintel over the whole frontage, between the glazing and the fascia.
+  E.box(wall, cx, GROUND + (GLASS_TOP + FASCIA_BOTTOM) / 2, front + LEAF / 2, WIDTH, FASCIA_BOTTOM - GLASS_TOP, LEAF, {
+    layer: 0,
+  });
 
-  // ── Shopfront: two display windows, then the door ──
-  const glassTop = FASCIA_BOTTOM - 0.14;
-  const glassBottom = 0.62;
-  for (const bay of [-1.25, -0.05]) {
-    // The frame first, then the glass inset into it, then what is standing behind it.
-    E.box(P.frame, cx + bay, GROUND + (glassBottom + glassTop) / 2, front - 0.02, 1.06, glassTop - glassBottom + 0.12, 0.1, {
-      layer: 0,
-    });
-    // Clear glass, so the goods behind it are the thing that reads -- an opaque pane with
-    // the glow painted on it is a lightbox, and hides the only detail that says "grocery".
-    E.box(P.glass, cx + bay, GROUND + (glassBottom + glassTop) / 2, front - 0.05, 0.9, glassTop - glassBottom, 0.04, {
+  // ── The frontage: piers with real openings between them ──
+  let x = cx - WIDTH / 2;
+  for (let i = 0; i < FRONTAGE.length; i++) {
+    const part = FRONTAGE[i];
+    const centre = x + part.width / 2;
+    x += part.width;
+    if (part.kind === 'pier') {
+      // The outer piers close the ends of the reveal; the mullions are leaf-thin.
+      const outer = i === 0 || i === FRONTAGE.length - 1;
+      const depth = outer ? RECESS : LEAF;
+      E.box(wall, centre, GROUND + (PLINTH + GLASS_TOP) / 2, front + depth / 2, part.width, GLASS_TOP - PLINTH, depth, {
+        layer: 0,
+      });
+      continue;
+    }
+    const bottom = part.kind === 'door' ? DOOR_BOTTOM : GLASS_BOTTOM;
+    const height = GLASS_TOP - bottom;
+    const gy = GROUND + (bottom + height / 2);
+    if (part.kind === 'window') {
+      // Cill wall under the glass, and the stone cill on top of it.
+      E.box(wall, centre, GROUND + (PLINTH + GLASS_BOTTOM) / 2, front + LEAF / 2, part.width, GLASS_BOTTOM - PLINTH, LEAF, {
+        layer: 0,
+      });
+      E.box(P.trim, centre, GROUND + GLASS_BOTTOM - 0.03, front - 0.03, part.width + 0.12, 0.07, LEAF + 0.1, { layer: 2 });
+    } else {
+      E.box(P.pavement, centre, GROUND + 0.05, front - 0.34, part.width + 0.3, 0.1, 0.5, { layer: 1 });
+      // Rails and a handle. Without them a glazed door with a lit shop behind it is a
+      // flat bright panel: correct geometry, and it does not read as a door.
+      E.box(P.frame, centre, GROUND + DOOR_BOTTOM + 0.13, front - 0.03, part.width - 0.06, 0.26, 0.06, { layer: 1 });
+      E.box(P.frame, centre, GROUND + 1.02, front - 0.03, part.width - 0.06, 0.09, 0.06, { layer: 1 });
+      E.box(P.steel, centre + part.width / 2 - 0.18, GROUND + 1.06, front - 0.07, 0.05, 0.3, 0.05, { layer: 2 });
+    }
+
+    // A slim frame standing proud of the reveal, then the pane set back inside it. The
+    // 4 cm between them is what stops the two outer faces sharing a plane.
+    const glassW = part.width - 0.1;
+    for (const [dx, dy, w, h] of [
+      [-glassW / 2 - 0.04, 0, 0.08, height + 0.16],
+      [glassW / 2 + 0.04, 0, 0.08, height + 0.16],
+      [0, height / 2 + 0.04, glassW + 0.16, 0.08],
+    ] as const) {
+      E.box(P.frame, centre + dx, gy + dy, front - 0.025, w, h, 0.05, { layer: 0 });
+    }
+    E.box(P.glass, centre, gy, front + 0.03, glassW, height, 0.03, {
       layer: 0,
       style: STYLE.glass,
       cls: 'glassClear',
     });
-    // Sill below the glass, and the dwarf wall it stands on.
-    E.box(wall, cx + bay, GROUND + (PLINTH + glassBottom) / 2, front - 0.01, 1.06, glassBottom - PLINTH, 0.08, { layer: 1 });
-    E.box(P.trim, cx + bay, GROUND + glassBottom - 0.03, front - 0.06, 1.1, 0.07, 0.16, { layer: 2 });
-    // The lit back of the shop. `shopGlow` is the entry whose emissive follows the
-    // grocery's own hours, so this is the light that is on inside while it is open --
-    // and, being behind the goods, it silhouettes them at night the way a real one does.
-    E.box(P.shopGlow, cx + bay, GROUND + (glassBottom + glassTop) / 2, front + 0.52, 0.94, glassTop - glassBottom, 0.06, {
-      layer: 0,
-    });
-    if (low) continue;
-    E.box(P.interior, cx + bay, GROUND + (glassBottom + glassTop) / 2, front + 0.3, 0.94, glassTop - glassBottom, 0.4, {
-      layer: 1,
-      ao: 0.85,
-    });
+
+    // The lit back of the shop, on the recessed body wall. `shopGlow` is the entry whose
+    // emissive follows the grocery's own hours, so this is the light that is on inside
+    // while it is open -- and it silhouettes the goods the way a real one does.
+    E.box(P.shopGlow, centre, gy, front + RECESS - 0.03, part.width - 0.06, height, 0.05, { layer: 0 });
+    if (low || part.kind !== 'window') continue;
+    // Goods on show: the only detail that says "grocery" from the pavement.
     for (let shelf = 0; shelf < 2; shelf++) {
-      const y = GROUND + glassBottom + 0.16 + shelf * 0.42;
+      const y = GROUND + GLASS_BOTTOM + 0.18 + shelf * 0.44;
+      E.box(P.trim, centre, y - 0.17, front + 0.34, part.width - 0.12, 0.04, 0.24, { layer: 2 });
       for (let k = 0; k < 3; k++) {
         const goods = (index + shelf + k) % 2 === 0 ? P.goodsA : P.goodsB;
-        E.box(goods, cx + bay - 0.3 + k * 0.3, y, front + 0.14, 0.2, 0.26, 0.2, { layer: 2 });
+        E.box(goods, centre - 0.31 + k * 0.31, y, front + 0.34, 0.2, 0.26, 0.2, { layer: 2 });
       }
-      E.box(P.trim, cx + bay, y - 0.16, front + 0.14, 0.9, 0.04, 0.26, { layer: 2 });
     }
   }
-
-  // Entrance on the right-hand bay, with a step up off the pavement.
-  const doorX = cx + 1.35;
-  E.box(P.frame, doorX, GROUND + (glassTop + 0.02) / 2, front - 0.02, 1.1, glassTop + 0.02, 0.1, { layer: 0 });
-  E.box(P.glassWarm, doorX, GROUND + glassTop / 2, front - 0.06, 0.88, glassTop - 0.06, 0.06, {
-    layer: 0,
-    style: STYLE.glass,
-    cls: 'glass',
-  });
-  E.box(P.pavement, doorX, GROUND + 0.05, front - 0.32, 1.3, 0.1, 0.5, { layer: 1 });
-  // A single amber accent by the door: the shop's own colour note.
-  E.box(P.goodsA, cx - 1.92, GROUND + (FASCIA_BOTTOM + BODY_TOP) / 2, front - 0.07, 0.22, BODY_TOP - FASCIA_BOTTOM, 0.14, {
-    layer: 1,
-  });
 }

@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { GROCERY_SHELL } from './grocery';
+import { KIOSK_SIGN } from '../WorldGenerator';
 import {
   GROCERY_CLOSE_HOUR,
   GROCERY_OPEN_HOUR,
@@ -66,6 +67,54 @@ describe('the grocery keeps its own hours', () => {
       expect(groceryGlow(hour * HOUR + 1, 0.5)).toBeCloseTo(groceryGlow(hour * HOUR, 0.5), 10);
       expect(groceryGlow(hour * HOUR - 4, 0.5)).toBeCloseTo(groceryGlow(hour * HOUR, 0.5), 10);
     }
+  });
+});
+
+describe('the shopfront reads as a shopfront', () => {
+  test('the name board is mounted on the fascia and the hood cannot cut it', () => {
+    const top = KIOSK_SIGN.y + KIOSK_SIGN.height / 2;
+    const bottom = KIOSK_SIGN.y - KIOSK_SIGN.height / 2;
+    // Entirely inside the green band, so nothing above or below it can cross the text.
+    expect(bottom, 'dolna krawędź tablicy pod fryzem').toBeGreaterThan(GROCERY_SHELL.fasciaBottomY);
+    expect(top, 'górna krawędź tablicy nad fryzem').toBeLessThan(GROCERY_SHELL.fasciaTopY);
+    // The hood sits on top of the fascia; the board must not reach its height at all.
+    expect(top).toBeLessThanOrEqual(GROCERY_SHELL.fasciaTopY);
+    // Narrower than the band it hangs on, so it is on the building and not over its edges.
+    expect(KIOSK_SIGN.width).toBeLessThan(GROCERY_SHELL.width - 0.2);
+  });
+
+  test('the board stands proud of the fascia but tucked under the hood', () => {
+    const fasciaFaceZ = GROCERY_SHELL.frontZ - 0.12;
+    const hoodEdgeZ = GROCERY_SHELL.frontZ - GROCERY_SHELL.hoodReach;
+    // In front of the wall it is fixed to -- but behind the hood's leading edge, which is
+    // what makes it read as sheltered by the building rather than hung in the air.
+    expect(KIOSK_SIGN.dz).toBeLessThan(fasciaFaceZ);
+    expect(KIOSK_SIGN.dz).toBeGreaterThan(hoodEdgeZ);
+  });
+
+  test('no pane shares an outer plane with its frame', () => {
+    /**
+     * The cause of "one pane looks broken": the opening was filled by a solid `frame`
+     * panel with a transparent pane hung on its front, both with their outer face at
+     * exactly z = front - 0.07. Coincident faces on a transparent draw fight for every
+     * pixel, and the shop's interior was behind the opaque panel anyway.
+     *
+     * The numbers below are the ones `shop()` uses. Kept here as a guard on the *rule*:
+     * the frame stands proud, the glass is set back, and there is real space between them.
+     */
+    const frameFaceZ = GROCERY_SHELL.frontZ - 0.05;
+    const glassFaceZ = GROCERY_SHELL.frontZ + 0.015;
+    expect(glassFaceZ - frameFaceZ, 'szyba musi być cofnięta względem ramy').toBeGreaterThan(0.04);
+  });
+
+  test('the interior stands in a reveal, not inside the solid body', () => {
+    // The lit back is on the recessed body wall and the goods in front of it, so both are
+    // in the void behind the frontage. They used to be buried inside the body box.
+    const revealDepth = 0.62;
+    const goodsZ = 0.34;
+    const litBackZ = revealDepth - 0.03;
+    expect(goodsZ).toBeLessThan(litBackZ);
+    expect(litBackZ).toBeLessThan(revealDepth);
   });
 });
 

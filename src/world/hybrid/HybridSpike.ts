@@ -40,6 +40,16 @@ export interface HybridMetrics {
   /** Pixels per metre that produced those levels, per cluster. */
   lodPixelsPerMetre: Record<string, number>;
   low: boolean;
+  /**
+   * What the grocery's display glass is emitting, and how far the awnings are out.
+   *
+   * Both are states a picture can be argued about and a number cannot, and neither can be
+   * read back off the canvas: the renderer has no `preserveDrawingBuffer`, so a
+   * `drawImage` of it comes out blank. So "the light inside signals that the shop is open"
+   * is checked against what the frame actually put in the uniform.
+   */
+  shopGlow: number;
+  awningFold: number;
 }
 
 /**
@@ -253,6 +263,8 @@ export function attachHybridSpike(options: HybridSpikeOptions): HybridHandle {
         bytes: totals.bytes,
         meshes: totals.meshes,
         clusters: lodGroups.length,
+        shopGlow: uniforms.uEmissive.value[P.shopGlow],
+        awningFold: awnings.progress,
         lodLevels: lodLevels(),
         lodPixelsPerMetre: { ...lodPixelsPerMetre },
         low,

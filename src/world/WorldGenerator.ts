@@ -616,6 +616,22 @@ function generateKiosk(x: number, z: number): VoxelData[] {
   return voxels;
 }
 
+/**
+ * Where the shop's name board hangs, and how big it is.
+ *
+ * Exported because two things have to agree about it: this generator, which builds it, and
+ * the pavilion, which builds the fascia it is mounted on and the hood above it. They did
+ * not agree, and the hood ran through the board between the two lines of text.
+ */
+export const KIOSK_SIGN = {
+  /** Offsets from a kiosk's anchor. */
+  dx: 1.5,
+  dz: -0.66,
+  y: GROUND_SURFACE_Y + 2.24,
+  width: 3,
+  height: 0.68,
+} as const;
+
 function buildKioskSigns(group: THREE.Group): Array<{ dispose: () => void }> {
   if (typeof document === 'undefined') return [];
   const canvas = document.createElement('canvas');
@@ -641,7 +657,12 @@ function buildKioskSigns(group: THREE.Group): Array<{ dispose: () => void }> {
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.anisotropy = 4;
-  const geometry = new THREE.PlaneGeometry(3.5, 0.78);
+  // Sized and placed to sit ON the fascia, inside the band between the trim below it and
+  // the concrete hood above. It used to be 3.5 x 0.78 hung 0.72 m out from the anchor,
+  // which put it 0.22 m in front of the wall -- inside the hood's own depth -- so the hood
+  // ran straight through the board between the two lines of text, and the board's top
+  // stood above the roof parapet with nothing behind it.
+  const geometry = new THREE.PlaneGeometry(KIOSK_SIGN.width, KIOSK_SIGN.height);
   const material = new THREE.MeshStandardMaterial({
     map: texture,
     emissive: 0xffffff,
@@ -655,10 +676,10 @@ function buildKioskSigns(group: THREE.Group): Array<{ dispose: () => void }> {
     const kiosk = KIOSK_SPECS[i];
     const sign = new THREE.Mesh(geometry, material);
     sign.name = `neighborhood-grocery-sign-${i}`;
-    // Clear of the wall in both worlds: the voxel shell's front face is at z-0.5 and the
-    // hybrid pavilion's green fascia stands 0.12 m proud of it, so a sign 15 mm off the
-    // legacy wall ended up buried inside the new one.
-    sign.position.set(kiosk.x + 1.5, 2.25, kiosk.z - 0.72);
+    // Clear of the wall in both worlds -- the voxel shell's front face is at z-0.5, the
+    // hybrid pavilion's fascia stands 0.12 m proud of it -- and centred on the fascia band
+    // rather than straddling the roof line.
+    sign.position.set(kiosk.x + KIOSK_SIGN.dx, KIOSK_SIGN.y, kiosk.z + KIOSK_SIGN.dz);
     sign.rotation.y = Math.PI;
     sign.castShadow = false;
     group.add(sign);
