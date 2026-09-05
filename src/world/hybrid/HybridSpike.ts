@@ -4,6 +4,7 @@ import type { QualityProfile } from '../../performance/QualityManager';
 import { BUS_STOPS, GROUND_SURFACE_Y } from '../WorldLayout';
 import { buildCityModel } from './CityModel';
 import { emitBuilding } from './architecture';
+import { Awnings } from './Awnings';
 import { emitStreetscape } from './streetscape';
 import { emitDominant } from './dominants';
 import { createHybridMaterial, createHybridUniforms } from './HybridMaterial';
@@ -160,9 +161,15 @@ export function attachHybridSpike(options: HybridSpikeOptions): HybridHandle {
   /** Last LOD input per cluster: gate 3 has to see the measure, not just the outcome. */
   const lodPixelsPerMetre: Record<string, number> = {};
 
+  /** Shop awnings: their own objects, because static geometry cannot open at ten. */
+  const awnings = new Awnings(options.scene, model.buildings);
+
   return {
     update(camera, viewportHeightPx, t01, night, dt) {
       uniforms.uNight.value = night;
+      // One call for every awning in the city, and it returns early unless the fold
+      // actually moved.
+      awnings.update(t01);
       for (let cohort = 0; cohort < WINDOW_COHORT_COUNT; cohort++) {
         uniforms.uCohort.value[cohort] = residentialWindowActivityAt(t01, cohort);
       }
@@ -234,6 +241,7 @@ export function attachHybridSpike(options: HybridSpikeOptions): HybridHandle {
     },
     dispose() {
       disposeMeshes();
+      awnings.dispose();
       options.scene.remove(group);
       for (const material of Object.values(materials)) material.dispose();
     },

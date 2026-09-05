@@ -267,6 +267,43 @@ function tenement(E: Emitter, b: BuildingSpec): void {
   void accent;
 }
 
+/** A shop bay in world space: where it is, which way it faces, how wide it is. */
+export interface Shopfront {
+  block: number;
+  bayIndex: number;
+  x: number;
+  y: number;
+  z: number;
+  /** Facade rotation about y, so an awning hangs the way the wall faces. */
+  ry: number;
+  width: number;
+}
+
+/** The bay width every shopfront is laid out on. */
+const SHOP_BAY = 2.7;
+/** Where the stairwell door sits on the front, measured along the facade. */
+const SHOP_DOOR_ALONG = 0.3;
+
+/**
+ * Every shop bay of a building, in world coordinates.
+ *
+ * The emitter and the awnings both read this. They used to have no way to agree: the
+ * bays were computed inside the emitter from `facadeGrid`, so anything hung on a
+ * shopfront afterwards would have had to recompute the same arithmetic and drift from it
+ * the first time a bay width changed.
+ */
+export function shopfrontsOf(b: BuildingSpec): Shopfront[] {
+  if (b.family !== 'tenement') return [];
+  const F = frame(b);
+  const front: Side = b.avenueSide;
+  return facadeGrid(F, front, SHOP_BAY)
+    .filter(({ along }) => Math.abs(along - SHOP_DOOR_ALONG) >= 1.4)
+    .map(({ i, along }) => {
+      const at = F.pos(front, along, GROUND + 3.05, 0.05);
+      return { block: b.index, bayIndex: i, x: at.x, y: at.y, z: at.z, ry: at.ry, width: SHOP_BAY };
+    });
+}
+
 /** Shop display bay protruding from the wall, with visible interior and goods. */
 function shopBay(E: Emitter, b: BuildingSpec, F: Frame, s: Side, i: number, along: number, bay: number): void {
   const signs = [P.accentRose, P.accentBlue, P.accentGold, P.goodsB, P.roofSheet];
@@ -292,7 +329,9 @@ function shopBay(E: Emitter, b: BuildingSpec, F: Frame, s: Side, i: number, alon
   sideBox(E, sign, F, s, along, GROUND + 3.05, 0.05, bay - 0.3, 0.55, 0.1, { layer: 1 });
   sideBox(E, P.trim, F, s, along, GROUND + 3.05, 0.11, bay - 1.3, 0.16, 0.02, { layer: 2 });
   sideBox(E, sign, F, s, along + (bay - 0.3) / 2 - 0.05, GROUND + 2.55, 0.42, 0.06, 0.42, 0.7, { layer: 2 });
-  if (i % 2 === 0) sideBox(E, sign, F, s, along, GROUND + 2.72, 0.5, bay - 0.5, 0.05, 1.0, { layer: 1, rx: 0.36 });
+  // No awning is baked here any more. Every other bay used to get a fixed tilted sheet,
+  // which cannot open at ten and close at six: it is merged into the cluster's static
+  // geometry. `Awnings.ts` hangs a moving one on the bays that have one.
 }
 
 function walkup(E: Emitter, b: BuildingSpec): void {
