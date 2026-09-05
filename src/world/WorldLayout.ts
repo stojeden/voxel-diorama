@@ -93,9 +93,20 @@ export const TRAIN_ROUTE_POINTS: THREE.Vector3[] = [
   new THREE.Vector3(-65, 0, -0.8),
   new THREE.Vector3(-57, 0, -2),
   new THREE.Vector3(-44, 0, -4.5),
-  new THREE.Vector3(-28, 1.2, -7.5),
-  new THREE.Vector3(-10, 2.8, -8),
-  new THREE.Vector3(5, 4.2, -5),
+  // The line dips through the level crossing and only starts climbing east of it.
+  //
+  // It used to be 0.6 m up and still rising where the west cross street goes over, so the
+  // ballast bed crossed the asphalt as a floating strip with daylight under it and the bus
+  // drove through the lot. Forty centimetres down puts the rail head one hand above the
+  // road: the sleepers and the ballast pass below the surface and only the crowns of the
+  // rails break it, which is what a flush crossing looks like and costs no extra geometry.
+  // The climb to the viaduct starts past the crossing instead and is correspondingly
+  // steeper -- the steepest gradient on the line is still the eastern descent, unchanged.
+  new THREE.Vector3(-36, -0.4, -6.35),
+  new THREE.Vector3(-30, -0.14, -6.95),
+  new THREE.Vector3(-19, 1.15, -7.85),
+  new THREE.Vector3(-6, 2.75, -7.7),
+  new THREE.Vector3(5, 3.9, -5),
   new THREE.Vector3(18, VIADUCT_RANGE.deckY, 0),
   new THREE.Vector3(32, VIADUCT_RANGE.deckY, 5),
   new THREE.Vector3(39, 4.45, 6.4),
@@ -312,8 +323,15 @@ export const BUS_ROUTE_CURVE = new THREE.CatmullRomCurve3(
   0.5
 );
 
-/** Where the bus loop crosses the railway at grade (the level crossing). */
-export const LEVEL_CROSSING = { x: -35, z: -11.6 } as const;
+/**
+ * Where the bus loop crosses the railway at grade (the level crossing).
+ *
+ * This is the intersection itself, sampled from the two curves. The old value was
+ * 5.4 m south of it, which is why the bus yielded to a train it had already let pass
+ * and why the occupancy probe's five-metre radius did not reach the rails at all.
+ */
+export const LEVEL_CROSSING = { x: -35, z: -6.2 } as const;
+
 
 export interface BusStop {
   atT: number;

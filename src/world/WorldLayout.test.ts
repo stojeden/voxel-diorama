@@ -17,6 +17,7 @@ import {
   KIOSK_MAIN,
   LAKE,
   LAMP_POSITIONS,
+  LEVEL_CROSSING,
   POSTMAN_ROUTE_CURVE,
   RAIL_SIGNAL_POSITIONS,
   STATION_STOPS,
@@ -89,6 +90,37 @@ describe('train route geometry', () => {
   test('contains an elevated viaduct stretch', () => {
     const elevated = routeSamples(300).filter((p) => p.y >= VIADUCT_RANGE.deckY - 0.25);
     expect(elevated.length).toBeGreaterThan(10);
+  });
+
+  test('the level crossing is where the two routes actually cross, and the rails are flush there', () => {
+    const near = (curve: THREE.Curve<THREE.Vector3>) => {
+      let best = curve.getPointAt(0);
+      for (let i = 0; i <= 2000; i++) {
+        const p = curve.getPointAt(i / 2000);
+        if (Math.hypot(p.x - LEVEL_CROSSING.x, p.z - LEVEL_CROSSING.z)
+          < Math.hypot(best.x - LEVEL_CROSSING.x, best.z - LEVEL_CROSSING.z)) best = p;
+      }
+      return best;
+    };
+    // The marker used to sit 5.4 m south of the intersection, which put the whole rails
+    // outside the radius the bus probes for an occupying train.
+    const rail = near(TRAIN_ROUTE_CURVE);
+    const road = near(BUS_ROUTE_CURVE);
+    expect(Math.hypot(rail.x - LEVEL_CROSSING.x, rail.z - LEVEL_CROSSING.z)).toBeLessThan(1);
+    expect(Math.hypot(road.x - LEVEL_CROSSING.x, road.z - LEVEL_CROSSING.z)).toBeLessThan(1);
+
+    // Flush, over the full width of the street: the rail head one hand above the asphalt,
+    // never the half-metre floating ballast bed it used to be. The road is x -36..-32.
+    for (let x = -36; x <= -32; x++) {
+      let closest = TRAIN_ROUTE_CURVE.getPointAt(0);
+      for (let i = 0; i <= 2000; i++) {
+        const p = TRAIN_ROUTE_CURVE.getPointAt(i / 2000);
+        if (Math.abs(p.x - x) < Math.abs(closest.x - x)) closest = p;
+      }
+      const overRoad = closest.y - GROUND_SURFACE_Y;
+      expect(overRoad, `x=${x}: główka szyny ${overRoad.toFixed(2)} m nad jezdnią`).toBeGreaterThan(0);
+      expect(overRoad, `x=${x}: główka szyny ${overRoad.toFixed(2)} m nad jezdnią`).toBeLessThan(0.25);
+    }
   });
 
   test('wrapT maps any value onto [0,1)', () => {
