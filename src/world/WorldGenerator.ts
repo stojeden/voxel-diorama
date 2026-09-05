@@ -47,7 +47,7 @@ export interface WindUniforms {
   uWind: THREE.IUniform<number>;
 }
 
-interface VoxelData {
+export interface VoxelData {
   position: THREE.Vector3;
   color: ColorHex;
   castShadow?: boolean;
@@ -300,6 +300,73 @@ function buildCatenary(group: THREE.Group, disposables: Array<{ dispose: () => v
   supports.receiveShadow = true;
   group.add(supports);
   disposables.push(unitBox);
+}
+
+/**
+ * The earth bank that carries the track where it is up off the ground but not yet on the
+ * viaduct.
+ *
+ * `generateViaduct` only starts building once the route is 1.2 m up, and the ballast bed
+ * hangs 0.61 m below the rail head -- so on every approach there is a stretch where the
+ * ballast is above the ground plane with nothing under it. It used to be the strip over
+ * the west cross street, which is why it was worth fixing; putting the rails down on the
+ * road moved that gap east onto the grass rather than closing it.
+ *
+ * This fills it, and only it: from the ground plane up to the underside of the ballast,
+ * tapered to either side so it reads as a bank of earth rather than a wall. Nothing is
+ * emitted where the route is already carried -- on the viaduct, on a road, or buried.
+ */
+export function generateTrackBank(): VoxelData[] {
+  /** Distance from the rail head down to the underside of the ballast bed. */
+  const BALLAST_UNDERSIDE = 0.61;
+  /**
+   * Cross-section of the bank, as a fraction of full height at each metre out from the
+   * centre-line. Seven metres wide and gently stepped, because three metres of steep
+   * steps read as a black retaining wall rather than as ground rising under the track.
+   */
+  const PROFILE = [0.22, 0.5, 0.8, 1, 0.8, 0.5, 0.22];
+  /**
+   * Tallest requirement per ground cell, not the first one written.
+   *
+   * The track runs diagonally, so one cell is reached by several samples and by several
+   * offsets -- the outer skirt of one sample lands on the centre-line of the next. Taking
+   * whichever arrived first left a cell shin-high under a track that needed it knee-high,
+   * and that is a gap under the ballast however small it is.
+   */
+  const needed = new Map<string, { x: number; z: number; height: number }>();
+  const samples = 600;
+  for (let i = 0; i <= samples; i++) {
+    const t = i / samples;
+    const point = TRAIN_ROUTE_CURVE.getPointAt(t);
+    // Above this the viaduct's own deck and piers carry the track.
+    if (point.y >= 1.2) continue;
+    const underside = point.y - BALLAST_UNDERSIDE;
+    if (underside <= GROUND_SURFACE_Y + 0.02) continue;
+    const tangent = TRAIN_ROUTE_CURVE.getTangentAt(t).normalize();
+    const normal = new THREE.Vector3(-tangent.z, 0, tangent.x).normalize();
+    for (let offset = -3; offset <= 3; offset++) {
+      const x = Math.round(point.x + normal.x * offset);
+      const z = Math.round(point.z + normal.z * offset);
+      // The crossing carries itself: there the ballast passes under the asphalt.
+      if (isOnRoad(x, z)) continue;
+      const height = (underside - GROUND_SURFACE_Y) * PROFILE[offset + 3];
+      if (height <= 0.02) continue;
+      const key = `${x},${z}`;
+      const previous = needed.get(key);
+      if (!previous || previous.height < height) needed.set(key, { x, z, height });
+    }
+  }
+
+  const voxels: VoxelData[] = [];
+  for (const { x, z, height } of needed.values()) {
+    voxels.push({
+      position: new THREE.Vector3(x, GROUND_SURFACE_Y + height / 2, z),
+      // Grass, not masonry: the ballast bed above it is the only hard edge wanted.
+      color: (x + z) % 3 === 0 ? COLORS.grassDark : COLORS.grass,
+      scale: new THREE.Vector3(1, height, 1),
+    });
+  }
+  return voxels;
 }
 
 function generateViaduct(): VoxelData[] {
@@ -1390,6 +1457,7 @@ export function createWorld(
 
   allVoxels.push(...generateGround(WORLD_HALF_SIZE, options.excludeGroundCell));
   allVoxels.push(...generateViaduct());
+  allVoxels.push(...generateTrackBank());
   allVoxels.push(...generateTunnel(-1));
   allVoxels.push(...generateTunnel(1));
 
