@@ -174,8 +174,16 @@ describe('hybrid fragment clearance', () => {
   });
 
   test('the figure it must clear is a believable human height', () => {
-    expect(PEDESTRIAN_HEIGHT).toBeGreaterThan(1.75);
-    expect(PEDESTRIAN_HEIGHT).toBeLessThan(2.05);
+    /**
+     * A believable adult, not the old band.
+     *
+     * This used to demand more than 1.75 m and less than 2.05 -- a range centred on
+     * 1.9 m, which forbade an average adult and let the city's 1.915 m figures pass as
+     * normal. The bus's own doors (1.86 m) and the shelter roof (2.28 m) had been
+     * telling us otherwise for a while.
+     */
+    expect(PEDESTRIAN_HEIGHT).toBeGreaterThan(1.6);
+    expect(PEDESTRIAN_HEIGHT).toBeLessThan(1.9);
   });
 
   test('no overhang at body height reaches a walking path, the shelter, the postman route or a product prop', () => {
@@ -323,7 +331,7 @@ describe('the stop is one street system', () => {
     // Three: what fits between the posts once the bodies are turned toward the door.
     // Four at 0.9 m centres overlapped by 2 mm at the runtime facing -- the version of
     // this test that passed with four was using a facing the product does not use.
-    expect(waitingFigures.length).toBe(3);
+    expect(waitingFigures.length).toBe(4);
     for (const a of waitingFigures) {
       for (const b of waitingFigures) {
         if (b.index <= a.index) continue;

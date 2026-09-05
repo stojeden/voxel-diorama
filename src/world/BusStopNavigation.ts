@@ -91,27 +91,28 @@ export function isPointClear(point: THREE.Vector3, colliders: readonly Collision
 /**
  * Four deterministic waiting spots in one row under the roof, behind the bench.
  *
- * The spacing comes from the finished bodies, not from the figure's nominal width, and
- * the count comes from what those bodies leave room for.
+ * The spacing comes from the finished bodies, and the count from what those bodies leave
+ * room for -- both re-derived after the figures were brought down to a believable height.
  *
- * A waiting figure is 0.874 m across its arms facing forward, but it stands turned
- * toward the bus door it will walk to. Turned, and measured on its own vertices at the
- * placement the runtime gives it, it is 0.83 to 0.90 m across the row and 0.48 to
- * 0.75 m deep -- the shoulders rotate into the depth. The figures cannot be narrow
- * along the row, because the doors are perpendicular to it.
+ * At 1.915 m an adult was 0.90 m across once turned toward the bus door, and four of them
+ * at 0.9 m centres overlapped by 0.002 m, so the row was cut to three. At 1.75 m the same
+ * turned figures are 0.72 to 0.83 m across and four fit again, which is what the stop was
+ * designed for.
  *
- * Four at 0.9 m centres therefore do not fit: at the runtime facing the two widest
- * neighbours measured 0.90 and 0.91 m across and overlapped by 0.002 m. Widening to
- * 1.0 m centres pushes the outermost body past the 3.84 m clear span between the posts.
- * So three, at 1.2 m centres, 0.25 m in front of the post line: measured gaps between
- * the finished boxes are 0.336 m and 0.359 m, the three of them occupy 3.28 m of the
- * 3.84 m clear span, and all are clear of the bench and under the 2.0 m roof.
+ * Four at 0.95 m centres, 0.25 m in front of the post line. Measured on the finished,
+ * rotated bodies at the placement the runtime gives them: gaps of 0.174, 0.179 and
+ * 0.125 m against a required 0.05 m, occupying 3.68 m along the row.
  *
- * `clearance.test.ts` checks the boxes themselves, at the placement
- * `busStopWaitingPlacements` gives the runtime, with a 0.05 m clearance.
+ * That row is wider than the 3.20 m between the posts, and deliberately so: the figures
+ * stand *in front of* the post line, not between the posts, so the constraint that
+ * matters is the three-dimensional one -- no body may intersect a post, the bench or the
+ * sign, and every body must be under the roof. `clearance.test.ts` checks exactly that,
+ * on the rotated outline. (An earlier version of this comment quoted a 3.84 m "clear
+ * span" and treated it as the limit; that number was neither the post gap nor the
+ * constraint.)
  */
 export function busStopWaitingPositions(stop: BusStop): THREE.Vector3[] {
-  return ([-1.2, 0, 1.2] as const).map((along) => localToWorld(stop, along, -0.25));
+  return ([-1.425, -0.475, 0.475, 1.425] as const).map((along) => localToWorld(stop, along, -0.25));
 }
 
 /** Where a waiting passenger stands, which door it walks to, and which way it looks. */

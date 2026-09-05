@@ -12,7 +12,18 @@ import { fallbackRandom, type RandomSource } from '../core/Random';
 
 const JACKET_COLORS = [0x9c3838, 0x2b5f9a, 0x355d2a, 0xc4a35a, 0x6c4a8a, 0x444444, 0xb87333];
 const SKIN_COLORS = [0xe8c39a, 0xd4a173, 0xa57448, 0xfcd7b6];
-export const PASSENGER_SCALE = 0.78;
+/**
+ * Every figure in the city is built in oversized units and brought down by this.
+ *
+ * It was 0.78, which made an adult 1.915 m -- a 191 cm person, and it showed. Two things
+ * in the world measured it for us: the bus's own doors are 1.86 m, so a passenger could
+ * not fit through them, and the shelter roof at 2.28 m left 36 cm of headroom. Against
+ * the 2.939 m bus the ratio was 1.53 where a real bus to a real adult is about 1.7.
+ *
+ * 0.71279 puts the finished figure at 1.75 m. The bus is untouched: it was the right
+ * size all along.
+ */
+export const PASSENGER_SCALE = 0.71279;
 
 type Activity = 'idle' | 'boarding' | 'disembarking';
 export type EclipsePassengerPose = 'glasses' | 'projection' | 'watch';

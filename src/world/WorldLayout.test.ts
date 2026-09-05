@@ -428,9 +428,17 @@ describe('palette', () => {
   });
 
   test('keeps passenger height within a believable human scale', () => {
+    /**
+     * A believable adult, not the old band.
+     *
+     * This used to demand more than 1.75 m and less than 2.05 -- a range centred on
+     * 1.9 m, which forbade an average adult and let the city's 1.915 m figures pass as
+     * normal. The bus's own doors (1.86 m) and the shelter roof (2.28 m) had been
+     * telling us otherwise for a while.
+     */
     const modeledHeight = 2.455 * PASSENGER_SCALE;
-    expect(modeledHeight).toBeGreaterThan(1.75);
-    expect(modeledHeight).toBeLessThan(2.05);
+    expect(modeledHeight).toBeGreaterThan(1.6);
+    expect(modeledHeight).toBeLessThan(1.9);
   });
 
   test('uses colors that Three can construct without string warnings', () => {
