@@ -1090,6 +1090,15 @@ const debugHandle: DioramaDebugHandle = {
   debugBusStop: (label: string) => bus.debugStartDwell(label),
   busPassengers: () => bus.getPassengerDebugState(),
   busService: () => bus.getServiceDebugState(),
+  /**
+   * The level crossing, and the two handles a demonstration of it needs.
+   *
+   * Exposed for the same reason as `train`: whether the bus stops for a train cannot be
+   * shown by waiting for the two to meet on their own. `seekBus` places the bus a chosen
+   * distance short of the rails and `busCrossing` reports what its throttle is doing.
+   */
+  busCrossing: () => bus.getCrossingState(),
+  seekBus: (progress: number) => bus.seekRouteProgress(progress),
   windowRhythm: () =>
     world.windowGlowMaterials.map((entry) => ({
       cohort: entry.cohort,
