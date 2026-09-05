@@ -356,6 +356,13 @@ Przesłanka do jej włączenia nie jest spełniona: zapas przy vsync jest dodatn
 
 ## 9. Rekomendacja dla całego spike'u
 
+> **Stan na 2026-09-05 — punkt 1 poniżej jest już nieaktualny.** Właściciel zaakceptował
+> kierunek wizualny hybrydy pokazany w tym spike'u i polecił rozszerzyć go na całe miasto.
+> Akceptacja dotyczy **języka wizualnego**, nie każdego błędu proporcji, i **nie jest zgodą
+> na publikację**: nadal nie ma merge'a, push'a ani deployu. Dalsze prace i ich pomiary są
+> w `2026-09-05-miasto.md`; ten dokument pozostaje zapisem tego, co zmierzono w tej
+> iteracji, i nie jest przepisywany po fakcie.
+
 ## **NO MERGE**
 
 Nie dlatego, że coś w tej rundzie nie działa. Bramki są zdane, drzewo czyste, budżet

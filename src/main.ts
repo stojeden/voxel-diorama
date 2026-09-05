@@ -94,7 +94,15 @@ const world = createWorld(
 );
 let hybrid: HybridHandle | null = null;
 /** One mutable frame object for the hybrid, like `FrameContext`: no per-frame allocation. */
-const hybridFrame = { sunT: 0, clockT: 0, night: 0, dt: 0, elapsed: 0 } as unknown as HybridFrame;
+const hybridFrame: HybridFrame = {
+  camera: env.camera,
+  viewportHeightPx: 0,
+  sunT: 0,
+  clockT: 0,
+  night: 0,
+  dt: 0,
+  elapsed: 0,
+};
 ui.setLoadingProgress(10, 'MIASTO I KRAJOBRAZ');
 const train = createTrain(env.scene);
 const bus = createBus(env.scene, worldRandom.stream('bus'));
