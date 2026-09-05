@@ -600,7 +600,11 @@ export function createBus(scene: THREE.Scene, random = fallbackRandom('bus')): B
 
       // ── Level crossing: yield to the train ──
       const toCrossing = forwardDelta(leadT, CROSSING_T) * ROUTE_LENGTH;
-      const holdForTrain = crossingBlocked && toCrossing < 18 && toCrossing > 0.5;
+      // Wait clear of the rails, not on them. The crossing point used to be 5.4 m short
+      // of the track, so half a metre of margin was really six; now that it is the
+      // intersection itself, the margin has to say so. Past it the bus keeps going --
+      // stopping on a crossing is worse than crossing it.
+      const holdForTrain = crossingBlocked && toCrossing < 18 && toCrossing > 4;
 
       if (state.kind === 'cruising') {
         const stop = nextStop(leadT);
