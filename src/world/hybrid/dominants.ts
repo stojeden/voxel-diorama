@@ -16,8 +16,9 @@ import { Emitter, type Cluster } from './surface';
 /**
  * The dominant duet: heat-plant chimney and an original brutalist RTV tower.
  * Both are landmarks for orientation, not monsters; both carry red aviation
- * lights as emissive `glow` primitives (future blink/transmission hooks are
- * data only — nothing animates here).
+ * lights as emissive `glow` primitives. The two structures take different palette
+ * entries so their beacons can flash out of step, the way two real masts do;
+ * `HybridSpike` drives both from the clock.
  */
 
 export function validateDominantSite(x: number, z: number): string[] {
@@ -48,8 +49,8 @@ export function emitDominant(spec: DominantSpec, low: boolean): Cluster {
   return E.cluster(`dominant-${spec.kind}`, [spec.x, GROUND + spec.height / 2, spec.z], spec.height / 2 + 8);
 }
 
-function light(E: Emitter, x: number, y: number, z: number, r = 0.22): void {
-  E.cylinder(P.aviationRed, x, y, z, r, r, r * 2, 8, { layer: 0, cls: 'glow' });
+function light(E: Emitter, x: number, y: number, z: number, r = 0.22, palette = P.aviationRed): void {
+  E.cylinder(palette, x, y, z, r, r, r * 2, 8, { layer: 0, cls: 'glow' });
 }
 
 function chimney(E: Emitter, spec: DominantSpec, low: boolean): void {
@@ -121,7 +122,7 @@ function rtvTower(E: Emitter, spec: DominantSpec, low: boolean): void {
   }
   for (let k = 0; k < 4; k++) {
     const a = (k * Math.PI) / 2;
-    light(E, spec.x + Math.cos(a) * 5.0, platY + 1.9, spec.z + Math.sin(a) * 5.0);
+    light(E, spec.x + Math.cos(a) * 5.0, platY + 1.9, spec.z + Math.sin(a) * 5.0, 0.22, P.aviationRedAlt);
   }
   // upper platform
   const upY = y0 + 37;
@@ -160,7 +161,7 @@ function rtvTower(E: Emitter, spec: DominantSpec, low: boolean): void {
       E.box(P.steel, spec.x, yy, spec.z, 0.05, 0.05, rr * 2.1, { layer: 1 });
     }
   }
-  light(E, spec.x, mastBase + mastH * 0.5, spec.z + 0.9, 0.18);
-  light(E, spec.x, mastBase + mastH * 0.5, spec.z - 0.9, 0.18);
-  light(E, spec.x, mastTop + 0.3, spec.z, 0.26);
+  light(E, spec.x, mastBase + mastH * 0.5, spec.z + 0.9, 0.18, P.aviationRedAlt);
+  light(E, spec.x, mastBase + mastH * 0.5, spec.z - 0.9, 0.18, P.aviationRedAlt);
+  light(E, spec.x, mastTop + 0.3, spec.z, 0.26, P.aviationRedAlt);
 }

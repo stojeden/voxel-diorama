@@ -277,10 +277,14 @@ export interface Shopfront {
   /** Facade rotation about y, so an awning hangs the way the wall faces. */
   ry: number;
   width: number;
+  /** Palette index of this bay's sign, so an awning matches the shop under it. */
+  sign: number;
 }
 
 /** The bay width every shopfront is laid out on. */
 const SHOP_BAY = 2.7;
+/** Sign colours, cycled per bay. The awning over a bay takes the same one. */
+const SHOP_SIGNS = [P.accentRose, P.accentBlue, P.accentGold, P.goodsB, P.roofSheet];
 /** Where the stairwell door sits on the front, measured along the facade. */
 const SHOP_DOOR_ALONG = 0.3;
 
@@ -300,14 +304,14 @@ export function shopfrontsOf(b: BuildingSpec): Shopfront[] {
     .filter(({ along }) => Math.abs(along - SHOP_DOOR_ALONG) >= 1.4)
     .map(({ i, along }) => {
       const at = F.pos(front, along, GROUND + 3.05, 0.05);
-      return { block: b.index, bayIndex: i, x: at.x, y: at.y, z: at.z, ry: at.ry, width: SHOP_BAY };
+      const sign = SHOP_SIGNS[(b.index + i) % SHOP_SIGNS.length];
+      return { block: b.index, bayIndex: i, x: at.x, y: at.y, z: at.z, ry: at.ry, width: SHOP_BAY, sign };
     });
 }
 
 /** Shop display bay protruding from the wall, with visible interior and goods. */
 function shopBay(E: Emitter, b: BuildingSpec, F: Frame, s: Side, i: number, along: number, bay: number): void {
-  const signs = [P.accentRose, P.accentBlue, P.accentGold, P.goodsB, P.roofSheet];
-  const sign = signs[(b.index + i) % signs.length];
+  const sign = SHOP_SIGNS[(b.index + i) % SHOP_SIGNS.length];
   const gw = bay - 0.55;
   const gh = 2.3;
   const gy = GROUND + 0.5 + gh / 2;

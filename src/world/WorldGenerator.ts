@@ -231,6 +231,7 @@ function buildTrackwork(group: THREE.Group, disposables: Array<{ dispose: () => 
 
   placeAlong(sleepers, sleeperCount, -0.17);
   placeAlong(ballast, ballastCount, -0.4);
+
 }
 
 /** Contact wire and sparse masts make the pantograph physically legible. */

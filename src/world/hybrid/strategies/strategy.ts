@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { Cluster, Layer, MaterialClass, SurfacePrimitive } from '../surface';
+import type { Cluster, Layer, MaterialClass, PrimitiveBase, SurfacePrimitive } from '../surface';
 
 /** Vertex attributes every strategy must emit — the contract of `HybridMaterial`. */
 export const ATTRIBUTES = ['position', 'normal', 'uv', 'aPalette', 'aCohort', 'aAo', 'aStyle'] as const;
@@ -38,8 +38,14 @@ export function now(): number {
   return typeof performance !== 'undefined' ? performance.now() : Date.now();
 }
 
-/** Fill the per-vertex semantic attributes of `geometry` from one primitive. */
-export function attachAttributes(geometry: THREE.BufferGeometry, prim: SurfacePrimitive): void {
+/**
+ * Fill the per-vertex semantic attributes of `geometry`.
+ *
+ * Takes the semantic base rather than a whole primitive, because the awnings are meshes
+ * of their own -- they move, so they cannot be baked into a cluster -- and they still
+ * have to satisfy the same attribute contract to share the hybrid material.
+ */
+export function attachAttributes(geometry: THREE.BufferGeometry, prim: PrimitiveBase): void {
   const count = geometry.getAttribute('position').count;
   geometry.setAttribute('aPalette', new THREE.BufferAttribute(new Float32Array(count).fill(prim.palette), 1));
   geometry.setAttribute('aCohort', new THREE.BufferAttribute(new Float32Array(count).fill(prim.cohort), 1));

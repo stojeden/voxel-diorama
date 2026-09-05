@@ -8,7 +8,8 @@ import { Awnings } from './Awnings';
 import { emitStreetscape } from './streetscape';
 import { emitDominant } from './dominants';
 import { createHybridMaterial, createHybridUniforms } from './HybridMaterial';
-import { resolvePalette } from './palette';
+import { beaconGlow } from './beacons';
+import { P, resolvePalette } from './palette';
 import { LodSelector, pixelsPerMetre } from './ScreenSpaceLod';
 import { checkModel, checkProbes, type GroundContactReport, type ProbeInput } from './GroundContact';
 import { buildDirect } from './strategies/DirectSurfaceStrategy';
@@ -161,12 +162,20 @@ export function attachHybridSpike(options: HybridSpikeOptions): HybridHandle {
   /** Last LOD input per cluster: gate 3 has to see the measure, not just the outcome. */
   const lodPixelsPerMetre: Record<string, number> = {};
 
-  /** Shop awnings: their own objects, because static geometry cannot open at ten. */
-  const awnings = new Awnings(options.scene, model.buildings);
+  /**
+   * Shop awnings: their own objects, because static geometry cannot open at ten. They
+   * take the shared opaque material, so the palette, theme, snow, wetness and night tint
+   * reach them exactly as they reach the wall they hang on.
+   */
+  const awnings = new Awnings(options.scene, model.buildings, materials.opaque);
 
   return {
     update(camera, viewportHeightPx, t01, night, dt) {
       uniforms.uNight.value = night;
+      // The chimney and the mast flash half a period apart, so the skyline never blinks
+      // as one object.
+      uniforms.uEmissive.value[P.aviationRed] = beaconGlow(t01, night, 0);
+      uniforms.uEmissive.value[P.aviationRedAlt] = beaconGlow(t01, night, 0.5);
       // One call for every awning in the city, and it returns early unless the fold
       // actually moved.
       awnings.update(t01);

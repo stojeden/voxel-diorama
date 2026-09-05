@@ -20,7 +20,12 @@ export interface PaletteEntry {
   readonly emissive?: number;
 }
 
-export const PALETTE_SIZE = 32;
+/**
+ * Room for two more entries than the palette uses. The spare slot is what let the RTV
+ * tower's aviation lights take a colour of their own: two structures whose beacons flash
+ * on the same phase read as one machine, which is not how the sky over a city looks.
+ */
+export const PALETTE_SIZE = 34;
 
 const M = (key: string, base: number, o: Partial<PaletteEntry> = {}): PaletteEntry => ({
   key,
@@ -68,7 +73,10 @@ export const PALETTE: readonly PaletteEntry[] = [
   M('goodsA', 0xd9a441, { roughness: 0.8 }),
   M('goodsB', 0x5a8f4a, { roughness: 0.8 }),
   M('concrete', 0x8e8d86, { origin: COLORS.concrete, roughness: 0.95, snow: SNOW_ROOF }),
+  // Two identical reds, driven on opposite phases so the chimney and the mast do not
+  // blink together. `emissive` here is the peak; `HybridSpike` fades it with the clock.
   M('aviationRed', 0xff2a1e, { roughness: 0.5, emissive: 1.6 }),
+  M('aviationRedAlt', 0xff2a1e, { roughness: 0.5, emissive: 1.6 }),
   M('lamp', 0xfff1cc, { roughness: 0.6, emissive: 0.6 }),
 ];
 

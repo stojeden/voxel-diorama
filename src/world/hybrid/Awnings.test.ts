@@ -15,6 +15,33 @@ import { buildCityModel } from './CityModel';
 
 const HOUR = 1 / 24;
 
+const mount = () => {
+  const scene = new THREE.Scene();
+  const awnings = new Awnings(scene, buildCityModel().buildings, new THREE.MeshStandardMaterial());
+  const group = scene.getObjectByName('shop-awnings')!;
+  return { awnings, group, shop: group.children[0] as THREE.Group };
+};
+
+/**
+ * A part's box in the shop's own frame, where the facade is z = 0 and the street is +z.
+ *
+ * Read from the part's own matrix rather than from world space: the shopfronts these hang
+ * on face -z, so a world-space box has its minimum where the assembly reaches *furthest
+ * out*, and a test written on world coordinates passes no matter what the geometry does.
+ */
+const localBox = (part: THREE.Object3D): THREE.Box3 => {
+  const mesh = part as THREE.Mesh;
+  mesh.updateMatrix();
+  mesh.geometry.computeBoundingBox();
+  return mesh.geometry.boundingBox!.clone().applyMatrix4(mesh.matrix);
+};
+
+/** Where a part's far face sits, in the same frame. */
+const farFace = (part: THREE.Object3D, local: THREE.Vector3) => {
+  part.updateMatrix();
+  return local.clone().applyMatrix4(part.matrix);
+};
+
 describe('shop awnings', () => {
   test('open at ten, closed at six, folded the rest of the day', () => {
     expect(awningFold(0)).toBe(0);
@@ -56,54 +83,54 @@ describe('shop awnings', () => {
   });
 
   test('a few shops have one, not the whole estate', () => {
-    const scene = new THREE.Scene();
-    const awnings = new Awnings(scene, buildCityModel().buildings);
+    const { awnings } = mount();
     expect(awnings.count).toBeGreaterThan(0);
     // Small enough to read as a signal. The city has thirty-four blocks.
     expect(awnings.count).toBeLessThanOrEqual(8);
     awnings.dispose();
   });
 
-  test('folded, it sits against the wall; open, it reaches out and stays whole', () => {
-    const scene = new THREE.Scene();
-    const awnings = new Awnings(scene, buildCityModel().buildings);
-    const group = scene.getObjectByName('shop-awnings')!;
-
+  test('folded, the whole assembly is put away in its housing', () => {
+    const { awnings, shop } = mount();
     awnings.update(3 * HOUR);
-    expect(group.visible, 'zwinięta markiza nie musi się rysować').toBe(false);
-
-    awnings.update(12 * HOUR);
-    expect(group.visible).toBe(true);
-    const shop = group.children[0] as THREE.Group;
-    const fabric = shop.children[0] as THREE.Mesh;
-    const arms = shop.children.slice(1) as THREE.Mesh[];
-    // Sheet and arms share one reach and one tilt, so the covering cannot float off its
-    // supports or hang through them.
-    for (const arm of arms) {
-      expect(arm.scale.z).toBeCloseTo(fabric.scale.z, 6);
-      expect(arm.rotation.x).toBeCloseTo(fabric.rotation.x, 6);
-      expect(arm.position.z).toBeCloseTo(fabric.position.z, 6);
+    for (const part of shop.children) {
+      // The housing is 18 cm deep; nothing may stand out past it when the shop is shut.
+      expect(localBox(part).max.z, 'coś wystaje ze zwiniętej markizy').toBeLessThanOrEqual(0.2);
     }
-    // Extended away from the facade, and sloping down rather than up.
-    expect(fabric.position.z).toBeGreaterThan(0.4);
-    expect(fabric.rotation.x).toBeLessThan(0);
+    awnings.dispose();
+  });
+
+  test('open, it reaches out, slopes down and stays one piece', () => {
+    const { awnings, shop } = mount();
+    awnings.update(12 * HOUR);
+    const [, fabric, valance, ...arms] = shop.children;
+
+    // Out over the pavement, and the far edge lower than the roller it hangs from.
+    const tip = farFace(fabric, new THREE.Vector3(0, 0, 0.5));
+    expect(tip.z).toBeGreaterThan(1);
+    expect(tip.y).toBeLessThan(-0.2);
+
+    // The skirt hangs off that very edge, and both arms end at it: the covering cannot
+    // float off its supports or hang through them.
+    expect(farFace(valance, new THREE.Vector3(0, 0.5, 0)).z).toBeCloseTo(tip.z, 6);
+    expect(farFace(valance, new THREE.Vector3(0, 0.5, 0)).y).toBeCloseTo(tip.y, 6);
+    for (const arm of arms) {
+      const end = farFace(arm, new THREE.Vector3(0, 0, 0.5));
+      expect(end.z).toBeCloseTo(tip.z, 6);
+      expect(end.y).toBeCloseTo(tip.y, 6);
+    }
+    // And the arms are two members under the sheet, not edging along its rim.
+    const xs = arms.map((arm) => arm.position.x).sort((a, b) => a - b);
+    expect(xs[1] - xs[0]).toBeGreaterThan(0.8);
     awnings.dispose();
   });
 
   test('the assembly never reaches back into the wall it hangs on', () => {
-    const scene = new THREE.Scene();
-    const awnings = new Awnings(scene, buildCityModel().buildings);
-    const group = scene.getObjectByName('shop-awnings')!;
-    const box = new THREE.Box3();
+    const { awnings, shop } = mount();
     for (const t of [OPEN_AT, OPEN_AT + TRAVEL / 2, 0.5, CLOSE_AT, CLOSE_AT + TRAVEL / 2]) {
       awnings.update(t);
-      const shop = group.children[0] as THREE.Group;
-      shop.updateWorldMatrix(true, true);
-      for (const child of shop.children) {
-        box.setFromObject(child);
-        // In the shop's own frame the facade is at z = 0 and the street is +z.
-        const local = shop.worldToLocal(box.min.clone());
-        expect(local.z, `t=${t.toFixed(3)}: element wchodzi w elewację`).toBeGreaterThan(-0.2);
+      for (const part of shop.children) {
+        expect(localBox(part).min.z, `t=${t.toFixed(3)}: element wchodzi w elewację`).toBeGreaterThan(-0.02);
       }
     }
     awnings.dispose();
