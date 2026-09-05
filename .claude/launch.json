@@ -24,6 +24,18 @@
         "--strictPort"
       ],
       "port": 5185
+    },
+    {
+      "name": "spike-hybrid-preview",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "vite",
+        "preview",
+        "--port",
+        "4190",
+        "--strictPort"
+      ],
+      "port": 4190
     }
   ]
 }
