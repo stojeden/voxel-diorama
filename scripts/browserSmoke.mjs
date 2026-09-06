@@ -614,17 +614,20 @@ try {
   assert.ok(initial.metrics.renderer.calls > 0, 'renderer must issue draw calls');
   assert.ok(initial.metrics.renderer.calls <= 1_400, `high-quality draw-call budget exceeded: ${initial.metrics.renderer.calls}`);
   /**
-   * Geometry budget, by the world this smoke actually runs.
+   * Geometry budget, taken from the world that actually built -- not from the URL.
    *
-   * It loads with no `world` parameter, which since 2026-09-06 means the whole-city
-   * hybrid: 38 clusters, each holding one geometry per material class and LOD layer. The
-   * owner raised the budget to 600 on a measured peak of 563 that repeats to the digit
-   * across five identical cycles. That is a bigger city, not an optimisation, and not
-   * evidence that nothing leaks -- the GL program count is still under investigation.
+   * This smoke loads with no `world` parameter, which since 2026-09-06 means the
+   * whole-city hybrid: 38 clusters, each holding one geometry per material class and LOD
+   * layer. Deriving the budget from the presence of hybrid metrics rather than from that
+   * default means flipping the default back cannot quietly check the voxel world against
+   * the larger number. The owner raised the hybrid budget to 600 on a measured peak of
+   * 563 that repeats to the digit across five identical cycles: that is a bigger city,
+   * not an optimisation, and not evidence that nothing leaks.
    */
+  const geometryBudget = initial.metrics.hybrid ? GEOMETRY_BUDGET.hybrid : GEOMETRY_BUDGET.voxel;
   softAssert(
-    initial.metrics.renderer.geometries <= GEOMETRY_BUDGET.hybrid,
-    `geometry budget exceeded: ${initial.metrics.renderer.geometries} > ${GEOMETRY_BUDGET.hybrid}`
+    initial.metrics.renderer.geometries <= geometryBudget,
+    `geometry budget exceeded: ${initial.metrics.renderer.geometries} > ${geometryBudget}`
   );
   assert.ok(initial.metrics.renderer.textures <= 80, `texture budget exceeded: ${initial.metrics.renderer.textures}`);
   assert.ok(initial.frameLength > 20_000, 'captured frame appears blank or incomplete');
