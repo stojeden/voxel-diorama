@@ -561,16 +561,40 @@ async function runPostman(page, world) {
       if (0.2126 * mask[i] + 0.7152 * mask[i + 1] + 0.0722 * mask[i + 2] <= 20) continue;
       deltas.push(Math.abs(luma(shown, i) - luma(gone, i)));
     }
-    if (!deltas.length) return { maskPixels: 0, separatedPercent: 0, medianDelta: 0, invisiblePixels: 0 };
+    if (!deltas.length) return { maskPixels: 0, separatedPercent: 0, medianDelta: 0, indistinguishablePixels: 0 };
     const sorted = [...deltas].sort((x, y) => x - y);
     const separated = deltas.filter((delta) => delta >= minimum).length;
+    /**
+     * The two values the gate is actually comparing, averaged over the mask: how bright
+     * the object renders, and how bright whatever stands behind it renders. A low
+     * separation figure has two very different causes -- a dark object, or a background
+     * of the same value -- and without these two numbers the percentage cannot tell them
+     * apart. It was read as occlusion once for exactly that reason.
+     */
+    let objectLuma = 0;
+    let behindLuma = 0;
+    let counted = 0;
+    for (let i = 0; i < mask.length; i += 4) {
+      if (0.2126 * mask[i] + 0.7152 * mask[i + 1] + 0.0722 * mask[i + 2] <= 20) continue;
+      objectLuma += luma(shown, i);
+      behindLuma += luma(gone, i);
+      counted += 1;
+    }
     return {
+      objectLuma: Math.round(objectLuma / Math.max(1, counted) * 10) / 10,
+      behindLuma: Math.round(behindLuma / Math.max(1, counted) * 10) / 10,
       maskPixels: deltas.length,
       separatedPixels: separated,
       separatedPercent: Math.round((separated / deltas.length) * 1000) / 10,
       medianDelta: Math.round(sorted[sorted.length >> 1] * 10) / 10,
-      // How much of the object is literally indistinguishable from its background.
-      invisiblePixels: deltas.filter((delta) => delta < 1).length,
+      /**
+       * Mask pixels where hiding the group moved luminance by less than one code value.
+       *
+       * NOT a measure of occlusion, and it was read as one once: a pixel can be fully
+       * visible and land here because whatever is behind it has the same luminance. It
+       * says "indistinguishable from what is behind", and nothing about what is in front.
+       */
+      indistinguishablePixels: deltas.filter((delta) => delta < 1).length,
     };
   }, [group, withSlot, withoutSlot, SEPARATION]);
 
@@ -618,8 +642,10 @@ async function runPostman(page, world) {
 
     console.log(
       `${world.padEnd(14)} high  ${name.padEnd(21)} control ${control} px  ` +
-      `koło ${legibility.wheels.separatedPercent}% z ${legibility.wheels.maskPixels} px maski (niewidocznych ${legibility.wheels.invisiblePixels})  ` +
-      `rama ${legibility.frame.separatedPercent}% z ${legibility.frame.maskPixels} px (niewidocznych ${legibility.frame.invisiblePixels})`
+      `koło ${legibility.wheels.separatedPercent}% z ${legibility.wheels.maskPixels} px maski `
+      + `(nieodróżnialnych od tła ${legibility.wheels.indistinguishablePixels})  ` +
+      `rama ${legibility.frame.separatedPercent}% z ${legibility.frame.maskPixels} px `
+      + `(nieodróżnialnych od tła ${legibility.frame.indistinguishablePixels})`
     );
 
     assert.equal(control, 0, `${world}: the frozen scene moved between two renders (${control} px) in ${name}`);
@@ -628,7 +654,11 @@ async function runPostman(page, world) {
       assert.ok(value.maskPixels > 500, `${world}: ${name} ${group} mask is only ${value.maskPixels} px -- the mask pass is wrong`);
       assert.ok(
         value.separatedPercent >= GATE,
-        `${world}: ${name} ${group} separates on ${value.separatedPercent}% of its ${value.maskPixels} mask pixels, gate ${GATE}%`
+        `${world}: ${name} ${group} separates on ${value.separatedPercent}% of its ${value.maskPixels} mask pixels, `
+        + `gate ${GATE}% -- the group renders at ${value.objectLuma} of 255 and what stands behind it at `
+        + `${value.behindLuma}, median step ${value.medianDelta} against a threshold of ${SEPARATION} `
+        + `(${value.indistinguishablePixels} px move by less than one code value, which is a luminance `
+        + 'result and not a count of anything hidden in front)'
       );
     }
   }
