@@ -802,6 +802,7 @@ function animate(timestamp?: number) {
   bus.setHeadlightsEnabled(diagnosticLocalLights && cameraMode !== 'train');
   world.setSnowCover(weather.getSnowCover());
   world.setWetness(weather.getWetness());
+  bus.setRoadWetness(weather.getWetness());
   if (hybrid) {
     hybrid.setSnowCover(weather.getSnowCover());
     hybrid.setWetness(weather.getWetness());

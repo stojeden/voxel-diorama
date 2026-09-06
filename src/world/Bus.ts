@@ -17,6 +17,7 @@ import {
   type PassengerBuild,
 } from './PassengerCrowd';
 import { mergeStaticMeshes } from '../performance/mergeStaticMeshes';
+import { createBusUnderGlow, type BusUnderGlowHandle } from './cyber/busGlow';
 import type { EclipseWorldReactionState } from '../experience/EclipseWorldReaction';
 import { fallbackRandom, type RandomSource } from '../core/Random';
 import {
@@ -117,6 +118,7 @@ function buildBusMesh(): {
   roofMaterial: THREE.MeshStandardMaterial;
   cyberTrim: THREE.Group;
   cyberTrimMaterial: THREE.MeshStandardMaterial;
+  underGlow: BusUnderGlowHandle;
 } {
   const group = new THREE.Group();
   const materials: THREE.Material[] = [];
@@ -189,6 +191,13 @@ function buildBusMesh(): {
   // geometry budget is counted in objects.
   mergeStaticMeshes(cyberTrim);
   group.add(cyberTrim);
+  /**
+   * What those strips leave on the asphalt, parented to the bus so it follows the route and
+   * every turn without a line of update code. The group's own origin already sits on the
+   * road surface, so a few centimetres is enough to clear it.
+   */
+  const underGlow = createBusUnderGlow(BUS_LENGTH, 0.03);
+  group.add(underGlow.object);
 
   const roof = new THREE.Mesh(new THREE.BoxGeometry(BUS_WIDTH - 0.3, 0.18, BUS_LENGTH - 0.5), roofMat);
   roof.position.y = floorY + BUS_HEIGHT + 0.09;
@@ -295,7 +304,7 @@ function buildBusMesh(): {
 
   return {
     group, wheels, doors, materials, windowMaterial: windowMat, headLights, beamMaterials,
-    bodyMaterial: bodyMat, roofMaterial: roofMat, cyberTrim, cyberTrimMaterial: trimMat,
+    bodyMaterial: bodyMat, roofMaterial: roofMat, cyberTrim, cyberTrimMaterial: trimMat, underGlow,
   };
 }
 
@@ -396,6 +405,14 @@ export interface BusHandle {
   };
   /** 0..1 — cyberpunk look morph (dark hull, neon glow). */
   setCyberLook: (factor: number) => void;
+  /**
+   * How wet the road is, 0..1, from the same weather the asphalt's own shine comes from.
+   *
+   * The under-sill strips mark the asphalt; on a wet road that mark becomes a reflection
+   * just outboard of the body. Without this the bus would be the only thing in the city
+   * that does not know it is raining.
+   */
+  setRoadWetness: (wetness: number) => void;
   setEclipseReaction: (reaction: EclipseWorldReactionState) => void;
   setHeadlightsEnabled: (enabled: boolean) => void;
   dispose: () => void;
@@ -414,8 +431,11 @@ const BUS_GLASS_CYBER = new THREE.Color(0x35e6ff);
 export function createBus(scene: THREE.Scene, random = fallbackRandom('bus')): BusHandle {
   const {
     group, wheels, doors, materials, windowMaterial, headLights, beamMaterials,
-    bodyMaterial, roofMaterial, cyberTrim, cyberTrimMaterial,
+    bodyMaterial, roofMaterial, cyberTrim, cyberTrimMaterial, underGlow,
   } = buildBusMesh();
+  /** The two inputs the road mark needs beyond the night factor `update` already carries. */
+  let cyberFactor = 0;
+  let roadWetness = 0;
   scene.add(group);
 
   const crowds = BUS_STOPS.map((stop) => buildStopCrowd(scene, stop, random));
@@ -640,6 +660,9 @@ export function createBus(scene: THREE.Scene, random = fallbackRandom('bus')): B
   return {
     update(delta, nightFactor, crossingBlocked, t01) {
       clock += delta;
+      // Driven from here because this is where the night factor already arrives, every
+      // frame, so the mark on the road can never be a frame behind the sky.
+      underGlow.set(cyberFactor, nightFactor, roadWetness);
       syncServiceSchedule(t01);
 
       if (serviceMode === 'off') return;
@@ -875,6 +898,7 @@ export function createBus(scene: THREE.Scene, random = fallbackRandom('bus')): B
       cyberTrim.visible = factor > 0.01;
       // Ramped with the morph rather than switched, so the strips come up with the city.
       cyberTrimMaterial.emissiveIntensity = 1.6 * factor;
+      cyberFactor = factor;
       bodyMaterial.color.lerpColors(BUS_BODY_NORMAL, BUS_BODY_CYBER, factor);
       roofMaterial.color.lerpColors(BUS_ROOF_NORMAL, BUS_ROOF_CYBER, factor);
       // Two different colours: the pane's own dark glass, and the warm interior that
@@ -882,6 +906,9 @@ export function createBus(scene: THREE.Scene, random = fallbackRandom('bus')): B
       // bus glow dark blue instead of showing a lit interior.
       windowMaterial.color.lerpColors(BUS_GLASS_NORMAL, BUS_GLASS_CYBER, factor);
       windowMaterial.emissive.lerpColors(BUS_INTERIOR_LIT, BUS_GLASS_CYBER, factor);
+    },
+    setRoadWetness(wetness) {
+      roadWetness = wetness;
     },
     setEclipseReaction(reaction) {
       eclipseReaction = reaction;
@@ -891,6 +918,8 @@ export function createBus(scene: THREE.Scene, random = fallbackRandom('bus')): B
       for (const lamp of headLights) lamp.visible = enabled;
     },
     dispose() {
+      // Its own shader material is not in `materials`, so it releases itself.
+      underGlow.dispose();
       scene.remove(group);
       group.traverse((child) => {
         if (child instanceof THREE.Mesh) child.geometry.dispose();
