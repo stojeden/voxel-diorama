@@ -14,6 +14,7 @@ import { spawn } from 'node:child_process';
 import { chromium } from 'playwright';
 import { stopPreview } from './previewServer.mjs';
 import { releaseLock, verifyBuild } from './buildProvenance.mjs';
+import { ACCEPTED_DEVIATION, classifyLegibility } from './legibilityDeviation.mjs';
 /**
  * Diagnostic mode: record a breach of the geometry budget and keep going.
  *
@@ -404,24 +405,11 @@ async function runPostman(page, world) {
   /** Half the object's own pixels must separate from their background. Fixed before measuring. */
   const GATE = 50;
   /**
-   * The one result the owner has accepted as a limitation of this version, on 2026-09-06.
-   *
-   * Scoped as narrowly as it can be: one shot, one group. It is NOT a pass, it is NOT the
-   * gate moved, and it covers neither the wheels in the same shot, nor the frame in the
-   * other two shots, nor any future regression. Everything else still has to clear 50%.
-   *
-   * Why it stands: in `postman-side` the frame renders at RGB 55/0/0 and the road behind
-   * it at 8/16/6 -- 47 code values apart in red, about 2 apart in luminance, and this gate
-   * weighs luminance only. Nothing occludes the object (city geometry covers 5 of 5 078
-   * mask pixels in the measured conditions), the voxel world measures the same, so does the
-   * bicycle moved along its route, and turning shadow maps off makes the ground darker
-   * rather than lighter. The neutral-grey wheels in the same shot clear the gate at 54%.
-   *
-   * `floor` guards the accepted value against getting worse. Three harness runs measured
-   * 28.9, 29.2 and 29.7, so the spread is under a point; 27 is two points below the lowest
-   * of them. It is a regression guard on an accepted number, not a gate anyone may pass by.
+   * The profile this phase measures in, named once so the URL below and the accepted
+   * deviation cannot drift apart: the exception is scoped to a world AND a profile, and
+   * that scoping is worthless if the phase quietly starts measuring another one.
    */
-  const ACCEPTED_DEVIATION = { shot: 'postman-side', group: 'frame', floor: 27, measured: 29.2 };
+  const QUALITY = 'high';
   const deviations = [];
   /** A luminance step of 8/255 is where an edge stops being invisible on a dark ground. */
   const SEPARATION = 8;
@@ -433,7 +421,7 @@ async function runPostman(page, world) {
   // sits on it with its tyres touching.
   const POSE = { x: -29, y: -0.5, z: -45.8, yaw: Math.PI / 2, legs: -0.5, arms: -1.05 };
 
-  await page.goto(`${URL}/?seed=${SEED}&world=${world}&quality=high`, { waitUntil: 'load' });
+  await page.goto(`${URL}/?seed=${SEED}&world=${world}&quality=${QUALITY}`, { waitUntil: 'load' });
   await page.waitForFunction(() => window.__diorama?.ready === true, null, { timeout: 90_000 });
   await settle(page, 4);
   // Morning: the only window in which he exists at all.
@@ -512,33 +500,58 @@ async function runPostman(page, world) {
     });
     const background = scene.background;
     const environment = scene.environment;
-    scene.background = null;
-    scene.environment = null;
-
     const Colour = targets[0].material.color.constructor;
     const previousClear = renderer.getClearColor(new Colour());
     const previousAlpha = renderer.getClearAlpha();
+    const previousAutoClear = renderer.autoClear;
+    const previousTarget = renderer.getRenderTarget();
     // Emissive white on a standard material: light-independent, so a tyre in deep shade
     // masks exactly as brightly as one in the sun.
     const flat = new targets[0].material.constructor({
       color: 0x000000, emissive: 0xffffff, emissiveIntensity: 1, fog: false,
     });
-    scene.overrideMaterial = flat;
-    renderer.setClearColor(0x000000, 1);
-    renderer.render(scene, diorama.controls.camera ?? diorama.camera);
 
-    const gl = renderer.domElement;
-    const canvas = new OffscreenCanvas(gl.width, gl.height);
-    const context = canvas.getContext('2d');
-    context.drawImage(gl, 0, 0);
-    const data = context.getImageData(0, 0, gl.width, gl.height).data;
+    let data;
+    try {
+      scene.background = null;
+      scene.environment = null;
+      scene.overrideMaterial = flat;
+      /**
+       * Clear the canvas, on purpose, before drawing the mask.
+       *
+       * The composer leaves `autoClear` false and may leave a render target bound, so
+       * `render()` alone would draw the silhouette on top of the last composited frame and
+       * the mask would come back as the whole lit scene. This used to work only because
+       * each `page.evaluate` is a separate task and the drawing buffer is discarded
+       * between them -- true today, an accident of the harness's shape, and false the
+       * moment two of these calls share a task. A probe written that way measured a mask
+       * of 488 000 pixels instead of 5 000. Nothing here removes pixels or changes what is
+       * drawn: the same full silhouette, still through `renderer.render` rather than the
+       * composer so bloom cannot spread it past its own edge.
+       */
+      renderer.setRenderTarget(null);
+      renderer.autoClear = true;
+      renderer.setClearColor(0x000000, 1);
+      renderer.clear(true, true, true);
+      renderer.render(scene, diorama.controls.camera ?? diorama.camera);
 
-    scene.overrideMaterial = null;
-    flat.dispose();
-    renderer.setClearColor(previousClear, previousAlpha);
-    scene.background = background;
-    scene.environment = environment;
-    for (const node of hidden) node.visible = true;
+      const gl = renderer.domElement;
+      const canvas = new OffscreenCanvas(gl.width, gl.height);
+      const context = canvas.getContext('2d');
+      context.drawImage(gl, 0, 0);
+      data = context.getImageData(0, 0, gl.width, gl.height).data;
+    } finally {
+      // Restored even when the pass throws: a half-restored renderer would poison every
+      // frame measured after it, and the failure would look like a rendering defect.
+      scene.overrideMaterial = null;
+      flat.dispose();
+      renderer.setRenderTarget(previousTarget);
+      renderer.autoClear = previousAutoClear;
+      renderer.setClearColor(previousClear, previousAlpha);
+      scene.background = background;
+      scene.environment = environment;
+      for (const node of hidden) node.visible = true;
+    }
 
     window.__masks = window.__masks ?? {};
     window.__masks[which] = data;
@@ -676,17 +689,17 @@ async function runPostman(page, world) {
         + `${value.behindLuma}, median step ${value.medianDelta} against a threshold of ${SEPARATION} `
         + `(${value.indistinguishablePixels} px move by less than one code value, which is a luminance `
         + 'result and not a count of anything hidden in front)';
-      const accepted = name === ACCEPTED_DEVIATION.shot && group === ACCEPTED_DEVIATION.group;
-      if (accepted && value.separatedPercent < GATE) {
-        // Recorded as an accepted deviation, and still guarded: below the floor it fails
-        // like anything else, because a worse number is a regression and not this exception.
-        assert.ok(
-          value.separatedPercent >= ACCEPTED_DEVIATION.floor,
-          `${world}: ${name} ${group} separates on ${value.separatedPercent}%, below the accepted `
-          + `${ACCEPTED_DEVIATION.measured}% floored at ${ACCEPTED_DEVIATION.floor}% -- this is a regression `
-          + `past the accepted deviation, not the deviation itself. ${detail}`
-        );
+      const verdict = classifyLegibility({
+        world,
+        quality: QUALITY,
+        shot: name,
+        group,
+        separatedPercent: value.separatedPercent,
+      });
+      if (verdict === 'DEVIATION') {
         deviations.push({
+          world,
+          quality: QUALITY,
           shot: name,
           group,
           separatedPercent: value.separatedPercent,
@@ -695,19 +708,25 @@ async function runPostman(page, world) {
           objectLuma: value.objectLuma,
           behindLuma: value.behindLuma,
           maskPixels: value.maskPixels,
-          accepted: '2026-09-06, wariant A: zachowana estetyka roweru i miasta',
-          note: 'ZAAKCEPTOWANE ODSTEPSTWO, nie PASS: bramka wazy sama luminancje',
+          accepted: `${ACCEPTED_DEVIATION.acceptedOn}, ${ACCEPTED_DEVIATION.reason}`,
+          note: 'ZAAKCEPTOWANE ODSTEPSTWO, nie PASS',
         });
         console.log(
-          `${world.padEnd(14)} ODSTEPSTWO  ${name} ${group}: ${value.separatedPercent}% przy bramce ${GATE}% `
-          + `(zaakceptowane, prog regresji ${ACCEPTED_DEVIATION.floor}%) -- ${detail}`
+          `${world.padEnd(14)} ODSTEPSTWO  ${name} ${group} (${QUALITY}): ${value.separatedPercent}% przy bramce `
+          + `${GATE}%, dolna granica ${ACCEPTED_DEVIATION.floor}% -- ${detail}`
         );
         continue;
       }
-      assert.ok(
-        value.separatedPercent >= GATE,
-        `${world}: ${name} ${group} separates on ${value.separatedPercent}% of its ${value.maskPixels} mask pixels, `
-        + `gate ${GATE}% -- ${detail}`
+      assert.equal(
+        verdict,
+        'PASS',
+        `${world}/${QUALITY}: ${name} ${group} separates on ${value.separatedPercent}% of its `
+        + `${value.maskPixels} mask pixels, gate ${GATE}%`
+        + (name === ACCEPTED_DEVIATION.shot && group === ACCEPTED_DEVIATION.group
+          ? `, below the accepted lower bound of ${ACCEPTED_DEVIATION.floor}% -- a regression past the `
+            + 'accepted deviation, not the deviation itself'
+          : ' -- no deviation is accepted for this case')
+        + `. ${detail}`
       );
     }
   }
