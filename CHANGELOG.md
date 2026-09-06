@@ -11,6 +11,28 @@ a wersjonowanie projektu docelowo stosuje [Semantic Versioning](https://semver.o
 
 ### Added
 
+- **Cyberpunk jest podmianą reprezentacji miasta, nie warstwą nad nim.** 34 działki
+  mieszkalne i oba dominanty ustępują własnej reprezentacji budowanej z tego samego
+  `CityModel`, więc megablok stoi na swojej działce i nic ze zwykłego budynku przez niego
+  nie wystaje. Role bierze się z modelu: `family` mówi, które działki są mieszkalne, a
+  `DominantSpec.kind` rozdziela ciepłownię z kominem od wieży transmisyjnej. Ulice,
+  chodniki, latarnie, drzewa i spożywczak zostają — to układ miasta, wspólny dla obu stylów.
+- Megabloki: bryły stopniowane, nadwieszenia ograniczone do metra na stronę i nie niżej niż
+  12 m nad ziemią, piony instalacyjne, żebra, techniczne korony i trzy rodzaje stref okien.
+  Całość to instancje trzech współdzielonych geometrii.
+- Ciepłownia jako zakład: hale trzech wysokości, chłodnie, rurociąg na trestlach i
+  oświetlenie techniczne. Komin zostaje kominem. Wieża RTV zostaje smukłą wieżą
+  transmisyjną z platformami, pierścieniami i oszczędnymi światłami przeszkodowymi.
+- **Dym z komina w obu stylach**: cienka smuga przy wylocie, unosi się, odchyla wspólnym
+  wiatrem świata, rozprasza się i zanika. Cały cykl życia liczy shader z jednej liczby na
+  cząstkę — brak alokacji w pętli klatki; Low rysuje 9 cząstek zamiast 26. Deterministyczny
+  z zegara symulacji, więc checkpoint zamraża też smugę.
+- Pociąg w Cyberpunku: aerodynamiczne czoło wewnątrz dwóch metrów, które lokomotywa już
+  rezerwowała, ciągły pas szyb, fazowania i fartuch. Nic nie zostało wydłużone, więc łuki,
+  perony i tunele bez zmian.
+- Autobus w Cyberpunku: LED-y pod progami plus ślad, który zostawiają na asfalcie, a na
+  mokrej jezdni węższe odbicie przy linii nadwozia. Jedna addytywna płaszczyzna, zero
+  nowych świateł dynamicznych; siła rośnie z nocą i z wilgotnością drogi.
 - Deterministyczny kalendarz naturalnych zaćmień: pierwszy dzień sesji jest
   zawsze spokojny, pierwsze zjawisko przypada losowo na dzień 2–5, a kolejne po
   2–6 dniach. Ręczne zaćmienie anuluje automatyczne tego dnia i również wymusza
@@ -153,6 +175,16 @@ a wersjonowanie projektu docelowo stosuje [Semantic Versioning](https://semver.o
 
 ### Fixed
 
+- Ślad LED-ów autobusu nie schodzi na nieutwardzone. Pierwsza wersja miała 5,2 × 10,6 m i
+  malowała krawężniki oraz chodnik; istniejące testy skrajni i proporcji zmierzyły wtedy
+  autobus jako pojazd o szerokości 6,2 m. Sama szerokość niczego jednak nie dowodzi na
+  zakręcie, bo sztywny prostokąt na krzywej wychyla narożniki dalej niż własna półszerokość
+  — więc cztery narożniki obeszły całą trasę w 1 600 pozycjach i w każdym z przystanków.
+  Przy 3,6 × 8,8 m trzy próbki wypadały na trawie obok ciepłowni; przy **3,4 × 8,4 m** ani
+  jedna. Ślad sięga chodnika — tak jak samo nadwozie w jedynym miejscu, gdzie trasa
+  nadwiesza krawężnik — i to jest w porządku: światło padające na utwardzony krawężnik robi
+  to, co światło. Leżące na trawie nie.
+
 - Delta klatki nie może być ujemna. `timer.reset()` wykonuje się synchronicznie
   bezpośrednio przed pierwszym `animate()`, a pierwszy znacznik czasu z `rAF`
   może wtedy poprzedzać ten reset nawet o pełny okres klatki. Przy 60 Hz to
@@ -193,6 +225,20 @@ a wersjonowanie projektu docelowo stosuje [Semantic Versioning](https://semver.o
 
 ### Performance
 
+- **Cyberpunk mierzony instrumentem GPU aplikacji, i opisany dokładnie tak, jak na to
+  pozwalają dane.** Panorama nocą, `debugStartFrameTiming`, 240 próbek na scenę: mediany
+  wszystkich zmierzonych stanów mieszczą się w przedziale 4,7–7,2 ms, czyli z zapasem
+  wewnątrz klatki 16,7 ms. Ten sam stan (Cyberpunk noc, High) w trzech przebiegach dał 5,86,
+  5,55 i 4,70 ms — rozrzut 1,16 ms jest **tego samego rzędu co różnice między scenami**,
+  więc z tych danych **nie wynika żadne uszeregowanie scen** i nie twierdzimy, że któraś
+  jest tańsza. Deszcz dodaje około 1,5 ms, co również leży na granicy rozdzielczości tego
+  pomiaru. p95 dla tych samych scen wahało się między przebiegami od 7,3 do 15,2 ms —
+  także w scenach klasycznych — więc p95 opisuje tu stan maszyny, nie zawartość scen, i nie
+  jest podawane jako właściwość zmiany.
+- Budżety utrzymane, nie podniesione: szczyt geometrii w Cyberpunku 577 przy limicie 600
+  (pierwsza wersja sięgała 606, dopóki powłoki pojazdów nie zostały scalone materiałowo),
+  chunk wejściowy 242 418 B przy 244 000 B, warstwa stylizacji w osobnym chunku
+  `cyber-style`.
 - Benchmark wydajności ma wyłączną blokadę procesu i twardo wymusza jeden
   kontekst przeglądarki oraz jedną kartę. Równoległe instancje Dioramy nie mogą
   już bezgłośnie zaniżać wyniku.

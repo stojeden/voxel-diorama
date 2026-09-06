@@ -25,14 +25,25 @@ import * as THREE from 'three';
  */
 
 /**
- * Plane size in metres, and why it is this and not wider.
+ * The mark's footprint in metres, and why it is this and not wider.
  *
- * The avenue's carriageway is five metres and the bus runs down the middle of it, so
- * anything past 1.8 m from the centre line is painting the kerb and the pavement. The
- * first version was 5.2 m wide and did exactly that -- and `clearance.test.ts` caught it,
- * because a plane parented to the bus counts as the bus until something says otherwise.
+ * Two measurements set it, neither of them taste.
+ *
+ * The first version was 5.2 m by 10.6 m, which put a light mark out over the kerbs and the
+ * pavement of a five-metre carriageway -- and, because a plane parented to the bus counts
+ * as the bus, made `clearance.test.ts` measure a 6.2 m vehicle.
+ *
+ * Width alone then proves nothing, because a rigid rectangle following a curve swings its
+ * corners wider than its own half-width. So the four corners were walked round the whole
+ * route at 1 600 positions and classified against the world: at 3.6 m by 8.8 m three
+ * samples landed on neither road nor pavement -- grass, beside the heating plant. At
+ * 3.4 m by 8.4 m none do. That is the number.
+ *
+ * It does reach the pavement, often. So does the bus's own body, at the one place where
+ * the route overhangs a kerb. Light from a strip falling on a paved kerb is what light
+ * does; landing on grass is not, and that is the line the test holds.
  */
-const GLOW_WIDTH = 3.6;
+export const GLOW_FOOTPRINT = { width: 3.4, length: 8.4 } as const;
 /** Where the strips are, across the bus: `BUS_WIDTH / 2 - 0.16`. */
 const SILL_OFFSET = 0.99;
 /** Where their reflection lands on wet asphalt: just outside the body line. */
@@ -46,15 +57,13 @@ export interface BusUnderGlowHandle {
 }
 
 export function createBusUnderGlow(busLength: number, roadOffsetY: number): BusUnderGlowHandle {
-  // Shorter than the bus plus its margins for the same reason: a mark that overhangs the
-  // vehicle by more than a metre at each end reads as a projection, not as spill.
-  const geometry = new THREE.PlaneGeometry(GLOW_WIDTH, busLength + 0.8);
+  const geometry = new THREE.PlaneGeometry(GLOW_FOOTPRINT.width, GLOW_FOOTPRINT.length);
   const material = new THREE.ShaderMaterial({
     uniforms: {
       uCyber: { value: 0 },
       uNight: { value: 0 },
       uWet: { value: 0 },
-      uHalfWidth: { value: GLOW_WIDTH / 2 },
+      uHalfWidth: { value: GLOW_FOOTPRINT.width / 2 },
       uSill: { value: SILL_OFFSET },
       uMirror: { value: MIRROR_OFFSET },
     },
