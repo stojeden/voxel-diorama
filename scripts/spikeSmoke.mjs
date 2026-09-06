@@ -1127,12 +1127,31 @@ async function clusterCensus(page) {
   });
 }
 
-/** Registered geometries and built meshes, for telling a rebuild from a duplication. */
+/**
+ * What exists after a rebuild, for telling a replacement from a duplication.
+ *
+ * Deliberately NOT `renderer.info.memory.geometries` as the primary measure: that counts
+ * geometries three.js has registered, which happens when one is first *drawn*, and a
+ * fresh rebuild has drawn only the level each cluster currently selects. Right after a
+ * profile flip it therefore reads lower than before, which says nothing about
+ * duplication. What does say it is the scene graph: how many `hybrid-` meshes hang there
+ * and how many distinct geometries they hold. A rebuild that added instead of replacing
+ * leaves two sets in the graph, and this counts both.
+ */
 async function resourceCount(page) {
   return page.evaluate(() => {
     const m = window.__diorama.getMetrics();
+    const geometries = new Set();
+    let sceneMeshes = 0;
+    window.__diorama.scene.traverse((node) => {
+      if (!node.isMesh || !node.name.startsWith('hybrid-')) return;
+      sceneMeshes += 1;
+      geometries.add(node.geometry.uuid);
+    });
     return {
-      geometries: window.__diorama.renderer.info.memory.geometries,
+      sceneMeshes,
+      sceneGeometries: geometries.size,
+      registeredGeometries: window.__diorama.renderer.info.memory.geometries,
       meshes: m.hybrid.meshes,
       clusters: m.hybrid.clusters,
       hybridTriangles: [...m.hybrid.triangles],
@@ -1419,11 +1438,21 @@ async function runGate3(page, worlds) {
       freshHigh.census,
       `${world}: High -> Low -> High did not restore the geometry it started with`
     );
-    assert.equal(
-      switchedHigh.resources.geometries,
-      freshHigh.resources.geometries,
-      `${world}: the profile round trip left ${switchedHigh.resources.geometries - freshHigh.resources.geometries} `
-      + 'extra registered geometries -- the rebuild is duplicating, not replacing'
+    for (const key of ['sceneMeshes', 'sceneGeometries']) {
+      assert.equal(
+        switchedHigh.resources[key],
+        freshHigh.resources[key],
+        `${world}: the profile round trip changed ${key} (${freshHigh.resources[key]} -> ${switchedHigh.resources[key]}) `
+        + '-- the rebuild is duplicating or dropping, not replacing'
+      );
+    }
+    // One-sided on purpose, and only as a net under the equality above: the registered
+    // count lags a rebuild downwards, because the new buffers register as they are first
+    // drawn. It cannot lag upwards, so a rise here is a rebuild that failed to dispose.
+    assert.ok(
+      switchedHigh.resources.registeredGeometries <= freshHigh.resources.registeredGeometries,
+      `${world}: the profile round trip left ${switchedHigh.resources.registeredGeometries - freshHigh.resources.registeredGeometries} `
+      + 'extra registered geometries -- the rebuild did not dispose what it replaced'
     );
     assert.equal(
       switchedHigh.resources.meshes,
