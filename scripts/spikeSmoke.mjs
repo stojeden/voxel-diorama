@@ -424,12 +424,29 @@ async function runPostman(page, world) {
   await page.goto(`${URL}/?seed=${SEED}&world=${world}&quality=${QUALITY}`, { waitUntil: 'load' });
   await page.waitForFunction(() => window.__diorama?.ready === true, null, { timeout: 90_000 });
   await settle(page, 4);
-  // Morning: the only window in which he exists at all.
-  await page.evaluate(() => window.__diorama.setTime(0.47));
+  /**
+   * Morning: the only window in which he exists at all.
+   *
+   * Set twice, and the second time matters. `setTime` moves the clock, it does not lock it
+   * (`ExperienceDirector.setTime` writes `simTime`; locking is `setClockLocked`, which the
+   * debug surface does not expose). So between this call and the freeze the day kept
+   * running for however long it took him to appear -- a wait that depends on machine load,
+   * not on anything measured. The sun moved with it, and five harness runs read the frame
+   * at 28.5, 28.8, 28.8, 32.4 and 33.6% with the object and the ground brightening
+   * together (8.6-8.9 and 10.9-12.0): a lighting difference, not a legibility one.
+   *
+   * Pinning it again immediately before the freeze cuts the drift from "however long the
+   * wait took" to the handful of frames `settle` needs for the day-night update to apply
+   * the new time. Nothing about the camera, the pose, the materials, the metric or the
+   * denominator changes -- this only makes the stated condition, t = 0.47, actually hold.
+   */
+  const MORNING_T01 = 0.47;
+  await page.evaluate((t01) => window.__diorama.setTime(t01), MORNING_T01);
   const found = await page.waitForFunction(() => {
     const bike = window.__diorama.scene.getObjectByName('postman-bike');
     return bike && bike.visible ? true : null;
   }, null, { timeout: 60_000, polling: 100 }).then(() => true);
+  await page.evaluate((t01) => window.__diorama.setTime(t01), MORNING_T01);
   await settle(page, 6);
 
   // Freeze, then place him. Nothing may move between the mask and the two frames.
@@ -440,6 +457,7 @@ async function runPostman(page, world) {
   });
   await page.waitForTimeout(300);
 
+  const frozenT01 = await page.evaluate(() => Number(window.__diorama.getState().t01.toFixed(6)));
   const placed = await page.evaluate((pose) => {
     const bike = window.__diorama.scene.getObjectByName('postman-bike');
     bike.position.set(pose.x, pose.y, pose.z);
@@ -743,7 +761,19 @@ async function runPostman(page, world) {
       + 'pozostale asercje zaliczone -- to nie jest PASS calej fazy'
     );
   }
-  return { world, found, gate: GATE, separationThreshold: SEPARATION, pose: POSE, shots, deviations };
+  return {
+    world,
+    quality: QUALITY,
+    found,
+    gate: GATE,
+    separationThreshold: SEPARATION,
+    /** The hour the shots were frozen at: the condition, recorded rather than assumed. */
+    frozenT01,
+    intendedT01: MORNING_T01,
+    pose: POSE,
+    shots,
+    deviations,
+  };
 }
 
 /**
