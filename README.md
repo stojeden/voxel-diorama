@@ -102,8 +102,19 @@ npm test         # 172 testy (vitest): geometria, światło, optyka, rytm miasta
 npm run typecheck # typy
 npm run build    # produkcja → dist/
 npm run validate # typy + unit + build + Chrome/WebGL + budżety wydajności
+npm run test:acceptance # PEŁNY odbiór: typy, unit, składnia harnessów, podpisany build,
+                 # browserSmoke oraz spikeSmoke we WSZYSTKICH fazach i w świecie voxel
 BENCH_HEADFUL=1 npm run test:performance # 7 stanów, 15 pomiarów (para tęczy 5× AB/BA), Metal/High
 ```
+
+**`npm run test:acceptance` jest jedyną komendą, która wykonuje cały odbiór.** Samo
+`node scripts/spikeSmoke.mjs` uruchamia wyłącznie domyślną fazę `frames` na świecie
+hybrydowym — fazy `gate3`, `materials`, `postman` i `train` wymagają `SPIKE_PHASE`, a świat
+wokselowy (i jego budżet 500 geometrii) wymaga `SPIKE_WORLDS=voxel`. Przebieg fazy `frames`
+nie jest przebiegiem spikeSmoke'a. Odbiór wykonuje każdy krok do końca, także po
+niepowodzeniu wcześniejszego, wypisuje kod wyjścia każdego z nich i sam kończy się
+niezerowo, jeśli którykolwiek nie przeszedł. Wymaga czystego drzewa: build jest podpisywany
+raz, a każdy harness weryfikuje ten sam pakiet.
 
 Wymagania: Node 20.19+, przeglądarka z WebGL2. Cel wydajnościowy to **stabilne 60 FPS na Apple M1 Pro** w profilu High. Twardy benchmark zachowuje próg 58 FPS oraz limit p95 20,5 ms.
 Benchmark ma blokadę procesu i sam odrzuca równoległe uruchomienie, dzięki czemu

@@ -1,10 +1,10 @@
 {
   "name": "voxel-blokowisko-diorama",
-  "description": "Miasto — a living voxel city diorama in the browser: portal train, day/night cycle with golden hour, weather with accumulating winter, themed morphing (incl. Cyberpunk) and tiny story actors (cow & UFO, fisherman, postman). Three.js + TypeScript, 60 FPS on Apple M1.",
+  "description": "Miasto \u2014 a living voxel city diorama in the browser: portal train, day/night cycle with golden hour, weather with accumulating winter, themed morphing (incl. Cyberpunk) and tiny story actors (cow & UFO, fisherman, postman). Three.js + TypeScript, 60 FPS on Apple M1.",
   "private": true,
   "version": "1.0.0",
   "license": "MIT",
-  "author": "Piotr Siwiński",
+  "author": "Piotr Siwi\u0144ski",
   "keywords": [
     "threejs",
     "voxel",
@@ -26,6 +26,7 @@
     "preview": "vite preview",
     "test:browser": "npm run build && node scripts/browserSmoke.mjs",
     "test:performance": "npm run build && node scripts/performanceBenchmark.mjs",
+    "test:acceptance": "node scripts/acceptance.mjs",
     "validate": "npm run typecheck && npm test && npm run test:browser"
   },
   "dependencies": {
