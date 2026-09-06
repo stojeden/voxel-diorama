@@ -31,13 +31,28 @@ const STEPS = [
   { name: 'skladnia spikeSmoke', command: process.execPath, args: ['--check', 'scripts/spikeSmoke.mjs'] },
   { name: 'build + podpis', command: process.execPath, args: ['scripts/prepareBuild.mjs'] },
   { name: 'browserSmoke', command: process.execPath, args: ['scripts/browserSmoke.mjs'] },
+  /**
+   * Each spike phase as its own step, rather than one `SPIKE_PHASE=all`.
+   *
+   * `all` runs them in one process, and the first assertion to fail takes the process
+   * down with it: a run that stopped in `postman` never reached `train` or `materials`,
+   * so their state was unknown and the summary could not say so. Naming them separately
+   * costs one browser session each and buys a result for every phase, every time. `all`
+   * still works and still runs the same set -- it is just not how the acceptance asks.
+   */
   {
-    name: 'spikeSmoke: wszystkie fazy (hybryda)',
+    name: 'spikeSmoke: faza frames (hybryda, budzet 600)',
     command: process.execPath,
     args: ['scripts/spikeSmoke.mjs'],
-    env: { SPIKE_PHASE: 'all' },
-    evidence: 'hybrid',
+    evidence: 'frames',
   },
+  ...['gate3', 'postman', 'train', 'materials'].map((phase) => ({
+    name: `spikeSmoke: faza ${phase}`,
+    command: process.execPath,
+    args: ['scripts/spikeSmoke.mjs'],
+    env: { SPIKE_PHASE: phase, SPIKE_SUMMARY: `spike-smoke-${phase}.json` },
+    evidence: phase,
+  })),
   {
     name: 'spikeSmoke: swiat voxel (budzet 500)',
     command: process.execPath,

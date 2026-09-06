@@ -103,7 +103,7 @@ npm run typecheck # typy
 npm run build    # produkcja → dist/
 npm run validate # typy + unit + build + Chrome/WebGL + budżety wydajności
 npm run test:acceptance # PEŁNY odbiór: typy, unit, składnia harnessów, podpisany build,
-                 # browserSmoke oraz spikeSmoke we WSZYSTKICH fazach i w świecie voxel
+                 # browserSmoke oraz spikeSmoke w każdej fazie osobno i w świecie voxel
 BENCH_HEADFUL=1 npm run test:performance # 7 stanów, 15 pomiarów (para tęczy 5× AB/BA), Metal/High
 ```
 
@@ -115,6 +115,12 @@ nie jest przebiegiem spikeSmoke'a. Odbiór wykonuje każdy krok do końca, takż
 niepowodzeniu wcześniejszego, wypisuje kod wyjścia każdego z nich i sam kończy się
 niezerowo, jeśli którykolwiek nie przeszedł. Wymaga czystego drzewa: build jest podpisywany
 raz, a każdy harness weryfikuje ten sam pakiet.
+
+Fazy `frames`, `gate3`, `postman`, `train` i `materials` uruchamiane są jako osobne kroki, a
+nie jednym `SPIKE_PHASE=all`. `all` wykonuje ten sam zestaw, ale w jednym procesie — pierwsza
+asercja, która padnie, zabiera ze sobą fazy jeszcze nieuruchomione i ich stan pozostaje
+nieznany. Osobne kroki kosztują jedną sesję przeglądarki każdy i dają wynik dla każdej fazy
+za każdym razem.
 
 Wymagania: Node 20.19+, przeglądarka z WebGL2. Cel wydajnościowy to **stabilne 60 FPS na Apple M1 Pro** w profilu High. Twardy benchmark zachowuje próg 58 FPS oraz limit p95 20,5 ms.
 Benchmark ma blokadę procesu i sam odrzuca równoległe uruchomienie, dzięki czemu
