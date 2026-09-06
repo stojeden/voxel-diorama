@@ -403,6 +403,26 @@ async function lookFromDistance(page, distance) {
 async function runPostman(page, world) {
   /** Half the object's own pixels must separate from their background. Fixed before measuring. */
   const GATE = 50;
+  /**
+   * The one result the owner has accepted as a limitation of this version, on 2026-09-06.
+   *
+   * Scoped as narrowly as it can be: one shot, one group. It is NOT a pass, it is NOT the
+   * gate moved, and it covers neither the wheels in the same shot, nor the frame in the
+   * other two shots, nor any future regression. Everything else still has to clear 50%.
+   *
+   * Why it stands: in `postman-side` the frame renders at RGB 55/0/0 and the road behind
+   * it at 8/16/6 -- 47 code values apart in red, about 2 apart in luminance, and this gate
+   * weighs luminance only. Nothing occludes the object (city geometry covers 5 of 5 078
+   * mask pixels in the measured conditions), the voxel world measures the same, so does the
+   * bicycle moved along its route, and turning shadow maps off makes the ground darker
+   * rather than lighter. The neutral-grey wheels in the same shot clear the gate at 54%.
+   *
+   * `floor` guards the accepted value against getting worse. Three harness runs measured
+   * 28.9, 29.2 and 29.7, so the spread is under a point; 27 is two points below the lowest
+   * of them. It is a regression guard on an accepted number, not a gate anyone may pass by.
+   */
+  const ACCEPTED_DEVIATION = { shot: 'postman-side', group: 'frame', floor: 27, measured: 29.2 };
+  const deviations = [];
   /** A luminance step of 8/255 is where an edge stops being invisible on a dark ground. */
   const SEPARATION = 8;
   /**
@@ -652,13 +672,42 @@ async function runPostman(page, world) {
     for (const group of ['wheels', 'frame']) {
       const value = legibility[group];
       assert.ok(value.maskPixels > 500, `${world}: ${name} ${group} mask is only ${value.maskPixels} px -- the mask pass is wrong`);
+      const detail = `the group renders at ${value.objectLuma} of 255 and what stands behind it at `
+        + `${value.behindLuma}, median step ${value.medianDelta} against a threshold of ${SEPARATION} `
+        + `(${value.indistinguishablePixels} px move by less than one code value, which is a luminance `
+        + 'result and not a count of anything hidden in front)';
+      const accepted = name === ACCEPTED_DEVIATION.shot && group === ACCEPTED_DEVIATION.group;
+      if (accepted && value.separatedPercent < GATE) {
+        // Recorded as an accepted deviation, and still guarded: below the floor it fails
+        // like anything else, because a worse number is a regression and not this exception.
+        assert.ok(
+          value.separatedPercent >= ACCEPTED_DEVIATION.floor,
+          `${world}: ${name} ${group} separates on ${value.separatedPercent}%, below the accepted `
+          + `${ACCEPTED_DEVIATION.measured}% floored at ${ACCEPTED_DEVIATION.floor}% -- this is a regression `
+          + `past the accepted deviation, not the deviation itself. ${detail}`
+        );
+        deviations.push({
+          shot: name,
+          group,
+          separatedPercent: value.separatedPercent,
+          gate: GATE,
+          floor: ACCEPTED_DEVIATION.floor,
+          objectLuma: value.objectLuma,
+          behindLuma: value.behindLuma,
+          maskPixels: value.maskPixels,
+          accepted: '2026-09-06, wariant A: zachowana estetyka roweru i miasta',
+          note: 'ZAAKCEPTOWANE ODSTEPSTWO, nie PASS: bramka wazy sama luminancje',
+        });
+        console.log(
+          `${world.padEnd(14)} ODSTEPSTWO  ${name} ${group}: ${value.separatedPercent}% przy bramce ${GATE}% `
+          + `(zaakceptowane, prog regresji ${ACCEPTED_DEVIATION.floor}%) -- ${detail}`
+        );
+        continue;
+      }
       assert.ok(
         value.separatedPercent >= GATE,
         `${world}: ${name} ${group} separates on ${value.separatedPercent}% of its ${value.maskPixels} mask pixels, `
-        + `gate ${GATE}% -- the group renders at ${value.objectLuma} of 255 and what stands behind it at `
-        + `${value.behindLuma}, median step ${value.medianDelta} against a threshold of ${SEPARATION} `
-        + `(${value.indistinguishablePixels} px move by less than one code value, which is a luminance `
-        + 'result and not a count of anything hidden in front)'
+        + `gate ${GATE}% -- ${detail}`
       );
     }
   }
@@ -669,7 +718,13 @@ async function runPostman(page, world) {
     window.__parked = [];
   });
   assert.ok(found, 'the postman never appeared');
-  return { world, found, gate: GATE, separationThreshold: SEPARATION, pose: POSE, shots };
+  if (deviations.length) {
+    console.log(
+      `${world.padEnd(14)} faza postman: ${deviations.length} zaakceptowane odstepstwo, `
+      + 'pozostale asercje zaliczone -- to nie jest PASS calej fazy'
+    );
+  }
+  return { world, found, gate: GATE, separationThreshold: SEPARATION, pose: POSE, shots, deviations };
 }
 
 /**
