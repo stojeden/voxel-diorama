@@ -1302,7 +1302,18 @@ function buildStreetLightPools(): {
 }
 
 /** Sleek megatowers that grow OVER the apartment blocks in cyberpunk mode. */
-function buildCyberTowers(): { group: THREE.Group; disposables: Array<{ dispose: () => void }> } {
+/**
+ * The legacy Cyberpunk towers of the voxel world.
+ *
+ * `excludeBlocks` is the same set that keeps the voxel generator from building the plots
+ * another representation owns. Without honouring it here, the hybrid city -- which is the
+ * default world -- got these towers as well as its own Cyberpunk representation, two
+ * different massings on two different footprints over one set of plots. In the voxel world
+ * nothing is excluded and this behaves exactly as it did.
+ */
+function buildCyberTowers(
+  excludeBlocks?: ReadonlySet<number>
+): { group: THREE.Group; disposables: Array<{ dispose: () => void }> } {
   const group = new THREE.Group();
   group.name = 'cyber-towers';
   group.visible = false;
@@ -1348,6 +1359,7 @@ function buildCyberTowers(): { group: THREE.Group; disposables: Array<{ dispose:
   };
 
   for (let i = 0; i < BLOCK_CONFIGS.length; i++) {
+    if (excludeBlocks?.has(i)) continue;
     const block = BLOCK_CONFIGS[i];
     const height = Math.min(46, Math.max(26, block.h * 2.5));
     const width = block.w + 1.6;
@@ -1653,7 +1665,7 @@ export function createWorld(
   trackDisposables.push(streetGlow.geometry, streetGlow.material);
 
   // ── Cyberpunk megatowers (hidden until the theme morph) ──
-  const cyberBuild = buildCyberTowers();
+  const cyberBuild = buildCyberTowers(options.excludeBlocks);
   scene.add(cyberBuild.group);
   const setCyberRise = (factor: number) => {
     cyberBuild.group.visible = factor > 0.01;

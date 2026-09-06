@@ -115,6 +115,8 @@ function buildBusMesh(): {
   beamMaterials: THREE.MeshBasicMaterial[];
   bodyMaterial: THREE.MeshStandardMaterial;
   roofMaterial: THREE.MeshStandardMaterial;
+  cyberTrim: THREE.Group;
+  cyberTrimMaterial: THREE.MeshStandardMaterial;
 } {
   const group = new THREE.Group();
   const materials: THREE.Material[] = [];
@@ -156,6 +158,38 @@ function buildBusMesh(): {
   group.add(body);
 
   // Roof cap
+  /**
+   * Cyberpunk trim: two LED strips tucked under the sills, and one line along the flank.
+   *
+   * Emissive geometry only. No point light per strip -- four more shadowless lights would
+   * spend the day-night budget on something nobody can point at, and a light under a bus
+   * paints a bright pool on the road that reads as hovering rather than as lit trim. The
+   * strips sit inboard of the wheels and above the road, so they light the bus's own
+   * underside in the bloom pass and nothing else.
+   */
+  const cyberTrim = new THREE.Group();
+  cyberTrim.name = 'bus-cyber-trim';
+  cyberTrim.visible = false;
+  const trimMat = new THREE.MeshStandardMaterial({
+    color: 0x0b1a20,
+    emissive: 0x35e6ff,
+    emissiveIntensity: 0,
+    roughness: 0.3,
+  });
+  materials.push(trimMat);
+  for (const side of [-1, 1]) {
+    const underLed = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.06, BUS_LENGTH - 2.2), trimMat);
+    underLed.position.set(side * (BUS_WIDTH / 2 - 0.16), floorY - 0.04, 0);
+    cyberTrim.add(underLed);
+    const flankLine = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, BUS_LENGTH - 1.4), trimMat);
+    flankLine.position.set(side * (BUS_WIDTH / 2 + 0.02), floorY + BUS_HEIGHT * 0.3, 0);
+    cyberTrim.add(flankLine);
+  }
+  // One mesh, not four: the strips share a material and never move independently, and the
+  // geometry budget is counted in objects.
+  mergeStaticMeshes(cyberTrim);
+  group.add(cyberTrim);
+
   const roof = new THREE.Mesh(new THREE.BoxGeometry(BUS_WIDTH - 0.3, 0.18, BUS_LENGTH - 0.5), roofMat);
   roof.position.y = floorY + BUS_HEIGHT + 0.09;
   roof.castShadow = true;
@@ -261,7 +295,7 @@ function buildBusMesh(): {
 
   return {
     group, wheels, doors, materials, windowMaterial: windowMat, headLights, beamMaterials,
-    bodyMaterial: bodyMat, roofMaterial: roofMat,
+    bodyMaterial: bodyMat, roofMaterial: roofMat, cyberTrim, cyberTrimMaterial: trimMat,
   };
 }
 
@@ -380,7 +414,7 @@ const BUS_GLASS_CYBER = new THREE.Color(0x35e6ff);
 export function createBus(scene: THREE.Scene, random = fallbackRandom('bus')): BusHandle {
   const {
     group, wheels, doors, materials, windowMaterial, headLights, beamMaterials,
-    bodyMaterial, roofMaterial,
+    bodyMaterial, roofMaterial, cyberTrim, cyberTrimMaterial,
   } = buildBusMesh();
   scene.add(group);
 
@@ -838,6 +872,9 @@ export function createBus(scene: THREE.Scene, random = fallbackRandom('bus')): B
       };
     },
     setCyberLook(factor) {
+      cyberTrim.visible = factor > 0.01;
+      // Ramped with the morph rather than switched, so the strips come up with the city.
+      cyberTrimMaterial.emissiveIntensity = 1.6 * factor;
       bodyMaterial.color.lerpColors(BUS_BODY_NORMAL, BUS_BODY_CYBER, factor);
       roofMaterial.color.lerpColors(BUS_ROOF_NORMAL, BUS_ROOF_CYBER, factor);
       // Two different colours: the pane's own dark glass, and the warm interior that

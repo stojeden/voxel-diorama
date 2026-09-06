@@ -9,6 +9,7 @@ import {
   type StationStop,
 } from './WorldLayout';
 import { mergeStaticMeshes } from '../performance/mergeStaticMeshes';
+import { buildCyberShell } from './cyber/trainShell';
 
 /**
  * Train composition with realistic bogie-based track following.
@@ -183,6 +184,27 @@ function buildSharedMaterials() {
       emissiveIntensity: 0.8,
       roughness: 0.3,
     }),
+    // ── Cyberpunk shell ──
+    // A styling layer over the same train, not a second train: dark panelling, one
+    // continuous window band and two thin light lines. Kept here so the existing
+    // disposal path covers it.
+    // Dark, but with a value the eye can find: at 0x171b22 and metalness 0.62 the body
+    // vanished under this theme's permanent dusk and the cars read as free-floating light
+    // bands. Same correction as the megablocks needed.
+    cyberShell: make(0x272e38, { roughness: 0.42, metalness: 0.34 }),
+    cyberBand: new THREE.MeshStandardMaterial({
+      color: 0x0a1620,
+      emissive: 0x39d6ff,
+      emissiveIntensity: 0.9,
+      roughness: 0.25,
+      metalness: 0.4,
+    }),
+    cyberAccent: new THREE.MeshStandardMaterial({
+      color: 0x120418,
+      emissive: 0xff4fb0,
+      emissiveIntensity: 1.1,
+      roughness: 0.3,
+    }),
   };
 }
 
@@ -245,6 +267,7 @@ interface LocomotiveBuild {
   headLights: THREE.SpotLight[];
   /** Additive beam cones — opacity follows the night factor. */
   beamMaterials: THREE.MeshBasicMaterial[];
+  cyberShell: THREE.Group;
 }
 
 function buildLocomotive(mats: SharedMats, length: number): LocomotiveBuild {
@@ -371,12 +394,22 @@ function buildLocomotive(mats: SharedMats, length: number): LocomotiveBuild {
   group.add(rearCoupler);
 
   mergeStaticMeshes(group);
-  return { group, headLights, beamMaterials };
+  const cyberShell = buildCyberShell(mats, {
+    length,
+    width,
+    bodyHeight,
+    floorY,
+    nose: true,
+    bandY: floorY + bodyHeight * 0.62,
+  });
+  group.add(cyberShell);
+  return { group, headLights, beamMaterials, cyberShell };
 }
 
 interface PassengerCarBuild {
   group: THREE.Group;
   doors: Array<{ mesh: THREE.Mesh; closedZ: number; slideSign: number }>;
+  cyberShell: THREE.Group;
 }
 
 function buildPassengerCar(mats: SharedMats, length: number, accent: THREE.Material): PassengerCarBuild {
@@ -444,7 +477,16 @@ function buildPassengerCar(mats: SharedMats, length: number, accent: THREE.Mater
   }
 
   mergeStaticMeshes(group, new Set(doors.map((door) => door.mesh)));
-  return { group, doors };
+  const cyberShell = buildCyberShell(mats, {
+    length,
+    width,
+    bodyHeight,
+    floorY,
+    nose: false,
+    bandY: floorY + bodyHeight * 0.48,
+  });
+  group.add(cyberShell);
+  return { group, doors, cyberShell };
 }
 
 interface BuiltCar {
@@ -558,6 +600,14 @@ export interface TrainHandle {
   seekRouteProgress: (progress: number) => void;
   getStationState: () => TrainPublicState;
   setLivery: (livery: TrainLivery) => void;
+  /**
+   * 0 = the ordinary train, 1 = the Cyberpunk express.
+   *
+   * A styling layer, not a different train: the same routes, the same wheelbase, the same
+   * couplings, the same door and braking animation. Nothing here changes a length, so the
+   * curves, the platforms and the tunnels are unaffected.
+   */
+  setCyberLook: (factor: number) => void;
   setHeadlightsEnabled: (enabled: boolean) => void;
   dispose: () => void;
 }
@@ -601,15 +651,19 @@ export function createTrain(scene: THREE.Scene): TrainHandle {
   const mats = buildSharedMaterials();
 
   // ─── Composition ───
+  /** Every car's Cyberpunk shell, toggled together by `setCyberLook`. */
+  const cyberShells: THREE.Group[] = [];
   const locoBuild: BuiltCar = (() => {
     const length = 7.5;
-    const { group, headLights, beamMaterials } = buildLocomotive(mats, length);
+    const { group, headLights, beamMaterials, cyberShell } = buildLocomotive(mats, length);
+    cyberShells.push(cyberShell);
     return { group, length, headLights, beamMaterials };
   })();
   const wagonAccents = [mats.passengerAccent, mats.locomotiveAccent, mats.passengerAccent];
   const wagonBuilds: BuiltCar[] = wagonAccents.map((accent) => {
     const length = 9.0;
-    const { group, doors } = buildPassengerCar(mats, length, accent);
+    const { group, doors, cyberShell } = buildPassengerCar(mats, length, accent);
+    cyberShells.push(cyberShell);
     return { group, length, doors };
   });
 
@@ -782,6 +836,10 @@ export function createTrain(scene: THREE.Scene): TrainHandle {
         stationLabel: label,
         dwellRemaining: state.kind === 'dwelling' ? Math.max(0, state.timeLeft) : 0,
       };
+    },
+    setCyberLook(factor) {
+      const on = factor > 0.5;
+      for (const shell of cyberShells) shell.visible = on;
     },
     setLivery(livery) {
       const palette = LIVERY_PALETTES[livery];

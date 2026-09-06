@@ -37,16 +37,17 @@
 | Retro PRL | sepia, wyblakłe tynki, pociąg w liverze retro |
 | Złota jesień | rude korony drzew, niskie słońce |
 | Zabawkowy | cukierkowa paleta makiety |
-| **Cyberpunk** | pełny morfing: z ziemi **wyrastają neonowe megabloki**, pociąg staje się nocnym ekspressem, autobus dostaje cyberlakier, balon zamienia się w kosmiczny odrzutowiec, wędkarz w hologram, a mewy/krowa/UFO znikają. Powrót = morfing wsteczny. |
+| **Cyberpunk** | pełna **podmiana reprezentacji miasta**: 34 działki mieszkalne i oba dominanty ustępują miejsca własnej reprezentacji, a nie drugiej warstwie nad pierwszą. Megabloki mają stopniowane bryły, ograniczone nadwieszenia, piony instalacyjne, żebra, techniczne korony i trzy rodzaje stref okien. Ciepłownia zostaje zakładem energetycznym z halami, chłodniami i rurociągiem, komin kominem, a wieża RTV smukłą wieżą transmisyjną z platformami i pierścieniami. Pociąg dostaje aerodynamiczne czoło i ciągły pas szyb, autobus — LED-y pod podwoziem. Ulice, chodniki, latarnie, drzewa i spożywczak zostają bez zmian: to układ miasta, wspólny dla obu stylów. Powrót = morfing wsteczny, pełne zwykłe miasto. |
 
 ### Smaczki fabularne
 - 🐄 **Krowa i UFO** — krowa pasie się nad jeziorem; co drugą noc latający spodek wciąga ją wiązką, a następnej nocy odstawia. Rankiem po porwaniu **rolnik** szuka jej, drapie się po głowie i wygraża kosmitom — a po powrocie radośnie ją klepie.
-- 👽 Czasem kosmici robią zamiast tego **nalot na kiosk** (rano stoi zapora „zamknięte").
+- 👽 Czasem kosmici robią zamiast tego **nalot na spożywczak** — rano sklep po prostu nie zapala świateł w swoich godzinach otwarcia, zamiast stawiać zaporę przed drzwiami.
 - 🎣 **Wędkarz** w czapeczce, ze skrzynką: rano wychodzi z bloku, łowi nad brzegiem (raz na kilka brań wyciąga rybę wielką jak on sam — zawsze ucieka), zimą **łowi w przeręblu na środku zamarzniętego jeziora**, siedząc na dopasowanym stołku z poprawnie zgiętymi nogami, a wieczorem wraca do domu.
 - 📮 **Listonosz** w niebieskim uniformie, czapce i z przewieszoną torbą objeżdża
   rano południową dzielnicę. Ma trzy osobne punkty doręczeń, a czasem goni go
   pies; stabilny yaw roweru utrzymuje postać nad jezdnią także podczas pościgu
   i na ciasnych zakrętach.
+- 🏭 **Dym z komina ciepłowni** w obu stylach: cienka smuga powstaje przy samym wylocie, unosi się, po czym łagodnie odchyla z **wiatrem świata** (tym samym, który kołysze drzewami), rozprasza się i zanika. Cały cykl życia liczy shader z jednej liczby na cząstkę, więc nie ma alokacji w pętli klatki; Low rysuje 9 cząstek zamiast 26. Efekt jest deterministyczny — wynika z zegara symulacji i seeda, nie z losowania — więc checkpoint zamraża także smugę.
 - 🎈 **Balon** na ogrzane powietrze przelatuje w pogodne dni i o zmierzchu, pięknie podświetlony ogniem palnika.
 - 🕊️ **Mewy** szybują i bankują w zakrętach. Przy narastającym zaćmieniu od 85% pokrycia wybierają najbliższe dachy i kolejno na nich siadają; po totalności wzlatują, gdy pokrycie spadnie do 65%. Nocą również śpią na dachach.
 
@@ -230,12 +231,18 @@ src/
 │   └── CinematicGrade.ts    # grading filmowy (golden hour, sepia, vibrance)
 └── world/
     ├── WorldLayout.ts       # ŹRÓDŁO PRAWDY: trasy, drogi, kotwice aktorów
-    ├── WorldGenerator.ts    # voxelowe miasto, tory, zima, cyber-wieże
+    ├── WorldGenerator.ts    # voxelowe miasto (linia bazowa), tory, zima
+    ├── hybrid/              # RYSOWANE MIASTO: 38 klastrów, LOD ekranowy, jeden materiał
+    │   ├── CityModel.ts     # semantyczny model: działki, rodziny, dominanty, props
+    │   ├── HybridSpike.ts   # budowa, LOD, motyw, jakość i podmiana reprezentacji
+    │   ├── ChimneySmoke.ts  # smuga z komina w obu stylach (shader, bez alokacji)
+    │   └── cyber/CyberCity.ts # reprezentacja Cyberpunk: megabloki, zakład, wieża
+    ├── cyber/trainShell.ts  # warstwa stylizacji pociągu (osobny chunk cyber-style)
     ├── Train.ts / Bus.ts    # pojazdy z maszynami stanów
     ├── BusStopNavigation.ts # kolidery i trasy pieszych przy wiatach
     ├── StationNavigation.ts # kolidery i trasy pieszych na dworcach
     ├── Birds.ts             # mewy (szybowanie/bankowanie/sen)
-    ├── LakesideCow.ts       # krowa + UFO + rolnik + nalot na kiosk
+    ├── LakesideCow.ts       # krowa + UFO + rolnik + nalot na spożywczak
     ├── Fisherman.ts         # wędkarz (brzeg/przerębel/hologram)
     ├── Postman.ts           # listonosz + pies
     ├── PassengerCrowd.ts    # pasażerowie na peronach

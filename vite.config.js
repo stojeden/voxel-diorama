@@ -57,6 +57,15 @@ export default defineConfig({
               includeDependenciesRecursively: false,
             },
             {
+              // Theme dressing: the Cyberpunk styling layer for the vehicles. Only ever
+              // used once someone picks the theme, and the entry chunk's budget is nearly
+              // spent, so it is cacheable on its own like the fragment above.
+              name: 'cyber-style',
+              test: /src[\\/]world[\\/]cyber[\\/]/,
+              priority: 15,
+              includeDependenciesRecursively: false,
+            },
+            {
               // Small, cohesive and independently cacheable world-signal logic.
               // Keeping it out of the near-limit entry chunk leaves room for the
               // UI redesign without hiding growth behind a larger budget.

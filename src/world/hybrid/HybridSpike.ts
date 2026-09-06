@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { WINDOW_COHORT_COUNT, residentialWindowActivityAt } from '../../environment/CityRhythm';
 import type { QualityProfile } from '../../performance/QualityManager';
 import { BUS_STOPS, GROUND_SURFACE_Y } from '../WorldLayout';
-import { buildCityModel } from './CityModel';
+import { buildCityModel, GROUND } from './CityModel';
 import { emitBuilding } from './architecture';
 import { Awnings } from './Awnings';
 import { emitStreetscape } from './streetscape';
@@ -11,6 +11,8 @@ import { emitGroceries } from './grocery';
 import { createHybridMaterial, createHybridUniforms } from './HybridMaterial';
 import { beaconGlow } from './beacons';
 import { groceryGlow } from './shopHours';
+import { createCyberCity, isReplacedByCyber, type CyberCityHandle } from './cyber/CyberCity';
+import { createChimneySmoke, type ChimneySmokeHandle } from './ChimneySmoke';
 import { P, resolvePalette } from './palette';
 import { LodSelector, pixelsPerMetre } from './ScreenSpaceLod';
 import { checkModel, checkProbes, type GroundContactReport, type ProbeInput } from './GroundContact';
@@ -75,6 +77,8 @@ export interface HybridFrame {
   elapsed: number;
   /** The grocery has been cleaned out overnight, so it stays dark until it is restocked. */
   shopRobbed: boolean;
+  /** The world's own wind strength, shared with the weather rather than invented here. */
+  wind: number;
 }
 
 /** One window cohort: how many openings are in it, and what the frame is driving it with. */
@@ -102,6 +106,11 @@ export interface HybridHandle {
   setSnowCover(cover: number): void;
   setWetness(wetness: number): void;
   setQuality(profile: QualityProfile): void;
+  /**
+   * 0 = the ordinary city, 1 = the Cyberpunk one. Hides what it replaces on the way up and
+   * gives all of it back on the way down.
+   */
+  setCyberRise(factor: number): void;
   getMetrics(): HybridMetrics;
   /** Static model rules plus a live raycast of every probe (and the shelter passengers) onto the drawn ground. */
   checkGroundContact(): GroundContactReport;
@@ -112,12 +121,22 @@ export interface HybridHandle {
 class LodGroup {
   readonly selector = new LodSelector();
   readonly center: THREE.Vector3;
+  /**
+   * This cluster has been replaced by another representation and must not draw.
+   *
+   * It lives here rather than as a one-off `visible = false` because the LOD pass reasserts
+   * visibility per mesh on every level change: hiding a cluster from outside would last
+   * until the camera moved. A swap that a step backwards undoes is not a swap.
+   */
+  suppressed = false;
   constructor(readonly cluster: Cluster, readonly meshes: Map<string, THREE.Mesh>, readonly radius: number) {
     this.center = new THREE.Vector3(...cluster.center);
     this.apply(0);
   }
   apply(level: Layer): void {
-    for (const [key, mesh] of this.meshes) mesh.visible = parseKey(key).layer <= level;
+    for (const [key, mesh] of this.meshes) {
+      mesh.visible = !this.suppressed && parseKey(key).layer <= level;
+    }
   }
 }
 
@@ -141,6 +160,48 @@ export function attachHybridSpike(options: HybridSpikeOptions): HybridHandle {
   const group = new THREE.Group();
   group.name = 'hybrid-spike';
   options.scene.add(group);
+
+  /**
+   * The Cyberpunk representation, and the clusters it stands in for.
+   *
+   * Built from the same `CityModel`, so a megablock occupies its plot and nothing of the
+   * ordinary building it replaces can hang outside it. Which clusters get replaced is
+   * decided by role: every residential plot, plus the two dominants, each of which gets a
+   * transform of its own kind. The streetscape and the grocery are not replaced -- the
+   * roads, pavements, lamps and trees are the layout, and the layout stays.
+   */
+  const cyber = createCyberCity(model);
+  options.scene.add(cyber.group);
+  const smoke = createChimneySmoke();
+  options.scene.add(smoke.object);
+  let cyberRise = 0;
+  /**
+   * Apply the swap to whatever LOD groups currently exist.
+   *
+   * Called again after every rebuild, because `setQuality` throws the groups away and
+   * makes new ones: without this, switching profile while Cyberpunk was up brought the
+   * ordinary city back underneath it.
+   */
+  const applyCyberSwap = () => {
+    const on = cyberRise > 0.5;
+    for (const lodGroup of lodGroups) {
+      if (!isReplacedByCyber(lodGroup.cluster.id)) continue;
+      if (lodGroup.suppressed === on) continue;
+      lodGroup.suppressed = on;
+      lodGroup.apply(lodGroup.selector.level);
+    }
+    // The ordinary stack vents just above its top segment; the Cyberpunk one is taller and
+    // has a flared mouth. The plume is anchored to whichever is standing.
+    const chimney = model.dominants.find((dominant) => dominant.kind === 'chimney');
+    if (chimney) {
+      if (on) {
+        const outlet = cyber.outlet();
+        smoke.setOutlet(outlet.x, outlet.y, outlet.z);
+      } else {
+        smoke.setOutlet(chimney.x, GROUND + chimney.height + 0.6, chimney.z);
+      }
+    }
+  };
 
   let low = options.quality.level === 'low';
   /** Openings per window cohort, counted from the primitives that carry the assignment. */
@@ -210,6 +271,11 @@ export function attachHybridSpike(options: HybridSpikeOptions): HybridHandle {
     }
   };
   buildAll();
+  // After the first build, never before it: the swap reads `lodGroups`, and `buildAll` is
+  // what fills them. Calling it earlier threw a temporal-dead-zone error inside the
+  // fragment's own module, so `hybrid` stayed null -- a city that silently did not build,
+  // while a check for "no ordinary meshes visible" passed for the wrong reason.
+  applyCyberSwap();
 
   const raycaster = new THREE.Raycaster();
   const rayOrigin = new THREE.Vector3();
@@ -238,7 +304,7 @@ export function attachHybridSpike(options: HybridSpikeOptions): HybridHandle {
   const awnings = new Awnings(options.scene, model.buildings, materials.opaque);
 
   return {
-    update({ camera, viewportHeightPx, sunT, clockT, night, dt, elapsed, shopRobbed }) {
+    update({ camera, viewportHeightPx, sunT, clockT, night, dt, elapsed, shopRobbed, wind }) {
       const t01 = sunT;
       uniforms.uNight.value = night;
       // Real seconds, not fractions of the day: a warning light keeps its own rate
@@ -251,6 +317,9 @@ export function attachHybridSpike(options: HybridSpikeOptions): HybridHandle {
       uniforms.uEmissive.value[P.shopGlow] = groceryGlow(clockT, night, shopRobbed);
       // One call for every awning in the city, on the hour and the frame's own delta.
       awnings.update(clockT, dt);
+      // One plume, one clock, one wind: the same elapsed seconds the beacons use and the
+      // same wind strength the weather publishes.
+      smoke.update(elapsed, wind, night);
       for (let cohort = 0; cohort < WINDOW_COHORT_COUNT; cohort++) {
         uniforms.uCohort.value[cohort] = residentialWindowActivityAt(t01, cohort);
       }
@@ -272,12 +341,22 @@ export function attachHybridSpike(options: HybridSpikeOptions): HybridHandle {
     setWetness(wetness) {
       uniforms.uWet.value = THREE.MathUtils.clamp(wetness, 0, 1);
     },
+    setCyberRise(factor) {
+      cyberRise = THREE.MathUtils.clamp(factor, 0, 1);
+      cyber.setRise(cyberRise);
+      applyCyberSwap();
+    },
     setQuality(profile) {
       const nextLow = profile.level === 'low';
       if (nextLow !== low) {
         low = nextLow;
         buildAll();
+        // The rebuild made new LOD groups, which start unsuppressed: put the swap back
+        // before the next frame draws two cities on top of each other.
+        applyCyberSwap();
       }
+      cyber.setLow(nextLow);
+      smoke.setLow(nextLow);
       for (const lodGroup of lodGroups) {
         lodGroup.selector.maxLevel = low ? 1 : 2;
         if (lodGroup.selector.level > lodGroup.selector.maxLevel) {
@@ -307,6 +386,12 @@ export function attachHybridSpike(options: HybridSpikeOptions): HybridHandle {
         shopGlow: uniforms.uEmissive.value[P.shopGlow],
         awningFold: awnings.progress,
         lodLevels: lodLevels(),
+        /** The replacement representation, so a test can see the swap rather than infer it. */
+        cyber: {
+          rise: cyberRise,
+          ...cyber.counts(),
+          suppressedClusters: lodGroups.filter((lodGroup) => lodGroup.suppressed).map((lodGroup) => lodGroup.cluster.id),
+        },
         lodPixelsPerMetre: { ...lodPixelsPerMetre },
         low,
       };
@@ -329,9 +414,11 @@ export function attachHybridSpike(options: HybridSpikeOptions): HybridHandle {
       return report;
     },
     getBloomObjects() {
-      return [...bloom];
+      return [...bloom, ...cyber.emissiveObjects()];
     },
     dispose() {
+      cyber.dispose();
+      smoke.dispose();
       disposeMeshes();
       awnings.dispose();
       options.scene.remove(group);

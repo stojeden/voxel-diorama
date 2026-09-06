@@ -103,6 +103,7 @@ const hybridFrame: HybridFrame = {
   dt: 0,
   elapsed: 0,
   shopRobbed: false,
+  wind: 0,
 };
 ui.setLoadingProgress(10, 'MIASTO I KRAJOBRAZ');
 const train = createTrain(env.scene);
@@ -319,7 +320,12 @@ function applyTheme(id: string): void {
 function setCyberFactorImmediate(factor: number): void {
   cyberFactor = THREE.MathUtils.clamp(factor, 0, 1);
   world.setCyberRise(cyberFactor);
+  // The hybrid owns the drawn city, so it owns the swap: it hides the plots and dominants
+  // the Cyberpunk representation stands in for. Without this the two representations were
+  // simply both present, which is what put ordinary balconies through the megablocks.
+  hybrid?.setCyberRise(cyberFactor);
   bus.setCyberLook(cyberFactor);
+  train.setCyberLook(cyberFactor);
   const cyberOn = cyberFactor > 0.5;
   if (cyberOn === cyberActorsOn) return;
   cyberActorsOn = cyberOn;
@@ -807,6 +813,9 @@ function animate(timestamp?: number) {
     hybridFrame.dt = presentationDelta;
     hybridFrame.elapsed = frame.elapsedSimulation;
     hybridFrame.shopRobbed = lakesideCow.isKioskRobbed();
+    // The world's own wind, the one the weather already publishes to the foliage shader.
+    // The plume leans with the trees rather than inventing a private breeze.
+    hybridFrame.wind = windUniforms.uWind.value;
     hybrid.update(hybridFrame);
   }
   world.setEclipseReflection(
@@ -1109,6 +1118,14 @@ const debugHandle: DioramaDebugHandle = {
    */
   busCrossing: () => bus.getCrossingState(),
   seekBus: (progress: number) => bus.seekRouteProgress(progress),
+  /**
+   * The same affordance for the train, and for the same reason.
+   *
+   * Framing it on a curve or against a platform means waiting for it to get there, and a
+   * frame captured "whenever it arrived" is not comparable between runs. Checkpoints
+   * already set `trainProgress`; this exposes the one call they use.
+   */
+  seekTrain: (progress: number) => train.seekRouteProgress(progress),
   /**
    * The residential window rhythm, from whichever representation is actually driving it.
    *
