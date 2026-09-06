@@ -64,9 +64,19 @@ const busGroup = (() => {
   createBus(scene);
   return scene.children.find((child) => child.type === 'Group')!;
 })();
-/** The headlight glow is decoration, not bodywork, and must not count as bus size. */
+/** The headlight beams, which have their own size test below. */
 const isGlow = (mesh: THREE.Mesh) => mesh.geometry.type === 'ConeGeometry';
-const BUS = sizeOf(objectBounds(busGroup, isGlow));
+/**
+ * Decoration, which is not bodywork and must not count as bus size.
+ *
+ * Two different things, kept apart on purpose. The headlight beams are cones and get
+ * measured as beams; the Cyberpunk under-sill mark is an additive plane that paints
+ * asphalt. Folding the second into `isGlow` made the beam test measure an 8.8 m plane and
+ * call it a wedge, which is a fair complaint about the wrong object. The mark is held
+ * inside the carriageway by its own size instead -- see `busGlow.ts`.
+ */
+const isDecoration = (mesh: THREE.Mesh) => isGlow(mesh) || mesh.name === 'bus-under-glow';
+const BUS = sizeOf(objectBounds(busGroup, isDecoration));
 
 /**
  * The primitives of one prop, by identity: its own emitter re-run for that prop

@@ -447,7 +447,10 @@ describe('the stop is one street system', () => {
     const vertex = new THREE.Vector3();
     group.traverse((node) => {
       const mesh = node as THREE.Mesh;
-      if (!mesh.isMesh || !mesh.geometry || mesh.geometry.type === 'ConeGeometry') return;
+      // Cones are the headlight beams and `bus-under-glow` is the Cyberpunk road mark:
+      // both are additive decoration rather than bodywork, and this measures bodywork.
+      if (!mesh.isMesh || !mesh.geometry) return;
+      if (mesh.geometry.type === 'ConeGeometry' || mesh.name === 'bus-under-glow') return;
       const position = mesh.geometry.getAttribute('position') as THREE.BufferAttribute;
       for (let i = 0; i < position.count; i++) {
         body.expandByPoint(vertex.fromBufferAttribute(position, i).applyMatrix4(mesh.matrixWorld));

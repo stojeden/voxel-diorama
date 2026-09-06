@@ -24,8 +24,15 @@ import * as THREE from 'three';
  * nothing else in the scene is lit by it.
  */
 
-/** Plane size in metres. Wide enough to hold the outboard reflection, and no wider. */
-const GLOW_WIDTH = 5.2;
+/**
+ * Plane size in metres, and why it is this and not wider.
+ *
+ * The avenue's carriageway is five metres and the bus runs down the middle of it, so
+ * anything past 1.8 m from the centre line is painting the kerb and the pavement. The
+ * first version was 5.2 m wide and did exactly that -- and `clearance.test.ts` caught it,
+ * because a plane parented to the bus counts as the bus until something says otherwise.
+ */
+const GLOW_WIDTH = 3.6;
 /** Where the strips are, across the bus: `BUS_WIDTH / 2 - 0.16`. */
 const SILL_OFFSET = 0.99;
 /** Where their reflection lands on wet asphalt: just outside the body line. */
@@ -39,7 +46,9 @@ export interface BusUnderGlowHandle {
 }
 
 export function createBusUnderGlow(busLength: number, roadOffsetY: number): BusUnderGlowHandle {
-  const geometry = new THREE.PlaneGeometry(GLOW_WIDTH, busLength + 2.6);
+  // Shorter than the bus plus its margins for the same reason: a mark that overhangs the
+  // vehicle by more than a metre at each end reads as a projection, not as spill.
+  const geometry = new THREE.PlaneGeometry(GLOW_WIDTH, busLength + 0.8);
   const material = new THREE.ShaderMaterial({
     uniforms: {
       uCyber: { value: 0 },
