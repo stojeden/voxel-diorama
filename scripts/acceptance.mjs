@@ -128,6 +128,14 @@ const dirty = execFileSync('git', ['status', '--porcelain'], { encoding: 'utf8' 
 console.log(`rewizja ${revision}`);
 console.log(`dowody: ${evidence}`);
 
+const inherited = SCOPE_VARS.filter((key) => process.env[key] !== undefined);
+if (inherited.length) {
+  console.log(
+    `ignoruje odziedziczone zmienne zakresu: ${inherited.map((key) => `${key}=${process.env[key]}`).join(', ')}`
+    + ' — kazdy krok ustawia swoj swiat, faze i profile sam'
+  );
+}
+
 /**
  * A dirty tree stops the acceptance here, not somewhere in the middle of it.
  *
@@ -145,14 +153,6 @@ if (dirty.length) {
   process.exit(1);
 }
 console.log('drzewo czyste');
-
-const inherited = SCOPE_VARS.filter((key) => process.env[key] !== undefined);
-if (inherited.length) {
-  console.log(
-    `ignoruje odziedziczone zmienne zakresu: ${inherited.map((key) => `${key}=${process.env[key]}`).join(', ')}`
-    + ' — kazdy krok ustawia swoj swiat, faze i profile sam'
-  );
-}
 
 /**
  * Deviations a step recorded -- and a hard failure when the report is not there.
