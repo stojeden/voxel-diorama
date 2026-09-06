@@ -1,16 +1,23 @@
 import { BLOCK_CONFIGS, WORLD_HALF_SIZE, isOnSidewalk } from '../WorldLayout';
 
 /**
- * Developer flag for the reversible hybrid spike. The default (`voxel`) renders
- * today's city untouched. This module is the only spike file imported statically
- * from the entry code; everything else in `src/world/hybrid/` loads on demand as
- * its own chunk so the entry bundle budget is not spent on an experiment.
+ * Which city the diorama builds.
+ *
+ * **The hybrid is the default now**, by the owner's decision of 2026-09-06: someone who
+ * opens the page with no parameters walks straight into Miasto. `?world=voxel` still
+ * builds the original voxel city and is kept deliberately -- it is the reference the
+ * hybrid was measured against, and a comparison that cannot be re-run is not a
+ * comparison. Anything unrecognised falls back to the default rather than failing, so an
+ * old link with a strategy name that no longer exists still opens the city.
+ *
+ * This module is the only file under `src/world/hybrid/` imported statically from the
+ * entry code; the rest loads as its own chunk.
  */
 export type WorldMode = 'voxel' | 'hybrid-direct';
 export type HybridStrategyName = 'direct';
 
 export function parseWorldMode(value: string | null | undefined): WorldMode {
-  return value === 'hybrid-direct' ? value : 'voxel';
+  return value === 'voxel' ? value : 'hybrid-direct';
 }
 
 export function strategyOf(mode: WorldMode): HybridStrategyName | null {

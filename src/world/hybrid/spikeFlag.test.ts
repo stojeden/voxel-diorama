@@ -10,14 +10,19 @@ import {
 } from './spikeFlag';
 
 describe('spike flag', () => {
-  test('defaults to the voxel city for anything but the two hybrid modes', () => {
-    expect(parseWorldMode(null)).toBe('voxel');
-    expect(parseWorldMode(undefined)).toBe('voxel');
-    expect(parseWorldMode('hybrid')).toBe('voxel');
+  test('opens the hybrid city by default, and the voxel one only when asked', () => {
+    // The direction was accepted, so no parameter means Miasto.
+    expect(parseWorldMode(null)).toBe('hybrid-direct');
+    expect(parseWorldMode(undefined)).toBe('hybrid-direct');
+    expect(parseWorldMode('')).toBe('hybrid-direct');
     expect(parseWorldMode('hybrid-direct')).toBe('hybrid-direct');
-    // The greedy strategy was compared, lost and removed; the flag no longer names it,
-    // so an old link falls back to the untouched product rather than to a missing world.
-    expect(parseWorldMode('hybrid-greedy')).toBe('voxel');
+    // The voxel city stays reachable on purpose: it is the reference the hybrid was
+    // measured against, and a comparison that cannot be re-run is not a comparison.
+    expect(parseWorldMode('voxel')).toBe('voxel');
+    // Anything unrecognised opens the city rather than failing. The greedy strategy was
+    // compared, lost and removed, so an old link naming it lands on the default.
+    expect(parseWorldMode('hybrid')).toBe('hybrid-direct');
+    expect(parseWorldMode('hybrid-greedy')).toBe('hybrid-direct');
     expect(strategyOf('voxel')).toBeNull();
     expect(strategyOf('hybrid-direct')).toBe('direct');
   });

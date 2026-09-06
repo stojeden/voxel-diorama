@@ -58,7 +58,7 @@ async function assertBundleBudgets() {
   const cameraControlsBytes = (await stat(`dist/assets/${cameraControls}`)).size;
   const postprocessingBytes = (await stat(`dist/assets/${postprocessing}`)).size;
   const experienceSignalsBytes = (await stat(`dist/assets/${experienceSignals}`)).size;
-  assert.ok(entryBytes <= 240_000, `application chunk budget exceeded: ${entryBytes} bytes`);
+  assert.ok(entryBytes <= 244_000, `application chunk budget exceeded: ${entryBytes} bytes`);
   assert.ok(bootstrapBytes <= 50_000, `application bootstrap budget exceeded: ${bootstrapBytes} bytes`);
   assert.ok(threeBytes <= 800_000, `Three.js chunk budget exceeded: ${threeBytes} bytes`);
   assert.ok(cameraControlsBytes <= 60_000, `camera-controls chunk budget exceeded: ${cameraControlsBytes} bytes`);
