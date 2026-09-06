@@ -122,6 +122,13 @@ asercja, która padnie, zabiera ze sobą fazy jeszcze nieuruchomione i ich stan 
 nieznany. Osobne kroki kosztują jedną sesję przeglądarki każdy i dają wynik dla każdej fazy
 za każdym razem.
 
+Każdy krok deklaruje własny świat, fazę i profile. Odbiór usuwa z środowiska procesów
+potomnych `SPIKE_PHASE`, `SPIKE_WORLDS`, `SPIKE_QUALITIES`, `SPIKE_SUMMARY`, `SPIKE_OUT_DIR`,
+`SPIKE_FRAME_DIR` i `SMOKE_DIAGNOSTIC`, żeby wartość zostawiona w powłoce nie zwęziła po
+cichu pełnego przebiegu; zignorowane wartości wypisuje na wejściu. Podsumowanie ma trzy
+stany: `PASS`, `FAIL` oraz `ODSTEPSTWO` — jawnie zaakceptowane ograniczenie tej wersji, które
+**nie** jest liczone jako wynik zaliczony.
+
 Wymagania: Node 20.19+, przeglądarka z WebGL2. Cel wydajnościowy to **stabilne 60 FPS na Apple M1 Pro** w profilu High. Twardy benchmark zachowuje próg 58 FPS oraz limit p95 20,5 ms.
 Benchmark ma blokadę procesu i sam odrzuca równoległe uruchomienie, dzięki czemu
 wyniku nie zaniżają dodatkowe instancje Dioramy. Kolejne serie należy uruchamiać
