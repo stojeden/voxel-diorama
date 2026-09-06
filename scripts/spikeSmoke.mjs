@@ -18,13 +18,13 @@ import { releaseLock, verifyBuild } from './buildProvenance.mjs';
  * Diagnostic mode: record a breach of the geometry budget and keep going.
  *
  * One over-budget number used to abort the whole run, which meant nobody knew whether the
- * remaining checks would have passed. With `SMOKE_DIAGNOSTIC=1` the breach is recorded and
- * the run continues, so the report can list every non-conformance at once instead of
- * discovering them one reload at a time.
+ * remaining checks would have passed -- and the only way to find out was to fix the budget
+ * first, which is the wrong order.
  *
  * Deliberately narrow, and deliberately not a way to pass: only this one budget is soft,
- * only under the explicit variable, every breach is printed at the end, and the process
- * exits non-zero. Normal acceptance runs never set it.
+ * only under an explicit `SMOKE_DIAGNOSTIC=1`, every breach is printed at the end, and the
+ * process exits non-zero. A normal acceptance run does not set the variable and behaves
+ * exactly as it did before.
  */
 const DIAGNOSTIC = process.env.SMOKE_DIAGNOSTIC === '1';
 const nonConformances = [];
@@ -1448,16 +1448,10 @@ try {
    */
   try {
     await browser?.close();
-    console.log(`preview: ${await stopPreview(preview)}
-
-reportNonConformances('spikeSmoke');`);
-  }
-
-reportNonConformances('spikeSmoke'); finally {
+    console.log(`preview: ${await stopPreview(preview)}`);
+  } finally {
     releaseLock();
   }
-
-reportNonConformances('spikeSmoke');
 }
 
 reportNonConformances('spikeSmoke');
