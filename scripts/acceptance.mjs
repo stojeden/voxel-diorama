@@ -19,6 +19,9 @@
  */
 import { spawn } from 'node:child_process';
 import { execFileSync } from 'node:child_process';
+import { mkdirSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 /** Steps, in the order they should run. `env` is merged over the inherited environment. */
 const STEPS = [
@@ -33,27 +36,45 @@ const STEPS = [
     command: process.execPath,
     args: ['scripts/spikeSmoke.mjs'],
     env: { SPIKE_PHASE: 'all' },
+    evidence: 'hybrid',
   },
   {
     name: 'spikeSmoke: swiat voxel (budzet 500)',
     command: process.execPath,
     args: ['scripts/spikeSmoke.mjs'],
     env: { SPIKE_WORLDS: 'voxel', SPIKE_SUMMARY: 'spike-smoke-voxel.json' },
+    evidence: 'voxel',
   },
 ];
 
 const run = (step) => new Promise((resolve) => {
   const child = spawn(step.command, step.args, {
     stdio: 'inherit',
-    env: { ...process.env, ...step.env },
+    env: {
+      ...process.env,
+      ...step.env,
+      ...(step.evidence ? { SPIKE_OUT_DIR: join(evidence, step.evidence) } : {}),
+    },
   });
   child.on('close', (code, signal) => resolve(signal ? `sygnal ${signal}` : code ?? 1));
 });
 
 const revision = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+/**
+ * Evidence goes outside the repository, and it has to.
+ *
+ * `spikeSmoke` writes its frames and JSON under `docs/superpowers/spike/` by default, which
+ * is right when a phase is run on its own to produce evidence for the spike. In a sequence
+ * it is fatal: the first phase to write leaves an untracked file, and the provenance check
+ * at the start of the NEXT harness sees a dirty tree and refuses to measure. That is the
+ * gate doing its job -- so the run keeps the tree clean instead of loosening it.
+ */
+const evidence = join(tmpdir(), 'voxel-diorama-acceptance', revision.slice(0, 12));
+mkdirSync(evidence, { recursive: true });
 const dirty = execFileSync('git', ['status', '--porcelain'], { encoding: 'utf8' }).split('\n').filter(Boolean);
 console.log(`rewizja ${revision}`);
 console.log(dirty.length ? `drzewo BRUDNE: ${dirty.join(', ')}` : 'drzewo czyste');
+console.log(`dowody: ${evidence}`);
 
 const results = [];
 for (const step of STEPS) {
@@ -69,4 +90,5 @@ for (const result of results) {
 }
 const failed = results.filter((result) => result.code !== 0);
 console.log(`${results.length - failed.length}/${results.length} krokow zaliczonych`);
+console.log(`dowody w ${evidence}`);
 process.exit(failed.length ? 1 : 0);
