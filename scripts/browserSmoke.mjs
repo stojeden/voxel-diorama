@@ -640,6 +640,66 @@ try {
   );
   await saveScreenshot(page, '/tmp/voxel-diorama-desktop.png');
 
+  /**
+   * The camera stops at the ground, whichever way it is pushed at it.
+   *
+   * Driven through the controls rather than through synthetic mouse drags: the first
+   * version of this check dragged and the camera never moved, so it passed while proving
+   * nothing. Each leg therefore asserts that something actually moved before asserting
+   * where it stopped.
+   *
+   * Orbiting is bounded by the polar limit, which only ever held the camera above its own
+   * target; panning walks the target itself into the floor, which is the way under the
+   * model that the polar limit never covered.
+   */
+  const GROUND_SURFACE_Y = -0.5;
+  const beforeOrbit = await page.evaluate(() => window.__diorama.cameraPose().position[1]);
+  await page.evaluate(async () => {
+    const controls = window.__diorama.controls;
+    for (let step = 0; step < 24; step++) {
+      controls.rotate(0, 0.25, false);
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+    }
+  });
+  await settleFrames(page);
+  const afterOrbit = await page.evaluate(() => ({
+    camera: window.__diorama.cameraPose().position[1],
+    target: window.__diorama.controls.getTarget(new window.__diorama.dayNight.camera.position.constructor()).y,
+  }));
+  assert.ok(
+    Math.abs(afterOrbit.camera - beforeOrbit) > 1,
+    `orbiting did not move the camera at all (${beforeOrbit} -> ${afterOrbit.camera}), so the floor was not tested`
+  );
+  assert.ok(
+    afterOrbit.camera >= GROUND_SURFACE_Y,
+    `orbiting put the camera under the diorama at y=${afterOrbit.camera}`
+  );
+
+  const beforePan = afterOrbit.target;
+  await page.evaluate(async () => {
+    const controls = window.__diorama.controls;
+    for (let step = 0; step < 40; step++) {
+      controls.truck(0, 4, false);
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+    }
+  });
+  await settleFrames(page);
+  const afterPan = await page.evaluate(() => ({
+    camera: window.__diorama.cameraPose().position[1],
+    target: window.__diorama.controls.getTarget(new window.__diorama.dayNight.camera.position.constructor()).y,
+  }));
+  assert.ok(
+    Math.abs(afterPan.target - beforePan) > 1,
+    `panning did not move the pivot at all (${beforePan} -> ${afterPan.target}), so the floor was not tested`
+  );
+  assert.ok(
+    afterPan.camera >= GROUND_SURFACE_Y && afterPan.target >= GROUND_SURFACE_Y,
+    `panning went under the diorama: camera y=${afterPan.camera}, pivot y=${afterPan.target}`
+  );
+  // Put the camera back where the rest of the smoke expects to find it.
+  await page.evaluate(() => window.__diorama.controls.setLookAt(96, 72, 102, -5, 3, -6, false));
+  await settleFrames(page);
+
   // ── The first day must stay quiet even while the clock crosses eclipse hours ──
   // The clock is stepped frame by frame rather than by wall clock: a software
   // renderer advances the simulation tens of times slower than real time.

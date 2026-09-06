@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import CameraControls from 'camera-controls';
+import { GROUND_SURFACE_Y } from './world/WorldLayout';
 import { CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js';
 import {
   DepthOfFieldEffect,
@@ -91,6 +92,32 @@ export function bootstrap(
   controls.dollyToCursor = true;
   controls.infinityDolly = false;
   controls.setTarget(0, 5, 0);
+  /**
+   * The camera stops at the ground. It does not go under the diorama.
+   *
+   * `maxPolarAngle` already kept the camera from dipping below its own target, but the
+   * target is not fixed: panning moves it, and once it is under the ground the camera
+   * follows it down. From there you see the model from below -- the underside of the
+   * ground plate, buildings open at the bottom, everything that was never built to be
+   * looked at.
+   *
+   * `setBoundary` with `boundaryEnclosesCamera` is the library's own answer, and it holds
+   * both: the pivot cannot leave the box and neither can the eye. Only the floor is a real
+   * limit here. The horizontal and upper bounds are far outside anything reachable --
+   * `maxDistance` is what actually caps the orbit -- so this adds one constraint rather
+   * than quietly reshaping how the camera moves.
+   *
+   * The floor sits a little above the walkable surface rather than on it, because a camera
+   * exactly at ground level still has a near plane 0.1 m in front of it, and that is enough
+   * to slice under the road.
+   */
+  const CAMERA_FLOOR_Y = GROUND_SURFACE_Y + 0.4;
+  const CAMERA_REACH = 600;
+  controls.setBoundary(new THREE.Box3(
+    new THREE.Vector3(-CAMERA_REACH, CAMERA_FLOOR_Y, -CAMERA_REACH),
+    new THREE.Vector3(CAMERA_REACH, CAMERA_REACH, CAMERA_REACH)
+  ));
+  controls.boundaryEnclosesCamera = true;
 
   const composer = new EffectComposer(renderer, {
     depthBuffer: true,
