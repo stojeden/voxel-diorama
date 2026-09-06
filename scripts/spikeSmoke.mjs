@@ -1100,6 +1100,47 @@ async function runMaterials(page, worlds) {
   return report;
 }
 
+/**
+ * Triangles actually built, per cluster and per layer, with the class breakdown kept.
+ *
+ * `hybrid.triangles` is three totals for the whole city: enough to notice that something
+ * changed between profiles, useless for saying what. The meshes carry the answer in their
+ * own names -- `hybrid-<cluster>-<class>:<layer>` -- so this reads the built buffers
+ * directly. The class breakdown is the part that matters for the contract: a check that
+ * says "the shopfronts are still there on Low" has to be able to name the glass.
+ */
+async function clusterCensus(page) {
+  return page.evaluate(() => {
+    const out = {};
+    window.__diorama.scene.traverse((node) => {
+      if (!node.isMesh) return;
+      const parsed = /^hybrid-(.+)-([A-Za-z]+):(\d+)$/.exec(node.name);
+      if (!parsed) return;
+      const [, cluster, cls, layer] = parsed;
+      const geometry = node.geometry;
+      const triangles = (geometry.index ? geometry.index.count : geometry.attributes.position.count) / 3;
+      out[cluster] ??= { layers: [0, 0, 0], classes: {} };
+      out[cluster].layers[Number(layer)] += triangles;
+      out[cluster].classes[`${cls}:${layer}`] = (out[cluster].classes[`${cls}:${layer}`] ?? 0) + triangles;
+    });
+    return out;
+  });
+}
+
+/** Registered geometries and built meshes, for telling a rebuild from a duplication. */
+async function resourceCount(page) {
+  return page.evaluate(() => {
+    const m = window.__diorama.getMetrics();
+    return {
+      geometries: window.__diorama.renderer.info.memory.geometries,
+      meshes: m.hybrid.meshes,
+      clusters: m.hybrid.clusters,
+      hybridTriangles: [...m.hybrid.triangles],
+      low: m.hybrid.low,
+    };
+  });
+}
+
 async function runGate3(page, worlds) {
   const report = { worlds: {} };
   for (const world of worlds) {
@@ -1151,8 +1192,48 @@ async function runGate3(page, worlds) {
         const m = window.__diorama.getMetrics();
         return { levels: m.hybrid.lodLevels, triangles: m.renderer.triangles, hybridTriangles: m.hybrid.triangles };
       });
-      entry.levels[quality] = { ...sample, mean: await regionMean(page, FRAGMENT_BOX) };
+      entry.levels[quality] = {
+        ...sample,
+        census: await clusterCensus(page),
+        resources: await resourceCount(page),
+        mean: await regionMean(page, FRAGMENT_BOX),
+      };
     }
+
+    // --- Low must not activate layer 2, and must not need to: pushed to the closest
+    // distance the High sweep used -- the one that put clusters on level 2 up there --
+    // the cap has to hold on its own, not because the camera stayed polite.
+    const closestSweep = entry.approach.at(-1).distance;
+    await openHybrid(page, world, 'low', 'spike-street', true);
+    await lookFromDistance(page, closestSweep);
+    entry.lowDetailCap = {
+      distance: closestSweep,
+      observed: await page.evaluate(async () => {
+        const seen = new Set();
+        for (let i = 0; i < 60; i++) {
+          await new Promise((resolve) => requestAnimationFrame(resolve));
+          for (const level of Object.values(window.__diorama.getMetrics().hybrid.lodLevels)) seen.add(level);
+        }
+        return [...seen].sort();
+      }),
+      levels: await page.evaluate(() => window.__diorama.getMetrics().hybrid.lodLevels),
+    };
+
+    // --- The profile round trip. Fresh High, down to Low, back up: the geometry has to
+    // come back, and it has to come back once. `setQuality` rebuilds the city when the
+    // profile flips, so this is where a rebuild that forgets to dispose would show up as a
+    // geometry count that grew.
+    await openHybrid(page, world, 'high', 'spike-street', true);
+    await page.evaluate((look) => window.__diorama.controls.setLookAt(...look.from, ...look.at, false), FACADE_LOOK);
+    await settle(page, 6);
+    const trip = {};
+    trip.freshHigh = { census: await clusterCensus(page), resources: await resourceCount(page) };
+    for (const [slot, level] of [['switchedLow', 'low'], ['switchedHigh', 'high']]) {
+      await page.evaluate((value) => window.__diorama.setQuality(value), level);
+      await settle(page, 12);
+      trip[slot] = { census: await clusterCensus(page), resources: await resourceCount(page) };
+    }
+    entry.roundTrip = trip;
 
     // --- Semantics: time of day, themes, snow and wet must all take effect on the fragment.
     // Every sample is measured against a reference taken immediately before it, in the
@@ -1249,13 +1330,108 @@ async function runGate3(page, worlds) {
       entry.levels.high.triangles > entry.levels.low.triangles,
       `${world}: LOD 2 drew ${entry.levels.high.triangles} triangles, LOD 1 drew ${entry.levels.low.triangles}`
     );
-    // Layer 2 is pure detail and quality-independent; layers 0 and 1 legitimately
-    // shrink on Low because the dominants swap to their Low variants.
-    assert.equal(
-      entry.levels.high.hybridTriangles[2],
-      entry.levels.low.hybridTriangles[2],
-      `${world}: the detail layer changed size between qualities`
+    /**
+     * What Low is allowed to change, declared cluster by cluster.
+     *
+     * The old contract said layer 2 is identical between profiles. That was true of the
+     * five-block fragment and stopped being true with the shopfronts (`52f19b7`): the goods
+     * on the shelves live on layer 2, and Low never selects layer 2, so building them there
+     * would be geometry nothing draws. The rule that replaced it is not a looser
+     * inequality -- an inequality passes when geometry goes missing by accident, which is
+     * exactly the failure this has to catch. Every cluster is named, and every difference
+     * has to be one the profile declares:
+     *   - `groceries` drops the goods: 2 shops x 2 windows x 2 shelves x (1 shelf board +
+     *     3 items) x 12 triangles = 384, and nothing else, on no other layer;
+     *   - the two dominants swap to coarser variants on layers 0 and 1 (fewer cylinder
+     *     segments, plus the `!low` details in `dominants.ts`), so their counts may fall
+     *     and must never rise;
+     *   - every other cluster is identical on every layer, to the triangle.
+     */
+    const GROCERY_LOW_DETAIL_TRIANGLES = 2 * 2 * 2 * 4 * 12;
+    const COARSER_ON_LOW = new Set(['dominant-chimney', 'dominant-rtvTower']);
+    const highCensus = entry.levels.high.census;
+    const lowCensus = entry.levels.low.census;
+    assert.deepEqual(
+      Object.keys(lowCensus).sort(),
+      Object.keys(highCensus).sort(),
+      `${world}: Low built a different set of clusters than High`
     );
+    for (const [id, high] of Object.entries(highCensus)) {
+      const low = lowCensus[id];
+      if (id === 'groceries') {
+        assert.equal(
+          high.layers[2] - low.layers[2],
+          GROCERY_LOW_DETAIL_TRIANGLES,
+          `${world}: ${id} layer 2 differs by ${high.layers[2] - low.layers[2]} triangles, `
+          + `not the declared ${GROCERY_LOW_DETAIL_TRIANGLES} of goods on shelves `
+          + `(High ${high.layers[2]}, Low ${low.layers[2]}) -- if the shopfront changed, update the declaration`
+        );
+        // The shopfronts are base geometry, not detail: every class outside layer 2 has to
+        // survive the profile intact, glass included.
+        for (const [key, triangles] of Object.entries(high.classes)) {
+          if (key.endsWith(':2')) continue;
+          assert.equal(low.classes[key], triangles, `${world}: the shopfront lost ${key} on Low`);
+        }
+        assert.ok(low.classes['glassClear:0'] > 0, `${world}: Low has no shopfront glazing at all`);
+        continue;
+      }
+      if (COARSER_ON_LOW.has(id)) {
+        for (const layer of [0, 1]) {
+          assert.ok(
+            low.layers[layer] <= high.layers[layer],
+            `${world}: ${id} grew layer ${layer} on Low (${high.layers[layer]} -> ${low.layers[layer]})`
+          );
+        }
+        assert.equal(
+          low.layers[2],
+          high.layers[2],
+          `${world}: ${id} changed the detail layer between profiles, which it declares no simplification for`
+        );
+        continue;
+      }
+      for (const layer of [0, 1, 2]) {
+        assert.equal(
+          low.layers[layer],
+          high.layers[layer],
+          `${world}: ${id} changed layer ${layer} between profiles (${high.layers[layer]} -> ${low.layers[layer]}) `
+          + '-- no profile simplification is declared for this cluster'
+        );
+      }
+    }
+
+    // --- Low caps the detail layer by itself, at the distance that reaches it on High.
+    assert.ok(
+      entry.lowDetailCap.observed.every((level) => level <= 1),
+      `${world}: Low reached LOD ${Math.max(...entry.lowDetailCap.observed)} at `
+      + `${entry.lowDetailCap.distance} m (levels ${JSON.stringify(entry.lowDetailCap.levels)})`
+    );
+
+    // --- Reaching a profile by switching must land in the same place as starting there,
+    // and coming back must restore the detail without building it twice.
+    const { freshHigh, switchedLow, switchedHigh } = entry.roundTrip;
+    assert.deepEqual(
+      switchedLow.census,
+      lowCensus,
+      `${world}: High -> Low does not match a fresh Low start`
+    );
+    assert.deepEqual(
+      switchedHigh.census,
+      freshHigh.census,
+      `${world}: High -> Low -> High did not restore the geometry it started with`
+    );
+    assert.equal(
+      switchedHigh.resources.geometries,
+      freshHigh.resources.geometries,
+      `${world}: the profile round trip left ${switchedHigh.resources.geometries - freshHigh.resources.geometries} `
+      + 'extra registered geometries -- the rebuild is duplicating, not replacing'
+    );
+    assert.equal(
+      switchedHigh.resources.meshes,
+      freshHigh.resources.meshes,
+      `${world}: the profile round trip changed the mesh count (${freshHigh.resources.meshes} -> ${switchedHigh.resources.meshes})`
+    );
+    assert.equal(switchedLow.resources.low, true, `${world}: setQuality('low') did not put the fragment on Low`);
+    assert.equal(switchedHigh.resources.low, false, `${world}: setQuality('high') did not put the fragment back on High`);
     for (const layer of [0, 1]) {
       assert.ok(
         entry.levels.low.hybridTriangles[layer] <= entry.levels.high.hybridTriangles[layer],
