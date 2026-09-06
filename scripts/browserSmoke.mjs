@@ -16,6 +16,13 @@ import { releaseLock, verifyBuild } from './buildProvenance.mjs';
  * process exits non-zero. A normal acceptance run does not set the variable and behaves
  * exactly as it did before.
  */
+/**
+ * Registered geometries each world may hold. Raised for the hybrid by the owner's decision
+ * of 2026-09-06 on a measured maximum of 563; the voxel world keeps its original 500,
+ * which its measured maximum of 408 sits comfortably inside.
+ */
+const GEOMETRY_BUDGET = { hybrid: 600, voxel: 500 };
+
 const DIAGNOSTIC = process.env.SMOKE_DIAGNOSTIC === '1';
 const nonConformances = [];
 function softAssert(ok, message) {
@@ -606,9 +613,18 @@ try {
   assert.equal(initial.metrics.ready, true);
   assert.ok(initial.metrics.renderer.calls > 0, 'renderer must issue draw calls');
   assert.ok(initial.metrics.renderer.calls <= 1_400, `high-quality draw-call budget exceeded: ${initial.metrics.renderer.calls}`);
+  /**
+   * Geometry budget, by the world this smoke actually runs.
+   *
+   * It loads with no `world` parameter, which since 2026-09-06 means the whole-city
+   * hybrid: 38 clusters, each holding one geometry per material class and LOD layer. The
+   * owner raised the budget to 600 on a measured peak of 563 that repeats to the digit
+   * across five identical cycles. That is a bigger city, not an optimisation, and not
+   * evidence that nothing leaks -- the GL program count is still under investigation.
+   */
   softAssert(
-    initial.metrics.renderer.geometries <= 500,
-    `geometry budget exceeded: ${initial.metrics.renderer.geometries}`
+    initial.metrics.renderer.geometries <= GEOMETRY_BUDGET.hybrid,
+    `geometry budget exceeded: ${initial.metrics.renderer.geometries} > ${GEOMETRY_BUDGET.hybrid}`
   );
   assert.ok(initial.metrics.renderer.textures <= 80, `texture budget exceeded: ${initial.metrics.renderer.textures}`);
   assert.ok(initial.frameLength > 20_000, 'captured frame appears blank or incomplete');
@@ -1150,6 +1166,35 @@ try {
   await saveScreenshot(page, '/tmp/voxel-diorama-eclipse-totality.png');
   await page.evaluate(() => window.__diorama.setEclipseProgress(1));
 
+  /**
+   * The city's residential rhythm, read from whatever is driving the windows.
+   *
+   * `windowRhythm()` reports the voxel window materials AND the hybrid's cohort table, so
+   * this works in either world. The mean is weighted by `windows`, because one hybrid
+   * cohort speaks for hundreds of openings while one voxel entry speaks for one group.
+   *
+   * The empty-collection trap is closed explicitly: this used to divide a sum by
+   * `groups.length`, and in the hybrid that list was empty, so every reading was `NaN` and
+   * the comparison below was `NaN > NaN` -- a real failure that read like a broken city
+   * rather than a blind diagnostic.
+   */
+  const readRhythm = async (t) =>
+    page.evaluate(async (time) => {
+      window.__diorama.setTime(time);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      const groups = window.__diorama.windowRhythm();
+      const windows = groups.reduce((sum, group) => sum + group.windows, 0);
+      const weighted = groups.reduce((sum, group) => sum + group.activity * group.windows, 0);
+      return {
+        entries: groups.length,
+        windows,
+        sources: [...new Set(groups.map((group) => group.source))].sort(),
+        cohorts: groups.map((group) => `${group.source}:${group.cohort}`).sort(),
+        mean: windows > 0 ? weighted / windows : null,
+      };
+    }, t);
+
+  const cityRhythmDetail = {};
   const cityRhythm = {};
   for (const [label, time] of [
     ['lateEvening', (23 * 60 + 50) / 1440],
@@ -1160,13 +1205,41 @@ try {
     ['firstWake', (4 * 60 + 5) / 1440],
     ['morning', (5 * 60 + 35) / 1440],
   ]) {
-    cityRhythm[label] = await page.evaluate(async (t) => {
-      window.__diorama.setTime(t);
-      await new Promise((resolve) => setTimeout(resolve, 100));
-      const groups = window.__diorama.windowRhythm();
-      return groups.reduce((sum, group) => sum + group.activity, 0) / groups.length;
-    }, time);
+    const detail = await readRhythm(time);
+    cityRhythmDetail[label] = detail;
+    // There has to BE a population, and its mean has to be a number. Missing data is not
+    // a pass.
+    assert.ok(
+      detail.entries > 0 && detail.windows > 0,
+      `${label}: no residential windows to observe (entries ${detail.entries}, windows ${detail.windows})`
+    );
+    assert.ok(
+      Number.isFinite(detail.mean),
+      `${label}: window activity is not a finite number: ${detail.mean}`
+    );
+    cityRhythm[label] = detail.mean;
   }
+  // Every reading has to describe the SAME population, or the comparisons below are
+  // between two different cities.
+  const rhythmLabels = Object.keys(cityRhythmDetail);
+  const reference = cityRhythmDetail[rhythmLabels[0]];
+  for (const label of rhythmLabels.slice(1)) {
+    const detail = cityRhythmDetail[label];
+    assert.equal(
+      detail.windows,
+      reference.windows,
+      `${label}: window population changed between readings (${reference.windows} → ${detail.windows})`
+    );
+    assert.deepEqual(
+      detail.cohorts,
+      reference.cohorts,
+      `${label}: window cohorts changed between readings`
+    );
+  }
+  console.log(
+    `rytm okien: ${reference.windows} okien w ${reference.entries} grupach `
+    + `(${reference.sources.join('+')})`
+  );
   assert.ok(cityRhythm.lateEvening > cityRhythm.afterMidnight, 'midnight should switch off some homes');
   assert.ok(cityRhythm.afterMidnight > cityRhythm.sleeping, '01:42 should switch off more homes');
   assert.ok(cityRhythm.sleeping > cityRhythm.isolated, '02:30 should leave isolated windows only');

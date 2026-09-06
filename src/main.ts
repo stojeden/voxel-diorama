@@ -1109,12 +1109,33 @@ const debugHandle: DioramaDebugHandle = {
    */
   busCrossing: () => bus.getCrossingState(),
   seekBus: (progress: number) => bus.seekRouteProgress(progress),
-  windowRhythm: () =>
-    world.windowGlowMaterials.map((entry) => ({
+  /**
+   * The residential window rhythm, from whichever representation is actually driving it.
+   *
+   * The voxel city gives every window group its own material, so listing materials is the
+   * observation. The hybrid drives all of its windows from one uniform per cohort, and in
+   * the hybrid all thirty-four blocks are excluded from the voxel generator -- so the
+   * material list is *empty*, and a diagnostic that only knew about it reported nothing at
+   * all in the default world. Each entry carries `windows`, the size of the population it
+   * speaks for, so a caller can weight them and can tell "no data" from "all dark".
+   */
+  windowRhythm: () => {
+    const voxel = world.windowGlowMaterials.map((entry) => ({
+      source: 'voxel' as const,
       cohort: entry.cohort,
+      windows: 1,
       activity: entry.activity,
       emissiveIntensity: entry.material.emissiveIntensity,
-    })),
+    }));
+    const hybridCohorts = (hybrid?.getWindowCohorts() ?? []).map((entry) => ({
+      source: 'hybrid' as const,
+      cohort: entry.cohort,
+      windows: entry.windows,
+      activity: entry.activity,
+      emissiveIntensity: null,
+    }));
+    return [...voxel, ...hybridCohorts];
+  },
   debugTrainStation: (label: string) => passengerCrowd.debugStartDwell(label),
   stationPassengers: () => passengerCrowd.getPassengerDebugState(),
   eclipseCrowdProps: () => eclipseCrowdProps.getDebugState(),

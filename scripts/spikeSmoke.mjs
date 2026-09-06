@@ -26,6 +26,13 @@ import { releaseLock, verifyBuild } from './buildProvenance.mjs';
  * process exits non-zero. A normal acceptance run does not set the variable and behaves
  * exactly as it did before.
  */
+/**
+ * Registered geometries each world may hold. Raised for the hybrid by the owner's decision
+ * of 2026-09-06 on a measured maximum of 563; the voxel world keeps its original 500,
+ * which its measured maximum of 408 sits comfortably inside.
+ */
+const GEOMETRY_BUDGET = { hybrid: 600, voxel: 500 };
+
 const DIAGNOSTIC = process.env.SMOKE_DIAGNOSTIC === '1';
 const nonConformances = [];
 function softAssert(ok, message) {
@@ -1334,9 +1341,12 @@ try {
         assert.equal(metrics.quality.level, quality, `${world}/${checkpoint}: quality ${metrics.quality.level}`);
         assert.ok(!/swiftshader|software|llvmpipe/i.test(metrics.renderer.gpu), `software renderer: ${metrics.renderer.gpu}`);
         assert.ok(metrics.renderer.calls <= 1_400, `${world}/${checkpoint}: draw calls ${metrics.renderer.calls}`);
+        // By the world actually running, not one number for both: the hybrid draws the
+        // whole city out of 38 clusters, the voxel world does not.
+        const geometryBudget = hybrid ? GEOMETRY_BUDGET.hybrid : GEOMETRY_BUDGET.voxel;
         softAssert(
-          metrics.renderer.geometries <= 500,
-          `${world}/${checkpoint}: geometries ${metrics.renderer.geometries}`
+          metrics.renderer.geometries <= geometryBudget,
+          `${world}/${checkpoint}: geometries ${metrics.renderer.geometries} > ${geometryBudget}`
         );
         assert.ok(metrics.renderer.textures <= 80, `${world}/${checkpoint}: textures ${metrics.renderer.textures}`);
         let levels = [];

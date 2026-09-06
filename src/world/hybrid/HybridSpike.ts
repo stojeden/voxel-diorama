@@ -77,8 +77,27 @@ export interface HybridFrame {
   shopRobbed: boolean;
 }
 
+/** One window cohort: how many openings are in it, and what the frame is driving it with. */
+export interface HybridWindowCohort {
+  cohort: number;
+  /** Openings assigned to this cohort across the city -- the population being observed. */
+  windows: number;
+  /** The value the last frame wrote into `uCohort`, which is what lights them. */
+  activity: number;
+}
+
 export interface HybridHandle {
   update(frame: HybridFrame): void;
+  /**
+   * The hybrid's residential windows, as cohorts and their sizes.
+   *
+   * The voxel city drives each window through its own material, so it can be observed by
+   * listing materials. The hybrid drives all of them from `uCohort`, one value per cohort,
+   * read per vertex from `aCohort` -- so the observable is the cohort table plus how many
+   * openings were assigned to each. Without this, a diagnostic that lists voxel materials
+   * sees nothing at all in the default world.
+   */
+  getWindowCohorts(): HybridWindowCohort[];
   setTheme(palette: Record<number, number>): void;
   setSnowCover(cover: number): void;
   setWetness(wetness: number): void;
@@ -124,6 +143,8 @@ export function attachHybridSpike(options: HybridSpikeOptions): HybridHandle {
   options.scene.add(group);
 
   let low = options.quality.level === 'low';
+  /** Openings per window cohort, counted from the primitives that carry the assignment. */
+  const cohortWindows = new Array<number>(WINDOW_COHORT_COUNT).fill(0);
   const lodGroups: LodGroup[] = [];
   const bloom: THREE.Object3D[] = [];
   let streetGround: THREE.Mesh | null = null;
@@ -154,7 +175,16 @@ export function attachHybridSpike(options: HybridSpikeOptions): HybridHandle {
       emitGroceries(low),
       ...model.dominants.map((dominant) => emitDominant(dominant, low)),
     ];
+    cohortWindows.fill(0);
     for (const cluster of clusters) {
+      // Counted here, before the primitives are merged away into buffers: after that the
+      // assignment survives only as a per-vertex attribute, and counting openings from
+      // vertices means guessing how many vertices an opening had.
+      for (const primitive of cluster.primitives) {
+        if (primitive.cohort >= 0 && primitive.cohort < WINDOW_COHORT_COUNT) {
+          cohortWindows[primitive.cohort] += 1;
+        }
+      }
       const result = strategy(cluster);
       const meshes = new Map<string, THREE.Mesh>();
       for (const [key, geometry] of result.geometries) {
@@ -256,6 +286,15 @@ export function attachHybridSpike(options: HybridSpikeOptions): HybridHandle {
         }
       }
     },
+    getWindowCohorts() {
+      const out: HybridWindowCohort[] = [];
+      for (let cohort = 0; cohort < WINDOW_COHORT_COUNT; cohort++) {
+        if (cohortWindows[cohort] === 0) continue;
+        out.push({ cohort, windows: cohortWindows[cohort], activity: uniforms.uCohort.value[cohort] });
+      }
+      return out;
+    },
+
     getMetrics() {
       return {
         strategy: options.strategy,
