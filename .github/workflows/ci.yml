@@ -59,8 +59,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build
-        run: npm run build
+      # Builds and signs in one step. `browserSmoke` verifies that signature and refuses
+      # to measure anything else, so a plain `npm run build` leaves it with no manifest
+      # to check and it stops before the first frame.
+      - name: Build and sign the bundle
+        run: node scripts/prepareBuild.mjs
 
       - name: Install browser
         run: npx playwright install --with-deps chromium
