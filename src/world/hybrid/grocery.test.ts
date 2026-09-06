@@ -62,6 +62,16 @@ describe('the grocery keeps its own hours', () => {
     expect(night).toBeGreaterThan(day * 2);
   });
 
+  test('after a raid it stays dark, whatever the hour says', () => {
+    // The alien visit leaves the shop with nothing to sell. That used to be a barrier
+    // planted in front of the door; a dark shop says it without the road sign.
+    expect(groceryGlow(12 * HOUR, 0, true)).toBe(0);
+    expect(groceryGlow(20 * HOUR, 1, true)).toBe(0);
+    // And the flag does not invent hours of its own: restocked, the hour rules again.
+    expect(groceryGlow(12 * HOUR, 0, false)).toBeGreaterThan(0);
+    expect(groceryGlow(3 * HOUR, 1, false)).toBe(0);
+  });
+
   test('the same hour gives the same light however it was reached', () => {
     for (const hour of [1, 6, 12, 22.5]) {
       expect(groceryGlow(hour * HOUR + 1, 0.5)).toBeCloseTo(groceryGlow(hour * HOUR, 0.5), 10);

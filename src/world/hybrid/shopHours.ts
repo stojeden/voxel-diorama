@@ -26,8 +26,15 @@ export function isGroceryOpen(clockT: number): boolean {
   return hour >= GROCERY_OPEN_HOUR - 1e-9 && hour < GROCERY_CLOSE_HOUR - 1e-9;
 }
 
-/** Emissive strength for the grocery's display glass. Zero when it is shut. */
-export function groceryGlow(clockT: number, night: number): number {
-  if (!isGroceryOpen(clockT)) return 0;
+/**
+ * Emissive strength for the grocery's display glass. Zero when it is shut.
+ *
+ * `robbed` is the morning after an alien visit: the shop has nothing to sell, so it stays
+ * dark through the day until the next nightfall restocks it. That used to be signalled by
+ * a red-and-white barrier planted in front of the door; a dark shop says it without
+ * putting a road sign on the pavement.
+ */
+export function groceryGlow(clockT: number, night: number, robbed = false): number {
+  if (robbed || !isGroceryOpen(clockT)) return 0;
   return GROCERY_GLOW_DAY + (GROCERY_GLOW_NIGHT - GROCERY_GLOW_DAY) * Math.min(1, Math.max(0, night));
 }

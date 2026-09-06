@@ -257,7 +257,14 @@ export class LakesideCow {
   private pendingEvent: UfoEvent | null = null;
   // ── Kiosk raid props ──
   private readonly crate: THREE.Mesh;
-  private readonly closedSign: THREE.Group;
+  /**
+   * The shop has nothing left to sell, so it stays shut through the following day.
+   *
+   * There used to be a red-and-white barrier planted in front of the door as well. A dark
+   * shop says the same thing without putting a road sign on the pavement, and the display
+   * glass already has an emissive that follows the shop's hours -- so this flag simply
+   * holds it at zero until the next nightfall restocks the place.
+   */
   private kioskClosed = false;
   private eventDelay = 0;
   private nightArmed = false;
@@ -297,7 +304,7 @@ export class LakesideCow {
     this.farmer.group.visible = false;
     scene.add(this.farmer.group);
 
-    // ── Kiosk raid props: goods crate + "ZAMKNIĘTE" barrier sign ──
+    // ── Kiosk raid prop: the goods crate ──
     const crateMat = new THREE.MeshStandardMaterial({ color: 0x8a6a3a, roughness: 0.9 });
     const crateGeo = new THREE.BoxGeometry(1, 1, 1);
     this.disposables.push(crateMat, crateGeo);
@@ -306,27 +313,6 @@ export class LakesideCow {
     this.crate.position.set(KIOSK_RAID.x, 0.5, KIOSK_RAID.z);
     scene.add(this.crate);
 
-    this.closedSign = new THREE.Group();
-    const signRed = new THREE.MeshStandardMaterial({ color: 0xc23a30, roughness: 0.7 });
-    const signWhite = new THREE.MeshStandardMaterial({ color: 0xf2f2ee, roughness: 0.7 });
-    const stripeGeo = new THREE.BoxGeometry(2.2, 0.22, 0.1);
-    const legGeo = new THREE.BoxGeometry(0.1, 1.1, 0.1);
-    this.disposables.push(signRed, signWhite, stripeGeo, legGeo);
-    const stripeTop = new THREE.Mesh(stripeGeo, signRed);
-    stripeTop.position.y = 1.0;
-    this.closedSign.add(stripeTop);
-    const stripeBottom = new THREE.Mesh(stripeGeo, signWhite);
-    stripeBottom.position.y = 0.74;
-    this.closedSign.add(stripeBottom);
-    for (const side of [-1, 1]) {
-      const leg = new THREE.Mesh(legGeo, signWhite);
-      leg.position.set(side * 0.95, 0.55, 0);
-      this.closedSign.add(leg);
-    }
-    // In front of the kiosk window (kiosk faces -z).
-    this.closedSign.position.set(KIOSK_MAIN.x + 2, 0, KIOSK_MAIN.z - 1.2);
-    this.closedSign.visible = false;
-    scene.add(this.closedSign);
   }
 
   update(delta: number, elapsed: number, night: number): void {
@@ -360,13 +346,16 @@ export class LakesideCow {
       this.ufoMode = 'hidden';
       this.pendingEvent = null;
       this.crate.visible = false;
-      this.closedSign.visible = false;
       if (this.cowMode === 'lifted') this.cowMode = this.cowPresent ? 'graze' : 'absent';
     } else {
       this.cow.group.visible = this.cowPresent;
       this.crate.visible = !this.kioskClosed;
-      this.closedSign.visible = this.kioskClosed;
     }
+  }
+
+  /** Is the grocery cleaned out, and therefore shut until the next nightfall? */
+  isKioskRobbed(): boolean {
+    return this.kioskClosed;
   }
 
   /** Dev helper: trigger tonight's UFO visit immediately. */
@@ -409,7 +398,6 @@ export class LakesideCow {
       // A new night: yesterday's raid is over — kiosk restocked & reopened.
       if (this.kioskClosed) {
         this.kioskClosed = false;
-        this.closedSign.visible = false;
         this.crate.visible = true;
         this.crate.position.set(KIOSK_RAID.x, 0.5, KIOSK_RAID.z);
       }
@@ -491,7 +479,6 @@ export class LakesideCow {
           if (t >= 1) {
             this.crate.visible = false;
             this.kioskClosed = true;
-            this.closedSign.visible = true;
             this.ufoMode = 'beamFadeOut';
             this.ufoTimer = 0;
             this.ufoDuration = 0.9;
@@ -773,7 +760,7 @@ export class LakesideCow {
   }
 
   dispose(): void {
-    this.scene.remove(this.cow.group, this.ufo.group, this.farmer.group, this.crate, this.closedSign);
+    this.scene.remove(this.cow.group, this.ufo.group, this.farmer.group, this.crate);
     this.farmer.group.traverse((child) => {
       if (child instanceof THREE.Mesh) child.geometry.dispose();
     });

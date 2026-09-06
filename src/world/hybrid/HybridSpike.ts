@@ -73,6 +73,8 @@ export interface HybridFrame {
   dt: number;
   /** Real seconds of presentation time -- the app's own clock, which checkpoints define. */
   elapsed: number;
+  /** The grocery has been cleaned out overnight, so it stays dark until it is restocked. */
+  shopRobbed: boolean;
 }
 
 export interface HybridHandle {
@@ -206,7 +208,7 @@ export function attachHybridSpike(options: HybridSpikeOptions): HybridHandle {
   const awnings = new Awnings(options.scene, model.buildings, materials.opaque);
 
   return {
-    update({ camera, viewportHeightPx, sunT, clockT, night, dt, elapsed }) {
+    update({ camera, viewportHeightPx, sunT, clockT, night, dt, elapsed, shopRobbed }) {
       const t01 = sunT;
       uniforms.uNight.value = night;
       // Real seconds, not fractions of the day: a warning light keeps its own rate
@@ -216,7 +218,7 @@ export function attachHybridSpike(options: HybridSpikeOptions): HybridHandle {
       uniforms.uEmissive.value[P.aviationRedAlt] = beaconGlow(elapsed, night, 0.5);
       // The grocery keeps its own hours -- six in the morning to eleven at night -- and
       // the light inside is on while it is open, brighter once it is dark out.
-      uniforms.uEmissive.value[P.shopGlow] = groceryGlow(clockT, night);
+      uniforms.uEmissive.value[P.shopGlow] = groceryGlow(clockT, night, shopRobbed);
       // One call for every awning in the city, on the hour and the frame's own delta.
       awnings.update(clockT, dt);
       for (let cohort = 0; cohort < WINDOW_COHORT_COUNT; cohort++) {

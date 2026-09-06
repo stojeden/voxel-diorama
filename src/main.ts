@@ -102,6 +102,7 @@ const hybridFrame: HybridFrame = {
   night: 0,
   dt: 0,
   elapsed: 0,
+  shopRobbed: false,
 };
 ui.setLoadingProgress(10, 'MIASTO I KRAJOBRAZ');
 const train = createTrain(env.scene);
@@ -805,6 +806,7 @@ function animate(timestamp?: number) {
     hybridFrame.night = light.night;
     hybridFrame.dt = presentationDelta;
     hybridFrame.elapsed = frame.elapsedSimulation;
+    hybridFrame.shopRobbed = lakesideCow.isKioskRobbed();
     hybrid.update(hybridFrame);
   }
   world.setEclipseReflection(
