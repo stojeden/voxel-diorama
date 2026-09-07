@@ -44,7 +44,7 @@ describe('train glazing', () => {
     const scene = new THREE.Scene();
     const train = createTrain(scene);
 
-    train.update(1 / 60, 1, 0, 1);
+    train.update(1 / 60, 1, 0);
     const day = glazingOf(scene);
     expect(day.emissiveIntensity, 'daylight glazing must not glow').toBeCloseTo(0, 5);
     expect(
@@ -59,7 +59,7 @@ describe('train glazing', () => {
     expect(day.envMapIntensity).toBeGreaterThanOrEqual(1);
     expect(day.envMapIntensity, 'a carriage pane reflects less than the bus glass at 1.2').toBeLessThan(1.2);
 
-    train.update(1 / 60, 2, 1, 1);
+    train.update(1 / 60, 2, 1);
     const night = glazingOf(scene);
     expect(night.emissiveIntensity, 'night glazing must glow').toBeGreaterThan(0.9);
     expect(night.emissive.r, 'a lit carriage is warm').toBeGreaterThan(night.emissive.b);
@@ -73,7 +73,7 @@ describe('train glazing', () => {
     const train = createTrain(scene);
     const readings: number[] = [];
     for (const night of [0, 0.25, 0.5, 0.75, 1]) {
-      train.update(1 / 60, 1 + night, night, 1);
+      train.update(1 / 60, 1 + night, night);
       readings.push(glazingOf(scene).emissiveIntensity);
     }
     for (let i = 1; i < readings.length; i++) {
@@ -87,7 +87,7 @@ describe('train glazing', () => {
     const scene = new THREE.Scene();
     const train = createTrain(scene);
     train.setLivery('cyber');
-    train.update(1 / 60, 1, 1, 1);
+    train.update(1 / 60, 1, 1);
     const material = glazingOf(scene);
     // Cyan interior, still emitting, and the pane is still a dark pane.
     expect(material.emissive.b).toBeGreaterThan(material.emissive.r);
@@ -95,7 +95,7 @@ describe('train glazing', () => {
     expect(relativeLuminance(material.color)).toBeLessThan(0.2);
 
     train.setLivery('modern');
-    train.update(1 / 60, 2, 1, 1);
+    train.update(1 / 60, 2, 1);
     expect(material.emissive.r, 'back to a warm interior').toBeGreaterThan(material.emissive.b);
   });
 });

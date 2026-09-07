@@ -37,6 +37,23 @@ describe('QualityManager', () => {
     });
   });
 
+  it('never renders the far view below the near one', () => {
+    // The bug this pins: the far view used to be 0.8x the near ratio, so on High it fell
+    // to 1.0 and a high-DPI screen stretched it. It is the view with the finest detail --
+    // the panel joints that were reported as flickering -- and the one with ambient
+    // occlusion and bloom already switched off, so it is the one that can pay for pixels.
+    for (const level of ['low', 'medium', 'high'] as const) {
+      const profile = new QualityManager({}, level).getProfile();
+      expect(profile.farPixelRatio).toBeGreaterThanOrEqual(
+        Math.max(1, profile.pixelRatio * 0.8)
+      );
+    }
+    // Only High was measured, so only High was raised.
+    expect(new QualityManager({}, 'high').getProfile().farPixelRatio).toBe(2);
+    expect(new QualityManager({}, 'medium').getProfile().farPixelRatio).toBe(1);
+    expect(new QualityManager({}, 'low').getProfile().farPixelRatio).toBe(1);
+  });
+
   it('keeps manual modes stable regardless of frame time', () => {
     const manager = new QualityManager({}, 'high');
     sample(manager, 20, 40);

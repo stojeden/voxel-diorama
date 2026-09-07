@@ -299,7 +299,6 @@ function setCameraMode(mode: 'train' | 'bus'): void {
 }
 
 ui.onCameraMode(setCameraMode);
-ui.onSpeedChange(() => interruptCameraForUi());
 
 // ─── Diorama themes ───
 let currentTheme: DioramaTheme = themeById('classic');
@@ -778,8 +777,7 @@ function animate(timestamp?: number) {
   );
 
   // ── Vehicles & life ──
-  const speedMultiplier = 0.5 + ui.speedSetting * 1.3;
-  train.update(delta, frame.elapsedSimulation, light.night, speedMultiplier);
+  train.update(delta, frame.elapsedSimulation, light.night);
   train.getPosition(trainPosition);
   bus.update(
     delta,
@@ -1076,6 +1074,14 @@ const debugHandle: DioramaDebugHandle = {
   scene: env.scene,
   renderer: env.renderer,
   controls: env.controls,
+  /**
+   * Diagnostic only. Anti-aliasing and resolution are the two settings whose cost has to
+   * be compared inside one process: rebuilding between variants puts each number on a
+   * different GPU state, and this repository has already been burned by that. With the
+   * composer reachable a harness can sweep `multisampling` and the pixel ratio live and
+   * time the frames that follow.
+   */
+  composer: env.composer,
   /**
    * Exposed for one reason: a light budget cannot be compared before and after unless a
    * harness can put the runtime back into the old configuration and let it light the

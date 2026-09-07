@@ -111,6 +111,64 @@ function blendedEnvironmentShaderChunk(): string {
 
 const BLENDED_ENVIRONMENT_SHADER_CHUNK = blendedEnvironmentShaderChunk();
 
+/**
+ * How much world one shadow-map texel covers, in metres.
+ *
+ * Worth having as a function because every number that matters downstream is derived
+ * from it -- the bias that hides what the map cannot draw, and the grid the focus is
+ * snapped to -- and because the value is not the one the constructor suggests: the
+ * quality profile overrides the map size, and the frustum radius follows the camera.
+ */
+export function shadowTexelSize(radius: number, mapSize: number): number {
+  return (radius * 2) / Math.max(1, mapSize);
+}
+
+/**
+ * How far the normal bias has to push a shadow lookup off its surface.
+ *
+ * In texels, not metres, because that is what the artefact is measured in: a feature
+ * thinner than a texel cannot be drawn at any map size, so the number that removes it
+ * has to grow with the texel. 1.5 was photographed, not guessed -- see the call site.
+ */
+export function shadowNormalBias(texel: number): number {
+  return texel * 1.5;
+}
+
+/**
+ * The shadow focus, rounded to whole texels in the light's own basis.
+ *
+ * Pure and exported so the property can be tested without a renderer: a focus that
+ * drifts continuously must come back quantised, or the shadow grid slides through the
+ * world and every stepped edge swims. The component along the light is left alone, so
+ * the frustum still covers what the camera is looking at.
+ *
+ * `right`, `up` and `out` are scratch vectors owned by the caller: this runs every frame.
+ */
+export function snapShadowFocus(
+  focus: THREE.Vector3,
+  sunDir: THREE.Vector3,
+  texel: number,
+  right: THREE.Vector3,
+  up: THREE.Vector3,
+  out: THREE.Vector3
+): THREE.Vector3 {
+  // With the sun overhead the usual world-up reference degenerates, so fall back to
+  // another axis rather than normalising a zero.
+  right.set(0, 1, 0).cross(sunDir);
+  if (right.lengthSq() < 1e-6) right.set(1, 0, 0).cross(sunDir);
+  right.normalize();
+  up.copy(sunDir).cross(right).normalize();
+  const grid = Math.max(1e-6, texel);
+  const alongRight = Math.round(focus.dot(right) / grid) * grid;
+  const alongUp = Math.round(focus.dot(up) / grid) * grid;
+  const alongLight = focus.dot(sunDir);
+  return out
+    .copy(right)
+    .multiplyScalar(alongRight)
+    .addScaledVector(up, alongUp)
+    .addScaledVector(sunDir, alongLight);
+}
+
 export function environmentTransitionAt(progress: number): {
   blend: number;
   intensity: number;
@@ -306,6 +364,10 @@ export class DayNightCycle {
   private readonly tmpSunColor = new THREE.Color();
   private readonly tmpWhite = new THREE.Color(0xffffff);
   private readonly shadowFocus = new THREE.Vector3();
+  /** Reused for snapping the shadow focus to whole texels; nothing here allocates per frame. */
+  private readonly shadowRight = new THREE.Vector3();
+  private readonly shadowUp = new THREE.Vector3();
+  private readonly snappedFocus = new THREE.Vector3();
   private shadowRadius = 95;
   private lightSelectionCooldown = 0;
   /**
@@ -361,6 +423,8 @@ export class DayNightCycle {
     this.sunLight.shadow.camera.near = 1;
     this.sunLight.shadow.camera.far = 320;
     this.sunLight.shadow.bias = -0.0008;
+    // Only the first frame uses this: `update` replaces it every frame with a value tied
+    // to the map's texel size, which is what the artefact scales with.
     this.sunLight.shadow.normalBias = 0.05;
     scene.add(this.sunLight);
     scene.add(this.sunLight.target);
@@ -665,8 +729,49 @@ export class DayNightCycle {
 
     // ── Sun light ──
     const sunStrength = this.smoothedSunStrength;
-    this.sunLight.position.copy(sunDir).multiplyScalar(140).add(this.shadowFocus);
-    this.sunLight.target.position.copy(this.shadowFocus);
+    /**
+     * The shadow map's grid is pinned to whole texels, so it stops crawling.
+     *
+     * `setShadowFocus` slides the whole shadow frustum along with whatever the camera is
+     * looking at. The map is a fixed number of texels across that frustum, and the numbers
+     * are worse than the constructor above suggests: the quality profile overrides the map
+     * to 1024 on High, the frustum settles around 69 m of radius in a street view, and a
+     * wide view drops the map to 512. That is 0.14 m of world per texel up close and
+     * 0.27 m in a wide view. Every shadow edge is quantised to that grid, and while the
+     * grid itself moves continuously the quantisation lands somewhere new every frame.
+     *
+     * Rounding the focus to whole texels in the light's own basis freezes the grid to the
+     * world, so an edge that is stepped stays stepped in the same place instead of
+     * swimming across the wall as the camera moves.
+     */
+    const texel = shadowTexelSize(this.shadowRadius, this.appliedShadowMapSize);
+    /**
+     * The bias that removes what the map cannot draw, sized in texels rather than metres.
+     *
+     * A window sill is 0.07 m thick and stands 0.26 m off the wall. Its shadow is a third
+     * of a texel wide, so the map cannot represent it: what reached the screen was a row
+     * of detached diagonal teeth on the wall below every window, which is what was
+     * reported. Photographed at a 0.136 m texel, 0.05 m of normal bias left them at full
+     * strength, 0.12 m left them faint, and 0.2 m removed them; the big shadows -- the
+     * trees, the blocks on the grass -- were unchanged, moving 2.1% of the street view's
+     * pixels and lifting its mean luminance by 0.24 of 255.
+     *
+     * Expressed as 1.5 texels it holds as the frustum tightens and as a wide view drops
+     * the map to 512, because the artefact scales with the texel and not with the metre.
+     * This removes an unresolvable shadow rather than paying for the resolution to draw
+     * it: no budget moves, and nothing else in the picture is given up for it.
+     */
+    this.sunLight.shadow.normalBias = shadowNormalBias(texel);
+    snapShadowFocus(
+      this.shadowFocus,
+      sunDir,
+      texel,
+      this.shadowRight,
+      this.shadowUp,
+      this.snappedFocus
+    );
+    this.sunLight.position.copy(sunDir).multiplyScalar(140).add(this.snappedFocus);
+    this.sunLight.target.position.copy(this.snappedFocus);
     // nightFloor (eternal-dusk themes) and an eclipse both mute the sun.
     const directSun =
       sunStrength *

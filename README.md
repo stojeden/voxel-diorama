@@ -86,7 +86,6 @@ Wydarzenie w świecie pozostaje przy tym nietknięte.
 | Zaćmienie Słońca / szeroki widok zjawiska | `E` lub „Zaćmienie” |
 | Pogoda (auto → słońce → chmury → deszcz → śnieg → mgła) | `W` lub przycisk pogody |
 | Motyw dioramy | 🎭 |
-| Prędkość pociągu | suwak / `←` `→` |
 | Pauza | spacja |
 | Jakość renderingu (Auto → Low → Medium → High) | `Q` lub przycisk jakości |
 

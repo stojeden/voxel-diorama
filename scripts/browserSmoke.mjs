@@ -927,9 +927,13 @@ try {
   assert.equal(framedBySpace, 'eclipse', 'Space must activate the focused ambient action');
   await page.evaluate(() => document.activeElement.blur());
 
-  // A control key is user input too: it must hand the camera back at once.
+  // A control key is user input too: it must hand the camera back at once. This was the
+  // speed slider's arrow key until the slider was removed; the clock-speed key stands in
+  // for the same thing -- a keyboard control whose handler calls the interrupt before it
+  // does anything else -- and `1` is the value the clock already has, so the only effect
+  // left to observe is the one being asserted.
   const releasedByKey = await page.evaluate(() => {
-    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: '1', bubbles: true }));
     return window.__diorama.getState().cameraAutomation;
   });
   assert.equal(releasedByKey, null, 'a control key must release automatic framing synchronously');

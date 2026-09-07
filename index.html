@@ -57,11 +57,6 @@
       margin-top: 8px; padding-top: 6px; border-top: 1px solid rgba(255,255,255,0.10);
       color: #d7ecff; line-height: 1.3; font-size: 10.5px;
     }
-    .controls-row {
-      display: flex; align-items: center; gap: 8px; margin-top: 4px;
-    }
-    .controls-row label { color: rgba(255,255,255,0.6); white-space: nowrap; font-size: 9px; letter-spacing: 0.6px; text-transform: uppercase; }
-    #speed-control { flex: 1; accent-color: #ffdd88; pointer-events: auto; }
     .action-row {
       display: flex; gap: 6px; margin-top: 8px;
     }
@@ -266,17 +261,6 @@
       <span class="panel-chevron" aria-hidden="true">▾</span>
     </button>
     <div id="panel-body">
-      <div class="controls-row">
-        <label for="speed-control">prędkość</label>
-        <input
-          id="speed-control"
-          type="range"
-          min="0"
-          max="100"
-          value="58"
-          aria-label="Prędkość pociągu"
-        />
-      </div>
       <div id="chapter" class="chapter">Stacja Zachodnia</div>
       <div id="station-status" hidden role="status" aria-live="polite">
         <span class="station-label" id="station-label"></span>
@@ -311,7 +295,7 @@
         <button id="quality-button" type="button" title="Przełącz jakość renderingu">JAKOŚĆ: AUTO</button>
       </div>
       <div id="keyboard-hint">
-        ←/→ prędkość · spacja pauza · E zaćmienie · W pogoda · T pociąg · B autobus · 1/2/3 zegar · R na żywo · Q jakość
+        spacja pauza · E zaćmienie · W pogoda · T pociąg · B autobus · 1/2/3 zegar · R na żywo · Q jakość
       </div>
     </div>
   </div>

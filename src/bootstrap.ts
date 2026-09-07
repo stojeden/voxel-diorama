@@ -233,9 +233,13 @@ export function bootstrap(
   };
 
   const syncSize = () => {
-    const distanceScale = ambientOcclusionNear ? 1 : 0.8;
     const cameraScale = cameraPerformanceMode === 'bus' ? 0.87 : 1;
-    const adaptivePixelRatio = Math.max(1, quality.pixelRatio * distanceScale * cameraScale);
+    // The far view renders at its own ratio rather than a fraction of the near one: see
+    // `farPixelRatio`. The near view keeps what it had, because the night street has no
+    // headroom for a single pixel more.
+    const adaptivePixelRatio = ambientOcclusionNear
+      ? Math.max(1, quality.pixelRatio * cameraScale)
+      : Math.max(1, quality.farPixelRatio);
     const pixelRatio = Math.min(window.devicePixelRatio, adaptivePixelRatio);
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();

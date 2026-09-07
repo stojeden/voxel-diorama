@@ -27,7 +27,16 @@ import { buildCyberShell } from './cyber/trainShell';
  * step where its own bogies straddle the seam (fully inside the tunnels).
  */
 
-const BASE_SPEED_METERS_PER_S = 10;
+/**
+ * Cruising speed, and why it is 12.5 rather than 10.
+ *
+ * It was 10, multiplied by whatever the speed slider said. The slider is gone -- it drove
+ * nothing but this one number, and its default position of 58 out of 100 worked out to
+ * 1.254x, so the city has always run at about 12.5 m/s. Keeping that is the point: the
+ * brief was to remove a control, not to slow the train down by a fifth and retime every
+ * station stop and level crossing with it.
+ */
+const BASE_SPEED_METERS_PER_S = 12.5;
 const WHEEL_RADIUS = 0.42;
 const RAIL_GAUGE = TRACK_HALF_GAUGE;
 const AXLE_SPACING = 1.2;
@@ -591,11 +600,10 @@ function placeCar(car: CarRef, centerT: number, elapsed: number, totalLength: nu
 }
 
 export interface TrainHandle {
-  update: (delta: number, elapsed: number, nightFactor: number, speedMultiplier: number) => void;
+  update: (delta: number, elapsed: number, nightFactor: number) => void;
   getPosition: (target?: THREE.Vector3) => THREE.Vector3;
   getDirection: (target?: THREE.Vector3) => THREE.Vector3;
   isGroundPointOccupied: (x: number, z: number, clearance?: number) => boolean;
-  getSpeedFactor: () => number;
   getRouteProgress: () => number;
   seekRouteProgress: (progress: number) => void;
   getStationState: () => TrainPublicState;
@@ -705,8 +713,8 @@ export function createTrain(scene: THREE.Scene): TrainHandle {
   };
 
   return {
-    update(delta, elapsed, nightFactor, speedMultiplier) {
-      const cruiseTarget = BASE_SPEED_METERS_PER_S * speedMultiplier;
+    update(delta, elapsed, nightFactor) {
+      const cruiseTarget = BASE_SPEED_METERS_PER_S;
 
       // 1. Target speed by state.
       let targetSpeed = cruiseTarget;
@@ -816,9 +824,6 @@ export function createTrain(scene: THREE.Scene): TrainHandle {
           car.group.position.y < 2.5 &&
           Math.hypot(car.group.position.x - x, car.group.position.z - z) < car.length / 2 + clearance
       );
-    },
-    getSpeedFactor() {
-      return currentSpeed / BASE_SPEED_METERS_PER_S;
     },
     getRouteProgress() {
       return wrapT(leadT);

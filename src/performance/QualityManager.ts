@@ -4,6 +4,28 @@ export type QualityMode = 'auto' | QualityLevel;
 export interface QualityProfile {
   level: QualityLevel;
   pixelRatio: number;
+  /**
+   * The ratio the far view renders at, which is higher than the near one and not lower.
+   *
+   * It used to be lower: `syncSize` multiplied `pixelRatio` by 0.8 once the camera pulled
+   * back, which on High meant the overview rendered at 1.0 and a Retina screen stretched
+   * it to 2.0. That is the view where a panel joint is a fraction of a pixel wide, so it
+   * was the softest picture in the product in exactly the place with the most detail to
+   * lose -- and it is where the reported flicker between the slabs lives.
+   *
+   * The far view can afford it because ambient occlusion and bloom are already switched
+   * off there. Measured at 1440x900 with a device ratio of 2, GPU median per frame: the
+   * overview goes from 7.2-7.5 ms at 1.0 to 8.2-9.7 ms at 2.0, in daylight, at dusk and
+   * at night alike. The near view cannot: the night street sits at 23 ms at 1.15 and
+   * jumps to 48 ms at 1.3, because it is fill-bound on sixteen lights rather than
+   * draw-bound. So this raises the far view only, and the near view keeps `pixelRatio`.
+   *
+   * Only High was measured, so only High is raised. Medium and Low keep the 1.0 they
+   * already resolved to -- an unmeasured device is not the place to spend four times the
+   * pixels. `syncSize` still clamps to the display's own ratio, so nothing changes at all
+   * on a screen that is not high-DPI.
+   */
+  farPixelRatio: number;
   msaaSamples: number;
   shadows: boolean;
   shadowMapSize: number;
@@ -41,6 +63,7 @@ export const QUALITY_PROFILES: Record<QualityLevel, QualityProfile> = {
   low: {
     level: 'low',
     pixelRatio: 1,
+    farPixelRatio: 1,
     msaaSamples: 0,
     shadows: false,
     shadowMapSize: 512,
@@ -63,6 +86,7 @@ export const QUALITY_PROFILES: Record<QualityLevel, QualityProfile> = {
   medium: {
     level: 'medium',
     pixelRatio: 1.1,
+    farPixelRatio: 1,
     msaaSamples: 0,
     shadows: true,
     shadowMapSize: 1024,
@@ -85,6 +109,7 @@ export const QUALITY_PROFILES: Record<QualityLevel, QualityProfile> = {
   high: {
     level: 'high',
     pixelRatio: 1.15,
+    farPixelRatio: 2,
     msaaSamples: 0,
     shadows: true,
     shadowMapSize: 1024,

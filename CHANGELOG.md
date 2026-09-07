@@ -9,6 +9,43 @@ a wersjonowanie projektu docelowo stosuje [Semantic Versioning](https://semver.o
 
 ## [Unreleased]
 
+### Fixed
+
+- **Zęby pod parapetami.** Cień parapetu to jedna trzecia tekstela mapy cieni, więc mapa
+  nie potrafi go narysować: na ścianie pod każdym oknem leżał rząd odklejonych, ukośnych
+  schodków. `normalBias` liczy się teraz z rozmiaru tekstela (1,5 tekstela), a nie ze
+  stałej w metrach. Zmierzone przy teksteli 0,136 m: 0,05 m nie ruszało zębów, 0,12 m je
+  osłabiało, 0,2 m usuwało; duże cienie — drzewa, bloki na trawie — zostały, kosztem 2,1%
+  pikseli widoku ulicy i 0,24 z 255 średniej jasności. To usunięcie cienia, którego nie da
+  się narysować, a nie zakup rozdzielczości, która by go narysowała: żaden budżet się nie
+  ruszył.
+- **Siatka cieni przestaje płynąć po świecie.** Ognisko mapy cieni jest zaokrąglane do
+  całych teksteli w bazie światła, więc krawędź, która jest schodkowa, pozostaje schodkowa
+  w tym samym miejscu, zamiast przesuwać się przy ruchu kamery. Własność geometryczna ma
+  test: ognisko przesuwane co dziesiątą tekstela albo nie rusza się wcale, albo skacze o
+  cały tekstel, i nigdy pomiędzy.
+- **Spoiny płyt nie migoczą na dystansie.** Przejście spoiny było stałe w metrach (5 cm),
+  a piksel przeglądu obejmuje 0,2 m, więc wzór był próbkowany raz na kilka swoich szerokości.
+  Szerokość przejścia bierze się teraz z pochodnej na piksel i wygasza wzór, gdy piksel
+  obejmuje kilka szerokości spoiny. Dotyczy spoin elewacji i fugowania chodnika.
+- **Daleki widok renderuje się w rozdzielczości ekranu, a nie poniżej niej.** Był mnożony
+  przez 0,8, czyli na High spadał do 1,0 i Retina rozciągała go dwukrotnie — najbardziej
+  rozmyty obraz w produkcie dokładnie w widoku o najdrobniejszym detalu. Stać go na to,
+  bo okluzja i bloom są tam już wyłączone: mediana GPU rośnie z 7,2–7,5 ms do 8,2–9,7 ms
+  przy 1440×900 i dSF 2, w dzień, o zmierzchu i w nocy. Bliskiego widoku nie stać —
+  nocna ulica ma 23 ms przy 1,15 i 48 ms przy 1,3, bo jest ograniczona wypełnieniem
+  szesnastu światel. Zmierzono i podniesiono tylko profil High.
+- MSAA rozważone i odrzucone z pomiarem, nie z przekonania: przy 2 lub 4 próbkach nocna
+  ulica rośnie z 24,4 ms do 37–44 ms. Pozostaje 0 we wszystkich profilach.
+
+### Removed
+
+- **Suwak prędkości i wszystko, co go dotyczyło**: kontrolka w panelu, jej styl, obsługa
+  `←`/`→`, `speedSetting`, `onSpeedChange`, mnożnik prędkości w pętli klatki, parametr
+  `speedMultiplier` w `Train.update` oraz nieużywane `getSpeedFactor`. Prędkość przelotowa
+  pociągu została taka, jaka była: domyślne 58/100 dawało 1,254 × 10 m/s, więc bazowa
+  prędkość to teraz 12,5 m/s. Usunięto kontrolkę, nie spowolniono miasta.
+
 ### Added
 
 - **Cyberpunk jest podmianą reprezentacji miasta, nie warstwą nad nim.** 34 działki

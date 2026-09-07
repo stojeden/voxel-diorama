@@ -9,7 +9,6 @@ import type { AmbientEvent, AmbientEventKind } from './experience/AmbientEvents'
 export type CameraMode = 'free' | 'train' | 'bus';
 
 export interface UiHandle {
-  speedSetting: number;
   paused: boolean;
   tourActive: boolean;
   timeScale: number;
@@ -40,7 +39,6 @@ export interface UiHandle {
   onProfilerToggle: (handler: () => void) => void;
   onEclipseStart: (handler: () => void) => void;
   onAmbientAction: (handler: (kind: AmbientEventKind) => void) => void;
-  onSpeedChange: (handler: () => void) => void;
   dispose: () => void;
 }
 
@@ -57,7 +55,6 @@ export function mountUi(): UiHandle {
   const loadingBarEl = requireEl<HTMLDivElement>('loading-progress-bar');
   const loadingStageEl = requireEl<HTMLDivElement>('loading-stage');
   const loadingProgressEl = requireEl<HTMLDivElement>('loading-progress');
-  const speedControlEl = requireEl<HTMLInputElement>('speed-control');
   const chapterEl = requireEl<HTMLDivElement>('chapter');
   const stationEl = requireEl<HTMLDivElement>('station-status');
   const stationLabelEl = requireEl<HTMLSpanElement>('station-label');
@@ -98,7 +95,6 @@ export function mountUi(): UiHandle {
   let ambientSignature = '';
 
   const handle: UiHandle = {
-    speedSetting: Number(speedControlEl.value) / 100,
     paused: false,
     tourActive: false,
     timeScale: 1,
@@ -285,11 +281,7 @@ export function mountUi(): UiHandle {
         if (ambientKind !== null) handler(ambientKind);
       });
     },
-    onSpeedChange(handler) {
-      speedHandler = handler;
-    },
     dispose() {
-      speedControlEl.removeEventListener('input', onSpeed);
       window.removeEventListener('keydown', onKey);
       panelToggleEl.removeEventListener('click', togglePanel);
     },
@@ -305,13 +297,6 @@ export function mountUi(): UiHandle {
     profiler?: () => void;
     eclipse?: () => void;
   } = {};
-
-  let speedHandler: (() => void) | undefined;
-
-  const onSpeed = () => {
-    handle.speedSetting = Number(speedControlEl.value) / 100;
-    speedHandler?.();
-  };
 
   const onKey = (e: KeyboardEvent) => {
     const target = e.target as HTMLElement | null;
@@ -338,17 +323,9 @@ export function mountUi(): UiHandle {
       if (target?.tagName === 'BUTTON') return;
       e.preventDefault();
       keyHandlers.pause?.();
-    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
-      e.preventDefault();
-      const dir = e.key === 'ArrowLeft' ? -5 : 5;
-      const newVal = Math.min(100, Math.max(0, Number(speedControlEl.value) + dir));
-      speedControlEl.value = String(newVal);
-      handle.speedSetting = newVal / 100;
-      speedHandler?.();
     }
   };
 
-  speedControlEl.addEventListener('input', onSpeed);
   window.addEventListener('keydown', onKey);
 
   return handle;

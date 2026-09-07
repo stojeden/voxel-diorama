@@ -38,6 +38,33 @@ const NOISE = /* glsl */ `
     return mix(mix(mix(hbHash(i), hbHash(i + vec3(1,0,0)), f.x), mix(hbHash(i + vec3(0,1,0)), hbHash(i + vec3(1,1,0)), f.x), f.y),
                mix(mix(hbHash(i + vec3(0,0,1)), hbHash(i + vec3(1,0,1)), f.x), mix(hbHash(i + vec3(0,1,1)), hbHash(i + vec3(1,1,1)), f.x), f.y), f.z);
   }
+
+  /*
+   * A groove in a surface, drawn so it stops existing before it starts to flicker.
+   *
+   * The argument "distance" is how far this pixel is from the middle of the joint, in
+   * metres, and "width" is how wide the joint is meant to be. The joints used a fixed
+   * transition of five centimetres, in world units. That is fine while a pixel covers less
+   * than five centimetres of wall. From the overview camera one pixel covers 0.207 m, so
+   * the whole joint sat inside a single pixel: sampled far below what it needs, it fell on
+   * a different side of the line every time the camera moved, and the panel joints on the
+   * smaller blocks crawled across them.
+   *
+   * fwidth is how much "distance" changes between neighbouring pixels, which here is
+   * exactly how much wall one pixel covers. Two things follow from it. The transition
+   * widens to at least a pixel, so a joint is never drawn narrower than the pixel drawing
+   * it; and once a pixel spans several joint widths the joint fades out entirely, because
+   * at that point the honest answer is the surface's average rather than a guess about
+   * which side of a line the pixel centre happened to land on.
+   *
+   * Only ever included in the fragment shader -- fwidth does not exist in a vertex one.
+   */
+  float hbGroove(float distance, float width) {
+    float pixel = fwidth(distance);
+    float line = 1.0 - smoothstep(0.0, width + pixel, distance);
+    float resolvable = 1.0 - smoothstep(width, width * 4.0, pixel);
+    return line * resolvable;
+  }
 `;
 
 /**
@@ -112,11 +139,11 @@ export function createHybridMaterial(
             float vc = abs(vWNormal.x) > 0.5 ? vWPos.z : vWPos.x;
             float fy = abs(fract((vWPos.y + 0.5) / 2.8 + 0.5) - 0.5) * 2.8;
             float fx = abs(fract(vc / 3.0 + 0.5) - 0.5) * 3.0;
-            hbCol *= 1.0 - 0.14 * (1.0 - smoothstep(0.0, 0.05, min(fy, fx))) * (1.0 - hbUp);
+            hbCol *= 1.0 - 0.14 * hbGroove(min(fy, fx), 0.05) * (1.0 - hbUp);
           }
           if (vStyle > 1.5 && vStyle < 2.5 && hbUp > 0.5) {
             vec2 g = abs(fract(vWPos.xz * 2.0 + 0.5) - 0.5) * 0.5;
-            hbCol *= 1.0 - 0.12 * (1.0 - smoothstep(0.0, 0.02, min(g.x, g.y)));
+            hbCol *= 1.0 - 0.12 * hbGroove(min(g.x, g.y), 0.02);
           }
           if (vStyle > 2.5 && vStyle < 3.5 && hbUp > 0.5) {
             hbCol *= 1.0 - 0.09 * smoothstep(0.55, 0.75, hbNoise(vWPos * 0.35 + 7.0));
