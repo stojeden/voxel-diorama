@@ -48,6 +48,15 @@ export interface RuntimeEnv {
   dispose: () => void;
 }
 
+/**
+ * How far past the display's own resolution the far view renders, per axis.
+ *
+ * Not a taste setting: it is the factor that turns resolution from a sharpness knob into a
+ * stability one, because what removes shimmer is averaging several samples into one
+ * displayed pixel rather than resolving detail the display then has to represent exactly.
+ */
+const FAR_SUPERSAMPLE = 1.3;
+
 const SMAA_PRESETS = {
   low: SMAAPreset.LOW,
   medium: SMAAPreset.MEDIUM,
@@ -234,13 +243,24 @@ export function bootstrap(
 
   const syncSize = () => {
     const cameraScale = cameraPerformanceMode === 'bus' ? 0.87 : 1;
-    // The far view renders at its own ratio rather than a fraction of the near one: see
-    // `farPixelRatio`. The near view keeps what it had, because the night street has no
-    // headroom for a single pixel more.
-    const adaptivePixelRatio = ambientOcclusionNear
-      ? Math.max(1, quality.pixelRatio * cameraScale)
-      : Math.max(1, quality.farPixelRatio);
-    const pixelRatio = Math.min(window.devicePixelRatio, adaptivePixelRatio);
+    /**
+     * The far view supersamples; the near view does not. See `farPixelRatio`.
+     *
+     * The near ratio is capped at the display, because rendering more pixels than the
+     * screen shows only pays for itself if they are averaged down, and the near frame has
+     * nothing left to spend either way. The far ratio is deliberately allowed past the
+     * display and bounded by 1.3x it instead: that bound is what supersampling means here,
+     * and it keeps a very high-DPI screen from asking for a buffer nothing can afford.
+     */
+    const nearPixelRatio = Math.min(
+      window.devicePixelRatio,
+      Math.max(1, quality.pixelRatio * cameraScale)
+    );
+    const farPixelRatio = Math.max(
+      1,
+      Math.min(quality.farPixelRatio, window.devicePixelRatio * FAR_SUPERSAMPLE)
+    );
+    const pixelRatio = ambientOcclusionNear ? nearPixelRatio : farPixelRatio;
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setPixelRatio(pixelRatio);

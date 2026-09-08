@@ -48,8 +48,12 @@ describe('QualityManager', () => {
         Math.max(1, profile.pixelRatio * 0.8)
       );
     }
-    // Only High was measured, so only High was raised.
-    expect(new QualityManager({}, 'high').getProfile().farPixelRatio).toBe(2);
+    // Only High was measured, so only High was raised -- and past the display's own
+    // resolution, because matching it exactly was measurably less stable than either the
+    // blur it replaced or the supersampling that replaced it.
+    const high = new QualityManager({}, 'high').getProfile();
+    expect(high.farPixelRatio).toBe(2.6);
+    expect(high.farPixelRatio).toBeGreaterThan(high.pixelRatio);
     expect(new QualityManager({}, 'medium').getProfile().farPixelRatio).toBe(1);
     expect(new QualityManager({}, 'low').getProfile().farPixelRatio).toBe(1);
   });

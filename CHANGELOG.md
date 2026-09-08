@@ -28,15 +28,28 @@ a wersjonowanie projektu docelowo stosuje [Semantic Versioning](https://semver.o
   a piksel przeglądu obejmuje 0,2 m, więc wzór był próbkowany raz na kilka swoich szerokości.
   Szerokość przejścia bierze się teraz z pochodnej na piksel i wygasza wzór, gdy piksel
   obejmuje kilka szerokości spoiny. Dotyczy spoin elewacji i fugowania chodnika.
-- **Daleki widok renderuje się w rozdzielczości ekranu, a nie poniżej niej.** Był mnożony
+- **Daleki widok nadpróbkowuje: renderuje 1,3× rozdzielczości ekranu na osi.** Był mnożony
   przez 0,8, czyli na High spadał do 1,0 i Retina rozciągała go dwukrotnie — najbardziej
-  rozmyty obraz w produkcie dokładnie w widoku o najdrobniejszym detalu. Stać go na to,
-  bo okluzja i bloom są tam już wyłączone: mediana GPU rośnie z 7,2–7,5 ms do 8,2–9,7 ms
-  przy 1440×900 i dSF 2, w dzień, o zmierzchu i w nocy. Bliskiego widoku nie stać —
-  nocna ulica ma 23 ms przy 1,15 i 48 ms przy 1,3, bo jest ograniczona wypełnieniem
-  szesnastu światel. Zmierzono i podniesiono tylko profil High.
-- MSAA rozważone i odrzucone z pomiarem, nie z przekonania: przy 2 lub 4 próbkach nocna
-  ulica rośnie z 24,4 ms do 37–44 ms. Pozostaje 0 we wszystkich profilach.
+  rozmyty obraz w produkcie dokładnie w widoku o najdrobniejszym detalu. Samo zrównanie do
+  ekranu (2,0) też nie jest odpowiedzią i to jest korekta wcześniejszej wersji tej zmiany:
+  wygląda dobrze, ale jest **mniej stabilne** niż rozmycie, które zastąpiło, bo upscaling
+  nie potrafi migotać, a rozdzielone szczegóły podpikselowego miasta potrafią. Mierzone na
+  obrazie prezentowanym, przy obrocie kamery o cztery piksele ekranu, pikseli skaczących
+  >24 poziomy: 0,50% przy 1,0, 0,89% przy 2,0, znów 0,50% przy 2,6 — i to ostatnie jest
+  zarazem ostre. 2,6 to miejsce, w którym krzywa przestaje się opłacać: 3,2 daje 2,6%
+  stabilności więcej za trzykrotność klatki. Mediana GPU 12,35 ms w dzień, 11,18 ms w nocy,
+  11,78 ms o zmierzchu, przy budżecie 16,7 ms; 5 z 5 parowanych stanów lepszych.
+- Bliski widok zostaje przy 1,15 i nie jest to przeoczenie: przy 1,6 dzienna ulica kosztuje
+  15,14 ms z 16,7, zbliżenie 17,87 ms, a nocna ulica 58,84 ms, bo jest ograniczona
+  wypełnieniem szesnastu światel. Jego niestabilność jest realna i zmierzona — 0,89%
+  pikseli elewacji przy 1,15 wobec 0,20% przy 1,6 — i zostaje do czasu, gdy bliska klatka
+  stanieje.
+- MSAA i presety SMAA rozważone i odrzucone z pomiarem parowanym, nie z przekonania.
+  MSAA 4 poprawia resztę po kompensacji ruchu o 3,1% w dzień i 3,8% w nocy w dalekim
+  widoku, a na elewacji nie poprawia wcale — za +1,9 ms; na nocnej ulicy podnosi klatkę z
+  24,4 do 37–44 ms. SMAA ULTRA daje 0,7%. `msaaSamples` pozostaje 0 we wszystkich profilach.
+  Ablacja: cienie odpowiadają za 3% reszty, dithering za 0,8%, `PCFSoftShadowMap` za nic —
+  żadna pojedyncza przyczyna nie dominuje, dominuje rozdzielczość.
 
 ### Removed
 

@@ -5,25 +5,38 @@ export interface QualityProfile {
   level: QualityLevel;
   pixelRatio: number;
   /**
-   * The ratio the far view renders at, which is higher than the near one and not lower.
+   * The ratio the far view renders at: above the display's own resolution, on purpose.
    *
-   * It used to be lower: `syncSize` multiplied `pixelRatio` by 0.8 once the camera pulled
-   * back, which on High meant the overview rendered at 1.0 and a Retina screen stretched
-   * it to 2.0. That is the view where a panel joint is a fraction of a pixel wide, so it
-   * was the softest picture in the product in exactly the place with the most detail to
-   * lose -- and it is where the reported flicker between the slabs lives.
+   * It used to be below it. `syncSize` multiplied `pixelRatio` by 0.8 once the camera
+   * pulled back, which on High meant the overview rendered at 1.0 and a high-DPI screen
+   * stretched it to 2.0 -- the softest picture in the product in the view with the most
+   * detail to lose.
    *
-   * The far view can afford it because ambient occlusion and bloom are already switched
-   * off there. Measured at 1440x900 with a device ratio of 2, GPU median per frame: the
-   * overview goes from 7.2-7.5 ms at 1.0 to 8.2-9.7 ms at 2.0, in daylight, at dusk and
-   * at night alike. The near view cannot: the night street sits at 23 ms at 1.15 and
-   * jumps to 48 ms at 1.3, because it is fill-bound on sixteen lights rather than
-   * draw-bound. So this raises the far view only, and the near view keeps `pixelRatio`.
+   * Matching the display exactly is not the answer either, and this is the correction of
+   * an earlier mistake in this file: at 2.0 the overview looks right and is measurably
+   * *less* stable than the blurred 1.0 it replaced, because an upscale cannot shimmer and
+   * a resolved sub-pixel city can. Measured on the presented image with the camera turned
+   * four display pixels, pixels jumping more than 24 levels went 0.50% at 1.0, 0.89% at
+   * 2.0, and back to 0.50% at 2.6 -- the last of those being sharp as well as steady,
+   * because the extra samples are averaged down into the display's pixels rather than
+   * thrown at detail nothing filters.
    *
-   * Only High was measured, so only High is raised. Medium and Low keep the 1.0 they
-   * already resolved to -- an unmeasured device is not the place to spend four times the
-   * pixels. `syncSize` still clamps to the display's own ratio, so nothing changes at all
-   * on a screen that is not high-DPI.
+   * 2.6 is 1.3x the display in each axis, and it is where the curve stops paying: 3.2
+   * gains 2.6% more stability for three times the frame (12.35 ms to 30.67 ms at
+   * 1440x900, device ratio 2). The far view can afford 2.6 because ambient occlusion and
+   * bloom are off there -- GPU median 12.35 ms by day, 11.18 ms at night, 11.78 ms at
+   * dusk, against a 16.7 ms frame, and 5 of 5 paired states improved in each.
+   *
+   * The near view gets none of this and it is not an oversight: at 1.6 the day street
+   * costs 15.14 ms of the 16.7, a close-up 17.87 ms, and the night street 58.84 ms,
+   * because it is fill-bound on sixteen lights. Its own instability is real and measured
+   * -- 0.89% of the facade's pixels at 1.15 against 0.20% at 1.6 -- and it stays until
+   * something makes the near frame cheaper.
+   *
+   * Only High was measured, so only High is raised; Medium and Low keep the 1.0 they
+   * already resolved to. `syncSize` also bounds this by 1.3x whatever the display's own
+   * ratio is, so a low-DPI screen supersamples gently and a very high-DPI one does not
+   * run away.
    */
   farPixelRatio: number;
   msaaSamples: number;
@@ -109,7 +122,7 @@ export const QUALITY_PROFILES: Record<QualityLevel, QualityProfile> = {
   high: {
     level: 'high',
     pixelRatio: 1.15,
-    farPixelRatio: 2,
+    farPixelRatio: 2.6,
     msaaSamples: 0,
     shadows: true,
     shadowMapSize: 1024,
