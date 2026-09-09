@@ -4,6 +4,7 @@ import {
   type ScheduledWindowMaterial,
 } from '../environment/CityRhythm';
 import { LakeSurface } from '../environment/LakeSurface';
+import { buildPlayground } from './Playground';
 import type { QualityProfile } from '../performance/QualityManager';
 import {
   BLOCK_CONFIGS,
@@ -20,7 +21,6 @@ import {
   LAKE,
   LAMP_SPECS,
   KIOSK_SPECS,
-  PLAYGROUND,
   STATION_STOPS,
   TRACK_HALF_GAUGE,
   TUNNEL_HEIGHT,
@@ -517,20 +517,6 @@ function generateStreetLamp(x: number, z: number, dz: number, height = 4): Voxel
       castShadow: false,
     },
   ];
-}
-
-function generatePlayground(x: number, z: number): VoxelData[] {
-  const voxels: VoxelData[] = [];
-  for (let sx = -2; sx <= 2; sx++) {
-    for (let sz = -2; sz <= 2; sz++) {
-      voxels.push({ position: new THREE.Vector3(x + sx, 0, z + sz), color: COLORS.accent });
-    }
-  }
-  for (let y = 0; y < 4; y++) {
-    voxels.push({ position: new THREE.Vector3(x - 4, y, z), color: COLORS.accentBlue });
-    voxels.push({ position: new THREE.Vector3(x - 4 + y, 3 - y * 0.5, z), color: COLORS.accentPink });
-  }
-  return voxels;
 }
 
 export function generateBench(x: number, z: number, rotate = false, backSign: 1 | -1 = -1): VoxelData[] {
@@ -1517,7 +1503,6 @@ export function createWorld(
     allVoxels.push(...generateStreetLamp(lamp.x, lamp.z, lamp.dz));
   }
 
-  allVoxels.push(...generatePlayground(PLAYGROUND.x, PLAYGROUND.z));
   allVoxels.push(...generateCityProps(options.excludeKiosks));
   allVoxels.push(...generateLake());
 
@@ -1664,12 +1649,20 @@ export function createWorld(
   group.add(streetGlow.mesh);
   trackDisposables.push(streetGlow.geometry, streetGlow.material);
 
+  // ── Playground by the lake ──
+  // Its own module rather than voxels: the frame is thin tube, which a voxel cannot be,
+  // and the swings move, which a voxel instance has no hook for.
+  const playground = buildPlayground();
+  group.add(playground.group);
+  trackDisposables.push(playground);
+
   // ── Cyberpunk megatowers (hidden until the theme morph) ──
   const cyberBuild = buildCyberTowers(options.excludeBlocks);
   scene.add(cyberBuild.group);
   const setCyberRise = (factor: number) => {
     cyberBuild.group.visible = factor > 0.01;
     cyberBuild.group.scale.y = Math.max(factor, 0.0001);
+    playground.setCyber(factor);
   };
 
   // ── Snow caps (hidden until it actually snows) ──
@@ -1800,6 +1793,7 @@ export function createWorld(
     },
     updateEnvironment(elapsed, wind, rain, freeze, mist) {
       lakeSurface.update(elapsed, wind, rain, freeze, mist);
+      playground.update(elapsed, wind);
     },
     dispose() {
       lakeSurface.dispose();

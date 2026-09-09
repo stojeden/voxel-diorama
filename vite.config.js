@@ -66,6 +66,17 @@ export default defineConfig({
               includeDependenciesRecursively: false,
             },
             {
+              // The lakeside playground: one cohesive prop, and the entry chunk had
+              // 1.1 kB left of its 244 000 B when this arrived. Splitting rather than
+              // raising the budget is the same call `experience-signals` below records --
+              // growth stays visible instead of hiding behind a bigger number. The
+              // Cyberpunk dressing for it sits in `cyber-style` and is loaded later still.
+              name: 'playground',
+              test: /src[\\/]world[\\/]Playground\.ts$/,
+              priority: 12,
+              includeDependenciesRecursively: false,
+            },
+            {
               // Small, cohesive and independently cacheable world-signal logic.
               // Keeping it out of the near-limit entry chunk leaves room for the
               // UI redesign without hiding growth behind a larger budget.

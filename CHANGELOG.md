@@ -9,6 +9,34 @@ a wersjonowanie projektu docelowo stosuje [Semantic Versioning](https://semver.o
 
 ## [Unreleased]
 
+### Changed
+
+- **Plac zabaw nad jeziorem zamiast placeholdera.** Stało tam pięć na pięć wokseli w
+  kolorze `accent`, jeden niebieski słupek i cztery różowe kostki po przekątnej, które
+  miały być zjeżdżalnią; płyta siedziała na całym wokselu, więc jej wierzch był 0,5 m nad
+  chodnikiem. Teraz: rurowa zjeżdżalnia — podest 1,20 m, wybieg 2,00 m, czyli **31°** i
+  ślizg 2,33 m, drabinka o trzech szczeblach, pałąk do trzymania, burty z rurki ∅ 50 mm
+  przy krawędzi ślizgu — oraz huśtawka z belką 2,20 m i dwoma siedziskami na 0,45 m.
+  Wszystko na gruncie, na piaskowej strefie upadku równo z trawą.
+- **Huśtawki bujają się wiatrem, z okresem wahadła.** Nie dowolna sinusoida: łańcuch ma
+  1,75 m, więc T = 2π√(L/g) = **2,65 s**, i oba siedziska dzielą ten okres dokładnie —
+  różni je faza, nie prędkość. Amplituda do 6° przy pełnym wietrze, czyli 18 cm; w pogodzie,
+  którą świat naprawdę produkuje, wychodzi 0,96° pogodnie, 1,80° w śniegu i 3,72° w deszczu.
+  Ruch liczy się z zegara symulacji, więc checkpoint go zamraża.
+- Plac zabaw mieści się w istniejącej rezerwacji 6×4 m i to jest wymóg, nie zbieg
+  okoliczności: `isPlaceableProp` odrzuca kandydatów na drzewa bliżej niż 3,5 m od
+  rezerwacji, a 46 pozycji drzew jest przez niego generowanych — szersza działka
+  przelosowałaby cały park. Sprzęt dopasowano do działki, nie odwrotnie.
+- W Cyberpunku ten sam stelaż świeci: rurki na cyjan, ślizg na magentę. Bez dodatkowej
+  geometrii i bez drugiego zestawu bryły — zmienia się emisja materiałów, a moduł neonu
+  ładuje się dopiero przy pierwszym morfie i siedzi w chunku `cyber-style`.
+- Cały plac to **dwie geometrie** (jedna rurka, jedno pudełko) i sześć wywołań rysowania.
+  Nic cieńszego od tekstela mapy cieni nie rzuca cienia: rurka ∅ 50 mm to jedna trzecia
+  tekstela, czyli dokładnie ta klasa artefaktu, którą usunięto spod parapetów.
+- Nowa grupa chunków `playground`: moduł ma 5,6 kB, a wiązce wejściowej zostało 1,1 kB
+  z 244 000 B. Budżet **nie został podniesiony** — wzrost jest widoczny w osobnym pliku,
+  tak samo jak przy `cyber-style` i `experience-signals`.
+
 ### Fixed
 
 - **Zęby pod parapetami.** Cień parapetu to jedna trzecia tekstela mapy cieni, więc mapa

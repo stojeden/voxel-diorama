@@ -42,6 +42,7 @@
 ### Smaczki fabularne
 - 🐄 **Krowa i UFO** — krowa pasie się nad jeziorem; co drugą noc latający spodek wciąga ją wiązką, a następnej nocy odstawia. Rankiem po porwaniu **rolnik** szuka jej, drapie się po głowie i wygraża kosmitom — a po powrocie radośnie ją klepie.
 - 👽 Czasem kosmici robią zamiast tego **nalot na spożywczak** — rano sklep po prostu nie zapala świateł w swoich godzinach otwarcia, zamiast stawiać zaporę przed drzwiami.
+- 🛝 **Plac zabaw nad jeziorem** w naturalnej skali: rurowa zjeżdżalnia (podest 1,20 m, ślizg pod 31°, pałąk do trzymania) i huśtawka z dwoma siedziskami, które **bujają się na wietrze** — z okresem wahadła wynikającym z długości łańcucha, więc pogodnie ledwie drgają, a w deszczu odchylają się o blisko cztery stopnie. W Cyberpunku ten sam stelaż świeci na cyjan, a ślizg na magentę.
 - 🎣 **Wędkarz** w czapeczce, ze skrzynką: rano wychodzi z bloku, łowi nad brzegiem (raz na kilka brań wyciąga rybę wielką jak on sam — zawsze ucieka), zimą **łowi w przeręblu na środku zamarzniętego jeziora**, siedząc na dopasowanym stołku z poprawnie zgiętymi nogami, a wieczorem wraca do domu.
 - 📮 **Listonosz** w niebieskim uniformie, czapce i z przewieszoną torbą objeżdża
   rano południową dzielnicę. Ma trzy osobne punkty doręczeń, a czasem goni go
