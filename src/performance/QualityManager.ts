@@ -209,6 +209,60 @@ function capabilitiesFromBrowser(): DeviceCapabilities {
   };
 }
 
+/**
+ * How far past the display's own resolution the far view renders, per axis.
+ *
+ * Not a taste setting: it is the factor that turns resolution from a sharpness knob into a
+ * stability one, because what removes shimmer is averaging several samples into one
+ * displayed pixel rather than resolving detail the display then has to represent exactly.
+ */
+export const FAR_SUPERSAMPLE = 1.3;
+
+/**
+ * The largest far-view buffer that has actually been measured: 3744x2340.
+ *
+ * A ratio on its own is not a budget, and treating it as one was a defect in the previous
+ * revision. 2.6 was measured at one viewport -- 1440x900 with a device ratio of 2, where it
+ * comes to 8.76 Mpx and 12.35 ms. The same 2.6 asks a 2560x1440 window for 24.9 Mpx, three
+ * times what was measured and several hundred megabytes of half-float targets, and a
+ * portrait iPad for 9.45 Mpx. Neither number was ever put in front of a GPU.
+ *
+ * So the ratio is capped by a pixel count as well: never more pixels than were measured.
+ * At 1440x900 the cap works out to 2.60 and changes nothing, which is the point -- the
+ * measured case stays exactly as measured, and everything larger comes down to it.
+ *
+ * What this cap does NOT know is the GPU. It bounds memory and bounds the work to a
+ * measured amount of it; a slower device rendering 8.76 Mpx is still a slower device, and
+ * only a measurement on that device can say what it can afford.
+ */
+export const FAR_PIXEL_BUDGET = 3744 * 2340;
+
+/**
+ * The ratio the far view actually renders at, from three bounds at once.
+ *
+ * The profile says how much supersampling this quality level wants, the display says what
+ * 1.3x of it means here, and the budget says how many pixels have been measured. The
+ * smallest wins, and never below 1.
+ *
+ * Pure and exported so the bounds can be tested at viewports nobody has a screen for.
+ */
+export function farViewPixelRatio(
+  profileFarRatio: number,
+  devicePixelRatio: number,
+  cssWidth: number,
+  cssHeight: number
+): number {
+  const area = Math.max(1, cssWidth * cssHeight);
+  return Math.max(
+    1,
+    Math.min(
+      profileFarRatio,
+      devicePixelRatio * FAR_SUPERSAMPLE,
+      Math.sqrt(FAR_PIXEL_BUDGET / area)
+    )
+  );
+}
+
 export function recommendedLevel(capabilities: DeviceCapabilities): QualityLevel {
   const cores = capabilities.hardwareConcurrency ?? 6;
   const memory = capabilities.deviceMemory;

@@ -28,7 +28,8 @@ a wersjonowanie projektu docelowo stosuje [Semantic Versioning](https://semver.o
   a piksel przeglądu obejmuje 0,2 m, więc wzór był próbkowany raz na kilka swoich szerokości.
   Szerokość przejścia bierze się teraz z pochodnej na piksel i wygasza wzór, gdy piksel
   obejmuje kilka szerokości spoiny. Dotyczy spoin elewacji i fugowania chodnika.
-- **Daleki widok nadpróbkowuje: renderuje 1,3× rozdzielczości ekranu na osi.** Był mnożony
+- **Daleki widok nadpróbkowuje: do 1,3× rozdzielczości ekranu na osi, w granicach
+  zmierzonego budżetu pikseli (patrz punkt niżej).** Był mnożony
   przez 0,8, czyli na High spadał do 1,0 i Retina rozciągała go dwukrotnie — najbardziej
   rozmyty obraz w produkcie dokładnie w widoku o najdrobniejszym detalu. Samo zrównanie do
   ekranu (2,0) też nie jest odpowiedzią i to jest korekta wcześniejszej wersji tej zmiany:
@@ -39,9 +40,17 @@ a wersjonowanie projektu docelowo stosuje [Semantic Versioning](https://semver.o
   zarazem ostre. 2,6 to miejsce, w którym krzywa przestaje się opłacać: 3,2 daje 2,6%
   stabilności więcej za trzykrotność klatki. Mediana GPU 12,35 ms w dzień, 11,18 ms w nocy,
   11,78 ms o zmierzchu, przy budżecie 16,7 ms; 5 z 5 parowanych stanów lepszych.
+- **Bufor dalekiego widoku jest ograniczony liczbą pikseli, nie tylko współczynnikiem.**
+  Sam współczynnik nie jest budżetem i traktowanie go tak było defektem poprzedniej
+  rewizji: 2,6 zmierzono przy jednym kadrze — 1440×900 i dSF 2, czyli 8,76 Mpx i 12,35 ms
+  — a ten sam 2,6 zamawia w oknie 2560×1440 **24,9 Mpx**, a na iPadzie w pionie 9,45 Mpx.
+  Żadnej z tych liczb nikt nie postawił przed kartą. Teraz obowiązuje reguła „nigdy więcej
+  pikseli niż zmierzono": przy 1440×900 wychodzi 2,60 i nie zmienia się nic, a wszystko
+  większe schodzi do tego pułapu. Ograniczenie pilnuje pamięci i ilości pracy — nie wie
+  nic o wydajności karty.
 - Bliski widok zostaje przy 1,15 i nie jest to przeoczenie: przy 1,6 dzienna ulica kosztuje
   15,14 ms z 16,7, zbliżenie 17,87 ms, a nocna ulica 58,84 ms, bo jest ograniczona
-  wypełnieniem szesnastu światel. Jego niestabilność jest realna i zmierzona — 0,89%
+  wypełnieniem szesnastu świateł. Jego niestabilność jest realna i zmierzona — 0,89%
   pikseli elewacji przy 1,15 wobec 0,20% przy 1,6 — i zostaje do czasu, gdy bliska klatka
   stanieje.
 - MSAA i presety SMAA rozważone i odrzucone z pomiarem parowanym, nie z przekonania.

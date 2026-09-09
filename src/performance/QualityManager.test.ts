@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { QualityManager, recommendedLevel } from './QualityManager';
+import {
+  FAR_PIXEL_BUDGET,
+  QualityManager,
+  farViewPixelRatio,
+  recommendedLevel,
+} from './QualityManager';
 
 function sample(manager: QualityManager, fps: number, seconds: number): void {
   const delta = 1 / fps;
@@ -90,5 +95,35 @@ describe('QualityManager', () => {
     const manager = new QualityManager({ hardwareConcurrency: 10 }, 'auto');
     sample(manager, 5, 20);
     expect(manager.getSnapshot().level).toBe('low');
+  });
+});
+
+describe('farViewPixelRatio', () => {
+  const buffer = (ratio: number, w: number, h: number) => Math.round(w * ratio) * Math.round(h * ratio);
+
+  it('supersamples the measured viewport exactly as it was measured', () => {
+    // 1440x900 at a device ratio of 2 is where 2.6 was measured, at 12.35 ms.
+    expect(farViewPixelRatio(2.6, 2, 1440, 900)).toBeCloseTo(2.6, 2);
+  });
+
+  it('never asks for more pixels than have been measured', () => {
+    // A ratio is not a budget: the same 2.6 would ask a 2560x1440 window for 24.9 Mpx.
+    for (const [w, h] of [[1440, 900], [2560, 1440], [3440, 1440], [1024, 1366], [393, 852]]) {
+      const ratio = farViewPixelRatio(2.6, 3, w, h);
+      expect(buffer(ratio, w, h)).toBeLessThanOrEqual(FAR_PIXEL_BUDGET * 1.01);
+    }
+    expect(farViewPixelRatio(2.6, 2, 2560, 1440)).toBeLessThan(2.6);
+  });
+
+  it('supersamples gently on a display that is not high-DPI, and never below 1', () => {
+    expect(farViewPixelRatio(2.6, 1, 1440, 900)).toBeCloseTo(1.3, 2);
+    expect(farViewPixelRatio(1, 3, 393, 852)).toBe(1);
+    expect(farViewPixelRatio(2.6, 0.5, 1440, 900)).toBe(1);
+  });
+
+  it('is bounded by the profile, so an unmeasured profile stays where it is', () => {
+    // Medium and Low ask for 1 and get 1, on any screen.
+    expect(farViewPixelRatio(1, 3, 393, 852)).toBe(1);
+    expect(farViewPixelRatio(1, 2, 1024, 1366)).toBe(1);
   });
 });
