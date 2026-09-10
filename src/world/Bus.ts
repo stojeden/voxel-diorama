@@ -655,6 +655,12 @@ export function createBus(scene: THREE.Scene, random = fallbackRandom('bus')): B
     const lerp = 1 - Math.exp(-6 * Math.max(delta, 0.0001));
     p.currentOpacity += (p.targetOpacity - p.currentOpacity) * lerp;
     for (const mat of p.build.materials) mat.opacity = p.currentOpacity;
+    // A figure faded to nothing is still drawn: the fade rides on `material.opacity`, and a
+    // transparent mesh at zero opacity costs a colour draw and a normal-pass draw and
+    // contributes not one photon. Five meshes per figure, and at a quiet moment most of the
+    // twenty bus-stop figures are at zero -- measured at 24 draw calls in the opening
+    // overview, against a 1400 budget that the owner's window reaches 1418 of.
+    p.build.group.visible = p.currentOpacity > 0.01;
     applyPassengerEclipsePose(p.build, p.eclipsePose, eclipseReaction.attention);
   }
 

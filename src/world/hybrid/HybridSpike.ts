@@ -252,7 +252,16 @@ export function attachHybridSpike(options: HybridSpikeOptions): HybridHandle {
         const { cls } = parseKey(key);
         const mesh = new THREE.Mesh(geometry, materials[cls]);
         mesh.name = `hybrid-${cluster.id}-${key}`;
-        mesh.castShadow = cls === 'opaque' || cls === 'glass';
+        // Glass does not cast, and that is measured rather than assumed.
+        //
+        // Every pane is a `sidePlane` sitting 0.015 m outside its own facade, so whatever it
+        // shadows is the wall directly behind it. Toggled inside one synchronous block, with
+        // a return-to-baseline control reading exactly zero: the opening overview does not
+        // change by one level, a close facade changes by 0.0002 on average with 0.003% of
+        // pixels moving more than three levels, and the RTV tower's free-standing pane --
+        // the one case where a shadow could have landed on something real -- also does not
+        // change at all. It buys 27 draw calls in a window that was reaching 1418 of 1400.
+        mesh.castShadow = cls === 'opaque';
         mesh.receiveShadow = cls !== 'glow';
         mesh.renderOrder = cls === 'glassClear' ? 2 : 0;
         group.add(mesh);
