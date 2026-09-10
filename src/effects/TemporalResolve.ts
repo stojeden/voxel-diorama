@@ -68,8 +68,8 @@ import { Pass } from 'postprocessing';
  *
  *   stability (detrended residual under sub-pixel camera creep)   -43.5%
  *   worst single pixel                                            -51%
- *   sharpness, static geometry                                     -4.2%
- *   sharpness, the smoke plume -- the fastest thing in frame       -4.2%
+ *   sharpness, static geometry                                     -2.8%
+ *   sharpness, the smoke plume -- the fastest thing in frame       -4.2% at amplitude 1.0
  *   frame time, median of 120                            12.78 -> 13.10 ms
  *
  * The two sharpness figures matching is the important one: the variance clip is holding, so
@@ -111,10 +111,36 @@ function halton(index: number, base: number): number {
   return result;
 }
 
+/**
+ * How wide the nudge is, as a fraction of a pixel, and it is deliberately NOT the textbook
+ * value.
+ *
+ * The usual amplitude is a full pixel -- offsets spanning -0.5 to +0.5 -- because that
+ * covers exactly one pixel's worth of coverage. But the jitter is also the pass's own
+ * source of noise: each frame carries a tenth of a differently-offset image, and the wider
+ * the offset the more of that survives into the output. Swept on the shaded facade that was
+ * reported, against the same shot without the pass:
+ *
+ *   amplitude   1.25     1.00     0.75     0.50
+ *   flicker    -44.7%   -46.0%   -43.5%   -43.5%
+ *   sharpness   -4.2%    -3.9%    -2.8%    -2.9%
+ *
+ * Three quarters of a pixel keeps essentially the whole flicker win and gives back more
+ * than a quarter of the blur, and the curve is flat from there down to a half, so this is
+ * the wide end of a plateau rather than a knife edge. Widening the blend factor instead --
+ * 0.15 or 0.20 -- buys sharpness far more expensively: 0.20 gave back only 1.7 points of
+ * blur for 13 points of flicker.
+ */
+const JITTER_AMPLITUDE = 0.75;
+
 /** The offsets, in pixels, centred on zero. Computed once: the sequence never changes. */
 const JITTER: ReadonlyArray<readonly [number, number]> = Array.from(
   { length: JITTER_SAMPLES },
-  (_, index) => [halton(index + 1, 2) - 0.5, halton(index + 1, 3) - 0.5] as const
+  (_, index) =>
+    [
+      (halton(index + 1, 2) - 0.5) * JITTER_AMPLITUDE,
+      (halton(index + 1, 3) - 0.5) * JITTER_AMPLITUDE,
+    ] as const
 );
 
 /**
