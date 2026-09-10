@@ -11,6 +11,7 @@ import {
 import {
   applyPassengerEclipsePose,
   buildPassenger,
+  SHARED_PASSENGER_GEOMETRY,
   eclipsePassengerPoseFor,
   easeInOut,
   type EclipsePassengerPose,
@@ -922,14 +923,18 @@ export function createBus(scene: THREE.Scene, random = fallbackRandom('bus')): B
       underGlow.dispose();
       scene.remove(group);
       group.traverse((child) => {
-        if (child instanceof THREE.Mesh) child.geometry.dispose();
+        if (child instanceof THREE.Mesh && !SHARED_PASSENGER_GEOMETRY.has(child.geometry)) {
+          child.geometry.dispose();
+        }
       });
       for (const mat of materials) mat.dispose();
       for (const crowd of crowds) {
         for (const p of crowd.passengers) {
           scene.remove(p.build.group);
           p.build.group.traverse((child) => {
-            if (child instanceof THREE.Mesh) child.geometry.dispose();
+            if (child instanceof THREE.Mesh && !SHARED_PASSENGER_GEOMETRY.has(child.geometry)) {
+              child.geometry.dispose();
+            }
           });
           for (const mat of p.build.materials) mat.dispose();
         }

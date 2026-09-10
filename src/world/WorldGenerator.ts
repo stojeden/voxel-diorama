@@ -1390,7 +1390,26 @@ function buildCyberTowers(
 
   bodyInstances.castShadow = true;
   bodyInstances.receiveShadow = true;
-  for (const mesh of [bodyInstances, cyanInstances, magentaInstances, bandInstances]) {
+  // Trimmed to what was actually placed, and dropped entirely when that is nothing.
+  //
+  // The capacities above are worst-case: every block, five neon strips, three bands. In the
+  // hybrid world `excludeBlocks` holds all thirty-four blocks, so the placement loop
+  // `continue`s on every iteration and not one matrix is written -- yet these four meshes
+  // were still added at full count, which is roughly 340 instances of a unit box sitting on
+  // an identity matrix. Under Cyberpunk that is four draw calls and one geometry spent on
+  // drawing nothing, and Cyberpunk is the tight case for both budgets. The file's own note
+  // above says the hybrid world should not have these towers at all.
+  for (const [mesh, placed] of [
+    [bodyInstances, bodyIndex],
+    [cyanInstances, cyanIndex],
+    [magentaInstances, magentaIndex],
+    [bandInstances, bandIndex],
+  ] as const) {
+    mesh.count = placed;
+    if (placed === 0) {
+      mesh.dispose();
+      continue;
+    }
     mesh.instanceMatrix.setUsage(THREE.StaticDrawUsage);
     group.add(mesh);
   }

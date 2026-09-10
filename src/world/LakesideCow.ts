@@ -1,6 +1,11 @@
 import * as THREE from 'three';
 import { COW_MEADOW, GROUND_SURFACE_Y, KIOSK_MAIN, KIOSK_RAID, LAKE } from './WorldLayout';
-import { buildPassenger, easeInOut, type PassengerBuild } from './PassengerCrowd';
+import {
+  buildPassenger,
+  easeInOut,
+  SHARED_PASSENGER_GEOMETRY,
+  type PassengerBuild,
+} from './PassengerCrowd';
 import { fallbackRandom, type RandomSource } from '../core/Random';
 
 /**
@@ -762,7 +767,9 @@ export class LakesideCow {
   dispose(): void {
     this.scene.remove(this.cow.group, this.ufo.group, this.farmer.group, this.crate);
     this.farmer.group.traverse((child) => {
-      if (child instanceof THREE.Mesh) child.geometry.dispose();
+      if (child instanceof THREE.Mesh && !SHARED_PASSENGER_GEOMETRY.has(child.geometry)) {
+        child.geometry.dispose();
+      }
     });
     for (const mat of this.farmer.materials) mat.dispose();
     for (const item of this.disposables) item.dispose();

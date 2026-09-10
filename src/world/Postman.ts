@@ -1,6 +1,10 @@
 import * as THREE from 'three';
 import { DOG_HOME, GROUND_SURFACE_Y, MAIL_STOPS, POSTMAN_ROUTE_CURVE } from './WorldLayout';
-import { PASSENGER_SCALE, type PassengerBuild } from './PassengerCrowd';
+import {
+  PASSENGER_SCALE,
+  SHARED_PASSENGER_GEOMETRY,
+  type PassengerBuild,
+} from './PassengerCrowd';
 import type { EclipseWorldReactionState } from '../experience/EclipseWorldReaction';
 
 /**
@@ -545,10 +549,10 @@ export class Postman {
   dispose(): void {
     this.scene.remove(this.bike.group, this.dog.group);
     this.bike.group.traverse((o) => {
-      if (o instanceof THREE.Mesh) o.geometry.dispose();
+      if (o instanceof THREE.Mesh && !SHARED_PASSENGER_GEOMETRY.has(o.geometry)) o.geometry.dispose();
     });
     this.dog.group.traverse((o) => {
-      if (o instanceof THREE.Mesh) o.geometry.dispose();
+      if (o instanceof THREE.Mesh && !SHARED_PASSENGER_GEOMETRY.has(o.geometry)) o.geometry.dispose();
     });
     for (const mat of this.bike.mats) mat.dispose();
     for (const mat of this.bike.rider.materials) mat.dispose();

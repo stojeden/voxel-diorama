@@ -1,6 +1,11 @@
 import * as THREE from 'three';
 import { FISHERMAN_HOME, FISHERMAN_SPOT, GROUND_SURFACE_Y, LAKE } from './WorldLayout';
-import { buildPassenger, PASSENGER_SCALE, type PassengerBuild } from './PassengerCrowd';
+import {
+  buildPassenger,
+  PASSENGER_SCALE,
+  SHARED_PASSENGER_GEOMETRY,
+  type PassengerBuild,
+} from './PassengerCrowd';
 import { fallbackRandom, type RandomSource } from '../core/Random';
 
 /**
@@ -587,7 +592,7 @@ export class Fisherman {
       this.bigFish, this.splash, this.iceHole
     );
     this.figure.group.traverse((o) => {
-      if (o instanceof THREE.Mesh) o.geometry.dispose();
+      if (o instanceof THREE.Mesh && !SHARED_PASSENGER_GEOMETRY.has(o.geometry)) o.geometry.dispose();
     });
     for (const mat of this.figure.materials) mat.dispose();
     for (const d of this.disposables) d.dispose();

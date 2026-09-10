@@ -117,6 +117,36 @@ export function applyPassengerEclipsePose(
   }
 }
 
+/**
+ * The four shapes every voxel figure is made of, built once.
+ *
+ * There are thirty-four figures in the city -- twelve at the two station stops, twenty
+ * across five bus stops at four waiting positions each, the fisherman and the farmer -- and
+ * each used to build five fresh `BoxGeometry` of its own. That is 170 geometries drawn from
+ * four distinct shapes, against a budget of 600, and the dimensions are literal constants:
+ * nothing about a figure varies except its materials, which stay per-figure so the jackets
+ * keep their colours. The two arms are the same box, so four shapes cover all five meshes.
+ *
+ * The same pattern is already used by `SHARED_GEOM` in `Train.ts`, `GULL_GEOMETRIES` in
+ * `Birds.ts` and the playground's tubes.
+ *
+ * `PASSENGER_GEOMETRIES` must be skipped by per-figure teardown, which is what
+ * `SHARED_PASSENGER_GEOMETRY` is for: seven places traverse a figure group and dispose
+ * every mesh geometry they find, and with sharing the first of them would pull the shapes
+ * out from under every figure still standing. `Birds.dispose` guards the same way.
+ */
+const PASSENGER_GEOMETRIES = {
+  legs: new THREE.BoxGeometry(0.55, 0.9, 0.5),
+  body: new THREE.BoxGeometry(0.7, 0.95, 0.5),
+  head: new THREE.BoxGeometry(0.55, 0.55, 0.55),
+  arm: new THREE.BoxGeometry(0.22, 0.85, 0.32),
+} as const;
+
+/** The shapes a per-figure teardown must leave alone. */
+export const SHARED_PASSENGER_GEOMETRY: ReadonlySet<THREE.BufferGeometry> = new Set(
+  Object.values(PASSENGER_GEOMETRIES)
+);
+
 /** Voxel-person builder — shared with the bus stop crowds. */
 export function buildPassenger(random = fallbackRandom('passenger-build')): PassengerBuild {
   const group = new THREE.Group();
@@ -128,28 +158,28 @@ export function buildPassenger(random = fallbackRandom('passenger-build')): Pass
   const skinMat = makeMat(skin, { roughness: 0.7 });
   const legsMat = makeMat(0x2a2a2a);
 
-  const legs = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.9, 0.5), legsMat);
+  const legs = new THREE.Mesh(PASSENGER_GEOMETRIES.legs, legsMat);
   legs.position.y = 0.45;
   legs.castShadow = false;
   group.add(legs);
 
-  const body = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.95, 0.5), jacketMat);
+  const body = new THREE.Mesh(PASSENGER_GEOMETRIES.body, jacketMat);
   body.position.y = 1.4;
   body.castShadow = false;
   group.add(body);
 
-  const head = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.55, 0.55), skinMat);
+  const head = new THREE.Mesh(PASSENGER_GEOMETRIES.head, skinMat);
   head.name = 'passenger-head';
   head.position.y = 2.18;
   head.castShadow = false;
   group.add(head);
 
-  const leftArm = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.85, 0.32), jacketMat);
+  const leftArm = new THREE.Mesh(PASSENGER_GEOMETRIES.arm, jacketMat);
   leftArm.position.set(-0.45, 1.45, 0);
   leftArm.castShadow = false;
   group.add(leftArm);
 
-  const rightArm = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.85, 0.32), jacketMat);
+  const rightArm = new THREE.Mesh(PASSENGER_GEOMETRIES.arm, jacketMat);
   rightArm.position.set(0.45, 1.45, 0);
   rightArm.castShadow = false;
   group.add(rightArm);
@@ -395,7 +425,9 @@ export class PassengerCrowd {
       for (const p of crowd.passengers) {
         this.scene.remove(p.group);
         p.group.traverse((child) => {
-          if (child instanceof THREE.Mesh) child.geometry.dispose();
+          if (child instanceof THREE.Mesh && !SHARED_PASSENGER_GEOMETRY.has(child.geometry)) {
+            child.geometry.dispose();
+          }
         });
         for (const mat of p.materials) mat.dispose();
       }
