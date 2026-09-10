@@ -9,6 +9,31 @@ a wersjonowanie projektu docelowo stosuje [Semantic Versioning](https://semver.o
 
 ## [Unreleased]
 
+### Added
+
+- **Akumulacja czasowa za flagą `?taa=1`, domyślnie wyłączona i na razie nieskuteczna.**
+  Jitter projekcji po sekwencji Haltona, reprojekcja z bufora głębi po macierzy poprzedniej
+  klatki, zaciskanie historii do sąsiedztwa 3×3, historia w ping-pongu, wstawione po
+  okluzji i przed bloomem. Powód, dla którego w ogóle powstała: w konfiguracji właściciela
+  (bufor 1584×722 rozciągany na 2880×1314, profil `medium`, domyślny kadr 96 m, czyli
+  8 pikseli na metr) **nic tańszego nie ruszyło migotania** — rozdzielczość jest płaska w
+  całym zakresie (reszta 2,75 przy 1,15; 3,04 przy 2,0; 2,78 przy 2,6), okluzja 0,00,
+  bloom 0,00, MSAA 3% za +1,9 ms, preset SMAA 0,7%. Najgorętszy kafel to jedna ukośna
+  linia szerokości 1–2 pikseli na tle nieba.
+- **I nie działa, co też jest zmierzone, nie podejrzewane.** Przy nieruchomej kamerze i
+  dziewięćdziesięciu klatkach na zbieżność udział pikseli pośrednich na tej krawędzi —
+  sygnatura wygładzenia — zmienił się z 2,337% na 2,367%, czyli o nic. Przebieg działa
+  (309 klatek, 1 reset, ~+3 ms), tylko rozwiązuje się do niemal dokładnie klatki bieżącej.
+  Diagnoza, na ile doszła: historia próbkowana dwuliniowo rozmywa się z każdą klatką, a
+  zaciskanie do sąsiedztwa ściąga rozmytą historię z powrotem do bieżącego piksela.
+  Lekarstwa są znane — próbkowanie Catmulla-Roma zamiast dwuliniowego i zaciskanie po
+  wariancji zamiast min/max — i żadne z nich nie jest tu zrobione. Zostaje za flagą,
+  z budżetem nietkniętym (własny chunk `temporal-resolve`, wiązka wejściowa 243,12 kB).
+- Wycofany przyrząd: **reszta po kompensacji ruchu nie nadaje się do oceny obrazu
+  akumulowanego.** Porównuje klatkę N z N−1 przesuniętą o znany wektor, a klatka
+  akumulowana zawiera mieszankę dziesięciu klatek o dziesięciu różnych przesunięciach.
+  Punktowała ten przebieg gorzej przy obrazie nie mniej stabilnym.
+
 ### Changed
 
 - **Plac zabaw nad jeziorem zamiast placeholdera.** Stało tam pięć na pięć wokseli w

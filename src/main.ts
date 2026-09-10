@@ -69,6 +69,9 @@ const requestedCheckpoint = getCheckpoint(query.get('checkpoint'));
 const worldMode = parseWorldMode(query.get('world'));
 const hybridStrategy = strategyOf(worldMode);
 const worldRandom = createWorldRandom(query.get('seed') ?? undefined);
+// Temporal accumulation, off unless asked for: it is the only measured answer to
+// sub-pixel flicker and it costs a smear on anything that moves by itself.
+const temporalResolve = query.has('taa') && query.get('taa') !== '0';
 const qualityParam = query.get('quality');
 const requestedQuality = qualityParam === 'low' || qualityParam === 'medium' || qualityParam === 'high'
   ? qualityParam
@@ -77,7 +80,7 @@ const requestedQuality = qualityParam === 'low' || qualityParam === 'medium' || 
 // provide the default profile when the caller did not request one.
 const quality = new QualityManager(undefined, requestedQuality ?? requestedCheckpoint?.quality);
 const rainbow = new RainbowAtmosphere(worldRandom.stream('rainbow-source'));
-const env = bootstrap(quality.getProfile(), rainbow.effect);
+const env = bootstrap(quality.getProfile(), rainbow.effect, { temporalResolve });
 const ui = mountUi();
 ui.setLoadingProgress(4, 'RENDERER GOTOWY');
 
@@ -162,6 +165,9 @@ env.setBloomSelection(bloomTargets);
 
 const unsubscribeQuality = quality.subscribe((profile, snapshot) => {
   env.setQuality(profile);
+  // A different profile means different buffers and different sampling, so the history is
+  // no longer comparable with what is being drawn now.
+  env.resetTemporal();
   dayNight.setQuality(profile);
   weather.setQuality(profile);
   rainbow.setQuality(profile.level);
@@ -307,6 +313,9 @@ let cyberFactor = 0;
 let cyberActorsOn = false;
 
 function applyTheme(id: string): void {
+  // A theme change repaints everything at once, so accumulated history describes a city
+  // that no longer exists.
+  env.resetTemporal();
   currentTheme = themeById(id);
   world.setTheme(currentTheme.palette, currentTheme.foliage);
   hybrid?.setTheme(currentTheme.palette);

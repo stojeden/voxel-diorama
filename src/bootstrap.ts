@@ -21,6 +21,7 @@ import { CinematicGradeEffect } from './effects/CinematicGrade';
 import { ColorLutPipeline } from './effects/ColorLuts';
 import type { QualityProfile } from './performance/QualityManager';
 import { farViewPixelRatio } from './performance/QualityManager';
+import { TemporalResolvePass } from './effects/TemporalResolve';
 
 CameraControls.install({ THREE });
 
@@ -45,6 +46,8 @@ export interface RuntimeEnv {
   /** Draw calls and triangles of the scene render alone, before post-processing passes. */
   getPrimaryPassInfo: () => { triangles: number; calls: number };
   setQuality: (profile: QualityProfile) => void;
+  /** Throw away accumulated history. A no-op unless `?taa=1`. */
+  resetTemporal: () => void;
   syncSize: () => void;
   dispose: () => void;
 }
@@ -57,7 +60,8 @@ const SMAA_PRESETS = {
 
 export function bootstrap(
   initialQuality: QualityProfile,
-  atmosphereEffect?: Effect
+  atmosphereEffect?: Effect,
+  options: { temporalResolve?: boolean } = {}
 ): RuntimeEnv {
   const scene = new THREE.Scene();
   scene.fog = new THREE.FogExp2(0x87ceeb, 0.003);
@@ -126,6 +130,25 @@ export function bootstrap(
     multisampling: initialQuality.msaaSamples,
     frameBufferType: THREE.HalfFloatType,
   });
+  /**
+   * Temporal accumulation, behind `?taa=1`.
+   *
+   * Off by default: it steadies sub-pixel geometry, which nothing else measured could, and
+   * it does that by blending in the previous frame -- which smears whatever moved on its
+   * own. That trade has to be looked at before it becomes the default for everybody.
+   *
+   * The nudge has to be applied before the scene is rasterised, so it rides in a pass ahead
+   * of the render rather than in the frame loop.
+   */
+  const temporal = options.temporalResolve ? new TemporalResolvePass(camera) : null;
+  if (temporal) {
+    composer.addPass(
+      new LambdaPass(() => {
+        const size = renderer.getDrawingBufferSize(new THREE.Vector2());
+        temporal.beginFrame(size.x, size.y);
+      })
+    );
+  }
   composer.addPass(new RenderPass(scene, camera));
   // renderer.info accumulates every pass of the frame; snapshot it right after the
   // scene render so metrics can split primary from multipass work.
@@ -169,6 +192,13 @@ export function bootstrap(
     }
   }));
   composer.addPass(aoPass);
+  if (temporal) {
+    composer.addPass(temporal);
+    // Put the projection back here rather than at the end of the chain: the composer gives
+    // `renderToScreen` to whichever pass is last, and a LambdaPass cannot render, so a pass
+    // appended after the final effect would quietly swallow the picture.
+    composer.addPass(new LambdaPass(() => temporal.endFrame()));
+  }
 
   // Ownership transfers to EffectPass/EffectComposer. Its single dispose path
   // also releases resources owned directly by the effect (the spectral LUT).
@@ -260,6 +290,7 @@ export function bootstrap(
     renderer.setPixelRatio(pixelRatio);
     composer.setSize(window.innerWidth, window.innerHeight, true);
     labelRenderer.setSize(window.innerWidth, window.innerHeight);
+    temporal?.reset();
   };
 
   const setQuality = (profile: QualityProfile) => {
@@ -345,6 +376,7 @@ export function bootstrap(
     setCameraPerformanceMode,
     getPrimaryPassInfo: () => primaryPass,
     setQuality,
+    resetTemporal: () => temporal?.reset(),
     syncSize,
     dispose,
   };

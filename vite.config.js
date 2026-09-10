@@ -66,6 +66,15 @@ export default defineConfig({
               includeDependenciesRecursively: false,
             },
             {
+              // Temporal accumulation, reachable only behind `?taa=1`. Its own chunk for
+              // the same reason as the two below: the entry budget is 244 000 B with a
+              // couple of hundred bytes spare, and an experiment must not spend them.
+              name: 'temporal-resolve',
+              test: /src[\\/]effects[\\/]TemporalResolve\.ts$/,
+              priority: 12,
+              includeDependenciesRecursively: false,
+            },
+            {
               // The lakeside playground: one cohesive prop, and the entry chunk had
               // 1.1 kB left of its 244 000 B when this arrived. Splitting rather than
               // raising the budget is the same call `experience-signals` below records --
