@@ -69,9 +69,20 @@ const requestedCheckpoint = getCheckpoint(query.get('checkpoint'));
 const worldMode = parseWorldMode(query.get('world'));
 const hybridStrategy = strategyOf(worldMode);
 const worldRandom = createWorldRandom(query.get('seed') ?? undefined);
-// Temporal accumulation, off unless asked for: it is the only measured answer to
-// sub-pixel flicker and it costs a smear on anything that moves by itself.
-const temporalResolve = query.has('taa') && query.get('taa') !== '0';
+// Temporal accumulation, on unless refused with `?taa=0`.
+//
+// It is the only measured answer to sub-pixel flicker, and now that it reaches the screen
+// at all it earns its place: on the shaded facade that was reported, flicker is down 43.5%
+// and the worst single pixel 51%, for 4.2% of sharpness. That 4.2% is the same on the smoke
+// plume -- the fastest thing in the frame -- as it is on static geometry, which is how the
+// variance clip standing in for the velocity buffer this pass does not have was checked.
+//
+// Cost, measured paired inside one session because separate page loads put it under the
+// run-to-run scatter and even came out negative twice: +0.65 ms on low of a 7.35 ms frame,
+// +0.16 on medium, +0.19 on high, with per-pair scatter of the same order as the effect.
+// The pass's own chunk is fetched at startup either way -- `bootstrap` imports it
+// statically -- so this default costs nothing to load.
+const temporalResolve = query.get('taa') !== '0';
 const qualityParam = query.get('quality');
 const requestedQuality = qualityParam === 'low' || qualityParam === 'medium' || qualityParam === 'high'
   ? qualityParam
