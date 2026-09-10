@@ -206,7 +206,30 @@ function tower(E: Emitter, b: BuildingSpec): void {
   if (b.entrance) doorAt(E, F, b.entrance.side, b.entrance.along, GROUND, 1.3, 2.2, P.roofSheet, true);
   roofFlat(E, b, H, 1, false);
   E.box(b.tint, b.cx, GROUND + H + 1.4, b.cz, 3.6, 2.8, 2.6, { layer: 1, ao: 0.96 });
-  E.cylinder(P.steel, b.cx, GROUND + H + 2.8 + 3.5, b.cz, 0.06, 0.09, 7, 8, { layer: 1 });
+  // Pale, not steel, and that is a stability decision with a number behind it.
+  //
+  // A frame-wide flicker map of the owner's default shot -- every 40 px cell creeped two
+  // buffer pixels and detrended, so a boundary sliding through a cell cannot pose as
+  // flicker -- put this mast at the top of 2304 cells, at 1.5% Weber where roughly 1% is
+  // visible. At 96 m the shot runs 7.3 px/m, so a 0.12-0.18 m mast is 0.9-1.3 px wide, and
+  // backlit its darkest pixel reads 1 against a sky of 235: the largest contrast in the
+  // frame, on the thinnest thing in it. Flicker tracks that contrast, so the fix is to
+  // close the gap -- upwards here, because the background is sky. The same rule as
+  // `trimBand` in `palette.ts`, pointing the other way.
+  //
+  //   steel  short  thin   THICK   pale(trim)  PALE(frame)   culled at distance
+  //   0.260% 0.313% 0.451% 0.312%    0.113%      0.103%          0.032%
+  //
+  // Thicker is worse, and so is thinner: 0.06/0.09 already sits near the best width, so
+  // there is nothing to win in geometry. Shortening the mast to end at its beacon, which
+  // is how a real mast is built, wins nothing either. Culling wins most and is not taken:
+  // the beacon is layer 0 and would hang in the sky with nothing under it -- photographed
+  // before it was ruled out.
+  //
+  // `P.frame` rather than a new palette entry because the last two spare slots are what let
+  // things be driven separately, and this needs no driving. An obstruction mast is painted
+  // for visibility anyway, so pale is the more truthful colour as well as the steadier one.
+  E.cylinder(P.frame, b.cx, GROUND + H + 2.8 + 3.5, b.cz, 0.06, 0.09, 7, 8, { layer: 1 });
   E.cylinder(P.aviationRed, b.cx, GROUND + H + 6.45, b.cz, 0.18, 0.18, 0.36, 8, { layer: 0, cls: 'glow' });
 }
 

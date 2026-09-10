@@ -10,7 +10,7 @@ import { CONTACT_TOLERANCE } from './GroundContact';
 import { emitBuilding } from './architecture';
 import { emitProp, emitStreetscape } from './streetscape';
 import { geometryFor } from './strategies/DirectSurfaceStrategy';
-import { P } from './palette';
+import { P, PALETTE } from './palette';
 import { Emitter, type SurfacePrimitive } from './surface';
 
 /**
@@ -301,6 +301,41 @@ describe('one metric system', () => {
     }
     expect(bands, 'zadna plyta elewacyjna nie zostala zmierzona').toBeGreaterThan(900);
     expect(sills, 'zaden parapet nie zostal zmierzony').toBeGreaterThan(600);
+  });
+
+  test('the tower mast is pale, because a dark hair against the sky flickers', () => {
+    /**
+     * The companion to the facade-band budget above, and the same rule with its sign
+     * flipped: flicker tracks a thin element's contrast against what lies behind it, and
+     * behind this one is sky.
+     *
+     * A frame-wide flicker map of the owner's default shot -- 2304 cells of 40 px, each
+     * creeped two buffer pixels and detrended so a boundary sliding through a cell cannot
+     * pose as flicker -- ranked this mast first, at 1.5% Weber against a threshold near 1%.
+     * It is 0.9-1.3 px wide at that framing and reads almost black against the sky, which
+     * is the largest contrast in the frame sitting on the thinnest thing in it. Painting it
+     * pale took its window from 0.260% to 0.103%. Geometry had nothing to offer: thicker
+     * measured 0.312%, thinner 0.451%, shorter 0.313%.
+     *
+     * The bound is on luminance, not on a palette key, because luminance is what was
+     * measured -- any pale entry passes and `P.steel` at 95 does not.
+     */
+    let masts = 0;
+    for (const b of model.buildings) {
+      for (const prim of emitBuilding(b).primitives) {
+        if (prim.kind !== 'cylinder' || prim.layer !== 1) continue;
+        if (prim.h < 5 || prim.rBottom > 0.12) continue;
+        const hex = PALETTE[prim.palette].base;
+        const luma =
+          0.299 * ((hex >> 16) & 255) + 0.587 * ((hex >> 8) & 255) + 0.114 * (hex & 255);
+        expect(
+          luma,
+          `blok ${b.index}: maszt w palecie ${PALETTE[prim.palette].key} o jasnosci ${luma.toFixed(0)}`
+        ).toBeGreaterThan(170);
+        masts++;
+      }
+    }
+    expect(masts, 'zaden maszt nie zostal zmierzony').toBeGreaterThanOrEqual(3);
   });
 
   test('balustrade posts are the height a balustrade has to be', () => {
