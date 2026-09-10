@@ -231,6 +231,78 @@ describe('one metric system', () => {
     expect(BENCH_DIMENSIONS.seatHeight).toBeLessThanOrEqual(0.52);
   });
 
+  test('facade trim bands stay thin, because thickening them makes them flicker', () => {
+    /**
+     * A stability budget written as a proportion. It exists because the opposite was tried
+     * on purpose, at the owner's request, and measured.
+     *
+     * Image differencing named `hybrid-building-3-opaque:1` -- the layer-1 `P.trim` bands
+     * on a slab facade -- as the one mesh of 709 that moves the artefact the owner
+     * photographed. The obvious reading was that the bands are too thin to resolve, so they
+     * were thickened and swept from 0.07 m to 0.48 m. Flicker rose at every step, with a
+     * plain patch of the same wall held as a control:
+     *
+     *   band     shipped  0.07   0.14   0.24   0.36   0.48    control
+     *   wobble    0.40%   0.66%  1.07%  1.48%  1.76%  1.98%    0.07%
+     *
+     * as a share of the wall's own luminance, where roughly 1% is where a moving edge
+     * becomes visible. Measured by creeping the camera two buffer pixels in sixteen steps
+     * inside one synchronous block -- so the world cannot advance and the whole sub-pixel
+     * phase range is covered -- and taking the standard deviation of the band's total
+     * light. The sweep's 0.07 m column reads higher than the shipped column because every
+     * swept build also carried a balustrade panel thickened from 0.08 to 0.14 m: that one
+     * 6 mm-per-side change, alone, cost 0.40% -> 0.66%.
+     *
+     * The mechanism is why no thickness wins. The camera sits about ten degrees above the
+     * horizon, so a band's 1.3 m top face foreshortens to some two pixels however thick the
+     * band is. What is sub-pixel is the foreshortening, not the thickness, and every
+     * millimetre added is more bright area whose coverage flips as the camera creeps.
+     *
+     * The lever that does work is contrast, and it is why these bands have their own
+     * palette entry: see `trimBand` in `palette.ts` for that sweep. Flicker tracks contrast
+     * against whatever lies behind, so the bands were darkened towards the wall they lie on
+     * while the parapets, which lie against the sky, were left alone.
+     *
+     * The sweep moved the sill and the loggia slab together, so the family bound below is
+     * what the evidence supports -- it catches thickening of the kind that was measured,
+     * not a centimetre's nudge, which nothing here can speak to. The sill gets its own
+     * tighter bound because it is the element the differencing named and it has no measured
+     * headroom at all. The balustrade panel is knowingly outside this net: it is `accent`
+     * rather than `P.trim`, and it is the one element with an isolated number against it.
+     *
+     * Roof parapets are excluded: 0.42 m by design, read against the sky rather than
+     * against a wall, and nothing here measured them.
+     */
+    let bands = 0;
+    let sills = 0;
+    for (const b of model.buildings) {
+      for (const prim of emitBuilding(b).primitives) {
+        // `P.trimBand` IS the facade-band family, so the palette does the selecting. An
+        // earlier version of this test filtered `P.trim` by "thinner than it is deep"
+        // instead, and a lintel thickened to 0.22 m escaped it -- thickening it past its
+        // own 0.18 m depth stopped it looking like a band at all.
+        if (prim.kind !== 'box' || prim.palette !== P.trimBand || prim.layer !== 1) continue;
+        expect(prim.h, `blok ${b.index}: pas ${prim.h.toFixed(2)} m nie lezy poziomo`).toBeLessThan(prim.w);
+        expect(
+          prim.h,
+          `blok ${b.index}: plyta elewacyjna ${prim.h.toFixed(2)} m -- grubsza migota mocniej`
+        ).toBeLessThanOrEqual(0.16);
+        bands++;
+        // The sill under a window: shallow enough that nobody stands on it, which is what
+        // separates it from the balcony and loggia slabs at 0.84 and 1.30 m deep.
+        if (prim.d > 0.2 && prim.d < 0.35) {
+          expect(
+            prim.h,
+            `blok ${b.index}: parapet ${prim.h.toFixed(2)} m -- zmierzony jako winowajca`
+          ).toBeLessThanOrEqual(0.1);
+          sills++;
+        }
+      }
+    }
+    expect(bands, 'zadna plyta elewacyjna nie zostala zmierzona').toBeGreaterThan(900);
+    expect(sills, 'zaden parapet nie zostal zmierzony').toBeGreaterThan(600);
+  });
+
   test('balustrade posts are the height a balustrade has to be', () => {
     // Measured on the members themselves, not on a search for the slab under them:
     // two earlier versions of this test matched a window sill and a lower rail and

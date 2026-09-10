@@ -52,6 +52,33 @@ export const PALETTE: readonly PaletteEntry[] = [
   M('towerGrey', 0xadb0b3, { origin: COLORS.concrete, roughness: 0.94 }),
   M('plinth', 0x6f6d66, { origin: COLORS.concreteDark, roughness: 0.95 }),
   M('trim', 0xc9c3b5, { origin: COLORS.concreteLight, roughness: 0.85, snow: SNOW_ROOF }),
+  // The same light concrete as `trim`, held one step darker, and it is a stability budget
+  // rather than a taste: flicker of a thin band tracks its contrast against whatever lies
+  // behind it, and facade bands lie against a wall while parapets lie against the sky, so
+  // one colour cannot quiet both. Swept on the owner's own configuration:
+  //
+  //   trim        0xb9b1a3  0xc1baac  0xc9c3b5  0xdcd6c8  0xeae5da
+  //   sill band     0.204%    0.233%    0.346%    0.557%    0.694%   (wall behind, 112)
+  //   parapet       0.783%    0.763%    0.743%    0.703%    0.679%   (sky behind, 235)
+  //
+  // as Weber wobble under sub-pixel camera creep; a flat patch of sky reads 0.000% on the
+  // same instrument. Monotone in opposite directions, and the band swings 3.4x against the
+  // parapet's 1.15x -- so splitting the entry buys the band 41% and costs the parapet
+  // nothing, where a global darkening would have paid for one with the other.
+  //
+  // `origin` is `concrete`, not `concreteLight`: the walls derive from `concrete`, and a
+  // theme override has to move the band with the wall it is hiding against or the match
+  // this exists for comes apart.
+  //
+  // One value cannot match eight wall tints, which run from `plasterRose` at luminance 147
+  // to `plasterSand` at 188, so this is `prefabLight`'s tint -- light concrete near the
+  // middle of them. The building the artefact was found on is `plasterGrey` at 160, where
+  // this leaves the band about 11% above its wall instead of 22%, and that halving is what
+  // the 0.346% -> 0.187% above is. A band on `plasterSand` now sits slightly below its
+  // wall instead of above it: the same small contrast with the sign flipped. Chasing the
+  // last of it is not worth another entry -- 0.187% is far under what an eye can catch,
+  // and the parapets, at 0.742%, are what is left near the threshold.
+  M('trimBand', 0xb9b1a3, { origin: COLORS.concrete, roughness: 0.85, snow: SNOW_ROOF }),
   M('frame', 0xdcd6c8, { roughness: 0.8 }),
   M('roofFlat', 0x44474c, { origin: COLORS.roof, roughness: 0.96, snow: SNOW_ROOF }),
   M('roofTile', 0x8d4b39, { roughness: 0.9, snow: SNOW_ROOF }),

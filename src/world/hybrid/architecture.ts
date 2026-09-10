@@ -88,8 +88,8 @@ function windowAt(E: Emitter, b: BuildingSpec, F: Frame, s: Side, bay: number, f
   sideBox(E, P.frame, F, s, along + ww / 2 + 0.035, yc, 0.04, 0.07, wh + 0.07, 0.08, { layer: 2 });
   if (ww >= 0.9) sideBox(E, P.frame, F, s, along, yc, 0.035, 0.045, wh, 0.05, { layer: 2 });
   if (wh >= 1.6) sideBox(E, P.frame, F, s, along, yc + wh * 0.2, 0.035, ww, 0.045, 0.05, { layer: 2 });
-  sideBox(E, P.trim, F, s, along, yc - wh / 2 - 0.04, 0.1, ww + 0.28, 0.07, 0.26, { layer: 1 });
-  if (lintel) sideBox(E, P.trim, F, s, along, yc + wh / 2 + 0.15, 0.08, ww + 0.36, 0.16, 0.18, { layer: 1 });
+  sideBox(E, P.trimBand, F, s, along, yc - wh / 2 - 0.04, 0.1, ww + 0.28, 0.07, 0.26, { layer: 1 });
+  if (lintel) sideBox(E, P.trimBand, F, s, along, yc + wh / 2 + 0.15, 0.08, ww + 0.36, 0.16, 0.18, { layer: 1 });
 }
 
 function doorAt(E: Emitter, F: Frame, s: Side, along: number, y0: number, dw: number, dh: number, canopy: number | null, board: boolean): void {
@@ -110,14 +110,14 @@ function doorAt(E: Emitter, F: Frame, s: Side, along: number, y0: number, dw: nu
 
 function loggiaAt(E: Emitter, b: BuildingSpec, F: Frame, s: Side, bay: number, floor: number, along: number, y0: number, floorH: number, bayW: number, accent: number, top: boolean): void {
   const w = bayW - 0.2;
-  sideBox(E, P.trim, F, s, along, y0 + 0.08, 0.65, w, 0.16, 1.3, { layer: 1, ao: 0.9 });
+  sideBox(E, P.trimBand, F, s, along, y0 + 0.08, 0.65, w, 0.16, 1.3, { layer: 1, ao: 0.9 });
   sideBox(E, b.tint, F, s, along - w / 2 + 0.07, y0 + floorH / 2, 0.65, 0.14, floorH, 1.3, { layer: 1, ao: 0.92 });
   sideBox(E, b.tint, F, s, along + w / 2 - 0.07, y0 + floorH / 2, 0.65, 0.14, floorH, 1.3, { layer: 1, ao: 0.92 });
   sideBox(E, accent, F, s, along, y0 + 0.16 + 0.52, 1.26, w - 0.28, 1.04, 0.08, { layer: 1 });
   sideBox(E, P.steel, F, s, along, y0 + 1.24, 1.26, w - 0.28, 0.05, 0.05, { layer: 2 });
   const look = windowLook(b, s, bay, floor);
   sidePlane(E, look.palette, F, s, along, y0 + 1.15, 0.015, 1.05, 2.15, { layer: 0, cls: 'glass', style: STYLE.glass, cohort: look.cohort });
-  if (top) sideBox(E, P.trim, F, s, along, y0 + floorH + 0.08, 0.65, w, 0.16, 1.3, { layer: 1 });
+  if (top) sideBox(E, P.trimBand, F, s, along, y0 + floorH + 0.08, 0.65, w, 0.16, 1.3, { layer: 1 });
 }
 
 function roofFlat(E: Emitter, b: BuildingSpec, H: number, towers: number, mast: boolean): void {
@@ -197,8 +197,8 @@ function tower(E: Emitter, b: BuildingSpec): void {
       const sB: Side = sx > 0 ? '+x' : '-x';
       const aA = sx * (b.w / 2 - 1.15);
       const aB = sz * (b.d / 2 - 1.15);
-      sideBox(E, P.trim, F, sA, aA, y0 + 0.07, 0.6, 2.3, 0.14, 1.2, { layer: 1, ao: 0.9 });
-      sideBox(E, P.trim, F, sB, aB, y0 + 0.07, 0.6, 2.3, 0.14, 1.2, { layer: 1, ao: 0.9 });
+      sideBox(E, P.trimBand, F, sA, aA, y0 + 0.07, 0.6, 2.3, 0.14, 1.2, { layer: 1, ao: 0.9 });
+      sideBox(E, P.trimBand, F, sB, aB, y0 + 0.07, 0.6, 2.3, 0.14, 1.2, { layer: 1, ao: 0.9 });
       sideBox(E, accent, F, sA, aA, y0 + 0.64, 1.16, 2.3, 1.0, 0.08, { layer: 1 });
       sideBox(E, accent, F, sB, aB, y0 + 0.64, 1.16, 2.3, 1.0, 0.08, { layer: 1 });
     }
@@ -220,7 +220,7 @@ function tenement(E: Emitter, b: BuildingSpec): void {
   const front = b.avenueSide;
   E.box(b.tint, b.cx, GROUND + H / 2, b.cz, b.w, H, b.d, { layer: 0 });
   E.box(P.plinth, b.cx, GROUND + 0.35, b.cz, b.w + 0.12, 0.7, b.d + 0.12, { layer: 0, ao: 0.85 });
-  E.box(P.trim, b.cx, GROUND + groundH, b.cz, b.w + 0.26, 0.14, b.d + 0.26, { layer: 1 });
+  E.box(P.trimBand, b.cx, GROUND + groundH, b.cz, b.w + 0.26, 0.14, b.d + 0.26, { layer: 1 });
   E.box(P.trim, b.cx, GROUND + H - 0.5, b.cz, b.w + 0.34, 0.14, b.d + 0.34, { layer: 1 });
   E.box(P.trim, b.cx, GROUND + H - 0.16, b.cz, b.w + 0.62, 0.32, b.d + 0.62, { layer: 1 });
   const roofPalette = b.seed > 0.5 ? P.roofTile : P.roofSheet;
@@ -249,13 +249,13 @@ function tenement(E: Emitter, b: BuildingSpec): void {
         const y0 = GROUND + groundH + f * floorH;
         const balcony = s === front && i % 2 === 1;
         if (balcony) {
-          sideBox(E, P.trim, F, s, along, y0 + 0.06, 0.42, 1.8, 0.12, 0.84, { layer: 1, ao: 0.9 });
+          sideBox(E, P.trimBand, F, s, along, y0 + 0.06, 0.42, 1.8, 0.12, 0.84, { layer: 1, ao: 0.9 });
           sideBox(E, P.steel, F, s, along, y0 + 0.62, 0.82, 1.8, 0.04, 0.04, { layer: 2 });
           sideBox(E, P.steel, F, s, along, y0 + 1.12, 0.82, 1.8, 0.04, 0.04, { layer: 2 });
           for (const k of [-0.86, -0.29, 0.29, 0.86]) sideBox(E, P.steel, F, s, along + k, y0 + 0.62, 0.82, 0.04, 1.0, 0.04, { layer: 2 });
           const look = windowLook(b, s, i, f + 1);
           sidePlane(E, look.palette, F, s, along, y0 + 1.15, 0.015, 1.05, 2.15, { layer: 0, cls: 'glass', style: STYLE.glass, cohort: look.cohort });
-          sideBox(E, P.trim, F, s, along, y0 + 2.3, 0.04, 1.35, 0.16, 0.14, { layer: 1 });
+          sideBox(E, P.trimBand, F, s, along, y0 + 2.3, 0.04, 1.35, 0.16, 0.14, { layer: 1 });
         } else {
           windowAt(E, b, F, s, i, f + 1, along, y0 + 0.95 + 0.92, 1.05, 1.85, true);
         }
