@@ -125,15 +125,6 @@ export function swingPeriodSeconds(): number {
   return 2 * Math.PI * Math.sqrt(swingChainLength() / 9.81);
 }
 
-/** Where each part stands, so the test can check the lot fits the reserved plot. */
-export interface PlaygroundPart {
-  id: string;
-  minX: number;
-  maxX: number;
-  minZ: number;
-  maxZ: number;
-}
-
 /**
  * Where every part stands, derived once.
  *
