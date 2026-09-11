@@ -66,6 +66,23 @@ inside `syncSize()` — threading a size in is mechanical. **Effort: 2–4 hours
 parameterisation and an `alpha` + mount-target option; the sky and fog ownership is a
 separate, smaller decision.**
 
+**Done for everything but the visible sky.** `bootstrap` now takes `container`, `alpha`, `fog`
+and `viewport`, all defaulting to exactly today's behaviour, and `windowViewport` is the default
+size source rather than an assumption baked into five call sites. `alpha` also zeroes the clear
+alpha, which three does not do on its own. `syncSize` reads the viewport once per resize instead
+of five times — harmless for a window, wrong for a video frame, where five reads are five
+answers.
+
+**The visible sky is left, and here is why it is its own decision.** `DayNightCycle` builds
+*two* `Sky` instances: `this.sky` at 2000 units, added to the main scene and carrying the
+patched eclipse shader, and `this.envSky`, added to a private `envScene` for reflections and
+ambient. Passthrough wants the first one gone and the second one kept — the world should still
+take its light and its reflections from a sky, it just must not paint a dome over the camera
+feed. The cheap move is to skip `scene.add(this.sky)` while keeping the object, so every uniform
+write and the eclipse patch keep working and the dome simply is not drawn. It needs a home for
+the flag: the constructor takes positional arguments after `hooks`, and `DayNightHooks` is about
+light handles, not about what gets drawn.
+
 ## 3. The entry chunk has 766 bytes free
 
 244 734 of 245 500, after that ceiling was raised deliberately on 2026-09-11. AR needs a

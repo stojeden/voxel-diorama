@@ -65,35 +65,83 @@ const SMAA_PRESETS = {
   high: SMAAPreset.HIGH,
 } as const;
 
+/** Where the frame is drawn and how big it is. The window is the default, not the assumption. */
+export interface Viewport {
+  width: number;
+  height: number;
+  pixelRatio: number;
+}
+
+/**
+ * The browser window, which is what every caller wanted until a camera feed turned up.
+ *
+ * A passthrough view is sized by its video frame, not by `innerWidth`, and lives inside a
+ * container rather than at the end of `document.body`.
+ */
+export const windowViewport = (): Viewport => ({
+  width: window.innerWidth,
+  height: window.innerHeight,
+  pixelRatio: window.devicePixelRatio,
+});
+
+export interface BootstrapOptions {
+  temporalResolve?: boolean;
+  /** Where the canvas and the label layer mount. Defaults to `document.body`. */
+  container?: HTMLElement;
+  /**
+   * Transparent clear, so something behind the canvas can show through.
+   *
+   * **This cannot be turned on later.** `alpha` is a WebGL context attribute, fixed when the
+   * context is created, so a renderer built without it can never composite over a camera
+   * feed -- no amount of reordering the frame loop works around that. It is the reason this
+   * option exists at all.
+   */
+  alpha?: boolean;
+  /** Distance fog. A passthrough view wants none: the real world supplies its own depth. */
+  fog?: boolean;
+  /** Size source. Defaults to the browser window. */
+  viewport?: () => Viewport;
+}
+
 export function bootstrap(
   initialQuality: QualityProfile,
   atmosphereEffect?: Effect,
-  options: { temporalResolve?: boolean } = {}
+  options: BootstrapOptions = {}
 ): RuntimeEnv {
+  const {
+    container = document.body,
+    alpha = false,
+    fog = true,
+    viewport = windowViewport,
+  } = options;
   const scene = new THREE.Scene();
-  scene.fog = new THREE.FogExp2(0x87ceeb, 0.003);
+  if (fog) scene.fog = new THREE.FogExp2(0x87ceeb, 0.003);
 
-  const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 3000);
+  const size = viewport();
+  const camera = new THREE.PerspectiveCamera(50, size.width / size.height, 0.1, 3000);
   camera.position.set(55, 42, 70);
 
-  const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, initialQuality.pixelRatio));
-  renderer.setSize(window.innerWidth, window.innerHeight);
+  const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance', alpha });
+  // A transparent clear is not the default even with `alpha`: three still clears to opaque
+  // black unless the clear alpha is zeroed as well.
+  if (alpha) renderer.setClearAlpha(0);
+  renderer.setPixelRatio(Math.min(size.pixelRatio, initialQuality.pixelRatio));
+  renderer.setSize(size.width, size.height);
   renderer.shadowMap.enabled = initialQuality.shadows;
   renderer.shadowMap.type = THREE.PCFShadowMap;
   renderer.toneMapping = THREE.NoToneMapping;
   renderer.toneMappingExposure = 1;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.info.autoReset = false;
-  document.body.appendChild(renderer.domElement);
+  container.appendChild(renderer.domElement);
 
   const labelRenderer = new CSS2DRenderer();
-  labelRenderer.setSize(window.innerWidth, window.innerHeight);
+  labelRenderer.setSize(size.width, size.height);
   labelRenderer.domElement.style.position = 'fixed';
   labelRenderer.domElement.style.inset = '0';
   labelRenderer.domElement.style.pointerEvents = 'none';
   labelRenderer.domElement.style.zIndex = '9';
-  document.body.appendChild(labelRenderer.domElement);
+  container.appendChild(labelRenderer.domElement);
 
   const controls = new CameraControls(camera, renderer.domElement);
   controls.smoothTime = 0.18;
@@ -281,22 +329,25 @@ export function bootstrap(
      * display, and bounded by `farViewPixelRatio` instead -- by 1.3x the display and by the
      * largest buffer anybody has measured, whichever is smaller.
      */
+    // One read per resize, shared by all five users below. Reading the window five times was
+    // harmless; reading a video frame five times is five different answers.
+    const current = viewport();
     const nearPixelRatio = Math.min(
-      window.devicePixelRatio,
+      current.pixelRatio,
       Math.max(1, quality.pixelRatio * cameraScale)
     );
     const farPixelRatio = farViewPixelRatio(
       quality.farPixelRatio,
-      window.devicePixelRatio,
-      window.innerWidth,
-      window.innerHeight
+      current.pixelRatio,
+      current.width,
+      current.height
     );
     const pixelRatio = ambientOcclusionNear ? nearPixelRatio : farPixelRatio;
-    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.aspect = current.width / current.height;
     camera.updateProjectionMatrix();
     renderer.setPixelRatio(pixelRatio);
-    composer.setSize(window.innerWidth, window.innerHeight, true);
-    labelRenderer.setSize(window.innerWidth, window.innerHeight);
+    composer.setSize(current.width, current.height, true);
+    labelRenderer.setSize(current.width, current.height);
     temporal?.reset();
   };
 
