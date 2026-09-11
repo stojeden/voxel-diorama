@@ -110,11 +110,16 @@ page and reference nothing from either arm; both were confirmed by mutation unde
 the tour. They cannot be lifted the same way. The honest options are to run the whole `else`
 in CI, or to restructure the sequence.
 
-**And the cost of just running it is now measured: the CI arm takes 24 s, the non-CI arm 52 s.
-Twenty-eight seconds.** That is much cheaper than the shape of the code suggests, and it
-changes the recommendation: the reason to be careful is no longer runtime but flake surface —
-those 98 include pixel comparisons against a software rasteriser. Worth an hour to try it and
-watch a few runs before deciding.
+**The 28-second figure is retracted (2026-09-11): it was read on a machine with a graphics
+card.** The local measurement was real — CI arm 24 s, non-CI arm 52 s — but CI runs SwiftShader,
+where a rendered frame costs seconds. The first run that exercised both lifted legs measured the
+gap: the phone leg cost **1 min 14 s** on CI against a few seconds locally, and the tall-window
+gate cost **21 min 14 s**. See item 10.
+
+So the CI cost of the remaining 98 is **unknown**, not twenty-eight seconds. They share the
+desktop page, which runs `low` at 1.30 MP and is cheaper per frame than the tall gate, but how
+much cheaper has not been measured. Measure it before deciding. The flake-surface concern stands
+either way, because those 98 include pixel comparisons against a software rasteriser.
 
 ## 7. ~~The deployed artifact is never the validated artifact~~ — **done 2026-09-11**
 
@@ -161,14 +166,42 @@ explaining that a literal once failed a deliberate colour change instead of a re
   exactly the number that would say whether stereo rendering doubled the scene cost or the
   post cost.
 
+## 10. The smoke step costs 41 minutes of CI, and 21 of them are one settle loop
+
+Measured on run 34602359888 (`c834d99`), the first run in which every leg was live:
+
+| leg | window | renders | cost |
+| --- | --- | --- | --- |
+| desktop | 1440x900, dSF 1 (1.30 MP) | `auto` resolves to **low** | 18 min 46 s |
+| phone | 375x812, dSF 3 | medium | 1 min 14 s |
+| tall-window gate | 1440x657, dSF **2** (2880x1314, 3.78 MP) | `quality=high` pinned | **21 min 14 s** |
+
+The browser job went from 20 min 07 s to 41 min 57 s. I expected the phone leg to be the
+expensive one; it is not. The tall gate is, and it was lifted out of the dead `else` in the same
+batch without its CI cost being measured either.
+
+The gate burns 180 settle frames plus 40 samples of two frames — 260 frames at about 4.9 s each.
+**The settle loop is the waste.** Those 180 frames exist to clear the LOD's 0.25 s wall-clock
+cooldown and its hysteresis: three seconds on a 60 fps machine, fifteen minutes here, for the
+same quarter second. A settle that waits on wall time, or on the count going quiet, with a small
+frame floor beneath it, would return most of those minutes and change nothing that is asserted.
+
+**Do not cut the cost by lowering `deviceScaleFactor`.** The LOD is driven by
+`lodPixelsPerMetre`, so the scale factor is load-bearing for exactly the draw-call count this
+gate exists to catch; halving it would make the gate measure a window nobody sits in. The sample
+count deserves the same care: `callsPeak` is a peak because the train, the bus and the gulls
+wander in and out of a frustum this wide.
+
 ---
 
 ## Suggested order
 
-1. Item 1 (the simulation seam) — everything else is cheaper afterwards.
-2. Item 5 (`CityRepresentation`) — do it inside item 1's refactor.
-3. Item 6's remaining 98 — an hour, now that the cost is known to be 28 seconds of CI.
-4. Item 2 (`bootstrap` parameterisation), item 3 (the lazy AR chunk seam).
-5. Item 8, then item 9's list.
+1. Item 10 (the 21-minute settle loop) — the shortest of these, and every run afterwards is
+   faster, including the runs that will measure everything below it.
+2. Item 1 (the simulation seam) — everything else is cheaper afterwards.
+3. Item 5 (`CityRepresentation`) — do it inside item 1's refactor.
+4. Item 6's remaining 98 — measure their CI cost first; the 28-second figure was a GPU reading.
+5. Item 2 (`bootstrap` parameterisation), item 3 (the lazy AR chunk seam).
+6. Item 8, then item 9's list.
 
 Item 4 needs nothing but a lockfile refresh, and item 7 is done.
