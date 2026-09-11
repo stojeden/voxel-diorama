@@ -321,17 +321,80 @@ ui.onCameraMode(setCameraMode);
 let currentTheme: DioramaTheme = themeById('classic');
 /** 0..1 — animated cyberpunk morph (megatowers rise / sink). */
 let cyberFactor = 0;
-let cyberActorsOn = false;
+/**
+ * The four actors that change with the Cyberpunk city, and when each one does.
+ *
+ * All four used to switch on the same test -- `cyberFactor > 0.5` -- so the birds vanished,
+ * the angler became a hologram, the cow was suppressed and the balloon changed mode inside
+ * one frame, alongside every building plot doing the same. Measured with the camera pinned
+ * against a background of 0.92 luminance levels of the city's own motion, that frame moved
+ * 16.1; spreading the plots took it to 6.9 and left these four as the batch still standing.
+ *
+ * Spread across the same window the plots use, and interleaved with them rather than sitting
+ * on the plot boundaries. Each keeps its own memory, so a morph interrupted half way and
+ * reversed puts every actor back at its own threshold rather than all at once.
+ */
+const CYBER_ACTOR_SWAPS: { at: number; on: boolean; apply: (on: boolean) => void }[] = [
+  { at: 0.43, on: false, apply: (on) => birds.setHidden(on) },
+  { at: 0.51, on: false, apply: (on) => fisherman.setHologram(on) },
+  { at: 0.57, on: false, apply: (on) => lakesideCow.setSuppressed(on) },
+  { at: 0.64, on: false, apply: (on) => balloon.setCyberMode(on) },
+];
 
-function applyTheme(id: string): void {
-  // A theme change repaints everything at once, so accumulated history describes a city
-  // that no longer exists.
+/**
+ * The theme being faded out of, and how far the fade has got.
+ *
+ * A theme change used to repaint the city in one frame. Measured on the owner's shot with
+ * the camera pinned, the city's own motion moves the frame by 0.93 of a luminance level
+ * between frames and the frame the theme landed on moved it by 40.5 -- forty-three times the
+ * background. The Cyberpunk morph animated the towers rising over two seconds and swapped
+ * its actors at the midpoint, but the colours, the foliage and the grade all cut, so the
+ * biggest single event of a "morph" happened before the towers had risen two percent.
+ *
+ * The fade is driven per theme change rather than off `cyberFactor`, because every theme had
+ * this cut and only Cyberpunk had a morph to hide behind.
+ */
+let previousTheme: DioramaTheme = currentTheme;
+let themeBlend = 1;
+/** Matched to the Cyberpunk ramp below, so the colours arrive with the towers. */
+const THEME_BLEND_RATE = 0.45;
+
+/**
+ * One theme's number, or a point between two.
+ *
+ * The four scalars this exists for are read out of `currentTheme` on every frame, so
+ * swapping the theme moved all four in a single frame -- and they are the whole tone of the
+ * picture, not a detail of it. Cyberpunk against Classic: exposure 0.64 against 1, night
+ * floor 0.62 against 0, bloom 1.45 against 1, turbidity 5 against 0. A 36% exposure cut and
+ * an instant eternal dusk is what the measured 34-level whole-frame jump was, AFTER the
+ * palettes and the grade had been put on a fade; those were real cuts too, but together they
+ * were only 15% of it. The lesson is in the order: the palette was the obvious suspect and
+ * the wrong one.
+ */
+const themeMix = (from: number, to: number, blend: number) => from + (to - from) * blend;
+
+function applyThemeBlend(): void {
+  world.setThemeBlend(
+    previousTheme.palette,
+    currentTheme.palette,
+    themeBlend,
+    previousTheme.foliage,
+    currentTheme.foliage
+  );
+  hybrid?.setThemeBlend(previousTheme.palette, currentTheme.palette, themeBlend);
+  env.setThemeGradeBlend(previousTheme.id, currentTheme.id, themeBlend, previousTheme, currentTheme);
+}
+
+function applyTheme(id: string, immediate = false): void {
+  // A theme change repaints everything, so accumulated history describes a city that no
+  // longer exists. Still true of a fade: its first frame is already a different city.
   env.resetTemporal();
+  previousTheme = currentTheme;
   currentTheme = themeById(id);
-  world.setTheme(currentTheme.palette, currentTheme.foliage);
-  hybrid?.setTheme(currentTheme.palette);
+  themeBlend = immediate ? 1 : 0;
+  applyThemeBlend();
+  // The livery is a repaint of four train cars, not a palette, and is left as a cut.
   train.setLivery(currentTheme.livery ?? 'modern');
-  env.setThemeGrade(currentTheme.id, currentTheme.sepia, currentTheme.saturation);
   ui.setThemeActive(id);
   ui.showToast(`STYL: ${currentTheme.label.toUpperCase()}`);
 }
@@ -345,13 +408,12 @@ function setCyberFactorImmediate(factor: number): void {
   hybrid?.setCyberRise(cyberFactor);
   bus.setCyberLook(cyberFactor);
   train.setCyberLook(cyberFactor);
-  const cyberOn = cyberFactor > 0.5;
-  if (cyberOn === cyberActorsOn) return;
-  cyberActorsOn = cyberOn;
-  birds.setHidden(cyberOn);
-  fisherman.setHologram(cyberOn);
-  lakesideCow.setSuppressed(cyberOn);
-  balloon.setCyberMode(cyberOn);
+  for (const swap of CYBER_ACTOR_SWAPS) {
+    const on = cyberFactor > swap.at;
+    if (on === swap.on) continue;
+    swap.on = on;
+    swap.apply(on);
+  }
 }
 
 function interruptCameraForUi(): void {
@@ -627,7 +689,7 @@ function applyBootCheckpoint(checkpoint: CheckpointDefinition): void {
   } else {
     rainbow.releaseDebugSource();
   }
-  applyTheme(checkpoint.theme);
+  applyTheme(checkpoint.theme, true);
   setCyberFactorImmediate(checkpoint.theme === 'cyberpunk' ? 1 : 0);
   if (checkpoint.trainProgress !== undefined) train.seekRouteProgress(checkpoint.trainProgress);
   if (checkpoint.busProgress !== undefined) bus.seekRouteProgress(checkpoint.busProgress);
@@ -784,15 +846,24 @@ function animate(timestamp?: number) {
   weather.update(delta * experience.getTimeScale(), presentationDelta);
 
   // ── Lighting ──
-  const skyCloud = Math.min(1, weather.getCloudCover() + currentTheme.turbidityAdd * 0.1);
+  const skyCloud = Math.min(
+    1,
+    weather.getCloudCover() +
+      themeMix(previousTheme.turbidityAdd, currentTheme.turbidityAdd, themeBlend) * 0.1
+  );
   dayNight.setCameraMode(cameraMode);
-  const light = dayNight.update(t01, presentationDelta, skyCloud, currentTheme.nightFloor);
+  const light = dayNight.update(
+    t01,
+    presentationDelta,
+    skyCloud,
+    themeMix(previousTheme.nightFloor, currentTheme.nightFloor, themeBlend)
+  );
   sunDirectionAt(t01, eclipseReflectionSun);
   sunColorAt(t01, rainbowSunColor);
   env.renderer.toneMappingExposure = sceneExposure(
     light.night,
     light.golden,
-    currentTheme.exposureMul,
+    themeMix(previousTheme.exposureMul, currentTheme.exposureMul, themeBlend),
     light.eclipse
   );
 
@@ -852,6 +923,12 @@ function animate(timestamp?: number) {
   railSignals.update(trainPosition);
   portalGlow.update(frame.elapsedSimulation, presentationDelta, trainPosition);
 
+  // ── Theme fade: colours, foliage and grade travel with the morph instead of cutting ──
+  if (themeBlend < 1) {
+    themeBlend = Math.min(1, themeBlend + presentationDelta * THEME_BLEND_RATE);
+    applyThemeBlend();
+  }
+
   // ── Cyberpunk morph: towers rise/sink, actors swap at the midpoint ──
   const cyberTarget = currentTheme.cyber ? 1 : 0;
   if (Math.abs(cyberTarget - cyberFactor) > 0.001) {
@@ -906,7 +983,13 @@ function animate(timestamp?: number) {
   env.gradeEffect.parameters.golden.value = light.golden;
   env.gradeEffect.parameters.night.value = gradeNight;
   env.setEnvironmentGrade(light.golden, gradeNight);
-  env.setBloomStrength(sceneBloomStrength(light.night, light.golden, currentTheme.bloomMul));
+  env.setBloomStrength(
+    sceneBloomStrength(
+      light.night,
+      light.golden,
+      themeMix(previousTheme.bloomMul, currentTheme.bloomMul, themeBlend)
+    )
+  );
   env.controls.getTarget(postFocusTarget);
   const cameraFocusDistance = env.camera.position.distanceTo(postFocusTarget);
   env.setCameraFocusDistance(cameraFocusDistance);

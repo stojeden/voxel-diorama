@@ -40,6 +40,14 @@ export interface RuntimeEnv {
   setAtmosphereEnabled: (enabled: boolean) => void;
   setEnvironmentGrade: (golden: number, night: number) => void;
   setThemeGrade: (id: string, sepia: number, saturation: number) => void;
+  /** The same grade, part way between two themes; `t` of 1 is `setThemeGrade(to, ...)`. */
+  setThemeGradeBlend: (
+    fromId: string,
+    toId: string,
+    t: number,
+    from: { sepia: number; saturation: number },
+    to: { sepia: number; saturation: number }
+  ) => void;
   setCinematicFocus: (active: boolean, target: THREE.Vector3) => void;
   setCameraFocusDistance: (distance: number) => void;
   setCameraPerformanceMode: (mode: 'free' | 'train' | 'bus') => void;
@@ -370,6 +378,13 @@ export function bootstrap(
       colorLuts.setTheme(id);
       gradeEffect.parameters.sepia.value = sepia;
       gradeEffect.parameters.saturation.value = saturation;
+    },
+    setThemeGradeBlend: (fromId, toId, t, from, to) => {
+      const mix = Math.min(Math.max(t, 0), 1);
+      colorLuts.setThemeBlend(fromId, toId, mix);
+      gradeEffect.parameters.sepia.value = from.sepia + (to.sepia - from.sepia) * mix;
+      gradeEffect.parameters.saturation.value =
+        from.saturation + (to.saturation - from.saturation) * mix;
     },
     setCinematicFocus,
     setCameraFocusDistance,

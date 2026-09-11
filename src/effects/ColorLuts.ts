@@ -52,9 +52,48 @@ export class ColorLutPipeline {
   }
 
   setTheme(id: string): void {
-    const safeId: ThemeLutId = id in this.themeLuts ? (id as ThemeLutId) : 'classic';
-    this.themeEffect.lut = this.themeLuts[safeId];
-    this.themeEffect.blendMode.opacity.value = safeId === 'classic' ? 0 : 0.32;
+    this.setThemeBlend(id, id, 1);
+  }
+
+  /**
+   * A theme's grade, or a point between two, crossfaded through zero.
+   *
+   * One `LUT3DEffect` holds one table, so two grades cannot be mixed inside it -- but its
+   * blend opacity can, and dipping through zero puts the swap at the moment the table is not
+   * contributing anything. Below the halfway point the old grade fades out; above it the new
+   * one fades in. `classic` has no table of its own (opacity zero), so a change to or from it
+   * is a plain one-way fade with no dip at all, which is the common case.
+   *
+   * This existed as a cut, and the cut was part of what read as the picture jumping on a
+   * theme change: see `resolvePaletteBlend` in `world/hybrid/palette.ts` for the measurement.
+   */
+  setThemeBlend(fromId: string, toId: string, t: number): void {
+    const safe = (id: string): ThemeLutId =>
+      id in this.themeLuts ? (id as ThemeLutId) : 'classic';
+    const from = safe(fromId);
+    const to = safe(toId);
+    const mix = Math.min(Math.max(t, 0), 1);
+    const strength = (id: ThemeLutId) => (id === 'classic' ? 0 : 0.32);
+
+    if (from === to) {
+      this.themeEffect.lut = this.themeLuts[to];
+      this.themeEffect.blendMode.opacity.value = strength(to);
+      return;
+    }
+    if (from === 'classic' || to === 'classic') {
+      const active = from === 'classic' ? to : from;
+      this.themeEffect.lut = this.themeLuts[active];
+      const target = from === 'classic' ? mix : 1 - mix;
+      this.themeEffect.blendMode.opacity.value = strength(active) * target;
+      return;
+    }
+    if (mix < 0.5) {
+      this.themeEffect.lut = this.themeLuts[from];
+      this.themeEffect.blendMode.opacity.value = strength(from) * (1 - mix * 2);
+    } else {
+      this.themeEffect.lut = this.themeLuts[to];
+      this.themeEffect.blendMode.opacity.value = strength(to) * (mix * 2 - 1);
+    }
   }
 
   dispose(): void {

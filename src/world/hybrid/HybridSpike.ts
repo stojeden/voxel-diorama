@@ -13,7 +13,7 @@ import { beaconGlow } from './beacons';
 import { groceryGlow } from './shopHours';
 import { createCyberCity, isReplacedByCyber, type CyberCityHandle } from './cyber/CyberCity';
 import { createChimneySmoke, type ChimneySmokeHandle } from './ChimneySmoke';
-import { P, resolvePalette } from './palette';
+import { P, resolvePalette, resolvePaletteBlend } from './palette';
 import { LodSelector, pixelsPerMetre } from './ScreenSpaceLod';
 import { checkModel, checkProbes, type GroundContactReport, type ProbeInput } from './GroundContact';
 import { buildDirect } from './strategies/DirectSurfaceStrategy';
@@ -103,6 +103,11 @@ export interface HybridHandle {
    */
   getWindowCohorts(): HybridWindowCohort[];
   setTheme(palette: Record<number, number>): void;
+  /**
+   * The same, part way between two themes. `t` of 1 is `setTheme(to)` exactly, which is
+   * what `setTheme` now delegates to, so the two cannot drift apart.
+   */
+  setThemeBlend(from: Record<number, number>, to: Record<number, number>, t: number): void;
   setSnowCover(cover: number): void;
   setWetness(wetness: number): void;
   setQuality(profile: QualityProfile): void;
@@ -141,6 +146,42 @@ class LodGroup {
 }
 
 const DOWN = new THREE.Vector3(0, -1, 0);
+
+/**
+ * When each plot hands its ordinary form over to its Cyberpunk one.
+ *
+ * Every replaced cluster used to hand over at exactly 0.5, so the whole residential city
+ * vanished and its replacement appeared inside a single frame. Measured with the camera
+ * pinned, against a background of 0.92 luminance levels of the city's own motion between
+ * frames: that one frame moved 16.1, and once the palettes, the grade and the four tone
+ * scalars were on a fade it was the largest event left in a two-second morph by a factor of
+ * eight.
+ *
+ * Spread across the middle third of the morph, evenly, by position in the sorted id list.
+ * The first attempt hashed the id instead and it barely spread at all: the ids are
+ * `building-0` through `building-33`, a hash taken modulo a thousand collapses their
+ * differences, and thirty of thirty-six landed inside one frame's worth of threshold
+ * (0.447 to 0.469). Even spacing is also simply the right tool -- an even spread is the
+ * thing wanted, and sorting gets it exactly rather than in distribution.
+ *
+ * The window stays away from both ends on purpose: below 0.38 the Cyberpunk tower is still
+ * too short to stand in for what it replaces, and above 0.62 there is not enough morph left
+ * to cover the change. Keyed on the id, not the build order, so it survives the rebuild that
+ * `setQuality` does -- a handover that moved on rebuild would flicker the city back.
+ */
+export const CYBER_HANDOVER_FROM = 0.38;
+export const CYBER_HANDOVER_TO = 0.62;
+
+export function cyberHandoverTable(clusterIds: readonly string[]): Map<string, number> {
+  const ids = [...clusterIds].sort();
+  const table = new Map<string, number>();
+  const span = CYBER_HANDOVER_TO - CYBER_HANDOVER_FROM;
+  for (let i = 0; i < ids.length; i++) {
+    const at = ids.length === 1 ? 0.5 : i / (ids.length - 1);
+    table.set(ids[i], CYBER_HANDOVER_FROM + span * at);
+  }
+  return table;
+}
 
 export function attachHybridSpike(options: HybridSpikeOptions): HybridHandle {
   const model = buildCityModel();
@@ -182,10 +223,29 @@ export function attachHybridSpike(options: HybridSpikeOptions): HybridHandle {
    * makes new ones: without this, switching profile while Cyberpunk was up brought the
    * ordinary city back underneath it.
    */
+  /**
+   * Built on first use from the ids the swap applies to, then kept.
+   *
+   * Lazily because `lodGroups` is created below this, and kept because a rebuild makes new
+   * groups for the same ids -- rebuilding the table would be harmless but pointless.
+   */
+  let handovers: Map<string, number> | null = null;
+
   const applyCyberSwap = () => {
-    const on = cyberRise > 0.5;
+    handovers ??= cyberHandoverTable(
+      lodGroups
+        .filter((group) => isReplacedByCyber(group.cluster.id))
+        .map((group) => group.cluster.id)
+    );
+    // The chimney hands over on its own threshold like every other plot, and the plume has
+    // to follow THAT rather than the midpoint -- otherwise between the two moments the smoke
+    // starts in mid-air above a stack that is still standing. Read off the same loop so
+    // there is one source of truth for the decision.
+    let chimneyOn = cyberRise > 0.5;
     for (const lodGroup of lodGroups) {
       if (!isReplacedByCyber(lodGroup.cluster.id)) continue;
+      const on = cyberRise > (handovers.get(lodGroup.cluster.id) ?? 0.5);
+      if (lodGroup.cluster.id.includes('chimney')) chimneyOn = on;
       if (lodGroup.suppressed === on) continue;
       lodGroup.suppressed = on;
       lodGroup.apply(lodGroup.selector.level);
@@ -194,7 +254,7 @@ export function attachHybridSpike(options: HybridSpikeOptions): HybridHandle {
     // has a flared mouth. The plume is anchored to whichever is standing.
     const chimney = model.dominants.find((dominant) => dominant.kind === 'chimney');
     if (chimney) {
-      if (on) {
+      if (chimneyOn) {
         const outlet = cyber.outlet();
         smoke.setOutlet(outlet.x, outlet.y, outlet.z);
       } else {
@@ -342,7 +402,10 @@ export function attachHybridSpike(options: HybridSpikeOptions): HybridHandle {
       }
     },
     setTheme(palette) {
-      resolvePalette(palette, uniforms.uPalette.value);
+      resolvePaletteBlend(palette, palette, 1, uniforms.uPalette.value);
+    },
+    setThemeBlend(from, to, t) {
+      resolvePaletteBlend(from, to, t, uniforms.uPalette.value);
     },
     setSnowCover(cover) {
       uniforms.uSnow.value = THREE.MathUtils.clamp(cover, 0, 1);

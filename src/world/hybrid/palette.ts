@@ -175,3 +175,38 @@ export function resolveEmissive(out: Float32Array = new Float32Array(PALETTE_SIZ
   for (let i = 0; i < PALETTE.length; i++) out[i] = PALETTE[i].emissive ?? 0;
   return out;
 }
+
+const blendFrom = new Float32Array(PALETTE_SIZE * 3);
+const blendTo = new Float32Array(PALETTE_SIZE * 3);
+
+/**
+ * A palette part way between two themes.
+ *
+ * A theme change used to repaint the city in one frame: `applyTheme` resolved the new
+ * palette straight into the uniform, so a Cyberpunk morph animated the towers rising and
+ * swapped the actors at its midpoint while the colours simply cut. Measured on the owner's
+ * shot with the camera pinned, the city's own motion moves the frame by 0.93 of a luminance
+ * level between frames and the frame the theme lands on moved it by 40.5 -- forty-three
+ * times the background, at a morph factor of 0.015, when the towers had risen by one and a
+ * half percent. The cut was the whole of what read as "the picture jumps".
+ *
+ * Interpolation is linear and in the linear RGB the uniform already holds, which is the
+ * space the shader reads, so a half-way palette is a half-way colour and nothing is
+ * gamma-warped on the way. Both ends are resolved into module-level scratch, so a frame loop
+ * calling this every frame allocates nothing -- but that also makes it single-threaded by
+ * construction, which is fine here and worth knowing.
+ */
+export function resolvePaletteBlend(
+  from: Record<number, number>,
+  to: Record<number, number>,
+  t: number,
+  out: Float32Array = new Float32Array(PALETTE_SIZE * 3)
+): Float32Array {
+  const mix = THREE.MathUtils.clamp(t, 0, 1);
+  resolvePalette(from, blendFrom);
+  resolvePalette(to, blendTo);
+  for (let i = 0; i < out.length; i++) {
+    out[i] = blendFrom[i] + (blendTo[i] - blendFrom[i]) * mix;
+  }
+  return out;
+}

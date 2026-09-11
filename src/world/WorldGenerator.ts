@@ -1221,6 +1221,14 @@ export interface WorldHandle {
   setEclipseReflection: (strength: number, sunDirection: THREE.Vector3) => void;
   /** Apply a diorama theme palette (original colour value → themed value). */
   setTheme: (palette: Record<number, number>, foliage?: { tree: number; treeLight: number }) => void;
+  /** The same look, part way between two themes; `t` of 1 is `setTheme(to)` exactly. */
+  setThemeBlend: (
+    from: Record<number, number>,
+    to: Record<number, number>,
+    t: number,
+    foliageFrom?: { tree: number; treeLight: number },
+    foliageTo?: { tree: number; treeLight: number }
+  ) => void;
   /** 0..1 — cyberpunk morph: megatowers rise out of the blocks. */
   setCyberRise: (factor: number) => void;
   setQuality: (profile: QualityProfile) => void;
@@ -1763,25 +1771,72 @@ export function createWorld(
     applyLook();
   };
 
+  /**
+   * The look of one theme, or of a point between two.
+   *
+   * A theme change used to land in a single frame: every entry was overwritten with the new
+   * colour and `applyLook` pushed it straight to the materials. Measured on the owner's shot
+   * with the camera pinned, the city's own motion moves the frame by 0.93 of a luminance
+   * level between frames and the frame a theme lands on moved it by 40.5 -- forty-three
+   * times the background, and the whole of what read as the picture jumping, since the
+   * Cyberpunk morph animated only the towers and swapped its actors at the midpoint.
+   *
+   * `setTheme` is now this with `t` of 1 and both ends the same, so there is one path and it
+   * cannot drift. Entries with no override in either theme sit still, which is most of them.
+   *
+   * Scratch colours are reused: this runs every frame of a transition.
+   */
+  const blendFrom = new THREE.Color();
+  const blendTo = new THREE.Color();
+  const treeFrom = new THREE.Color();
+  const treeTo = new THREE.Color();
+  const treeMix = new THREE.Color();
+  const treeLightMix = new THREE.Color();
+
+  const setThemeBlend = (
+    from: Record<number, number>,
+    to: Record<number, number>,
+    t: number,
+    foliageFrom?: { tree: number; treeLight: number },
+    foliageTo?: { tree: number; treeLight: number }
+  ) => {
+    const mix = THREE.MathUtils.clamp(t, 0, 1);
+    blendFrom.setHex(from[COLORS.window] ?? COLORS.window);
+    blendTo.setHex(to[COLORS.window] ?? COLORS.window);
+    blendFrom.lerp(blendTo, mix);
+    for (const schedule of windowGlowMaterials) schedule.darkColor.copy(blendFrom);
+    for (const entry of lookEntries) {
+      const a = from[entry.colorKey];
+      const b = to[entry.colorKey];
+      if (a === undefined && b === undefined) {
+        entry.themed.copy(entry.original);
+        continue;
+      }
+      blendFrom.copy(entry.original);
+      if (a !== undefined) blendFrom.setHex(a);
+      blendTo.copy(entry.original);
+      if (b !== undefined) blendTo.setHex(b);
+      entry.themed.copy(blendFrom).lerp(blendTo, mix);
+    }
+    // Tree crowns carry their colour per instance, so a blend has to rewrite them all.
+    treeFrom.setHex(foliageFrom?.tree ?? COLORS.tree);
+    treeTo.setHex(foliageTo?.tree ?? COLORS.tree);
+    treeMix.copy(treeFrom).lerp(treeTo, mix);
+    treeFrom.setHex(foliageFrom?.treeLight ?? COLORS.treeLight);
+    treeTo.setHex(foliageTo?.treeLight ?? COLORS.treeLight);
+    treeLightMix.copy(treeFrom).lerp(treeTo, mix);
+    for (let i = 0; i < foliage.length; i++) {
+      foliageBuild.mesh.setColorAt(i, foliage[i].variant === 1 ? treeLightMix : treeMix);
+    }
+    if (foliageBuild.mesh.instanceColor) foliageBuild.mesh.instanceColor.needsUpdate = true;
+    applyLook();
+  };
+
   const setTheme = (
     palette: Record<number, number>,
     foliageTheme?: { tree: number; treeLight: number }
   ) => {
-    const darkWindowColor = palette[COLORS.window] ?? COLORS.window;
-    for (const schedule of windowGlowMaterials) schedule.darkColor.setHex(darkWindowColor);
-    for (const entry of lookEntries) {
-      const override = palette[entry.colorKey];
-      entry.themed.copy(entry.original);
-      if (override !== undefined) entry.themed.setHex(override);
-    }
-    // Recolour tree crowns per instance.
-    const treeColor = new THREE.Color(foliageTheme?.tree ?? COLORS.tree);
-    const treeLightColor = new THREE.Color(foliageTheme?.treeLight ?? COLORS.treeLight);
-    for (let i = 0; i < foliage.length; i++) {
-      foliageBuild.mesh.setColorAt(i, foliage[i].variant === 1 ? treeLightColor : treeColor);
-    }
-    if (foliageBuild.mesh.instanceColor) foliageBuild.mesh.instanceColor.needsUpdate = true;
-    applyLook();
+    setThemeBlend(palette, palette, 1, foliageTheme, foliageTheme);
   };
 
   scene.add(group);
@@ -1806,6 +1861,7 @@ export function createWorld(
       lakeSurface.setEclipseReflection(strength, sunDirection);
     },
     setTheme,
+    setThemeBlend,
     setCyberRise,
     setQuality(profile) {
       lakeSurface.setQuality(profile.waterDetail);
