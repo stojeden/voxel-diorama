@@ -225,10 +225,19 @@ Verified two ways, because the arithmetic alone would not have been evidence:
   loop bodies were run back to back on one page: **70 frames and 16.2 s** against **260 frames
   and 60.2 s**. That is 30 settle frames plus 40 sample frames, exactly what the clamp predicts.
 
-The expected CI saving is most of the 21 minutes, but **that is a projection, not a reading** —
-the 21 min 14 s window also contains the page load and the `ready` wait, which this does not
-touch. The real number comes from the first run after this ships; the gate now prints
-`settleFrames`, `sampleFrames` and `simSeconds` so it can be read off the log.
+**Measured on run 34622681298 (`00a5d28`), which is no longer a projection:**
+
+| leg | before | after |
+| --- | --- | --- |
+| desktop | 18 min 46 s | 18 min 56 s — untouched, as intended |
+| phone | 1 min 14 s | 1 min 14 s — untouched |
+| tall-window gate | 21 min 14 s | **7 min 27 s** |
+| browser job | 41 min 57 s | **28 min 21 s** |
+
+The gate reported `settleFrames` 30 and `sampleFrames` 40 — exactly the 70 frames the 0.1 s
+clamp predicts and the throttled probe measured. `simSeconds` came out at 7 against 4.88
+locally, so on CI the gate now sweeps *more* simulated time than on a developer's machine, not
+less. `callsPeak` read 1379 against the 1400 budget.
 
 **The desktop leg's 18 min 46 s is not explained and not addressed here.** It has no fixed
 settle of this kind — `settleFrames(page)` waits two frames and carries a comment that already
