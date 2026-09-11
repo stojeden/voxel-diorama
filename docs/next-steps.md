@@ -28,6 +28,27 @@ What is missing is one object that owns the twenty subsystems and takes a `Frame
 **Effort: 1–2 days. This is the item that decides whether AR costs three days or three
 weeks.** Do it before the first AR commit, not after.
 
+**First half done in `5642362`.** `animate()` is now three phases — `animate` (bookkeeping and
+camera damping), `stepWorld` and `presentWorld` — with a `WorldFrame` carrier between the last
+two. The seam is **eight values**, and they were found rather than chosen: exactly the locals
+declared before the camera update that are still referenced after it. `WorldFrame` holds no
+Three.js object.
+
+It is three phases and not two because the order is load-bearing: damping runs before the world
+steps, since the hybrid LOD measures pixels per metre against the camera damping just moved; and
+camera automation runs after, since it follows vehicles the world has just moved.
+
+Verified as a no-op by the full local smoke, non-CI arm included: `callsPeak` 1371, `callsMedian`
+1328, `geometries` 422 — the same three numbers as the run before the split — plus
+`nightBusStopFps` 60.0 and zero browser errors.
+
+**What is left is the owning object.** Twelve module-level `let`s are still mutated from inside
+the phases (`eclipseState`, `eclipseReaction`, `previousDayProgress`, `themeBlend`,
+`optionalActorAccumulator`, `ambientEvent`, `ambientTicks`, `hudAccumulator`,
+`shadowFocusAccumulator`, `loadingHidden`, `loadingCompletedAt`, `rafId`), and the phases still
+reach module scope for every subsystem handle. Until those move, a second presenter can call
+`stepWorld` but cannot own a second world. That is where item 5 belongs.
+
 ## 2. `bootstrap` assumes one window, one canvas and one sky
 
 Three things are structurally coupled, not merely reading globals:
