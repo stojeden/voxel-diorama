@@ -31,6 +31,9 @@ import { themeById, type DioramaTheme } from './experience/Themes';
 import { DAY_SECONDS, LEVEL_CROSSING } from './world/WorldLayout';
 import { createWorldRandom } from './core/Random';
 import { createFrameContext } from './experience/FrameContext';
+import type { FrameContext } from './experience/FrameContext';
+import { createWorldFrame } from './experience/WorldFrame';
+import type { WorldFrame } from './experience/WorldFrame';
 import { ExperienceDirector } from './experience/ExperienceDirector';
 import { CameraDirector, type CameraMode } from './experience/CameraDirector';
 import {
@@ -733,7 +736,17 @@ const busDirection = new THREE.Vector3();
 const cameraSubjects = { trainPosition, trainDirection, busPosition, busDirection };
 const postFocusTarget = new THREE.Vector3();
 const boardingStations = new Set<string>();
+/** The seam itself: one carrier, reused, written by `stepWorld` and read by `presentWorld`. */
+const worldFrame = createWorldFrame(experience.getState(), train.getStationState());
 
+/**
+ * One frame, in three phases: the camera the viewer drives, the world, then the picture.
+ *
+ * The order is load-bearing, which is why this is three phases and not two. Damping runs
+ * before the world steps, because the hybrid LOD measures pixels per metre against the camera
+ * damping has just moved. Camera *automation* -- tour rigs, the train and bus chases -- runs
+ * after it, inside presentation, because it follows vehicles the world has just moved.
+ */
 function animate(timestamp?: number) {
   if (!running) return;
   rafId = requestAnimationFrame(animate);
@@ -762,6 +775,25 @@ function animate(timestamp?: number) {
     dayNight.setShadowFocus(postFocusTarget, shadowRadius);
     shadowFocusAccumulator = 0;
   }
+
+  worldFrame.realDelta = rawDelta;
+  worldFrame.presentationDelta = presentationDelta;
+  worldFrame.simulationDelta = delta;
+  stepWorld(frame, worldFrame);
+  presentWorld(frame, worldFrame);
+}
+
+/**
+ * Advance the world. Knows the clock, the weather, the lighting solution, the vehicles and
+ * the actors; knows nothing about how any of it will be drawn.
+ *
+ * Everything a presenter needs afterwards is written into `world` at the end, and those eight
+ * values are the whole seam. Everything else stays private to this phase on purpose: a
+ * presenter that reaches past the carrier for a subsystem handle has re-created the coupling
+ * the split exists to remove.
+ */
+function stepWorld(frame: FrameContext, carrier: WorldFrame): void {
+  const { presentationDelta, simulationDelta: delta } = carrier;
 
   // ── Clock: one owner for simulation, real time and tour overrides ──
   let experienceState = experience.update(
@@ -960,6 +992,29 @@ function animate(timestamp?: number) {
     passengerCrowd.update(actorDelta, boardingStations);
   }
   eclipseCrowdProps.update(eclipseReaction, eclipseState.separation);
+
+  // `world` is the generator; `carrier` is the seam. Two different things, one unlucky word.
+  carrier.t01 = t01;
+  carrier.skyCloud = skyCloud;
+  carrier.light = light;
+  carrier.experienceState = experienceState;
+  carrier.stationState = stationState;
+  carrier.eclipseActive = eclipseActive;
+}
+
+/**
+ * Draw the world that was just stepped, and nothing else: camera automation, post, the HUD
+ * and the composer.
+ *
+ * The deltas come from `world` rather than being recomputed, because picking the wrong one is
+ * a real bug and not a style question -- `realDelta` keeps the HUD counting while a checkpoint
+ * has frozen every visual delta to zero.
+ */
+function presentWorld(frame: FrameContext, carrier: WorldFrame): void {
+  const {
+    t01, light, skyCloud, experienceState, stationState, eclipseActive,
+    presentationDelta, realDelta: rawDelta,
+  } = carrier;
 
   cameraDirector.update(frame, experienceState.tour, cameraSubjects);
   // A future camera rig may move an ancestor rather than the camera itself.
