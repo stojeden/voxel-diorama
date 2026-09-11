@@ -1220,8 +1220,7 @@ export interface WorldHandle {
   setWetness: (wetness: number) => void;
   setEclipseReflection: (strength: number, sunDirection: THREE.Vector3) => void;
   /** Apply a diorama theme palette (original colour value → themed value). */
-  setTheme: (palette: Record<number, number>, foliage?: { tree: number; treeLight: number }) => void;
-  /** The same look, part way between two themes; `t` of 1 is `setTheme(to)` exactly. */
+  /** The look of one theme, or of a point between two; `t` of 1 lands on `to` exactly. */
   setThemeBlend: (
     from: Record<number, number>,
     to: Record<number, number>,
@@ -1788,8 +1787,6 @@ export function createWorld(
    */
   const blendFrom = new THREE.Color();
   const blendTo = new THREE.Color();
-  const treeFrom = new THREE.Color();
-  const treeTo = new THREE.Color();
   const treeMix = new THREE.Color();
   const treeLightMix = new THREE.Color();
 
@@ -1819,12 +1816,12 @@ export function createWorld(
       entry.themed.copy(blendFrom).lerp(blendTo, mix);
     }
     // Tree crowns carry their colour per instance, so a blend has to rewrite them all.
-    treeFrom.setHex(foliageFrom?.tree ?? COLORS.tree);
-    treeTo.setHex(foliageTo?.tree ?? COLORS.tree);
-    treeMix.copy(treeFrom).lerp(treeTo, mix);
-    treeFrom.setHex(foliageFrom?.treeLight ?? COLORS.treeLight);
-    treeTo.setHex(foliageTo?.treeLight ?? COLORS.treeLight);
-    treeLightMix.copy(treeFrom).lerp(treeTo, mix);
+    blendFrom.setHex(foliageFrom?.tree ?? COLORS.tree);
+    blendTo.setHex(foliageTo?.tree ?? COLORS.tree);
+    treeMix.copy(blendFrom).lerp(blendTo, mix);
+    blendFrom.setHex(foliageFrom?.treeLight ?? COLORS.treeLight);
+    blendTo.setHex(foliageTo?.treeLight ?? COLORS.treeLight);
+    treeLightMix.copy(blendFrom).lerp(blendTo, mix);
     for (let i = 0; i < foliage.length; i++) {
       foliageBuild.mesh.setColorAt(i, foliage[i].variant === 1 ? treeLightMix : treeMix);
     }
@@ -1832,12 +1829,7 @@ export function createWorld(
     applyLook();
   };
 
-  const setTheme = (
-    palette: Record<number, number>,
-    foliageTheme?: { tree: number; treeLight: number }
-  ) => {
-    setThemeBlend(palette, palette, 1, foliageTheme, foliageTheme);
-  };
+
 
   scene.add(group);
 
@@ -1860,7 +1852,6 @@ export function createWorld(
     setEclipseReflection(strength, sunDirection) {
       lakeSurface.setEclipseReflection(strength, sunDirection);
     },
-    setTheme,
     setThemeBlend,
     setCyberRise,
     setQuality(profile) {

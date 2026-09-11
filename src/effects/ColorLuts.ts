@@ -48,11 +48,7 @@ export class ColorLutPipeline {
       tetrahedralInterpolation: false,
     };
     this.themeEffect = new LUT3DEffect(this.themeLuts.classic, options);
-    this.setTheme('classic');
-  }
-
-  setTheme(id: string): void {
-    this.setThemeBlend(id, id, 1);
+    this.setThemeBlend('classic', 'classic', 1);
   }
 
   /**
@@ -75,12 +71,9 @@ export class ColorLutPipeline {
     const mix = Math.min(Math.max(t, 0), 1);
     const strength = (id: ThemeLutId) => (id === 'classic' ? 0 : 0.32);
 
-    if (from === to) {
-      this.themeEffect.lut = this.themeLuts[to];
-      this.themeEffect.blendMode.opacity.value = strength(to);
-      return;
-    }
-    if (from === 'classic' || to === 'classic') {
+    // `classic` has no table of its own, so a change to or from it -- and the constructor's
+    // classic-to-classic -- is a plain one-way fade with no dip.
+    if (from === to || from === 'classic' || to === 'classic') {
       const active = from === 'classic' ? to : from;
       this.themeEffect.lut = this.themeLuts[active];
       const target = from === 'classic' ? mix : 1 - mix;

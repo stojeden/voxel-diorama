@@ -39,8 +39,7 @@ export interface RuntimeEnv {
   setBloomStrength: (strength: number) => void;
   setAtmosphereEnabled: (enabled: boolean) => void;
   setEnvironmentGrade: (golden: number, night: number) => void;
-  setThemeGrade: (id: string, sepia: number, saturation: number) => void;
-  /** The same grade, part way between two themes; `t` of 1 is `setThemeGrade(to, ...)`. */
+  /** A theme's grade, or a point between two; `t` of 1 lands on `to` exactly. */
   setThemeGradeBlend: (
     fromId: string,
     toId: string,
@@ -373,11 +372,6 @@ export function bootstrap(
     setEnvironmentGrade: (golden, night) => {
       gradeEffect.parameters.golden.value = golden;
       gradeEffect.parameters.night.value = night;
-    },
-    setThemeGrade: (id, sepia, saturation) => {
-      colorLuts.setTheme(id);
-      gradeEffect.parameters.sepia.value = sepia;
-      gradeEffect.parameters.saturation.value = saturation;
     },
     setThemeGradeBlend: (fromId, toId, t, from, to) => {
       const mix = Math.min(Math.max(t, 0), 1);

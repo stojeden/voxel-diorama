@@ -102,11 +102,7 @@ export interface HybridHandle {
    * sees nothing at all in the default world.
    */
   getWindowCohorts(): HybridWindowCohort[];
-  setTheme(palette: Record<number, number>): void;
-  /**
-   * The same, part way between two themes. `t` of 1 is `setTheme(to)` exactly, which is
-   * what `setTheme` now delegates to, so the two cannot drift apart.
-   */
+  /** One theme's palette, or a point between two; `t` of 1 lands on `to` exactly. */
   setThemeBlend(from: Record<number, number>, to: Record<number, number>, t: number): void;
   setSnowCover(cover: number): void;
   setWetness(wetness: number): void;
@@ -400,9 +396,6 @@ export function attachHybridSpike(options: HybridSpikeOptions): HybridHandle {
         const level = lodGroup.selector.update(measure, dt);
         if (level !== previous) lodGroup.apply(level);
       }
-    },
-    setTheme(palette) {
-      resolvePaletteBlend(palette, palette, 1, uniforms.uPalette.value);
     },
     setThemeBlend(from, to, t) {
       resolvePaletteBlend(from, to, t, uniforms.uPalette.value);
