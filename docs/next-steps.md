@@ -55,15 +55,34 @@ and a mode switch — several kB at least. It cannot live in `main.ts`.
 first line.** That seam is cheap to create up front and expensive to retrofit around a
 half-written feature.
 
-## 4. `three@0.185.1` is the last version `postprocessing@6.39.2` accepts
+## 4. ~~The `three` ceiling~~ — checked, and it is not a ceiling
 
-The peer range closes at `< 0.186.0`. WebXR improvements land in `three` minors, so the first
-time AR wants a newer `three` the choice is between it and a six-pass post-processing chain.
+**Corrected 2026-09-11, the same day it was written.** The claim above was one release out of
+date when I made it. Verified against the npm registry and the GitHub API:
 
-Because `three` is `0.x`, npm's caret pins the minor, so nothing breaks by accident — the
-breakage is opt-in, and AR will opt in. **Fifteen minutes of reading the `postprocessing`
-release notes now turns a mid-feature crisis into a scheduling decision.** *Not verified: I
-did not query the registry for whether a newer `postprocessing` widens the range.*
+- `postprocessing@6.39.5` shipped **2026-09-09** with `three: ">= 0.168.0 < 0.187.0"`.
+- `three@0.186.0` shipped **2026-09-08** — the peer range was widened one day later.
+- The same one-day lag holds across four consecutive minors (6.39.0 `<0.184`, 6.39.1
+  `<0.185`, 6.39.2 `<0.186`, 6.39.5 `<0.187`). The repository is `pmndrs/postprocessing`,
+  active, and its recent commits are backports from a v7 line.
+
+So this is a normal lag, not a wall, and nothing needs deciding. Two notes that do matter:
+
+- **`postprocessing@6.39.5` is free to take now** — `^6.39.2` already covers it, so it is a
+  lockfile refresh, not a manifest change. It brings an `EffectComposer` multisampling
+  fallback, which this project touches at runtime through `composer.multisampling`.
+- **Do not bump `three` yet, and the reason is not the peer range:** `@types/three` has no
+  0.186 release. Since `build` now runs `tsc --noEmit`, bumping today would typecheck a
+  0.186 runtime against 0.185 definitions. Take both together when the types appear.
+
+`v7` is not an escape hatch: its last beta was 2026-02-19 and its peer range is
+`>= 0.179.0 < 0.184.0`, which would drag `three` *backwards*.
+
+**And the AR premise itself is settled:** iOS Safari still does not implement WebXR in 2026,
+on iPhone or visionOS, with no published timeline. So the route is camera passthrough plus
+`DeviceOrientationEvent` — and `three@0.185.1` covers all of it. `getUserMedia`, a transparent
+canvas over a `<video>`, and quaternion-to-camera are either browser APIs or arithmetic.
+**The version is not going to be the constraint; the iOS permission prompts are.**
 
 ## 5. Two cities, five hand-synchronised setter pairs, no shared interface
 
@@ -78,30 +97,33 @@ will almost certainly add a sixth city-wide parameter (a scale, a clipping dista
 "hide the far half" toggle). **Effort: 3–4 hours, and it removes eight lines from the frame
 loop that item 1 is going to refactor anyway.**
 
-## 6. CI runs 131 of this repo's 241 browser-smoke assertions
+## 6. CI still cannot see ~98 browser-smoke assertions — **partly done**
 
 `scripts/browserSmoke.mjs` has `if (IS_CI) { … } else { … }` where the `else` does not close
-for 818 lines. 125 assertions run before the branch and 6 inside the CI arm; **110 never run
-in CI at all** — mobile layout, checkpoint determinism, eclipse totality, the postman, the
-cow, the bus stops, the tour.
+for 800 lines. Two legs have been lifted out of it and now run in CI: the tall-window
+draw-call guard (2026-09-11) and the phone-layout leg — viewport overflow, five overlap
+checks and the 24 px touch-target minimum. Both were provable because they open their own
+page and reference nothing from either arm; both were confirmed by mutation under `CI=true`.
 
-The tall-window draw-call guard was in that branch and was moved out on 2026-09-11. The rest
-were left, because moving 110 assertions wholesale would change CI's runtime and flake
-surface in one step. The right shape is probably to move the deterministic structural
-assertions out and keep only the genuinely GPU-dependent pixel comparisons conditional.
-**Effort: 1–2 hours, and it should be done before AR, because the three things CI cannot
-currently see — mobile layout, draw calls at an unusual aspect ratio, scene determinism — are
-the three things AR is most likely to break.**
+**What is left is roughly 98 assertions that share one page whose state each step depends on**
+— eclipse totality and corona, checkpoint determinism, the postman, the cow, the bus stops,
+the tour. They cannot be lifted the same way. The honest options are to run the whole `else`
+in CI, or to restructure the sequence.
 
-## 7. The deployed artifact is never the validated artifact
+**And the cost of just running it is now measured: the CI arm takes 24 s, the non-CI arm 52 s.
+Twenty-eight seconds.** That is much cheaper than the shape of the code suggests, and it
+changes the recommendation: the reason to be careful is no longer runtime but flake surface —
+those 98 include pixel comparisons against a software rasteriser. Worth an hour to try it and
+watch a few runs before deciding.
 
-`.github/workflows/deploy.yml` runs its own `npm ci` and `npm run build` and publishes that
-`dist/`. It does not consume the bundle that `prepareBuild.mjs` signed and `browserSmoke.mjs`
-verified. So the whole provenance apparatus — 309 lines whose header lists three previously
-caught holes — stops at the CI boundary, and the shipped bundle gets no budget check.
+## 7. ~~The deployed artifact is never the validated artifact~~ — **done 2026-09-11**
 
-**Effort: ~30 minutes.** Upload `dist/` as an artifact from the browser-smoke job and have
-the deploy job download it instead of rebuilding.
+The measured `dist/` now travels from the browser-smoke job to the deploy job as an artifact,
+with the provenance manifest beside it, and `scripts/verifyArtifact.mjs` checks every file's
+size and sha256 on arrival — and refuses anything in `dist/` the manifest does not list,
+because an extra file is how you would smuggle something in. The checker comes from the
+repository rather than the artifact: one that travelled with the thing it checks would check
+nothing. Verified both ways locally.
 
 ## 8. Budget constants are duplicated across the two harnesses, and one has already drifted
 
@@ -145,7 +167,8 @@ explaining that a literal once failed a deliberate colour change instead of a re
 
 1. Item 1 (the simulation seam) — everything else is cheaper afterwards.
 2. Item 5 (`CityRepresentation`) — do it inside item 1's refactor.
-3. Item 6 (the CI branch) and item 7 (the deploy artifact) — before AR can be trusted to ship.
+3. Item 6's remaining 98 — an hour, now that the cost is known to be 28 seconds of CI.
 4. Item 2 (`bootstrap` parameterisation), item 3 (the lazy AR chunk seam).
-5. Item 4 (the `three` ceiling) — fifteen minutes, any time, but before the first bump.
-6. Item 8, then item 9's list.
+5. Item 8, then item 9's list.
+
+Item 4 needs nothing but a lockfile refresh, and item 7 is done.
