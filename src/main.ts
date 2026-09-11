@@ -1086,6 +1086,16 @@ const debugHandle: DioramaDebugHandle = {
     t01: experience.getState().t01,
     /** Rendered frames of the single RAF loop — one loop, one counter. */
     frameIndex: frame.frameIndex,
+    /**
+     * Simulated seconds, which is not wall time and not frames.
+     *
+     * Every per-frame delta is clamped to 0.1 s above, so this advances by at most a tenth
+     * of a second however long the frame took. It is the clock the LOD cooldown, the
+     * hysteresis and every actor actually run on, so anything waiting for the world to
+     * settle should wait on this rather than on a frame count: the same number of frames
+     * buys 3 s here at 60 Hz and 18 s on a software rasteriser.
+     */
+    elapsedSimulation: frame.elapsedSimulation,
     simulationSeed: worldRandom.seed,
     layoutSeed: WORLD_LAYOUT_SEED,
     world: worldMode,

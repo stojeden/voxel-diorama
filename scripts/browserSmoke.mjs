@@ -1878,19 +1878,56 @@ try {
   tall.on('pageerror', (error) => tallErrors.push(error.message));
   await tall.goto(`${URL}?seed=20260722&quality=high`, { waitUntil: 'networkidle' });
   await tall.waitForFunction(() => window.__diorama?.ready === true, null, { timeout: READY_TIMEOUT_MS });
-  // The LOD carries a 0.25 s cooldown and hysteresis, so it needs a moment to settle before
-  // the count means anything; and the peak matters more than an instant, because gulls, the
-  // train and the bus wander in and out of a frustum this wide.
+  /**
+   * Both loops below are counted in *simulated* seconds, and that is the whole point.
+   *
+   * The LOD carries a 0.25 s cooldown and hysteresis, so the count means nothing until the
+   * world has settled; and the peak matters more than an instant, because gulls, the train
+   * and the bus wander in and out of a frustum this wide. Both of those are properties of
+   * the simulation clock, which `main.ts` advances by `min(delta, 0.1)` every frame.
+   *
+   * This was written as `for (i < 180)` and `for (i < 40) { frame(); frame(); }`, which is
+   * the same 3 s and 1.33 s of simulation on a 60 Hz machine -- and 18 s and 8 s on CI's
+   * SwiftShader, where a frame of this window costs about five seconds. Measured on run
+   * 34602359888: 260 frames, 21 min 14 s, for a quarter-second cooldown. Frames were never
+   * the unit anyone wanted; they were a proxy for simulated time that holds only at 60 Hz.
+   *
+   * Keyed to the clock instead, a fast machine does what it always did -- 3 s is 180 frames
+   * at 60 Hz -- and a slow one stops paying for settling it already finished. The frame caps
+   * are escape hatches, not budgets: a paused or checkpoint-locked page never advances the
+   * clock at all, and must not spin here forever.
+   */
   const tallMetrics = await tall.evaluate(async () => {
     const diorama = window.__diorama;
     const frame = () => new Promise((resolve) => requestAnimationFrame(resolve));
-    for (let i = 0; i < 180; i++) await frame();
+    const simNow = () => diorama.getState().elapsedSimulation;
+
+    const SETTLE_SIM_SECONDS = 3;
+    const SAMPLE_SPACING_SIM_SECONDS = 1 / 30;
+    const SAMPLES = 40;
+    const SETTLE_FRAME_CAP = 600;
+    const SAMPLE_FRAME_CAP = 10;
+
+    const settleFrom = simNow();
+    let settleFrames = 0;
+    while (simNow() - settleFrom < SETTLE_SIM_SECONDS && settleFrames < SETTLE_FRAME_CAP) {
+      await frame();
+      settleFrames++;
+    }
+
     const calls = [];
-    for (let i = 0; i < 40; i++) {
-      await frame();
-      await frame();
+    let sampleFrames = 0;
+    for (let i = 0; i < SAMPLES; i++) {
+      const from = simNow();
+      let spent = 0;
+      do {
+        await frame();
+        sampleFrames++;
+        spent++;
+      } while (simNow() - from < SAMPLE_SPACING_SIM_SECONDS && spent < SAMPLE_FRAME_CAP);
       calls.push(diorama.getMetrics().renderer.calls);
     }
+    const simSpent = simNow() - settleFrom;
     calls.sort((a, b) => a - b);
     const metrics = diorama.getMetrics();
     return {
@@ -1902,8 +1939,32 @@ try {
       textures: metrics.renderer.textures,
       lodPixelsPerMetre: metrics.hybrid?.lodPixelsPerMetre ?? null,
       aspect: innerWidth / innerHeight,
+      settleFrames,
+      sampleFrames,
+      simSeconds: Number(simSpent.toFixed(2)),
     };
   });
+  // Printed because the cost of this gate is the thing item 10 is about, and a number in the
+  // log is how a later run proves it stayed cheap.
+  console.log(
+    JSON.stringify({
+      tallWindow: {
+        settleFrames: tallMetrics.settleFrames,
+        sampleFrames: tallMetrics.sampleFrames,
+        simSeconds: tallMetrics.simSeconds,
+        callsPeak: tallMetrics.callsPeak,
+        callsMedian: tallMetrics.callsMedian,
+        geometries: tallMetrics.geometries,
+      },
+    })
+  );
+  // A settle that ran to its cap did not settle by the clock; it ran out of rope. That is a
+  // paused or wedged page, not a passing gate, and it must not be read as one.
+  assert.ok(
+    tallMetrics.settleFrames < 600,
+    `the tall window never advanced its simulation clock: ${tallMetrics.settleFrames} frames, ` +
+      `${tallMetrics.simSeconds} simulated seconds`
+  );
   assert.equal(tallMetrics.level, 'high', `the tall window must run high, got ${tallMetrics.level}`);
   assert.ok(
     tallMetrics.callsPeak <= 1_400,
