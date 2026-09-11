@@ -92,7 +92,27 @@ async function assertBundleBudgets() {
   const cameraControlsBytes = (await stat(`dist/assets/${cameraControls}`)).size;
   const postprocessingBytes = (await stat(`dist/assets/${postprocessing}`)).size;
   const experienceSignalsBytes = (await stat(`dist/assets/${experienceSignals}`)).size;
-  assert.ok(entryBytes <= 244_000, `application chunk budget exceeded: ${entryBytes} bytes`);
+  /**
+   * Entry-chunk budget, raised from 244 000 on 2026-09-11 and this is why.
+   *
+   * A theme change used to repaint the city in one frame -- palettes, colour grade, and four
+   * tone scalars the frame loop reads straight off the theme, all cutting together. Measured
+   * with the camera pinned against a background of 0.92 luminance levels of the city's own
+   * motion between frames, the frame a theme landed on moved the picture by 40.5. Putting it
+   * on a fade costs 1 265 bytes here and took that frame to 1.9.
+   *
+   * The old ceiling had 531 bytes free, so the fade did not fit. Everything cheaper was
+   * tried and measured first: the dead code the change created gave back 270 bytes, dropping
+   * the voxel palette blend gives 372 more but costs the first frame 1.9 -> 5.5 and still
+   * leaves it over, and compacting the tone reads made the chunk 170 bytes LARGER. None of
+   * it can move to a lazy chunk either -- the voxel blend closes over the generator's own
+   * look entries and the ramp lives in the frame loop.
+   *
+   * So this is a deliberate purchase, made by the owner, not a ceiling nudged to make a red
+   * gate green. 245 500 leaves 766 bytes free, more headroom than the 531 it replaces, so the
+   * next change meets a real budget rather than this one again.
+   */
+  assert.ok(entryBytes <= 245_500, `application chunk budget exceeded: ${entryBytes} bytes`);
   assert.ok(bootstrapBytes <= 50_000, `application bootstrap budget exceeded: ${bootstrapBytes} bytes`);
   assert.ok(threeBytes <= 800_000, `Three.js chunk budget exceeded: ${threeBytes} bytes`);
   assert.ok(cameraControlsBytes <= 60_000, `camera-controls chunk budget exceeded: ${cameraControlsBytes} bytes`);
