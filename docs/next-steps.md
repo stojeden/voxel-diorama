@@ -166,7 +166,7 @@ explaining that a literal once failed a deliberate colour change instead of a re
   exactly the number that would say whether stereo rendering doubled the scene cost or the
   post cost.
 
-## 10. The smoke step costs 41 minutes of CI, and 21 of them are one settle loop
+## 10. ~~The smoke step costs 41 minutes of CI, and 21 of them are one settle loop~~ — **done 2026-09-11**
 
 Measured on run 34602359888 (`c834d99`), the first run in which every leg was live:
 
@@ -192,12 +192,33 @@ gate exists to catch; halving it would make the gate measure a window nobody sit
 count deserves the same care: `callsPeak` is a peak because the train, the bus and the gulls
 wander in and out of a frustum this wide.
 
+**Fixed in `a32f817`.** Both loops now wait on the simulation clock, which `getState()` reports
+as `elapsedSimulation`. Neither budget moved and neither leg was removed.
+
+Verified two ways, because the arithmetic alone would not have been evidence:
+
+- **Locally**, the gate reads the same window: `callsPeak` 1371, `callsMedian` 1328,
+  `geometries` 422, against 1373 before the change. The settle spent 176 frames where the old
+  code spent a fixed 180 — the same 3 s, because this machine renders it at 58.6 Hz.
+- **Under a 20x CPU throttle**, where a frame costs 323 ms and the 0.1 s clamp bites, the two
+  loop bodies were run back to back on one page: **70 frames and 16.2 s** against **260 frames
+  and 60.2 s**. That is 30 settle frames plus 40 sample frames, exactly what the clamp predicts.
+
+The expected CI saving is most of the 21 minutes, but **that is a projection, not a reading** —
+the 21 min 14 s window also contains the page load and the `ready` wait, which this does not
+touch. The real number comes from the first run after this ships; the gate now prints
+`settleFrames`, `sampleFrames` and `simSeconds` so it can be read off the log.
+
+**The desktop leg's 18 min 46 s is not explained and not addressed here.** It has no fixed
+settle of this kind — `settleFrames(page)` waits two frames and carries a comment that already
+knew this trap — and its camera loops count input steps rather than time. Decomposing it needs
+its own measurement.
+
 ---
 
 ## Suggested order
 
-1. Item 10 (the 21-minute settle loop) — the shortest of these, and every run afterwards is
-   faster, including the runs that will measure everything below it.
+1. ~~Item 10 (the 21-minute settle loop)~~ — done.
 2. Item 1 (the simulation seam) — everything else is cheaper afterwards.
 3. Item 5 (`CityRepresentation`) — do it inside item 1's refactor.
 4. Item 6's remaining 98 — measure their CI cost first; the 28-second figure was a GPU reading.
