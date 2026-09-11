@@ -63,12 +63,15 @@ jobs:
       # to measure anything else, so a plain `npm run build` leaves it with no manifest
       # to check and it stops before the first frame.
       #
-      # The manifest goes into the workspace rather than the default tmpdir so it can travel
-      # with the bundle: the deploy job checks the bytes it is about to publish against it.
+      # The manifest stays OUTSIDE the checkout. The first version of this put it in the
+      # workspace so it could travel with the bundle, and the provenance gate immediately
+      # refused the run -- `?? build-manifest.json` made the tree dirty, which is exactly what
+      # that gate exists to catch. The file is copied in further down, after the check that
+      # would object to it has already passed.
       - name: Build and sign the bundle
         run: node scripts/prepareBuild.mjs
         env:
-          BUILD_MANIFEST: ${{ github.workspace }}/build-manifest.json
+          BUILD_MANIFEST: ${{ runner.temp }}/build-manifest.json
 
       - name: Install browser
         run: npx playwright install --with-deps chromium
@@ -76,13 +79,15 @@ jobs:
       - name: Browser smoke and renderer budgets
         run: node scripts/browserSmoke.mjs
         env:
-          BUILD_MANIFEST: ${{ github.workspace }}/build-manifest.json
+          BUILD_MANIFEST: ${{ runner.temp }}/build-manifest.json
 
       # Every budget assertion and pixel comparison above applies to THIS bundle. Until
       # 2026-09-11 the deploy job built its own and published that instead, so none of it
       # covered what shipped.
       - name: Keep the measured bundle
-        uses: actions/upload-artifact@v4
+        run: cp "${{ runner.temp }}/build-manifest.json" build-manifest.json
+
+      - uses: actions/upload-artifact@v4
         with:
           name: measured-bundle
           path: |
