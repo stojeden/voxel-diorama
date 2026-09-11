@@ -1044,86 +1044,6 @@ try {
     await page.waitForFunction(() => window.__diorama?.ready === true, null, { timeout: READY_TIMEOUT_MS });
   }
 
-  /**
-   * Before the CI/non-CI branch, not inside it.
-   *
-   * This leg used to sit in the `else`, which CI never runs -- so the phone layout, the five
-   * overlap checks and the 24 px touch-target minimum were verified on a developer's machine
-   * and nowhere else. The next feature is AR on a phone.
-   *
-   * It goes BEFORE the branch rather than after it because the summary the `else` prints
-   * reads `mobilePixels`; moving the block past that line would leave the constant in its
-   * temporal dead zone. It opens its own page and closes it again, and it touches nothing
-   * the branch below depends on -- checked: it references no variable from either arm.
-   */
-  const mobile = await browser.newPage({
-    viewport: { width: 390, height: 844 },
-    deviceScaleFactor: 2,
-    hasTouch: true,
-    isMobile: true,
-  });
-  const mobileErrors = [];
-  mobile.on('console', (message) => {
-    if (message.type() === 'error') mobileErrors.push(message.text());
-  });
-  mobile.on('pageerror', (error) => mobileErrors.push(error.message));
-  await mobile.goto(URL, { waitUntil: 'networkidle' });
-  await mobile.waitForFunction(() => window.__diorama?.ready === true, null, { timeout: READY_TIMEOUT_MS });
-  const mobileAtHandover = await mobile.evaluate(() => ({
-    ambient: window.__diorama.getState().ambient,
-    ambientHidden: document.querySelector('#ambient-status').hidden,
-    centreElement: document.elementFromPoint(innerWidth / 2, innerHeight / 2)?.tagName ?? null,
-    cameraAutomation: window.__diorama.getState().cameraAutomation,
-    storageKeys: Object.keys(localStorage),
-  }));
-  assert.equal(mobileAtHandover.ambient, null, 'mobile must also open with an empty ambient status');
-  assert.equal(mobileAtHandover.ambientHidden, true, 'mobile empty state must render nothing');
-  assert.equal(mobileAtHandover.centreElement, 'CANVAS', 'nothing may cover the centre of the mobile scene');
-  assert.equal(mobileAtHandover.cameraAutomation, null, 'mobile must open on a free camera');
-  assert.deepEqual(mobileAtHandover.storageKeys, [], 'mobile must not persist first-visit state');
-
-  await mobile.evaluate(() => window.__diorama.setEclipseProgress(0.5));
-  await waitForHudLatch(
-    mobile,
-    () => window.__diorama.getState().ambient?.kind === 'eclipse',
-    'the mobile ambient status never reported the live eclipse'
-  );
-  const mobilePixels = await sampleRenderedFrame(mobile);
-  assert.ok(mobilePixels.visibleSamples > 200, 'mobile canvas is blank');
-  assert.ok(mobilePixels.maxLuminance - mobilePixels.minLuminance > 25, 'mobile canvas lacks visual contrast');
-  await assertMobileLayout(mobile);
-
-  // Touch parity: tap frames the event, and the next touch gives the camera back.
-  const mobilePoseBefore = await mobile.evaluate(() => window.__diorama.cameraPose());
-  const mobileActionPoint = await pointAtAmbientAction(mobile);
-  assert.equal(
-    mobileActionPoint.hitId,
-    'ambient-action',
-    `the mobile ambient action must be its own hit target, found: ${mobileActionPoint.hitId}`
-  );
-  await mobile.touchscreen.tap(mobileActionPoint.x, mobileActionPoint.y);
-  await mobile.waitForFunction(
-    () => window.__diorama.getState().cameraAutomation === 'eclipse',
-    null,
-    { timeout: SIMULATION_TIMEOUT_MS }
-  );
-  await waitForCameraMove(mobile, mobilePoseBefore);
-  const mobileFramed = await mobile.evaluate(() => ({
-    automation: window.__diorama.getState().cameraAutomation,
-    pose: window.__diorama.cameraPose(),
-  }));
-  assert.equal(mobileFramed.automation, 'eclipse', 'a tap on "Pokaż" must frame the event on touch devices');
-  assert.ok(
-    poseDistance(mobileFramed.pose, mobilePoseBefore) > 5,
-    'the requested framing must move the mobile camera'
-  );
-  await mobile.touchscreen.tap(195, 400);
-  const mobileReleased = await mobile.evaluate(() => window.__diorama.getState().cameraAutomation);
-  assert.equal(mobileReleased, null, 'the first touch on the scene must release the camera');
-  await saveScreenshot(mobile, '/tmp/voxel-diorama-mobile.png');
-  await mobile.close();
-  assert.deepEqual(mobileErrors, [], `mobile browser errors:\n${mobileErrors.join('\n')}`);
-
   if (IS_CI) {
     await page.evaluate(() => window.__diorama.setQuality('low'));
     const low = await page.evaluate(() => window.__diorama.getMetrics());
@@ -1832,12 +1752,96 @@ try {
     renderer: initial.metrics.renderer,
     lowQualityCalls: low.renderer.calls,
     desktopPixels,
-    mobilePixels,
     exposureSamples,
     nightBusStopFps: nightBusStopMetrics.quality.estimatedFps,
     browserErrors: consoleErrors.length,
   }, null, 2));
   }
+
+  /**
+   * After the branch, not before it, and the difference is two WebGL contexts.
+   *
+   * This leg used to live inside the `else`, which CI never runs -- so the phone layout, the
+   * five overlap checks and the 24 px touch-target minimum were verified on a developer's
+   * machine and nowhere else, with AR on a phone coming next.
+   *
+   * The first attempt lifted it ABOVE the branch, which put it alongside a desktop page that
+   * was still open. On a developer's GPU that is free; on CI's software rasteriser the phone
+   * page never finished starting and the run died on a 180-second timeout. It belongs here,
+   * after both arms have closed `page`, which is the condition it was written under.
+   *
+   * Its pixel sample is printed here rather than in the `else`'s summary, because the summary
+   * is now upstream of it.
+   */
+  const mobile = await browser.newPage({
+    viewport: { width: 390, height: 844 },
+    deviceScaleFactor: 2,
+    hasTouch: true,
+    isMobile: true,
+  });
+  const mobileErrors = [];
+  mobile.on('console', (message) => {
+    if (message.type() === 'error') mobileErrors.push(message.text());
+  });
+  mobile.on('pageerror', (error) => mobileErrors.push(error.message));
+  await mobile.goto(URL, { waitUntil: 'networkidle' });
+  await mobile.waitForFunction(() => window.__diorama?.ready === true, null, { timeout: READY_TIMEOUT_MS });
+  const mobileAtHandover = await mobile.evaluate(() => ({
+    ambient: window.__diorama.getState().ambient,
+    ambientHidden: document.querySelector('#ambient-status').hidden,
+    centreElement: document.elementFromPoint(innerWidth / 2, innerHeight / 2)?.tagName ?? null,
+    cameraAutomation: window.__diorama.getState().cameraAutomation,
+    storageKeys: Object.keys(localStorage),
+  }));
+  assert.equal(mobileAtHandover.ambient, null, 'mobile must also open with an empty ambient status');
+  assert.equal(mobileAtHandover.ambientHidden, true, 'mobile empty state must render nothing');
+  assert.equal(mobileAtHandover.centreElement, 'CANVAS', 'nothing may cover the centre of the mobile scene');
+  assert.equal(mobileAtHandover.cameraAutomation, null, 'mobile must open on a free camera');
+  assert.deepEqual(mobileAtHandover.storageKeys, [], 'mobile must not persist first-visit state');
+
+  await mobile.evaluate(() => window.__diorama.setEclipseProgress(0.5));
+  await waitForHudLatch(
+    mobile,
+    () => window.__diorama.getState().ambient?.kind === 'eclipse',
+    'the mobile ambient status never reported the live eclipse'
+  );
+  const mobilePixels = await sampleRenderedFrame(mobile);
+  assert.ok(mobilePixels.visibleSamples > 200, 'mobile canvas is blank');
+  assert.ok(mobilePixels.maxLuminance - mobilePixels.minLuminance > 25, 'mobile canvas lacks visual contrast');
+  await assertMobileLayout(mobile);
+
+  // Touch parity: tap frames the event, and the next touch gives the camera back.
+  const mobilePoseBefore = await mobile.evaluate(() => window.__diorama.cameraPose());
+  const mobileActionPoint = await pointAtAmbientAction(mobile);
+  assert.equal(
+    mobileActionPoint.hitId,
+    'ambient-action',
+    `the mobile ambient action must be its own hit target, found: ${mobileActionPoint.hitId}`
+  );
+  await mobile.touchscreen.tap(mobileActionPoint.x, mobileActionPoint.y);
+  await mobile.waitForFunction(
+    () => window.__diorama.getState().cameraAutomation === 'eclipse',
+    null,
+    { timeout: SIMULATION_TIMEOUT_MS }
+  );
+  await waitForCameraMove(mobile, mobilePoseBefore);
+  const mobileFramed = await mobile.evaluate(() => ({
+    automation: window.__diorama.getState().cameraAutomation,
+    pose: window.__diorama.cameraPose(),
+  }));
+  assert.equal(mobileFramed.automation, 'eclipse', 'a tap on "Pokaż" must frame the event on touch devices');
+  assert.ok(
+    poseDistance(mobileFramed.pose, mobilePoseBefore) > 5,
+    'the requested framing must move the mobile camera'
+  );
+  await mobile.touchscreen.tap(195, 400);
+  const mobileReleased = await mobile.evaluate(() => window.__diorama.getState().cameraAutomation);
+  assert.equal(mobileReleased, null, 'the first touch on the scene must release the camera');
+  await saveScreenshot(mobile, '/tmp/voxel-diorama-mobile.png');
+  await mobile.close();
+  assert.deepEqual(mobileErrors, [], `mobile browser errors:\n${mobileErrors.join('\n')}`);
+
+  console.log(JSON.stringify({ mobilePixels }, null, 2));
 
   /**
    * Outside the CI/non-CI branch on purpose, and this is the whole reason it exists.
