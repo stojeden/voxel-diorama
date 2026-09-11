@@ -22,9 +22,9 @@
     "dev": "vite",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "build": "vite build",
+    "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "test:browser": "npm run build && node scripts/browserSmoke.mjs",
+    "test:browser": "node scripts/prepareBuild.mjs && node scripts/browserSmoke.mjs",
     "test:performance": "npm run build && node scripts/performanceBenchmark.mjs",
     "test:acceptance": "node scripts/acceptance.mjs",
     "validate": "npm run typecheck && npm test && npm run test:browser"

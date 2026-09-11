@@ -29,6 +29,27 @@ const CROSSING_T = nearestCurveT(BUS_ROUTE_CURVE, LEVEL_CROSSING.x, LEVEL_CROSSI
 const BUS_LENGTH = 8;
 const BUS_WIDTH = 2.5;
 
+/**
+ * The rail centre-line near the crossing, sampled once.
+ *
+ * `bodyClearance` runs on every simulated frame, for nine points of the bus footprint, and
+ * it used to walk all 601 samples of the train curve each time -- with the cheap 20 m
+ * rejection AFTER the expensive `getPointAt`, which does an arc-length search per call. The
+ * slowest test in the suite spent 6.17 million curve evaluations that way and took 1.6 s
+ * locally; on a loaded CI runner it crossed Vitest's 5 s default and failed a release for a
+ * reason that had nothing to do with level crossings.
+ *
+ * The curve is static, so the window is computed once. The same samples survive the same
+ * filter and feed the same distance, so every assertion below measures exactly what it
+ * measured before.
+ */
+const RAIL_NEAR_CROSSING: { x: number; z: number }[] = [];
+for (let i = 0; i <= 600; i++) {
+  const rail = TRAIN_ROUTE_CURVE.getPointAt(i / 600);
+  if (Math.abs(rail.x - LEVEL_CROSSING.x) > 20) continue;
+  RAIL_NEAR_CROSSING.push({ x: rail.x, z: rail.z });
+}
+
 /** How close any part of the bus body comes to the rail centre-line, in metres. */
 function bodyClearance(bus: ReturnType<typeof createBus>): number {
   const centre = bus.getPosition(new THREE.Vector3());
@@ -42,9 +63,7 @@ function bodyClearance(bus: ReturnType<typeof createBus>): number {
       const corner = centre.clone()
         .addScaledVector(forward, along)
         .addScaledVector(side, across);
-      for (let i = 0; i <= 600; i++) {
-        const rail = TRAIN_ROUTE_CURVE.getPointAt(i / 600);
-        if (Math.abs(rail.x - LEVEL_CROSSING.x) > 20) continue;
+      for (const rail of RAIL_NEAR_CROSSING) {
         nearest = Math.min(nearest, Math.hypot(rail.x - corner.x, rail.z - corner.z));
       }
     }

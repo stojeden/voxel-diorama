@@ -94,7 +94,11 @@ export const QUALITY_PROFILES: Record<QualityLevel, QualityProfile> = {
     streetLightBudget: 4,
     busStopLightBudget: 1,
     stationLightBudget: 2,
-    windowLightBudget: 1,
+    // Zero, like the other two, and found by the test rather than by eye: Low was the last
+    // profile still paying for a window pool that High's measurement had already shown to be
+    // worth 497 px at 0.03% of a near-facade frame. The cheapest profile was carrying a light
+    // the dearest one had discarded.
+    windowLightBudget: 0,
   },
   medium: {
     level: 'medium',
@@ -114,10 +118,29 @@ export const QUALITY_PROFILES: Record<QualityLevel, QualityProfile> = {
     labels: true,
     pmremInterval: 12,
     optionalActorHz: 20,
-    streetLightBudget: 8,
+    /**
+     * The same light budget High carries, and it should have had it all along.
+     *
+     * High was cut to six lamps and no window pools after the measurement recorded below;
+     * Medium kept the older, heavier set -- eight lamps and two window pools -- so the
+     * CHEAPER profile was lighting the night with fourteen local lights against High's ten.
+     * Measured on the owner's own window at the default overview, clear, t01 0.92:
+     *
+     *   medium, as it was    70 ms   22 lights visible, 234 shader programs
+     *   medium, as it is     22 ms   18 lights visible, 170 shader programs
+     *   high, for scale      24 ms
+     *
+     * Forty-eight milliseconds a frame, on the profile the owner actually runs -- fourteen
+     * frames a second at night against forty-five. The cost is not linear in the light count
+     * because Three compiles the count into every material's shader: four more lights bought
+     * sixty-four more programs as well as the per-fragment work.
+     *
+     * `profiles.test.ts` now refuses to let a cheaper profile out-spend a dearer one again.
+     */
+    streetLightBudget: 6,
     busStopLightBudget: 2,
     stationLightBudget: 2,
-    windowLightBudget: 2,
+    windowLightBudget: 0,
   },
   high: {
     level: 'high',

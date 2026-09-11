@@ -1745,69 +1745,6 @@ try {
   assert.deepEqual(consoleErrors, [], `browser errors:\n${consoleErrors.join('\n')}`);
   await page.close();
 
-  /**
-   * The owner's own window, because the gate could not see the case they were in.
-   *
-   * `fov` is vertical and fixed at 50 degrees, so a shorter window at the same width does
-   * not crop the shot -- it widens the frustum horizontally. 1440x900 is 73.45 degrees
-   * across; 1440x657 is 91.25. The owner's frame is a strict superset of the one asserted
-   * above, roughly a quarter more angular width, and every object that enters costs a draw
-   * in the colour pass, another in the normal pass, another in the shadow map if it casts
-   * and another in the bloom depth pass if it is selected. The gate read 1352 while the
-   * owner's window was issuing 1420 at medium and 1453 at high, over this very budget, and
-   * nothing here could tell.
-   *
-   * `deviceScaleFactor` is fixed when a page is created, so this has to be its own page
-   * rather than a `setViewportSize`, and it has to come after the single-context assertion
-   * near the top. Quality is pinned in the URL because a fresh page has empty storage and
-   * would resolve `auto` through the hardware probe independently, which would make the two
-   * numbers incomparable.
-   */
-  const tall = await browser.newPage({ viewport: { width: 1440, height: 657 }, deviceScaleFactor: 2 });
-  const tallErrors = [];
-  tall.on('console', (message) => {
-    if (message.type() === 'error') tallErrors.push(message.text());
-  });
-  tall.on('pageerror', (error) => tallErrors.push(error.message));
-  await tall.goto(`${URL}?seed=20260722&quality=high`, { waitUntil: 'networkidle' });
-  await tall.waitForFunction(() => window.__diorama?.ready === true, null, { timeout: READY_TIMEOUT_MS });
-  // The LOD carries a 0.25 s cooldown and hysteresis, so it needs a moment to settle before
-  // the count means anything; and the peak matters more than an instant, because gulls, the
-  // train and the bus wander in and out of a frustum this wide.
-  const tallMetrics = await tall.evaluate(async () => {
-    const diorama = window.__diorama;
-    const frame = () => new Promise((resolve) => requestAnimationFrame(resolve));
-    for (let i = 0; i < 180; i++) await frame();
-    const calls = [];
-    for (let i = 0; i < 40; i++) {
-      await frame();
-      await frame();
-      calls.push(diorama.getMetrics().renderer.calls);
-    }
-    calls.sort((a, b) => a - b);
-    const metrics = diorama.getMetrics();
-    return {
-      level: metrics.quality?.level ?? null,
-      callsMedian: calls[Math.floor(calls.length / 2)],
-      callsPeak: calls[calls.length - 1],
-      primaryCalls: metrics.renderer.primaryCalls ?? null,
-      geometries: metrics.renderer.geometries,
-      textures: metrics.renderer.textures,
-      lodPixelsPerMetre: metrics.hybrid?.lodPixelsPerMetre ?? null,
-      aspect: innerWidth / innerHeight,
-    };
-  });
-  assert.equal(tallMetrics.level, 'high', `the tall window must run high, got ${tallMetrics.level}`);
-  assert.ok(
-    tallMetrics.callsPeak <= 1_400,
-    `draw-call budget exceeded in a 1440x657 window: peak ${tallMetrics.callsPeak}, median ${tallMetrics.callsMedian}`
-  );
-  assert.ok(
-    tallMetrics.geometries <= 600,
-    `geometry budget exceeded in a 1440x657 window: ${tallMetrics.geometries}`
-  );
-  assert.deepEqual(tallErrors, [], `tall-window browser errors:\n${tallErrors.join('\n')}`);
-  await tall.close();
 
   const mobile = await browser.newPage({
     viewport: { width: 390, height: 844 },
@@ -1888,6 +1825,79 @@ try {
     browserErrors: consoleErrors.length,
   }, null, 2));
   }
+
+  /**
+   * Outside the CI/non-CI branch on purpose, and this is the whole reason it exists.
+   *
+   * It was written inside the `else` above, which never runs in CI -- so the guard added
+   * BECAUSE the 1440x900 gate had missed a live over-budget case was itself invisible to the
+   * gate. It was verified locally, and by mutation, and reported as protected. It was not.
+   * One hundred and ten of this file's assertions are still in that branch; this one is out
+   * because it guards a budget that a wider frustum silently breaks.
+   */
+  /**
+   * The owner's own window, because the gate could not see the case they were in.
+   *
+   * `fov` is vertical and fixed at 50 degrees, so a shorter window at the same width does
+   * not crop the shot -- it widens the frustum horizontally. 1440x900 is 73.45 degrees
+   * across; 1440x657 is 91.25. The owner's frame is a strict superset of the one asserted
+   * above, roughly a quarter more angular width, and every object that enters costs a draw
+   * in the colour pass, another in the normal pass, another in the shadow map if it casts
+   * and another in the bloom depth pass if it is selected. The gate read 1352 while the
+   * owner's window was issuing 1420 at medium and 1453 at high, over this very budget, and
+   * nothing here could tell.
+   *
+   * `deviceScaleFactor` is fixed when a page is created, so this has to be its own page
+   * rather than a `setViewportSize`, and it has to come after the single-context assertion
+   * near the top. Quality is pinned in the URL because a fresh page has empty storage and
+   * would resolve `auto` through the hardware probe independently, which would make the two
+   * numbers incomparable.
+   */
+  const tall = await browser.newPage({ viewport: { width: 1440, height: 657 }, deviceScaleFactor: 2 });
+  const tallErrors = [];
+  tall.on('console', (message) => {
+    if (message.type() === 'error') tallErrors.push(message.text());
+  });
+  tall.on('pageerror', (error) => tallErrors.push(error.message));
+  await tall.goto(`${URL}?seed=20260722&quality=high`, { waitUntil: 'networkidle' });
+  await tall.waitForFunction(() => window.__diorama?.ready === true, null, { timeout: READY_TIMEOUT_MS });
+  // The LOD carries a 0.25 s cooldown and hysteresis, so it needs a moment to settle before
+  // the count means anything; and the peak matters more than an instant, because gulls, the
+  // train and the bus wander in and out of a frustum this wide.
+  const tallMetrics = await tall.evaluate(async () => {
+    const diorama = window.__diorama;
+    const frame = () => new Promise((resolve) => requestAnimationFrame(resolve));
+    for (let i = 0; i < 180; i++) await frame();
+    const calls = [];
+    for (let i = 0; i < 40; i++) {
+      await frame();
+      await frame();
+      calls.push(diorama.getMetrics().renderer.calls);
+    }
+    calls.sort((a, b) => a - b);
+    const metrics = diorama.getMetrics();
+    return {
+      level: metrics.quality?.level ?? null,
+      callsMedian: calls[Math.floor(calls.length / 2)],
+      callsPeak: calls[calls.length - 1],
+      primaryCalls: metrics.renderer.primaryCalls ?? null,
+      geometries: metrics.renderer.geometries,
+      textures: metrics.renderer.textures,
+      lodPixelsPerMetre: metrics.hybrid?.lodPixelsPerMetre ?? null,
+      aspect: innerWidth / innerHeight,
+    };
+  });
+  assert.equal(tallMetrics.level, 'high', `the tall window must run high, got ${tallMetrics.level}`);
+  assert.ok(
+    tallMetrics.callsPeak <= 1_400,
+    `draw-call budget exceeded in a 1440x657 window: peak ${tallMetrics.callsPeak}, median ${tallMetrics.callsMedian}`
+  );
+  assert.ok(
+    tallMetrics.geometries <= 600,
+    `geometry budget exceeded in a 1440x657 window: ${tallMetrics.geometries}`
+  );
+  assert.deepEqual(tallErrors, [], `tall-window browser errors:\n${tallErrors.join('\n')}`);
+  await tall.close();
 } catch (error) {
   console.error(previewLog);
   throw error;

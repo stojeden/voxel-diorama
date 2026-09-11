@@ -14,6 +14,23 @@ export default defineConfig({
   optimizeDeps: {
     include: ['three', 'postprocessing', 'camera-controls', 'suncalc'],
   },
+  test: {
+    /**
+     * Vitest 4 dropped the dist glob from its default exclude, and it never reads
+     * `.git/info/exclude`. A git worktree lives under `.claude/worktrees/` -- a whole second
+     * copy of `src/` -- so the local suite was collecting 717 tests where CI collects 382:
+     * 39 byte-identical duplicates and, worse, 7 files asserting a five-day-old contract.
+     * Those seven can go green on behaviour that has been deleted, or red on behaviour that
+     * has just been changed, and the failure names a path under `.claude/` that reads like
+     * tooling noise rather than a real result.
+     *
+     * The defaults are repeated here rather than replaced by a bare pair: writing only the
+     * two new globs would drop node_modules from the exclude list and start collecting the
+     * dependencies' own tests.
+     */
+    exclude: ['**/node_modules/**', '**/.git/**', '**/.claude/**', '**/dist/**'],
+  },
+
   build: {
     outDir: 'dist',
     // Three itself is a large, cacheable vendor chunk. Application code has a
