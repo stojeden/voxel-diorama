@@ -62,14 +62,34 @@ jobs:
       # Builds and signs in one step. `browserSmoke` verifies that signature and refuses
       # to measure anything else, so a plain `npm run build` leaves it with no manifest
       # to check and it stops before the first frame.
+      #
+      # The manifest goes into the workspace rather than the default tmpdir so it can travel
+      # with the bundle: the deploy job checks the bytes it is about to publish against it.
       - name: Build and sign the bundle
         run: node scripts/prepareBuild.mjs
+        env:
+          BUILD_MANIFEST: ${{ github.workspace }}/build-manifest.json
 
       - name: Install browser
         run: npx playwright install --with-deps chromium
 
       - name: Browser smoke and renderer budgets
         run: node scripts/browserSmoke.mjs
+        env:
+          BUILD_MANIFEST: ${{ github.workspace }}/build-manifest.json
+
+      # Every budget assertion and pixel comparison above applies to THIS bundle. Until
+      # 2026-09-11 the deploy job built its own and published that instead, so none of it
+      # covered what shipped.
+      - name: Keep the measured bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: measured-bundle
+          path: |
+            dist
+            build-manifest.json
+          retention-days: 7
+          if-no-files-found: error
 
   deploy:
     name: Deploy validated build to GitHub Pages
@@ -83,4 +103,6 @@ jobs:
       contents: read
       pages: write
       id-token: write
+      # Reading the artifact the browser-smoke job left behind.
+      actions: read
     uses: ./.github/workflows/deploy.yml

@@ -7,6 +7,8 @@ permissions:
   contents: read
   pages: write
   id-token: write
+  # `download-artifact` reads the run's own artifacts through the Actions API.
+  actions: read
 
 concurrency:
   group: pages-${{ github.ref }}
@@ -16,18 +18,26 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
+      # For `scripts/verifyArtifact.mjs` only -- the bundle itself arrives as an artifact,
+      # and taking the script from the repository rather than the artifact is the point:
+      # a checker that travelled with the thing it checks would check nothing.
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-          cache: npm
 
-      - name: Install dependencies
-        run: npm ci
+      # Deliberately no `npm ci` and no build. This job used to make its own bundle and
+      # publish that, which meant the budgets, the pixel comparisons and the whole of
+      # `buildProvenance.mjs` applied to a bundle that was then discarded. Two builds of one
+      # commit are usually identical -- and "usually identical" is not a gate.
+      - name: Take the bundle the gates measured
+        uses: actions/download-artifact@v4
+        with:
+          name: measured-bundle
 
-      - name: Build
-        run: npm run build
+      - name: Check it is byte-for-byte what was measured
+        run: node scripts/verifyArtifact.mjs build-manifest.json dist
 
       - uses: actions/configure-pages@v5
 
