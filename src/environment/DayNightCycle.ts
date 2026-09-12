@@ -992,7 +992,19 @@ export class DayNightCycle {
     // takes the beam apart and hands it to the sky — see {@link cloudDaylightAt}.
     const directSun =
       sunStrength * cloudLight.beam * (1 - nightFloor * 0.8) * eclipseState.irradiance;
-    this.sunLight.intensity = directSun * 2.2;
+    /**
+     * 2.0363, not 2.2, so that a clear day renders exactly as it did.
+     *
+     * The old beam term was `1 - cloudCover * 0.62`, and this product's clear sky is cover
+     * 0.12 -- so it quietly took 7.4 per cent off the beam on a cloudless noon as well.
+     * Kasten & Czeplak put the loss at one okta at 0.06 per cent, so that 7.4 was never
+     * cloud; it was part of the rig's calibration wearing a cloud term's clothes. The beam
+     * no longer spends it, so the gain absorbs it: `2.2 * (1 - 0.62 * 0.12) = 2.0363`.
+     * Measured on a running page at noon, cover 0.12: `sunLight.intensity` 2.036 before
+     * this change and 2.036 after it. The defect was rain, and rain is the only thing that
+     * moves.
+     */
+    this.sunLight.intensity = directSun * 2.0363;
     sunColorAt(t, declination, this.tmpSunColor);
     this.sunLight.color.copy(this.tmpSunColor);
     /**
