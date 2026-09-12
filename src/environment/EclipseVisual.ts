@@ -383,6 +383,29 @@ export const glslFloat = (value: number): string => {
  * already cuts the photosphere out of its disc -- so the two layers want opposite blend
  * modes and now have them.
  */
+/**
+ * Angular radius of the drawn sun, as a fraction of the billboard's half-width.
+ *
+ * The real sun is 0.265 degrees in radius and this billboard subtends about 5.07 degrees, so
+ * 0.052 would be life size. It has never been life size: 0.16 was about three times that, a
+ * deliberate legibility choice, and both judges of the design round killed a proposal to shrink
+ * it because at 1.19 degrees the crescent falls under two pixels at coverage 0.90 and goes
+ * sub-pixel at 0.95.
+ *
+ * It is 0.24 now -- 2.43 degrees, about 4.6 times life -- for a measured reason. With the
+ * layers isolated one at a time on the built product, the drawn photosphere contributes
+ * NOTHING during the partial phases: "sun only" is indistinguishable from "sky only" at
+ * coverage 0.72 and 0.96, because the sky beside a sun 8.8 degrees up is Preetham's forward
+ * lobe, clipped at 254 of 255, and an additive layer cannot beat white. Every readable pixel of
+ * a partial eclipse comes from the MOON, which replaces the sky rather than adding to it. So
+ * the one lever on the owner's "you must be able to see the sun being covered" is how many
+ * pixels across that dark bite is, and at 0.16 it was ten.
+ *
+ * The moon keeps the real 1.01875 ratio to the sun, which is what makes totality total.
+ */
+export const SUN_DISC_RADIUS = 0.24;
+export const MOON_DISC_RADIUS = SUN_DISC_RADIUS * 1.01875;
+
 const SOLAR_FRAGMENT_SHADER = /* glsl */ `
   varying vec2 vUv;
   uniform float uTime;
@@ -395,8 +418,8 @@ const SOLAR_FRAGMENT_SHADER = /* glsl */ `
   uniform float uProminenceDetail;
   uniform float uTransmittance;
 
-  const float SUN_RADIUS = 0.16;
-  const float MOON_RADIUS = 0.163;
+  const float SUN_RADIUS = ${glslFloat(SUN_DISC_RADIUS)};
+  const float MOON_RADIUS = ${glslFloat(MOON_DISC_RADIUS)};
 
   float hash(float n) {
     return fract(sin(n) * 43758.5453123);
@@ -524,8 +547,8 @@ const MOON_FRAGMENT_SHADER = /* glsl */ `
   uniform float uTotality;
   uniform float uTransmittance;
 
-  const float SUN_RADIUS = 0.16;
-  const float MOON_RADIUS = 0.163;
+  const float SUN_RADIUS = ${glslFloat(SUN_DISC_RADIUS)};
+  const float MOON_RADIUS = ${glslFloat(MOON_DISC_RADIUS)};
 
   void main() {
     vec2 p = (vUv - 0.5) * 2.0;
@@ -548,10 +571,18 @@ const MOON_FRAGMENT_SHADER = /* glsl */ `
     // invariant of this project broken by design; with dithering on in the final pass those
     // pixels round to rgb(0,0,0) about half the time. The max() is last so cloud cannot
     // take the disc back under it. See MOON_MINIMUM_RADIANCE for where 0.012 comes from.
+    //
+    // The alpha carries no cloud term. It used to be multiplied by mix(0.35, 1.0, uTransmittance), and
+    // "clear" weather in this world is cloud cover 0.12, so the moon was 90 per cent opaque
+    // on a clear day: ten per cent of a sky that is Preetham's forward lobe near a low sun,
+    // clipped at 254, came through the disc and filled the bite to 218. That is the whole of
+    // why a partial eclipse had no visible bite. A cloud in front of the moon does not make
+    // the moon translucent -- it puts cloud in front of it, which is what uTransmittance on
+    // the COLOUR is for. The moon is a rock; it is opaque.
     vec3 interior = earthshine * uTotality * 1.3 * uTransmittance;
     gl_FragColor = vec4(
       max(interior, vec3(${glslFloat(MOON_MINIMUM_RADIANCE)})),
-      mask * visibility * mix(0.35, 1.0, uTransmittance)
+      mask * visibility
     );
   }
 `;

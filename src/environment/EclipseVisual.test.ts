@@ -7,6 +7,8 @@ import {
   SOLAR_RADIANCE,
   coronaRadialProfile,
   glslFloat,
+  MOON_DISC_RADIUS,
+  SUN_DISC_RADIUS,
   solarLimbIntensity,
 } from './EclipseVisual';
 import { EclipseTimeline, eclipseCoverageAtSeparation } from '../experience/EclipseTimeline';
@@ -606,16 +608,39 @@ describe('uniforms across a swept progress', () => {
   });
 });
 
-describe('the drawn sun keeps its size', () => {
-  test('SUN_RADIUS is unchanged at 0.16, and the moon still overhangs it', () => {
-    // 0.16 uv of a 120-unit billboard at 680 units is 1.614 deg, a 3.03x exaggeration of the
-    // real 0.5334 deg. It is a legibility choice, not an oversight: at true size the
-    // crescent is 0.95 px at coverage 0.90 and 0.50 px at 0.95, which is the owner's second
-    // sentence traded away. Both judges killed shrinking it.
+describe('the drawn sun is big enough to see covered', () => {
+  /**
+   * This pinned 0.16 exactly, on the grounds that both judges of the design round killed a
+   * proposal to SHRINK it -- at true size the crescent is 0.95 px at coverage 0.90. That
+   * reasoning is right and is kept; the exact value is not, because measurement moved it.
+   *
+   * With the layers isolated one at a time on the built product, the drawn photosphere adds
+   * nothing during the partial phases: "sun only" is indistinguishable from "sky only" at
+   * coverage 0.72 and at 0.96, because the sky beside a sun 8.8 degrees up is Preetham's
+   * forward lobe clipped at 254 of 255, and an additive layer cannot beat white. Every
+   * readable pixel of a partial eclipse is the MOON, which replaces the sky instead of adding
+   * to it. So the only lever on "you must be able to see the sun being covered" is how many
+   * pixels wide that dark bite is -- and at 0.16 it was ten.
+   *
+   * The bound is a floor, not an equality, so the next honest retune does not have to come
+   * back here; what it may not do is give back the legibility this exists to protect.
+   */
+  test('the disc is at least three times life size, and the moon still overhangs it', () => {
     const shader = solarShaderOf();
-    expect(shader).toContain('const float SUN_RADIUS = 0.16;');
-    expect(shader).toContain('const float MOON_RADIUS = 0.163;');
+    expect(shader).toContain(`const float SUN_RADIUS = ${glslFloat(SUN_DISC_RADIUS)};`);
+    expect(shader).toContain(`const float MOON_RADIUS = ${glslFloat(MOON_DISC_RADIUS)};`);
+    expect(moonShaderOf()).toContain(`const float SUN_RADIUS = ${glslFloat(SUN_DISC_RADIUS)};`);
+
+    // One constant feeds both shaders now; they used to be two literals that could drift.
+    const solarRadii = [...shader.matchAll(/const float (SUN|MOON)_RADIUS = ([0-9.]+);/g)];
+    expect(solarRadii).toHaveLength(2);
+
+    // 0.052 uv of a 120-unit billboard at 680 units is the real 0.5334 deg across.
+    const LIFE_SIZE_UV = 0.052;
+    expect(SUN_DISC_RADIUS / LIFE_SIZE_UV).toBeGreaterThan(3);
+    // ...and not so large that the sun stops reading as a sun.
+    expect(SUN_DISC_RADIUS / LIFE_SIZE_UV).toBeLessThan(6);
     // Magnitude 1.01875 -- a total eclipse needs the moon larger than the sun.
-    expect(MOON_OVER_SUN).toBeGreaterThan(1);
+    expect(MOON_OVER_SUN).toBeCloseTo(1.01875, 6);
   });
 });
