@@ -93,7 +93,12 @@ describe('EclipseTimeline', () => {
       stars: 1,
       separation: 0,
     });
-    expect(totality.irradiance).toBeCloseTo(0.025, 10);
+    // 0.0025, not the 0.025 this pinned until 2026-09-13. The old floor dominated the
+    // (1 - coverage)^1.3 term long before the moon finished, so irradiance fell only 14 per
+    // cent across the whole totality ramp while every additive term gated on `totality` went
+    // 0 to 1 -- the frame BRIGHTENED 35 per cent into totality, and second contact was the
+    // darkest moment of the eclipse. See the constant's docblock for the two measurements.
+    expect(totality.irradiance).toBeCloseTo(0.0025, 10);
     expect(totality.beads).toBe(0);
 
     timeline.start();

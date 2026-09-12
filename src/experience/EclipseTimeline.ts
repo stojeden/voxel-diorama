@@ -45,7 +45,36 @@ const MOON_RADIUS = 1.01875;
 const CONTACT_DISTANCE = SUN_RADIUS + MOON_RADIUS;
 const TOTALITY_SEPARATION = (MOON_RADIUS - SUN_RADIUS) / CONTACT_DISTANCE;
 const PARTIAL_CONTACT_COVERAGE = 0.985;
-const MINIMUM_IRRADIANCE = 0.025;
+/**
+ * How much of the sun's light still reaches the observer at totality, as a fraction of the
+ * uneclipsed hour.
+ *
+ * This is the floor on how dark the eclipse can get, and at 0.025 it was the single thing
+ * holding the sky bright. Two measurements, both on the built product with the weather pinned:
+ *
+ *  - Across the ENTIRE totality ramp -- coverage 0.985 to 1.0 -- `irradiance` fell only from
+ *    0.02915 to 0.02500, 14 per cent, because this floor dominates the `(1 - coverage)^1.3`
+ *    term long before the moon finishes. Meanwhile every additive term gated on `totality`
+ *    goes 0 to 1 over exactly that interval. The world therefore BRIGHTENED 35 per cent as the
+ *    moon finished covering the sun, and second contact, not totality, was the darkest frame.
+ *  - With the billboard hidden, the sky immediately beside the sun still presented at 236 of
+ *    255 at totality. Preetham's forward-scattering lobe near a low sun is of order 1000 in
+ *    linear radiance, and two and a half per cent of a thousand is still white. That is why
+ *    the corona could not be seen: it was not too dim, the sky behind it was too bright.
+ *
+ * Real totality is 1 to 100 lux against about 100 000 in full sun, i.e. 1e-5 to 1e-3. The
+ * value here is deliberately the bright end of that, and above it: legibility on a screen the
+ * viewer's eye is not dark-adapted to, and the honest name for the gap is legibility, not
+ * physics. What the floor is NOT doing any more is standing in for the umbral sky -- since the
+ * dome carries an explicit additive skyglow (`ECLIPSE_UMBRAL_ZENITH` plus the ring), the floor
+ * on what the observer can see belongs on THAT term, where it is a colour rather than a
+ * multiplier on the whole Preetham lobe.
+ *
+ * The diffuse fills do not follow this down: `eclipseDiffuseFraction` floors them at 0.13
+ * independently, so lowering this darkens the sky and the direct beam -- which at totality is
+ * geometrically zero anyway -- and leaves the light the city is modelled by alone.
+ */
+const MINIMUM_IRRADIANCE = 0.0025;
 
 const clamp01 = (value: number): number => Math.min(1, Math.max(0, value));
 const clampUnit = (value: number): number => Math.min(1, Math.max(-1, value));
