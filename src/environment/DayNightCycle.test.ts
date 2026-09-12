@@ -4,16 +4,24 @@ import { Sky } from 'three/addons/objects/Sky.js';
 import {
   cloudDaylightAt,
   eclipseDiffuseFraction,
+  eclipseRingRadiance,
   environmentTransitionAt,
   preethamHandoff,
   shadowNormalBias,
   shadowTexelSize,
   snapShadowFocus,
   starAlphaAt,
+  umbraSemiMajorKm,
+  umbraTraverse,
+  UMBRA_TRAVERSE_LIMIT,
+  umbraWallDistanceKm,
   withEclipseSky,
   withRadianceCeiling,
   withTwilightDome,
 } from './DayNightCycle';
+// The module's own source text: nothing in `tsc` or `vitest` reads a comment, so the doc-link
+// test below has to read the file. `?raw` keeps it inside Vite's own resolution.
+import dayNightCycleSource from './DayNightCycle.ts?raw';
 import { beamTransmittanceColor, twilightSkyColorCached } from './SunlightSpectrum';
 import { adaptingLuminance } from './ViewerAdaptation';
 import { EclipseTimeline } from '../experience/EclipseTimeline';
@@ -438,9 +446,11 @@ describe('the twilight dome patch', () => {
  * `DayNightCycle` is allowed to supply its own expected value.
  *
  * **Mutation results.** Each mutation was applied alone and the file re-run; the count is how
- * many of these twelve tests went red. The harness asserts that each substitution actually
- * changed the file before the run counts for anything -- a harness that cannot mutate looks
- * exactly like a test that cannot fail, and this repository has been burned by that once.
+ * many of these tests went red. The harness asserts that each substitution actually changed the
+ * file before the run counts for anything -- a harness that cannot mutate looks exactly like a
+ * test that cannot fail, and this repository has been burned by that once. The first five rows
+ * are the 2026-09-12 darkness rework's, re-run against this file and unchanged; the rest are
+ * the umbra ring's.
  *
  * | mutation                                                          | tests failed |
  * | ------------------------------------------------------------------ | ------------ |
@@ -449,19 +459,37 @@ describe('the twilight dome patch', () => {
  * | `max(irradiance, floor)` -> `floor` (no beam term)                  | 3            |
  * | `UMBRAL_SKYGLOW` 0.13 -> 0.0014 (the physical figure)               | 1            |
  * | `UMBRAL_SKYGLOW` 0.13 -> 0.30                                       | 3            |
- * | dome `texColor * ( 1.0 - eclipseDarkness )` -> `texColor`           | 2            |
- * | dome sum -> `mix( texColor, eclipseSky, eclipseDarkness * 0.88 )`   | 2            |
- * | ring `1.0 - abs( direction.y )` -> `1.0 - clamp( ..., 0.0, 1.0 )`   | 1            |
- * | `ECLIPSE_RING` raised over the half-float ceiling                   | 1            |
- * | umbral sky no longer gated on `eclipseTotality`                     | 1            |
+ * | dome `texColor * eclipseSkyFlux` -> `texColor`                      | 2            |
+ * | dome sum -> `mix( texColor, eclipseSky, eclipseDarkness )`          | 2            |
+ * | ring `abs( direction.y )` -> `max( direction.y, 0.0 )`              | 1            |
+ * | the ring's height law removed (band becomes the whole dome)         | 2            |
+ * | `ECLIPSE_RING_SCALE_HEIGHT_KM` 8 -> 48 (the old cubic's 11.9 deg)   | 1            |
+ * | footprint made circular (`a = b`, so no bearing at all)             | 2            |
+ * | traverse pinned to mid-totality (no 180-degree swing)               | 1            |
+ * | `UMBRA_TRAVERSE_LIMIT` 0.9 -> 0.99 (observer on the wall)           | 1            |
+ * | `ECLIPSE_RING_GAIN` 1.2536 -> 10.53 (the rejected calibration)      | 1            |
+ * | `ECLIPSE_UMBRAL_ZENITH` -> the 0.40 cd/m2 figure both proposals gave | 2           |
+ * | ring no longer gated on `eclipseTotality`                           | 1            |
+ * | a dangling `{@link}` reintroduced                                   | 1            |
  * | the ceiling patch removed from the constructor                      | 0 -- throws  |
+ * | `uniforms.eclipseSkyFlux.value` fed `1 - irradiance`                | 0 -- no test |
+ * | `umbraWall`'s outer `max( ..., 0.0 )` removed                       | 0 -- cannot  |
  *
- * The last row is the one honest gap and it is left in the table rather than tidied away. No
- * test here builds a `DayNightCycle`, so nothing in this file can observe the order the
- * constructor applies the three sky patches in. {@link withEclipseSky} therefore refuses to run
- * on a shader that is not already clamped, so that mutation stops the page at construction
- * instead of shipping a half-float overflow to somebody else's rasteriser; the guard itself is
- * covered by `refuses to be applied before the ceiling`.
+ * The last three rows are the honest gaps, left in the table rather than tidied away.
+ *
+ * No test here builds a `DayNightCycle`, so nothing in this file can observe the order the
+ * constructor applies the three sky patches in, nor what `update` writes into a uniform.
+ * {@link withEclipseSky} therefore refuses to run on a shader that is not already clamped, so
+ * that mutation stops the page at construction instead of shipping a half-float overflow to
+ * somebody else's rasteriser; the guard itself is covered by `refuses to be applied before the
+ * ceiling`. The flux assignment has no such backstop and is a real hole: what it feeds is one
+ * line, `uniforms.eclipseSkyFlux.value = eclipseState.irradiance`, and the only thing standing
+ * behind it is that inverting it would make an uneclipsed sky black rather than subtly wrong.
+ *
+ * `umbraWall`'s outer clamp cannot be killed by any test, and that is a property of the code
+ * rather than of the suite: the quadratic's positive root is positive for every observer inside
+ * the footprint, and {@link UMBRA_TRAVERSE_LIMIT} keeps the observer inside it. The clamp is
+ * insurance against a state the traverse cannot reach, which is exactly why it is cheap.
  *
  * The first row is the defect this suite caught in its own author's first draft. Written as a
  * sum, the diffuse light *rose* 0.0291 to 0.130 across second contact -- the world brightening
@@ -565,24 +593,44 @@ describe('an eclipse removes the light it removes', () => {
     const stock = new Sky().material.fragmentShader;
     // The constructor's order, reproduced: the ceiling clamps, then the eclipse patch runs.
     const patched = withEclipseSky(withRadianceCeiling(stock));
+    /** Only what this patch inserted: the stock shader has `pow` and `abs` of its own. */
+    const inserted = patched.slice(
+      patched.indexOf('vec2 uS ='),
+      patched.lastIndexOf('gl_FragColor')
+    );
     const vec3 = (name: string) =>
       /vec3\(\s*([\d.]+),\s*([\d.]+),\s*([\d.]+)\s*\)/
         .exec(patched.slice(patched.indexOf(`vec3 ${name} =`)))!
         .slice(1, 4)
         .map(Number);
 
-    test('attenuates the dome instead of crossfading away from it', () => {
+    test('attenuates the dome by the surviving flux, sent as the flux', () => {
       // A crossfade cannot darken a sky: whatever the blend is, `1 - blend` of a
       // full-brightness daytime dome survives it. Measured on the built bundle at the
       // `totality` checkpoint, that remainder was 14.2 per cent of the dome and four fifths of
       // the frame's light -- taking it alone to zero moved the whole frame from 0.4393 of the
       // uneclipsed hour to 0.0998.
-      expect(patched).toContain('texColor * ( 1.0 - eclipseDarkness )');
       expect(patched).not.toContain('mix( texColor, eclipseSky');
+      // The scale is the surviving solar flux and it arrives *as* the flux. The form it
+      // replaces, `texColor * ( 1.0 - eclipseDarkness )`, was the same quantity sent through a
+      // subtraction the shader then undid -- which cost 2.4e-7 of relative precision and, more
+      // to the point, hid the fact that the dome was already being scaled at all from a
+      // reviewer reading the shader.
+      expect(patched).toContain('texColor * eclipseSkyFlux');
+      expect(patched).not.toContain('1.0 - eclipseDarkness');
+      expect(patched).toContain('uniform float eclipseSkyFlux;');
       // ...and it is exactly `texColor` with no eclipse, which is what leaves a day identical.
-      const dome = (tex: number, sky: number, darkness: number) =>
-        tex * (1 - darkness) + sky * darkness;
-      for (const tex of [0, 0.004, 1, 142, 4096]) expect(dome(tex, 0.55, 0)).toBe(tex);
+      // `toBe`, not a tolerance: `irradiance` is exactly 1 and `eclipseDarkness` exactly 0
+      // whenever no eclipse is running, so this is an IEEE identity or it is a regression.
+      const dome = (tex: number, sky: number, flux: number, darkness: number) =>
+        tex * flux + sky * darkness;
+      for (const tex of [0, 0.004, 1, 142, 4096, 59999.5]) {
+        expect(dome(tex, 0.55, 1, 0)).toBe(tex);
+      }
+      // The round trip the uniform removes, so the cost is written down rather than asserted
+      // away: float32( 1 - float32( 0.025 ) ) does not come back as 0.025.
+      const roundTrip = Math.fround(1 - Math.fround(1 - Math.fround(0.025)));
+      expect(roundTrip).not.toBe(Math.fround(0.025));
     });
 
     test('stays under the radiance ceiling although it now adds light', () => {
@@ -596,36 +644,313 @@ describe('an eclipse removes the light it removes', () => {
       const ceiling = Number(/min\( texColor, vec3\( ([\d.]+) \) \)/.exec(patched)?.[1]);
       expect(ceiling).toBeGreaterThan(1000);
       const zenith = vec3('eclipseZenith');
-      const glow = vec3('eclipseGlow');
-      const ring = vec3('eclipseRing');
-      const brightest = Math.max(...zenith.map((z, i) => z + glow[i] + ring[i]));
-      expect(brightest).toBeLessThan(ceiling);
+      // The ring is an `exp` of a non-positive argument times its gain, so the gain *is* its
+      // supremum -- no sampling of directions can find a brighter one. That is the whole bound.
+      const gain = Number(/\)\s*\)\s*\)\s*\n?\s*\* ([\d.]+);/.exec(patched)?.[1]);
+      expect(gain).toBeGreaterThan(0);
+      expect(Math.max(...zenith.map((z) => z + gain))).toBeLessThan(ceiling);
+      for (const wall of [0, 1e-9, 69.3, 159, 1037, 1e6]) {
+        for (const y of [-1.0000001, -0.5, 0, 0.5, 1, 1.0000001]) {
+          for (const channel of eclipseRingRadiance(wall, y)) {
+            expect(channel).toBeGreaterThanOrEqual(0);
+            expect(channel).toBeLessThanOrEqual(gain);
+          }
+        }
+      }
       expect(patched.indexOf('min( texColor')).toBeLessThan(
-        patched.indexOf('texColor * ( 1.0 - eclipseDarkness )')
+        patched.indexOf('texColor * eclipseSkyFlux')
       );
     });
 
-    test('holds the 360-degree sunset to the horizon, above it and below it', () => {
+    test('cannot put a NaN on the dome however `direction` rounds', () => {
+      // Cheap hardening, not a reproduced defect. The term this replaces was
+      // `pow( 1.0 - abs( direction.y ), 12.0 )`: `pow` with a negative base is undefined in
+      // GLSL, and a `normalize()` that rounded `abs( direction.y )` to just over 1 would have
+      // handed it one. A NaN there survives `* eclipseDarkness` even at 0, so it would reach
+      // the dome on every frame of every hour, not only during an eclipse.
+      expect(inserted).not.toContain('pow(');
+      for (const y of [1 + Number.EPSILON, 1.0000001, 2, -2, 1e6]) {
+        for (const channel of eclipseRingRadiance(159, y)) expect(Number.isFinite(channel)).toBe(true);
+      }
+      // The guard is inside the shader too, and it is the same `max` the CPU form uses.
+      expect(patched).toContain('max( 1.0 - uUp * uUp, 1e-4 )');
+    });
+
+    test('holds the ring to the horizon, above it and below it', () => {
       // The diorama is a floating plate, so a good half of the frame is sky *below* the
       // horizon. `1 - clamp( direction.y, 0.0, 1.0 )` is 1 for every one of those directions,
       // which stood the ring at full strength across the whole lower dome and turned the frame
       // into a pink wash. A 360-degree sunset is a band at the horizon: it falls off both ways.
-      expect(patched).toContain('1.0 - abs( direction.y )');
-      const falloff = Number(/abs\( direction\.y \), ([\d.]+) \)/.exec(patched)?.[1]);
-      expect(falloff).toBeGreaterThan(1);
-      const ring = (y: number) => Math.pow(1 - Math.abs(y), falloff);
-      expect(ring(0)).toBe(1);
-      // 30 degrees up and 30 degrees down are both off the band, and by the same amount.
-      expect(ring(0.5)).toBeCloseTo(ring(-0.5), 12);
-      expect(ring(0.5)).toBeLessThan(0.01);
+      const at = (elevationDeg: number) =>
+        eclipseRingRadiance(159, Math.sin((elevationDeg * Math.PI) / 180))[0];
+      expect(at(30)).toBeCloseTo(at(-30), 15);
+      // Half brightness at 2.0 degrees and 5 per cent by 8.5 -- the measured "red color
+      // observed in the lowest 8 degrees of the sky", Applied Optics 14, 2831 (1975). The
+      // `pow( 1 - |y|, 12 )` this replaces was at half value at 11.9 degrees, six times too
+      // tall, and at 3 -- the value before the darkness rework -- it was a wash over the
+      // whole sky.
+      expect(at(2) / at(0)).toBeCloseTo(0.5, 2);
+      expect(at(8.5) / at(0)).toBeLessThan(0.06);
+      expect(at(8.5) / at(0)).toBeGreaterThan(0.03);
+      // ...and the band is genuinely tighter where the wall is nearer, which a function of
+      // elevation alone cannot be: at second contact's 69 km wall it reaches 4.6 degrees.
+      const near = (elevationDeg: number) =>
+        eclipseRingRadiance(69.3, Math.sin((elevationDeg * Math.PI) / 180))[0];
+      expect(near(4.57) / near(0)).toBeCloseTo(0.5, 2);
     });
 
-    test('adds the umbral sky only at totality, so partial phases keep their character', () => {
-      // Before second contact the only eclipse colour on the dome is the authored zenith tint,
-      // and a partial eclipse has to read as a dimmed day rather than a blue one.
-      expect(patched).toContain(
-        '( eclipseGlow + eclipseRing * eclipseHorizon ) * eclipseTotality'
-      );
+    test('computes the same ring in GLSL as it does here', () => {
+      // The wall solve and the ring exponential are written twice -- once in TypeScript, where
+      // it can be tested, and once in GLSL, because a fragment shader cannot call a function on
+      // the CPU. So the two are held against each other numerically, not by eye: everything the
+      // shader is built from is parsed back out of the shader text and run through the same
+      // arithmetic. A constant that drifts in one copy and not the other fails here.
+      expect(inserted).toContain('uUp = abs( direction.y )');
+      const extinction = /vec3\( ([\d.]+),([\d.]+),([\d.]+) \)\s*\n?\s*\+ uUp/
+        .exec(inserted)!
+        .slice(1, 4)
+        .map(Number);
+      const scaleHeight = Number(/\+ uUp \/ \( ([\d.]+)\.0 \*/.exec(inserted)?.[1]);
+      const gain = Number(/\*\s*([\d.]+);\s*\nvec3 eclipseSky/.exec(inserted)?.[1]);
+      expect(scaleHeight).toBeGreaterThan(0);
+      expect(gain).toBeGreaterThan(0);
+      for (const wall of [0, 12, 69.3, 159, 1037]) {
+        for (const y of [-0.99, -0.5, -0.03, 0, 0.03, 0.5, 0.99]) {
+          const up = Math.abs(y);
+          const climb = up / (scaleHeight * Math.sqrt(Math.max(1 - up * up, 1e-4)));
+          const fromShader = extinction.map((beta) => Math.exp(-wall * (beta + climb)) * gain);
+          const fromModule = eclipseRingRadiance(wall, y);
+          for (let channel = 0; channel < 3; channel++) {
+            expect(fromModule[channel]).toBeCloseTo(fromShader[channel], 12);
+          }
+        }
+      }
+    });
+
+    test('adds the ring only at totality, so partial phases keep their character', () => {
+      // Before second contact the only eclipse colour on the dome is the authored umbral
+      // zenith, and a partial eclipse has to read as a dimmed day rather than a blue one.
+      expect(patched).toContain('eclipseZenith + eclipseRing * eclipseTotality');
+    });
+
+    test('gives the umbra a bearing, and swings it through 180 degrees', () => {
+      // The owner's fourth sentence. A ring that looks the same in every direction is not a
+      // shadow you are standing inside; the footprint is an ellipse 6.5:1 at this eclipse's
+      // 8.82 degree sun, and the observer crosses it from one end to the other.
+      const semiMajor = umbraSemiMajorKm((8.819420050862682 * Math.PI) / 180);
+      expect(semiMajor / 159).toBeCloseTo(6.52, 2);
+      const wall = (traverse: number, alongSun: number, acrossSun: number) =>
+        umbraWallDistanceKm(semiMajor, semiMajor * UMBRA_TRAVERSE_LIMIT * traverse, alongSun, acrossSun);
+      // Mid-totality is symmetric: broadside is 159 km -- the umbra's own half-width -- and
+      // both ends of the long axis are 1037 km away, which Rayleigh has already taken to zero.
+      expect(wall(0, 0, 1)).toBeCloseTo(159, 6);
+      expect(wall(0, 1, 0)).toBeCloseTo(semiMajor, 6);
+      expect(wall(0, 1, 0)).toBeCloseTo(wall(0, -1, 0), 6);
+      // C2 and C3 are not, and they are mirror images of each other. Positive traverse is
+      // toward the sun, so the bright side is antisolar at second contact and sunward at
+      // third: the measured "dark to the west and blue to the east" at C2, reversing by C3.
+      expect(wall(-1, -1, 0)).toBeLessThan(wall(-1, 1, 0));
+      expect(wall(1, 1, 0)).toBeLessThan(wall(1, -1, 0));
+      expect(wall(-1, -1, 0)).toBeCloseTo(wall(1, 1, 0), 6);
+      expect(wall(-1, -1, 0)).toBeCloseTo(semiMajor * (1 - UMBRA_TRAVERSE_LIMIT), 6);
+      // ...and the swing is monotone across the traverse rather than a flip at the midpoint.
+      let previous = Number.POSITIVE_INFINITY;
+      for (let traverse = -1; traverse <= 1.0001; traverse += 0.05) {
+        const sunward = wall(traverse, 1, 0);
+        expect(sunward).toBeLessThan(previous);
+        previous = sunward;
+      }
+      // The traverse itself needs no new state: `separation` is the only thing on
+      // `EclipseRenderState` that still moves once coverage has pinned at 1, and it sweeps
+      // exactly the observer's crossing. The endpoints are read back off the timeline's own
+      // coverage law rather than copied out of it.
+      const timeline = new EclipseTimeline();
+      expect(umbraTraverse(timeline.seek(0.42).separation)).toBeCloseTo(-1, 6);
+      expect(umbraTraverse(timeline.seek(0.5).separation)).toBe(0);
+      expect(umbraTraverse(timeline.seek(0.58).separation)).toBeCloseTo(1, 6);
+      // ...and it is clamped, because the partial phases run the separation far past totality's.
+      expect(umbraTraverse(timeline.seek(0).separation)).toBe(-1);
+      expect(umbraTraverse(timeline.seek(0.2).separation)).toBe(-1);
+      expect(umbraTraverse(timeline.seek(1).separation)).toBe(1);
+    });
+
+    /**
+     * The ring's sRGB codes, through the tone-mapping path this repo actually renders through.
+     *
+     * Not "an ACES slope". `bootstrap.ts` runs `NoToneMapping` on the renderer and does the
+     * tone map in the composer's final pass, `ToneMappingEffect({ mode: ACES_FILMIC })`, whose
+     * shader is `#include <tonemapping_pars_fragment>` -- three r185's own
+     * `ACESFilmicToneMapping`: `color *= toneMappingExposure / 0.6`, the ACES input matrix,
+     * `RRTAndODTFit`, the output matrix, `saturate`. `toneMappingExposure` is set by
+     * `WebGLRenderer.setProgram` from `renderer.toneMappingExposure`, which `main.ts` drives
+     * from `sceneExposure`, so the uniform does reach this shader although the renderer's own
+     * tone mapping is off.
+     *
+     * The exposure is that function's own value at the staged eclipse's totality, computed
+     * from the repo's own parts and not assumed: `t01` 0.79628 from `eclipseViewClock`, sun
+     * +8.8194 degrees, `nightFactorAt` 0.0745 raised to 0.627 by the eclipse's own
+     * `darkness * 0.52 + totality * 0.12`, `goldenFactorAt` 0.8771, `highSunFactor` 0,
+     * classic theme, and `viewerAdaptation` 1.4606 on top -- **E = 0.50286**. A reviewer's
+     * 0.257 for the same frame is a little over half of that, which is where an earlier
+     * attempt's ring came out 16x too bright and clipped to white; at the real exposure the
+     * error would have been worse, not better.
+     *
+     * These are the sky's own terms. The surviving Preetham dome sits under them
+     * (`irradiance` 0.025 of it) and `CinematicGrade` runs after, so a photograph of the frame
+     * will not read these exactly -- what this pins is that the ring is bright, warm,
+     * directional, and **on no channel at 255**.
+     */
+    test('presents the ring below clipping at every bearing of the traverse', () => {
+      const EXPOSURE = 0.50286;
+      const DARKNESS = 0.975;
+      const ACES_IN = [
+        [0.59719, 0.076, 0.0284],
+        [0.35458, 0.90834, 0.13383],
+        [0.04823, 0.01566, 0.83777],
+      ];
+      const ACES_OUT = [
+        [1.60475, -0.10208, -0.00327],
+        [-0.53108, 1.10813, -0.07276],
+        [-0.07367, -0.00605, 1.07602],
+      ];
+      const byColumns = (columns: number[][], v: number[]) =>
+        [0, 1, 2].map((row) => columns.reduce((sum, column, i) => sum + column[row] * v[i], 0));
+      const rrtAndOdtFit = (v: number[]) =>
+        v.map(
+          (x) =>
+            (x * (x + 0.0245786) - 0.000090537) / (x * (0.983729 * x + 0.432951) + 0.238081)
+        );
+      const transfer = (d: number) =>
+        d <= 0.0031308 ? 12.92 * d : 1.055 * Math.pow(d, 1 / 2.4) - 0.055;
+      const displayCode = (scene: number[]) =>
+        byColumns(
+          ACES_OUT,
+          rrtAndOdtFit(byColumns(ACES_IN, scene.map((x) => (x * EXPOSURE) / 0.6)))
+        ).map((d) => Math.round(255 * transfer(Math.min(1, Math.max(0, d)))));
+
+      const zenith = vec3('eclipseZenith');
+      const semiMajor = umbraSemiMajorKm((8.819420050862682 * Math.PI) / 180);
+      const skyAt = (traverse: number, alongSun: number, acrossSun: number) => {
+        const wall = umbraWallDistanceKm(
+          semiMajor,
+          semiMajor * UMBRA_TRAVERSE_LIMIT * traverse,
+          alongSun,
+          acrossSun
+        );
+        const ring = eclipseRingRadiance(wall, 0);
+        return displayCode(zenith.map((z, i) => (z + ring[i]) * DARKNESS));
+      };
+
+      // C2: the bright side is antisolar, and the horizon toward the sun is as dark as the
+      // zenith -- 1037 km of shadowed air is 1970 km of it, which no channel survives.
+      expect(skyAt(-1, 0, 1)).toEqual([184, 157, 96]);
+      expect(skyAt(-1, -1, 0)).toEqual([169, 128, 58]);
+      expect(skyAt(-1, 1, 0)).toEqual([0, 2, 15]);
+      // Mid-totality: symmetric, a deep orange-red band broadside and nothing along the axis.
+      expect(skyAt(0, 0, 1)).toEqual([141, 83, 31]);
+      expect(skyAt(0, 1, 0)).toEqual([1, 2, 15]);
+      expect(skyAt(0, -1, 0)).toEqual([1, 2, 15]);
+      // C3: the mirror of C2. The sunward horizon lights up as totality ends, which is the
+      // whole point of giving the umbra a bearing.
+      expect(skyAt(1, 0, 1)).toEqual([184, 157, 96]);
+      expect(skyAt(1, 1, 0)).toEqual([169, 128, 58]);
+      expect(skyAt(1, -1, 0)).toEqual([0, 2, 15]);
+      // A ring that clips to white is worse than no ring: an earlier attempt at this model was
+      // rejected for a clipped rgb(242, 231, 194) at C2/C3. Nothing here reaches 255.
+      for (const traverse of [-1, -0.5, 0, 0.5, 1]) {
+        for (let bearing = 0; bearing < 64; bearing++) {
+          const angle = (bearing / 64) * 2 * Math.PI;
+          for (const channel of skyAt(traverse, Math.cos(angle), Math.sin(angle))) {
+            expect(channel).toBeLessThan(250);
+          }
+        }
+      }
+    });
+
+    /**
+     * The umbral zenith's level, which until now was right for no recorded reason.
+     *
+     * Two earlier proposals put it at (0.0009, 0.0020, 0.0078) and (0.0012, 0.0027, 0.0105) --
+     * both derived from the measured 0.40 cd/m2 zenith, and both an order of magnitude below
+     * what this output can show. `RRTAndODTFit` subtracts before it scales, so the curve
+     * crosses zero at a positive input and everything under it presents at display code 0.
+     *
+     * A note handed to this change put that floor at scene-linear 1.2031e-2 and the shipped
+     * blue at 2.91x above it, presenting at code 3.85. **That arithmetic does not hold**, and
+     * the reason is the exposure: 1.2031e-2 is the floor at E = 0.1837, and this repo's own
+     * `sceneExposure` at the staged totality returns 0.50286 -- because `nightFactorAt` is
+     * lifted to 0.627 by the eclipse itself and `viewerAdaptation` then multiplies by 1.4606.
+     * At the real exposure the floor is 3.88e-3, the shipped blue clears it by 9.0x, and it
+     * presents at code 15, not 4. The constant is kept; the reason it is right is different
+     * from the one that was offered for it, and that is worth a test rather than a footnote.
+     */
+    test('keeps the umbral zenith above the floor the tone curve puts under it', () => {
+      const EXPOSURE = 0.50286;
+      // `RRTAndODTFit` is `a / b` with `a = v * ( v + 0.0245786 ) - 0.000090537`, so display
+      // radiance crosses zero at the positive root of that quadratic, whatever `b` is.
+      const root = (-0.0245786 + Math.sqrt(0.0245786 ** 2 + 4 * 0.000090537)) / 2;
+      const floor = root / (EXPOSURE / 0.6);
+      expect(floor).toBeCloseTo(3.8814e-3, 7);
+      const zenith = vec3('eclipseZenith');
+      // Blue carries the hue and has to clear the floor with room to spare; green is the check
+      // that the colour is not a single channel; red is deliberately at the floor, because the
+      // zenith at totality is blue-violet and a red one would be the old warm wash returning.
+      expect(zenith[2] / floor).toBeGreaterThan(8);
+      expect(zenith[1] / floor).toBeGreaterThan(2);
+      expect(zenith[0] / floor).toBeLessThan(1.2);
+      // The two proposals this rejects. The note offered for the shipped constant said both
+      // sat under the floor on *every* channel and would have put the whole zenith on code 0;
+      // at the real exposure that is not true either -- their blues clear it by 2.0x and 2.7x.
+      // What is true, and is the reason they are still wrong, is that both lose red *and*
+      // green: a zenith with two dead channels is a pure-blue primary, a hue no sky has, and
+      // the first thing a dithered gradient bands on.
+      for (const proposal of [
+        [0.0009, 0.002, 0.0078],
+        [0.0012, 0.0027, 0.0105],
+      ]) {
+        expect(proposal[0]).toBeLessThan(floor);
+        expect(proposal[1]).toBeLessThan(floor);
+        expect(proposal[2]).toBeGreaterThan(floor);
+      }
+    });
+
+    /**
+     * Every `{@link}` in the module names something the module can see.
+     *
+     * `{@link ECLIPSE_SKY_LEVEL}` stood in this file pointing at a symbol that has never
+     * existed anywhere in the repository. A doc link is the only navigation these long
+     * docblocks have, and a dead one sends the next reader looking for a constant that is not
+     * there -- which is worse than no link, because it reads as a promise that the level is
+     * written down somewhere.
+     *
+     * Anchored on the source text rather than on the compiler because that is where the defect
+     * lives: nothing in `tsc` or `vitest` looks at a comment.
+     */
+    test('leaves no dangling doc links in the module', () => {
+      const source = dayNightCycleSource;
+      const declared = new Set<string>();
+      for (const [, name] of source.matchAll(
+        /(?:^|\n)\s*(?:export\s+)?(?:async\s+)?(?:function|const|let|class|interface|type|enum)\s+([A-Za-z_$][\w$]*)/g
+      )) {
+        declared.add(name);
+      }
+      // ...and anything the module imported, which is equally in scope for a doc link.
+      for (const [, names] of source.matchAll(/import\s*(?:type\s*)?\{([^}]*)\}\s*from/g)) {
+        for (const entry of names.split(',')) {
+          const name = entry.replace(/\btype\b/, '').trim().split(/\s+as\s+/).pop();
+          if (name) declared.add(name);
+        }
+      }
+      // Class members are reachable through the class, so a bare method name counts too.
+      for (const [, name] of source.matchAll(/\n {2}(?:private |readonly )*([A-Za-z_$][\w$]*)\(/g)) {
+        declared.add(name);
+      }
+      const dangling = [...source.matchAll(/\{@link\s+([A-Za-z_$][\w$]*)/g)]
+        .map(([, name]) => name)
+        .filter((name) => !declared.has(name));
+      expect(dangling).toEqual([]);
+      // ...and the harness can actually find links, rather than passing on an empty match.
+      expect(source.match(/\{@link\s/g)?.length).toBeGreaterThan(10);
     });
 
     test('refuses to be applied before the ceiling rather than quietly working', () => {

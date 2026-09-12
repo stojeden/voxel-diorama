@@ -20,6 +20,14 @@ import {
   sunElevationAt,
 } from './sky';
 import { beamTransmittanceColor, twilightSkyColorCached } from './SunlightSpectrum';
+// Geometry only, and a pure function: the umbra's traverse has to be normalised against the
+// separation at which the moon's disc first contains the sun's, and reading that back off the
+// timeline's own coverage law is what keeps this file out of `EclipseTimeline.ts`.
+// The class comes in as a type only -- it is erased at build and costs no bytes -- so that the
+// doc links naming it below resolve instead of dangling, which is how a link to a constant
+// named ECLIPSE_SKY_LEVEL, a symbol that never existed anywhere in this repository, survived in
+// this file for as long as it did.
+import { eclipseCoverageAtSeparation, type EclipseTimeline } from '../experience/EclipseTimeline';
 
 /**
  * Full day/night lighting rig:
@@ -345,16 +353,38 @@ ${SKY_OUTPUT_MARKER}`
  * actually leaves it and *adds* the glow the umbra sits under, which is what those two
  * quantities physically are:
  *
- *     texColor * irradiance + eclipseSky * eclipseDarkness
+ *     texColor * eclipseSkyFlux + eclipseSky * eclipseDarkness
  *
- * written as `1.0 - eclipseDarkness` so the patch still needs only the two uniforms it already
- * had. The dome takes **`irradiance`, not {@link eclipseDiffuseFraction}**: the umbral skyglow
- * the fills floor on is, for the dome, the `eclipseSky` term standing right beside it, and
- * giving it to both would count the same light twice.
+ * The dome takes **`irradiance`, not {@link eclipseDiffuseFraction}**: the umbral skyglow the
+ * fills floor on is, for the dome, the `eclipseSky` term standing right beside it, and giving
+ * it to both would count the same light twice.
  *
- * `eclipseDarkness` is 0 with no eclipse running, so an uneclipsed dome is
- * `texColor * 1.0 + eclipseSky * 0.0` -- an exact identity in IEEE 754, not an approximate
- * one, which is what lets an uneclipsed day be unchanged rather than nearly unchanged.
+ * **Why `eclipseSkyFlux` is its own uniform and not `1.0 - eclipseDarkness`.** The two are the
+ * same quantity, and the double negation was the reason a reviewer reading only the shader
+ * could not see that the dome was already being scaled by the surviving solar flux -- which is
+ * the thing the physics asks for and the thing a reader has to be able to check. It is also
+ * not bit-identical: the CPU sends `1 - irradiance` as a float32 and the shader undoes it, so
+ * an irradiance of 0.025 comes back as 0.025000005960464478. Six per cent of a code level at
+ * the eclipse hour, and zero reason to pay it when the flux itself is one uniform away.
+ *
+ * `eclipseSkyFlux` is exactly 1 and `eclipseDarkness` exactly 0 with no eclipse running, so an
+ * uneclipsed dome is `texColor * 1.0 + eclipseSky * 0.0` -- an exact identity in IEEE 754, not
+ * an approximate one, which is what lets an uneclipsed day be unchanged rather than nearly
+ * unchanged.
+ *
+ * **The ring has a bearing now.** See {@link umbraWallDistanceKm}: one scalar per azimuth, the
+ * horizontal distance to the umbra's wall, sets the ring's colour, its brightness and its
+ * height together, and the traverse across the umbra swings the asymmetry through 180 degrees
+ * between second and third contact. The term it replaces was
+ * `vec3( 0.55, 0.15, 0.055 ) * pow( 1.0 - abs( direction.y ), 12.0 )`, the same 360-degree
+ * sunset in every direction at every instant of totality.
+ *
+ * That `pow` is also gone for a second reason, which is cheap hardening rather than a defect
+ * anyone reproduced: `pow` with a negative base is undefined in GLSL, and a `normalize()`
+ * rounding `abs( direction.y )` to just over 1 would have handed it one. The replacement is an
+ * `exp` of a non-positive argument, which is in `[0, 1]` for every finite input including
+ * `|y| > 1`, so there is no value of `direction` that can put a NaN on the dome -- and a NaN
+ * there multiplies through `eclipseDarkness` even when that is 0.
  *
  * Exported for the same reason as {@link withTwilightDome}: the patch is a pure string
  * transform, so the test suite can hold it against the real shader Three.js ships and fail
@@ -378,23 +408,31 @@ export function withEclipseSky(fragmentShader: string): string {
       'uniform float time;',
       `uniform float time;
         uniform float eclipseDarkness;
-        uniform float eclipseTotality;`
+        uniform float eclipseTotality;
+        uniform float eclipseSkyFlux;
+        uniform vec2 eclipseUmbra;`
     )
     .replace(
       SKY_OUTPUT_MARKER,
-      `float eclipseHorizon = pow( 1.0 - abs( direction.y ), ${ECLIPSE_RING_FALLOFF.toFixed(1)} );
-        // The authored partial-phase tint, untouched: through every phase before second
-        // contact this is all there is, which is what keeps a partial eclipse looking like a
-        // dimmed day rather than a blue one.
-        vec3 eclipseZenith = vec3( 0.004, 0.009, 0.035 );
-        // ...and the two terms totality adds, which are separate things and are authored
-        // separately. See ECLIPSE_UMBRAL_SKY and ECLIPSE_RING.
-        vec3 eclipseGlow = vec3( ${ECLIPSE_UMBRAL_SKY.join(', ')} );
-        vec3 eclipseRing = vec3( ${ECLIPSE_RING.join(', ')} );
-        vec3 eclipseSky = eclipseZenith
-          + ( eclipseGlow + eclipseRing * eclipseHorizon ) * eclipseTotality;
-        texColor = texColor * ( 1.0 - eclipseDarkness ) + eclipseSky * eclipseDarkness;
-        ${SKY_OUTPUT_MARKER}`
+      // Written tight, like the twilight patch above it: shader source is a string literal and
+      // ships to the browser byte for byte, so the reasoning lives in the docblock instead.
+      // `eclipseUmbra` is ( semi-major axis, observer offset along it ), km, along the sun's
+      // bearing. `umbraWall` is the positive root of |here + wall * step| = 1 on the footprint
+      // scaled to a unit circle; its outer max is insurance, so the ring cannot exceed its gain.
+      `vec2 uS = normalize( vSunDirection.xz + vec2( 1e-5 ) );
+vec2 uV = direction.xz / ( length( direction.xz ) + 1e-4 );
+vec2 uStep = vec2( dot( uV, uS ) / eclipseUmbra.x,
+dot( uV, vec2( -uS.y, uS.x ) ) / ${UMBRA_SEMI_WIDTH_KM}.0 );
+float uHere = eclipseUmbra.y / eclipseUmbra.x, uQ = dot( uStep, uStep ), uD = uStep.x * uHere;
+float uWall = max( ( sqrt( max( uD * uD + uQ * ( 1.0 - uHere * uHere ), 0.0 ) ) - uD )
+/ max( uQ, 1e-9 ), 0.0 ), uUp = abs( direction.y );
+vec3 eclipseZenith = vec3( ${ECLIPSE_UMBRAL_ZENITH.join()} );
+vec3 eclipseRing = exp( -uWall * ( vec3( ${ECLIPSE_RING_EXTINCTION_PER_KM.join()} )
++ uUp / ( ${ECLIPSE_RING_SCALE_HEIGHT_KM}.0 * sqrt( max( 1.0 - uUp * uUp, 1e-4 ) ) ) ) )
+* ${ECLIPSE_RING_GAIN};
+vec3 eclipseSky = eclipseZenith + eclipseRing * eclipseTotality;
+texColor = texColor * eclipseSkyFlux + eclipseSky * eclipseDarkness;
+${SKY_OUTPUT_MARKER}`
     );
 }
 
@@ -601,53 +639,240 @@ export function eclipseDiffuseFraction(irradiance: number): number {
  * for, and for what 0.130 costs in honesty.
  *
  * It is deliberately **not** applied to the sky dome, which carries its own, explicit skyglow in
- * {@link ECLIPSE_SKY_LEVEL}; giving the dome both would count the same light twice.
+ * {@link ECLIPSE_UMBRAL_ZENITH} and {@link ECLIPSE_RING_GAIN}; giving the dome both would count
+ * the same light twice.
  */
 const UMBRAL_SKYGLOW = 0.13;
 
 /**
- * The isotropic part of the umbral skyglow, in the dome's own linear units.
+ * The isotropic umbral sky: what the dome is at totality everywhere the ring is not.
  *
- * **Blue, and authored apart from the ring, because they are different light.** At totality the
- * whole sky is lit from outside a 100-270 km shadow: light arriving overhead has been scattered
- * twice and comes in blue, while light arriving along the horizon has grazed a long path
- * through still-sunlit air and comes in red -- the 360-degree sunset. A single `mix` between a
- * zenith colour and a horizon colour cannot be both, because it spends the same photons twice;
- * at any level high enough to carry the sky it turns the entire dome the horizon's colour.
+ * **One term, where the shipped dome had two.** Until this change the patch added *both* an
+ * authored partial-phase tint, `vec3( 0.004, 0.009, 0.035 )`, and a totality-only
+ * `ECLIPSE_UMBRAL_SKY = vec3( 0.035, 0.055, 0.172 )` on top of it. Those are the same light --
+ * the multiply-scattered blue-violet that reaches the middle of the umbra from outside it --
+ * counted twice, and the double count is exactly the defect a verifier measured on the built
+ * pair: the top eighth of the frame went from 0.2928 of the uneclipsed hour to 0.3730, mean
+ * luma 69.14 to 88.08, and a star-peak count over that region fell 42 to 36. **The zenith got
+ * brighter at totality, which is backwards.**
  *
- * **These are new numbers, and that is the honest description of them.** The pair they replace
- * -- `mix( vec3( 0.004, 0.009, 0.035 ), vec3( 0.24, 0.065, 0.025 ), ... )` -- was authored as a
- * *tint* over a dome that was still mostly un-attenuated Preetham, and never as a radiance.
- * Once {@link withEclipseSky} attenuates the dome properly, those two values have to carry the
- * whole totality sky on their own; re-levelling them by one multiplier was tried first, and 1.6
- * is the value that hits the ratios exactly -- whole frame 0.4002, ground band 0.2605 -- while
- * turning the frame into a uniform orange wash with the corona and the stars lost in it. The
- * scalars were right and the picture was wrong, which is the whole reason this split exists.
+ * The arithmetic, in the dome's own linear units and at `eclipseDarkness` 0.975: the parent's
+ * authored zenith was 0.858 * ( 0.004, 0.009, 0.035 ) = ( 0.0034, 0.0077, 0.0300 ) and this
+ * build's was 0.975 * ( 0.039, 0.064, 0.207 ) = ( 0.0380, 0.0624, 0.2018 ) -- 6.7 times the
+ * blue. The surviving Preetham dome beside it went the right way over the same change (2.5 per
+ * cent of a five times brighter dome is 0.88 of the 14.2 per cent the crossfade used to leave),
+ * so the regression is entirely this pair of terms and not the dome scale.
  *
- * Both terms are gated on `eclipseTotality`, so every partial phase keeps the authored
- * `eclipseZenith` alone and is unchanged in character.
+ * **Why the level survives.** Rec709 luminance 0.009814, against the ring's 0.2282 at
+ * mid-totality broadside: 23.3x, or 4.54 stops horizon to zenith. The measured figure is 195x
+ * (7.6 stops: ~78 cd/m2 of ring against a 0.40 cd/m2 zenith, Applied Optics 10, 1211 (1971) and
+ * 14, 2831 (1975)), and the shipped pair spanned 2.13. 4.54 is not 7.6 and the reason is the
+ * output, not the taste: the ACES fit this repo tone-maps through, `RRTAndODTFit`, subtracts
+ * before it scales, so at the eclipse hour's own exposure of 0.5029 a scene-linear channel
+ * under 3.88e-3 presents at display code 0. This constant's blue clears that by 9.0x and its
+ * green by 2.3x; a zenith 195 times under the ring would be ( 0.0002, 0.0005, 0.0018 ) and
+ * would put the whole sky on code 0, which the standing "no exactly-black pixels" invariant
+ * forbids and which would look worse than the error it fixed.
+ *
+ * This is added at every eclipse phase rather than gated on `eclipseTotality`, so a partial
+ * eclipse still reads as a dimmed day rather than a blue one: at coverage 0.5 it arrives at
+ * `eclipseDarkness` 0.34 over a dome still carrying 66 per cent of its light.
  */
-const ECLIPSE_UMBRAL_SKY = [0.035, 0.055, 0.172];
-
-/** The 360-degree sunset, added on top of {@link ECLIPSE_UMBRAL_SKY} and only at totality. */
-const ECLIPSE_RING = [0.55, 0.15, 0.055];
+const ECLIPSE_UMBRAL_ZENITH = [0.004, 0.009, 0.035];
 
 /**
- * How tightly the ring hugs the horizon, as the exponent on `1 - abs( direction.y )`.
+ * Rayleigh extinction at 650, 550 and 440 nm, per kilometre of horizontal sea-level air.
  *
- * 3 -- the authored value -- still carries 56.4 per cent of the ring's colour 10 degrees up and
- * 12.5 per cent 30 degrees up. That was invisible while the ring was a tint on a bright dome;
- * once the ring *is* the dome it is a wash over the whole sky. 12 leaves 10.1 per cent at 10
- * degrees and 0.02 at 30, which is a band rather than a gradient.
+ * The ring's colour *is* this exponential. The light in it is sunlit air outside the umbra seen
+ * through however many kilometres of shadowed air stand between: singly scattered sunlight
+ * "depleted by scattering in its passage from outside the shadow region" (Shaw et al., *Sky
+ * color near the horizon during a total solar eclipse*, Applied Optics 14, 2831 (1975)).
  *
- * The `abs` matters more than the exponent, and it is the half of this that a photograph would
- * not have caught. `1 - clamp( direction.y, 0.0, 1.0 )` is exactly 1 for *every* downward
- * direction, and this diorama is a floating plate: a good half of the frame is sky below the
- * horizon, so the ring stood at full strength across all of it however tight the exponent was.
- * Measured, moving the exponent 6 -> 12 under `clamp` changed the whole frame by 0.0038; adding
- * the `abs` changed it by 0.0552.
+ * One number, 0.0122 km^-1 at 550 nm -- the standard vertical Rayleigh optical depth of 0.0973
+ * spread over an 8 km equivalent column -- scaled by lambda^-4 to the other two: 0.0122 *
+ * (550/650)^4 = 0.00626 and 0.0122 * (550/440)^4 = 0.0297. So the hue is not authored at all.
+ * At the umbra's own half-width of 159 km it comes out ( 0.370, 0.144, 0.0089 ), the deep
+ * orange-red of the measured ring; at 300 km it is ( 0.153, 0.026, 0.0001 ) and by 1000 km
+ * there is nothing left to see. That single fact is what makes the ring directional.
  */
-const ECLIPSE_RING_FALLOFF = 12;
+const ECLIPSE_RING_EXTINCTION_PER_KM = [0.00626, 0.0122, 0.0297];
+
+/**
+ * Rayleigh scale height, in kilometres: how fast the ring dies as the sightline climbs.
+ *
+ * A sightline leaving the observer at elevation theta exits the umbra tube at altitude
+ * `L * tan( theta )`, and the sunlit air it meets there has density proportional to
+ * `exp( -L tan( theta ) / H )`. At the 159 km wall that is half brightness at **2.0 degrees**
+ * and 5 per cent by 8.5 degrees, which is the measured "red color observed in the lowest 8
+ * degrees of the sky" of Applied Optics 14, 2831 (1975).
+ *
+ * The term it replaces, `pow( 1 - abs( direction.y ), 12 )`, was at half value at 11.9 degrees
+ * -- about six times too tall -- and, being a function of elevation alone, was the same height
+ * in every direction. Here the height, the brightness and the hue all come off the same `L`, so
+ * the near wall gives a taller, paler band and the far wall a thinner, redder one, for free.
+ */
+const ECLIPSE_RING_SCALE_HEIGHT_KM = 8;
+
+/**
+ * Half the umbra's true width on the ground, in kilometres, across the sun's bearing.
+ *
+ * NASA GSFC's path table for 2026-08-12 gives 318 km of path width at 52 deg 22' N, which is
+ * this diorama's own latitude (`sky.ts` LATITUDE 52.23). The footprint is not a circle: the
+ * umbra is a tube of *constant* cross-section -- the shadow cone's half-angle is the solar
+ * semi-diameter, 0.265 degrees, so it narrows by 93 m over the whole 20 km of scattering
+ * atmosphere, under 0.1 per cent -- tilted at the sun's own elevation, so it cuts the ground in
+ * an ellipse with this as its semi-minor axis and `this / sin( elevation )` along the sun's
+ * bearing. At the staged eclipse's 8.82 degrees that is 6.5:1, and the elongation is the reason
+ * the sunward and antisolar horizons go black while the broadside horizons carry the ring.
+ */
+const UMBRA_SEMI_WIDTH_KM = 159;
+
+/**
+ * The smallest `sin( elevation )` the footprint is allowed, so the semi-major axis stays finite.
+ *
+ * 0.02 is 1.15 degrees, which caps the ellipse at 7 950 km -- a quarter of the way round the
+ * Earth, and far past the distance at which {@link ECLIPSE_RING_EXTINCTION_PER_KM} has taken
+ * every channel to zero anyway. So the clamp never changes a pixel; it exists because a sun on
+ * the horizon would otherwise divide by zero and hand the shader an infinity.
+ */
+const UMBRA_MIN_SIN_ELEVATION = 0.02;
+
+/**
+ * How close to the umbra's wall the traverse is allowed to carry the observer, as a fraction.
+ *
+ * At the wall itself `L` is zero: the ring reaches its full gain *and* its height law stops
+ * falling off, so the band stops being a band and paints the whole dome. That is the failure a
+ * reviewer measured on an earlier attempt at this model -- "a clipped rgb(242,231,194) ring at
+ * C2/C3", a ring about 16 times too bright that clips to white.
+ *
+ * 0.9 keeps the nearest wall 103.6 km away at second and third contact, where the band is still
+ * a band -- half brightness 3.1 degrees up rather than 2.0 at mid-totality -- and the brightest
+ * bearing of the whole traverse presents at rgb(184, 157, 96), which does not clip on any
+ * channel. It is a clamp with a picture behind it, not a fudge factor: the observer really is at
+ * the shadow's edge at C2, and the sky there really is about to be sunlit.
+ */
+export const UMBRA_TRAVERSE_LIMIT = 0.9;
+
+/**
+ * What the ring's exponential is worth on the dome, at the one bearing that did not change.
+ *
+ * Derived, not chosen. The uniform ring this replaces was `vec3( 0.55, 0.15, 0.055 )`, Rec709
+ * luminance 0.22818, and that level is what the twice-verified whole-frame darkness measurement
+ * was taken against. `exp( -beta * 159 )` -- the ring at mid-totality, broadside, where the wall
+ * stands at the umbra's own half-width -- has luminance 0.18201, so 0.22818 / 0.18201 = 1.2536
+ * is the gain that leaves that one bearing exactly where it was and moves every other one.
+ *
+ * Every other bearing moves *down*, which is the point: at mid-totality the sunward and
+ * antisolar horizons are 1037 km from the wall and go to the zenith's own colour, where before
+ * they carried the full 360-degree sunset. The frame loses light by having a shape rather than
+ * by having a smaller number in it.
+ */
+const ECLIPSE_RING_GAIN = 1.2536;
+
+/**
+ * Where totality's traverse ends, as a separation: the largest one still fully covering the sun.
+ *
+ * `EclipseTimeline`'s own `separation` sweeps from -this at second contact through 0 at
+ * mid-totality to +this at third contact, and that sweep **is** the observer's position across
+ * the umbra -- the one quantity on `EclipseRenderState` that still moves once coverage has
+ * pinned at 1. Normalising it needs the endpoint, and the endpoint is a private constant of
+ * `EclipseTimeline`.
+ *
+ * Rather than export it from a file outside this brief, or copy the number and let the two
+ * drift, this reads it back out of the timeline's own exported geometry: coverage is 1 exactly
+ * while the moon's disc contains the sun's, so the endpoint is the largest separation at which
+ * {@link eclipseCoverageAtSeparation} still returns 1. Sixty bisections put it at
+ * 0.009287925774, against the 0.009287925697 the timeline's `( MOON_RADIUS - SUN_RADIUS ) /
+ * ( SUN_RADIUS + MOON_RADIUS )` gives -- eight significant figures, and it cannot go stale if
+ * the moon's radius is ever retuned.
+ */
+const TOTALITY_SEPARATION = (() => {
+  let inside = 0;
+  let outside = 1;
+  for (let step = 0; step < 60; step++) {
+    const middle = (inside + outside) / 2;
+    if (eclipseCoverageAtSeparation(middle) >= 1) inside = middle;
+    else outside = middle;
+  }
+  return inside;
+})();
+
+/**
+ * Where the observer stands across the umbra, from -1 at second contact to +1 at third.
+ *
+ * Positive is toward the sun's own horizontal bearing, and that sign is a choice rather than a
+ * derivation: `separation` is the moon's offset across the sun's disc, and nothing ties its sign
+ * to a compass. It is set this way to reproduce the one thing observers report -- "dark to the
+ * west and blue to the east" at C2, reversing by C3, for a western sun -- which puts the
+ * observer at the antisolar end of the footprint when totality begins and at the sunward end
+ * when it ends.
+ */
+export function umbraTraverse(separation: number): number {
+  const normalized = separation / TOTALITY_SEPARATION;
+  return normalized < -1 ? -1 : normalized > 1 ? 1 : normalized;
+}
+
+/**
+ * The semi-major axis of the umbra's ground footprint, in kilometres.
+ *
+ * {@link UMBRA_SEMI_WIDTH_KM} across the sun's bearing and this along it. The whole azimuthal
+ * asymmetry of the ring is this one ratio.
+ */
+export function umbraSemiMajorKm(sunElevationRad: number): number {
+  return UMBRA_SEMI_WIDTH_KM / Math.max(Math.sin(sunElevationRad), UMBRA_MIN_SIN_ELEVATION);
+}
+
+/**
+ * How far the umbra's wall is, horizontally, along one bearing: the whole model in one scalar.
+ *
+ * The umbra is a tube of constant cross-section, so nothing about the sky at totality varies
+ * with bearing except this. It sets the ring's colour through {@link
+ * ECLIPSE_RING_EXTINCTION_PER_KM}, its brightness through the same exponential, and its height
+ * through {@link ECLIPSE_RING_SCALE_HEIGHT_KM} -- three things that used to be authored apart
+ * and are one thing here.
+ *
+ * `alongSun` and `acrossSun` are the components of a **unit horizontal** view bearing in the
+ * sun's own frame. The solve is the positive root of `| here + L * step | = 1` on the footprint
+ * scaled to a unit circle, and it is duplicated in GLSL inside {@link withEclipseSky} because a
+ * fragment shader cannot call this; the test suite holds the two against each other.
+ *
+ * Exported for that test, and because the numbers it produces are the ones worth arguing about:
+ * at the staged eclipse's 8.82 degree sun the wall is 159 km broadside and 1037 km along the
+ * sun's bearing at mid-totality, and 69 km broadside against 104 km antisolar at second contact.
+ */
+export function umbraWallDistanceKm(
+  semiMajorKm: number,
+  offsetKm: number,
+  alongSun: number,
+  acrossSun: number
+): number {
+  const stepAlong = alongSun / semiMajorKm;
+  const stepAcross = acrossSun / UMBRA_SEMI_WIDTH_KM;
+  const here = offsetKm / semiMajorKm;
+  const quadratic = stepAlong * stepAlong + stepAcross * stepAcross;
+  const cross = stepAlong * here;
+  const wall =
+    (Math.sqrt(Math.max(cross * cross + quadratic * (1 - here * here), 0)) - cross) /
+    Math.max(quadratic, 1e-9);
+  return wall > 0 ? wall : 0;
+}
+
+/**
+ * The ring's radiance along one bearing, in the dome's own linear units.
+ *
+ * `viewY` is the vertical component of the unit view ray, so `|viewY|` -- the diorama is a
+ * floating plate and a good half of the frame is sky *below* the horizon, where the band has to
+ * fall off exactly as it does above it. The first draft of the term this replaces used
+ * `1 - clamp( direction.y, 0, 1 )`, which is 1 for every downward direction and stood the ring
+ * at full strength across the whole lower dome.
+ */
+export function eclipseRingRadiance(wallKm: number, viewY: number): number[] {
+  const up = Math.abs(viewY);
+  const climb = up / (ECLIPSE_RING_SCALE_HEIGHT_KM * Math.sqrt(Math.max(1 - up * up, 1e-4)));
+  return ECLIPSE_RING_EXTINCTION_PER_KM.map(
+    (beta) => Math.exp(-wallKm * (beta + climb)) * ECLIPSE_RING_GAIN
+  );
+}
 
 export function environmentTransitionAt(progress: number): {
   blend: number;
@@ -1079,6 +1304,13 @@ export class DayNightCycle {
     const material = this.sky.material;
     material.uniforms.eclipseDarkness = { value: 0 };
     material.uniforms.eclipseTotality = { value: 0 };
+    // 1, not 0: with no eclipse running the dome keeps all of its light, and it keeps it
+    // through an exact multiplication rather than through a subtraction that nearly undoes one.
+    material.uniforms.eclipseSkyFlux = { value: 1 };
+    // ( semi-major axis, observer offset along it ) in kilometres. The identity footprint --
+    // both axes at the umbra's own half-width, observer dead centre -- so a frame rendered
+    // before the first update still has a finite, sane ring rather than a division by zero.
+    material.uniforms.eclipseUmbra = { value: new THREE.Vector2(UMBRA_SEMI_WIDTH_KM, 0) };
     material.fragmentShader = withEclipseSky(material.fragmentShader);
     material.needsUpdate = true;
   }
@@ -1312,6 +1544,22 @@ export class DayNightCycle {
     uniforms.showSunDisc.value = eclipseState.active ? 0 : 1;
     uniforms.eclipseDarkness.value = eclipseDarkness;
     uniforms.eclipseTotality.value = eclipseState.totality;
+    // The dome loses its light in proportion to the light it is being lit by, and that is
+    // `irradiance` itself -- not `1 - eclipseDarkness`, which is the same number sent through a
+    // subtraction the shader then has to undo. See {@link withEclipseSky}.
+    uniforms.eclipseSkyFlux.value = eclipseState.irradiance;
+    /**
+     * ...and where the observer stands inside the umbra, which is what gives the ring a bearing.
+     *
+     * `elevation` is the real sun rather than the smoothed lighting blend, for the same reason
+     * the twilight hand-off below uses it: the footprint's elongation is a fact about where the
+     * sun is, not about how fast the rig is catching up with it.
+     */
+    const semiMajorKm = umbraSemiMajorKm(elevation);
+    (uniforms.eclipseUmbra.value as THREE.Vector2).set(
+      semiMajorKm,
+      semiMajorKm * UMBRA_TRAVERSE_LIMIT * umbraTraverse(eclipseState.separation)
+    );
     /**
      * ...and the half of the day Preetham does not have. `elevation` is the real sun, not the
      * smoothed lighting blend, because the hand-off is defined against `vSunE`, which the
