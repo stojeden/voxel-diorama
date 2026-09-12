@@ -89,12 +89,146 @@ export function eclipsePassengerPoseFor(index: number): EclipsePassengerPose {
   return index % 3 === 0 ? 'glasses' : index % 3 === 1 ? 'projection' : 'watch';
 }
 
+/** Where the sun is, for anything in the world that has to look at it. */
+export interface SunGaze {
+  /** World bearing of the sun, `atan2(dir.x, dir.z)` — the repo's own "face this" idiom. */
+  yaw: number;
+  /** Sun elevation above the horizon, radians. */
+  elevation: number;
+}
+
+/**
+ * Read a gaze off the sun direction the sky already computes.
+ *
+ * `atan2(x, z)` and `asin(y)` and nothing else: the figures and the drawn disc must come
+ * from the same vector or one of them is lying about where the eclipse is. The clamp is for
+ * a direction that is a hair over unit length after normalisation, which `asin` answers with
+ * NaN -- and a NaN yaw would spread silently through every figure's quaternion.
+ */
+export function sunGazeFrom(direction: THREE.Vector3): SunGaze {
+  return {
+    yaw: Math.atan2(direction.x, direction.z),
+    elevation: Math.asin(THREE.MathUtils.clamp(direction.y, -1, 1)),
+  };
+}
+
+/** One figure's share of that: the sun, plus where this figure stands and how far it has turned. */
+export interface PassengerSunGaze extends SunGaze {
+  /** The yaw this figure holds when it is watching nothing. */
+  baseFacing: number;
+  /** 0 while the crowd still walks, exactly 1 once it has frozen. Gates the body turn only. */
+  bodyTurn: number;
+}
+
+/**
+ * How far round the feet have come, from the freeze the crowd is already running.
+ *
+ * A body that turns while it is still walking moonwalks, so the turn has to be the freeze
+ * read backwards — but `movementScale` bottoms at 0.04, so a raw `1 - movementScale` tops
+ * out at 0.96 and every figure would stop 4% short of the sun and stay there. Dividing by
+ * the same 0.96 the freeze is scaled by makes the two one number read twice: identically
+ * zero until the crowd stops, exactly 1 once it has.
+ */
+export function eclipseBodyTurn(movementScale: number): number {
+  return THREE.MathUtils.clamp((1 - movementScale) / 0.96, 0, 1);
+}
+
+/**
+ * Sustained backward head tilt a standing person will actually hold, radians (25 degrees).
+ *
+ * ISO 11226 puts the acceptable head/neck inclination band at 0-25 degrees and sends
+ * anything past it into a holding-time assessment; REBA and RULA both penalise the neck
+ * beyond 20 degrees and flag extension as the bad direction. The shipped pose was a flat
+ * -0.58 rad -- 33.2 degrees of extension held for the whole ninety seconds, above that
+ * ceiling at every sun elevation there is, and at the staged eclipse it aimed the entire
+ * crowd at empty sky 24 degrees over the sun's head. The injury has a name: "eclipse neck".
+ */
+const SUSTAINED_NECK_EXTENSION = 0.4363;
+
+/**
+ * How far the trunk leans back once the neck is at that ceiling, radians (25 degrees).
+ *
+ * Same standard one rung further on: past the neck's band a person leans, sits or reclines
+ * rather than craning. It is exactly zero at the staged eclipse -- the sun is 8.8 degrees up
+ * -- and exists so the model can never author a posture nobody would hold if the eclipse is
+ * ever staged nearer noon, where the required gaze runs past what the neck alone can give.
+ */
+const SUSTAINED_TRUNK_LEAN = 0.4363;
+
+/**
+ * Comfortable axial neck rotation, radians (45 degrees). Past it the feet have to move.
+ *
+ * This is why a body turn exists at all rather than a neck term alone: at the staged
+ * checkpoint the sun's bearing is -117 degrees, and it swings 51.5 degrees between seasons
+ * at that same checkpoint, so no neck can reach it and no constant can stand in for it.
+ */
+const COMFORTABLE_NECK_TWIST = 0.785;
+
+/** Head pitch of someone reading a pinhole image held in front of them, radians. */
+const PROJECTION_HEAD_PITCH = 0.42;
+
+const wrapPi = (angle: number): number => Math.atan2(Math.sin(angle), Math.cos(angle));
+
+function applySunGaze(
+  passenger: PassengerBuild,
+  pose: EclipsePassengerPose,
+  attention: number,
+  gaze: PassengerSunGaze
+): void {
+  if (pose === 'projection') {
+    /**
+     * A pinhole user stands with their BACK to the sun. The card with the hole is held up
+     * with the sun behind them, the image falls on a surface in front, and they look DOWN
+     * at it (AAS eye-safety/projection). Posing them like the glasses wearers put the card
+     * in the one place the image cannot land, and it is why `EclipseCrowdProps` has to take
+     * its cohort from the stamped pose rather than from a second, differently ordered
+     * index: turning the wrong figures round is worse than turning none.
+     */
+    const away = wrapPi(gaze.yaw + Math.PI - gaze.baseFacing);
+    passenger.group.rotation.y = gaze.baseFacing + away * gaze.bodyTurn;
+    passenger.group.rotation.x = 0;
+    passenger.head.rotation.y = THREE.MathUtils.lerp(passenger.head.rotation.y, 0, attention);
+    passenger.head.rotation.x = THREE.MathUtils.lerp(0, PROJECTION_HEAD_PITCH, attention);
+    return;
+  }
+
+  const delta = wrapPi(gaze.yaw - gaze.baseFacing);
+  const headYaw = THREE.MathUtils.clamp(delta, -COMFORTABLE_NECK_TWIST, COMFORTABLE_NECK_TWIST);
+  // The neck takes what it comfortably can and the feet carry the rest, so the two sum to
+  // the sun's own bearing once both terms are full -- not to something near it.
+  passenger.group.rotation.y = gaze.baseFacing + (delta - headYaw) * gaze.bodyTurn;
+  passenger.head.rotation.y = THREE.MathUtils.lerp(passenger.head.rotation.y, headYaw, attention);
+
+  const elevation = Math.max(gaze.elevation, 0);
+  passenger.head.rotation.x = THREE.MathUtils.lerp(
+    0,
+    -Math.min(elevation, SUSTAINED_NECK_EXTENSION),
+    attention
+  );
+  passenger.group.rotation.x =
+    -Math.min(Math.max(elevation - SUSTAINED_NECK_EXTENSION, 0), SUSTAINED_TRUNK_LEAN) *
+    gaze.bodyTurn;
+}
+
 export function applyPassengerEclipsePose(
   passenger: PassengerBuild,
   pose: EclipsePassengerPose,
-  attention: number
+  attention: number,
+  gaze?: PassengerSunGaze | null
 ): void {
-  passenger.head.rotation.x = THREE.MathUtils.lerp(0, -0.58, attention);
+  if (!gaze) {
+    // No sun plumbed through: the shipped constant tilt, unchanged. Optional rather than
+    // defaulted, so a caller that forgets the sun keeps the old pose instead of silently
+    // gazing at a zero bearing on the horizon.
+    passenger.head.rotation.x = THREE.MathUtils.lerp(0, -0.58, attention);
+    passenger.group.rotation.x = 0;
+  } else if (attention <= 0.001) {
+    // Hand the figure back to the walk and idle loops with nothing of ours left on it.
+    passenger.head.rotation.x = 0;
+    passenger.group.rotation.x = 0;
+  } else {
+    applySunGaze(passenger, pose, attention, gaze);
+  }
   if (attention <= 0.001) return;
   passenger.legs.rotation.x *= 1 - attention;
   if (pose === 'glasses') {
@@ -151,6 +285,15 @@ export const SHARED_PASSENGER_GEOMETRY: ReadonlySet<THREE.BufferGeometry> = new 
 export function buildPassenger(random = fallbackRandom('passenger-build')): PassengerBuild {
   const group = new THREE.Group();
   group.scale.setScalar(PASSENGER_SCALE);
+  /**
+   * Yaw first, then pitch about the figure's own side-to-side axis.
+   *
+   * Both the head and the body now carry a yaw AND a pitch at once. Under the default 'XYZ'
+   * the pitch is applied about the world X axis after the yaw, so a figure turned a quarter
+   * turn would ROLL onto its ear instead of looking up. `Postman.ts:213` already sets 'YXZ'
+   * for the same reason.
+   */
+  group.rotation.order = 'YXZ';
   const jacket = JACKET_COLORS[Math.floor(random() * JACKET_COLORS.length)];
   const skin = SKIN_COLORS[Math.floor(random() * SKIN_COLORS.length)];
 
@@ -170,6 +313,7 @@ export function buildPassenger(random = fallbackRandom('passenger-build')): Pass
 
   const head = new THREE.Mesh(PASSENGER_GEOMETRIES.head, skinMat);
   head.name = 'passenger-head';
+  head.rotation.order = 'YXZ';
   head.position.y = 2.18;
   head.castShadow = false;
   group.add(head);
@@ -204,6 +348,9 @@ export class PassengerCrowd {
     projection: 0,
     dogAlert: 0,
   };
+  private sunGaze: SunGaze | null = null;
+  /** Refilled per figure per frame: thirty-two objects a frame is thirty-two too many. */
+  private readonly gaze: PassengerSunGaze = { yaw: 0, elevation: 0, baseFacing: 0, bodyTurn: 0 };
 
   constructor(scene: THREE.Scene, random = fallbackRandom('station-crowd')) {
     this.random = random;
@@ -228,7 +375,14 @@ export class PassengerCrowd {
         const pathMetrics = polylineLengths(route.path);
 
         const built = buildPassenger(random);
+        const eclipsePose = eclipsePassengerPoseFor(i);
         built.group.name = `station-passenger-${station.label}-${i}`;
+        // Stamped here so there is exactly one derivation of who is who. EclipseCrowdProps
+        // used to re-derive the cohort as `index % 3 === 1` over its own name-sorted global
+        // list while the pose came from this per-stop index: the two agree at the first stop
+        // and diverge at every one after it, so cards hovered behind glasses wearers and
+        // figures holding both arms up got nothing. One fact, stamped once, read twice.
+        built.group.userData.eclipsePose = eclipsePose;
         built.group.position.copy(platformPos);
         built.group.rotation.y = facingTrack;
         scene.add(built.group);
@@ -254,7 +408,7 @@ export class PassengerCrowd {
           phase: random() * Math.PI * 2,
           currentOpacity: 0,
           targetOpacity: 0.92,
-          eclipsePose: eclipsePassengerPoseFor(i),
+          eclipsePose,
         });
       }
 
@@ -274,6 +428,17 @@ export class PassengerCrowd {
 
   setEclipseReaction(reaction: EclipseWorldReactionState): void {
     this.eclipseReaction = reaction;
+  }
+
+  /**
+   * Where the sun is, or null when there is no eclipse to watch.
+   *
+   * A setter rather than two more fields on `EclipseWorldReactionState`: that struct is
+   * written out as an inline literal in three subsystems and six tests, and none of them
+   * has anything to say about the sun.
+   */
+  setSunGaze(gaze: SunGaze | null): void {
+    this.sunGaze = gaze;
   }
 
   update(delta: number, stationsBoarding: Set<string>): void {
@@ -396,7 +561,15 @@ export class PassengerCrowd {
     // twenty bus-stop figures are at zero -- measured at 24 draw calls in the opening
     // overview, against a 1400 budget that the owner's window reaches 1418 of.
     p.group.visible = p.currentOpacity > 0.01;
-    applyPassengerEclipsePose(p, p.eclipsePose, this.eclipseReaction.attention);
+    let gaze: PassengerSunGaze | null = null;
+    if (this.sunGaze) {
+      this.gaze.yaw = this.sunGaze.yaw;
+      this.gaze.elevation = this.sunGaze.elevation;
+      this.gaze.baseFacing = p.facingTrack;
+      this.gaze.bodyTurn = eclipseBodyTurn(this.eclipseReaction.movementScale);
+      gaze = this.gaze;
+    }
+    applyPassengerEclipsePose(p, p.eclipsePose, this.eclipseReaction.attention, gaze);
   }
 
   debugStartDwell(stationLabel: string): boolean {

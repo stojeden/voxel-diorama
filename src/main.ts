@@ -7,7 +7,7 @@ import { createWorld, type WindUniforms } from './world/WorldGenerator';
 import { createTrain } from './world/Train';
 import { createBus } from './world/Bus';
 import { Birds } from './world/Birds';
-import { PassengerCrowd } from './world/PassengerCrowd';
+import { PassengerCrowd, sunGazeFrom } from './world/PassengerCrowd';
 import { LakeLife } from './world/LakeLife';
 import { LakesideCow, type UfoEvent } from './world/LakesideCow';
 import { RailSignals } from './world/RailSignals';
@@ -936,6 +936,12 @@ function stepWorld(frame: FrameContext, carrier: WorldFrame): void {
     weather.getCloudCover()
   );
   sunDirectionAt(t01, declination, eclipseReflectionSun);
+  // The crowd looks along the same vector the lake reflects and the disc is drawn on. It was
+  // computed here every frame and reached exactly one consumer, which is why thirty-two
+  // figures tipped their heads back by a constant and faced whatever they had been facing.
+  const sunGaze = eclipseActive ? sunGazeFrom(eclipseReflectionSun) : null;
+  passengerCrowd.setSunGaze(sunGaze);
+  bus.setSunGaze(sunGaze);
   sunColorAt(t01, declination, rainbowSunColor);
   env.renderer.toneMappingExposure = sceneExposure(
     light.night,

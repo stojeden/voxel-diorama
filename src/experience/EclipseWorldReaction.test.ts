@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { eclipseWorldReactionAt } from './EclipseWorldReaction';
+import { EclipseTimeline } from './EclipseTimeline';
 
 describe('eclipse world reactions', () => {
   test('keeps ordinary city life unchanged outside an eclipse', () => {
@@ -27,6 +28,35 @@ describe('eclipse world reactions', () => {
     expect(reaction.eyeProtection).toBe(0);
     expect(reaction.projection).toBe(0);
     expect(reaction.dogAlert).toBe(1);
+  });
+
+  /**
+   * The one rule every eclipse observer follows, checked against the schedule that drives it.
+   *
+   * The filter comes off when the LAST Baily's bead goes and goes back on the instant any
+   * photosphere returns; the diamond ring itself is viewed THROUGH it. The shipped window
+   * (0.08, 0.72) did the reverse: at both bead peaks -- progress 0.39 and 0.61, the middle
+   * of each ring phase and the two most photogenic frames in the ninety seconds --
+   * `eyeProtection` was 0.070, barely over the 0.03 gate `EclipseCrowdProps` draws on, so
+   * the glasses were gone at the two frames where they are mandatory and the crowd stood
+   * bare-eyed through 2.5 s of returning sun on the way out.
+   */
+  test('keeps filters on through both diamond rings and removes them only inside totality', () => {
+    const timeline = new EclipseTimeline();
+    const at = (progress: number) => {
+      const state = timeline.seek(progress);
+      return eclipseWorldReactionAt(state.coverage, state.totality);
+    };
+
+    expect(at(0.39).eyeProtection, 'okulary przy pierwszym diamentowym pierscieniu')
+      .toBeGreaterThan(0.5);
+    expect(at(0.61).eyeProtection, 'okulary przy drugim diamentowym pierscieniu')
+      .toBeGreaterThan(0.5);
+
+    for (const progress of [0.45, 0.5, 0.55]) {
+      expect(at(progress).eyeProtection, `okulary w srodku totalnosci (${progress})`).toBe(0);
+      expect(at(progress).projection, `kartka w srodku totalnosci (${progress})`).toBe(0);
+    }
   });
 
   test('sanitizes invalid samples', () => {
