@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { clockFromSolarPhase } from '../environment/sky';
 import type { RuntimeEnv } from '../bootstrap';
 import type { UiHandle } from '../ui';
 import type { DayNightCycle } from '../environment/DayNightCycle';
@@ -31,18 +32,35 @@ export async function warmRenderer(options: RendererWarmupOptions): Promise<void
   const themeDeclination = () =>
     THREE.MathUtils.degToRad(options.getTheme().sunDeclinationDeg);
 
-  const compileAt = async (progress: number, loading: number, label: string) => {
+  const compileAt = async (clock: number, loading: number, label: string) => {
     ui.setLoadingProgress(loading, label);
-    dayNight.update(progress, 0, 0, themeDeclination(), options.getTheme().nightFloor);
+    dayNight.update(clock, 0, 0, themeDeclination(), options.getTheme().nightFloor);
     await env.renderer.compileAsync(env.scene, env.camera);
     env.composer.render(0);
   };
+  /**
+   * The three labelled moments below are solar PHASES; the opening one is already a clock.
+   *
+   * They exist to walk the lighting across its range so every shader permutation is built
+   * before the first frame. Written against a sun that always set at 18:00, they stopped
+   * meaning what their labels say the moment the sun became seasonal: read as a clock, 0.86
+   * is 2.4 degrees below the horizon in June rather than 22.9, so "KOMPILOWANIE NOCY"
+   * compiled civil twilight and the night permutations were never built. That is the fifth
+   * and sixth instance of this same mistake in this codebase; the axis is named at every
+   * literal now precisely because naming it is what was missing each time.
+   *
+   * `getDayProgress()` is the director's own clock and must NOT be converted -- it is also
+   * the call that seeds the smoothed lighting, so it has to seed it at the hour the world
+   * actually opens.
+   */
+  const compileAtPhase = (phase: number, loading: number, label: string) =>
+    compileAt(clockFromSolarPhase(phase, themeDeclination()), loading, label);
 
   try {
     await compileAt(options.getDayProgress(), 24, 'KOMPILOWANIE PORANKA');
-    await compileAt(0.5, 42, 'KOMPILOWANIE ŚWIATŁA DNIA');
-    await compileAt(0.28, 56, 'KOMPILOWANIE ZŁOTEJ GODZINY');
-    await compileAt(0.86, 70, 'KOMPILOWANIE NOCY');
+    await compileAtPhase(0.5, 42, 'KOMPILOWANIE ŚWIATŁA DNIA');
+    await compileAtPhase(0.28, 56, 'KOMPILOWANIE ZŁOTEJ GODZINY');
+    await compileAtPhase(0.86, 70, 'KOMPILOWANIE NOCY');
     ui.setLoadingProgress(84, 'KOMPILOWANIE ZAĆMIENIA');
     dayNight.setCameraFocusDistance(148);
     dayNight.setEclipseState({

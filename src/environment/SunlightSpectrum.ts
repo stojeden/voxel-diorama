@@ -207,8 +207,13 @@ export function airSlantFactor(elevationRad: number): number {
  *
  * The integral depends on nothing but the tangent height, and the twilight model below needs
  * it 418 times per evaluation at 4 degrees of depression -- two profiles at each of 209 steps
- * up the zenith column. One integral measures 6.2 us here, so left live it would cost 6.5 ms
- * per twilight colour: a third of a frame, for one colour. The table is 261 entries.
+ * up the zenith column. Built the live variant and measured it rather than multiplying out:
+ * **2.39 ms** per twilight colour, against 6.2 us for a single integral. The table is 261
+ * entries.
+ *
+ * (An earlier draft of this comment said 6.5 ms, which is not what 418 integrals cost at
+ * 6.2 us each -- that is 2.59 ms, and the measured figure is 2.39. A number in a comment in
+ * this file is supposed to be one somebody read off an instrument.)
  */
 const SLANT_TABLE_STEP_KM = 0.5;
 const SLANT_TABLE_TOP_KM = 130;
