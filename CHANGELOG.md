@@ -11,6 +11,92 @@ a wersjonowanie projektu docelowo stosuje [Semantic Versioning](https://semver.o
 
 ### Added
 
+- **Zaćmienie, którego naprawdę widać.** Cztery rzeczy zmierzone na zbudowanym produkcie
+  z przyszpiloną pogodą, kamerą `focusEclipseView`, bezstratnym PNG.
+  - **Niebo traci światło, zamiast być domalowane na ciemno.** Kopuła była przenikaniem
+    (`mix`), a przenikanie nie potrafi przygasić nieba: przy totalności zostawało **14,2 %**
+    pełnej jasności dziennej kopuły, a ta jedna siódma nieba niosła **cztery piąte** światła
+    kadru. Teraz to tłumienie plus dodawana łuna, a kopuła jest mnożona przez przetrwały
+    strumień słoneczny.
+  - **Cień ma kierunek.** Obręcz przy horyzoncie była jednakowa we wszystkich azymutach.
+    Ślad umbry to elipsa 159 km w poprzek azymutu słońca na 159/sin(wysokość) wzdłuż niego —
+    **6,5:1** przy tutejszym słońcu 8,83° — i jedna odległość do ściany cienia na azymut
+    prowadzi teraz barwę, jasność i wysokość obręczy naraz, przez `exp(-beta*L - L*tan(θ)/8 km)`.
+    Jasna łuna obraca się o 180° między drugim a trzecim kontaktem, bo obserwator przechodzi
+    przez cień. Niezależny recenzent przeskanował 130 tys. kierunków w czterech fazach: nic
+    nie dochodzi do bieli i nic nie jest `rgb(0,0,0)`.
+  - **Korona dodaje światło, zamiast wycinać dziurę.** Warstwa słoneczna była
+    `NormalBlending`, więc korona nie dodawała się do nieba, tylko je zastępowała — a że
+    profil szedł i w kolor, i w alfę, emitowane światło leciało jak **kwadrat**: 48× autorskiego
+    spadku stawało się 2301×, a wszystko poza 2,6 promienia słonecznego znikało.
+  - **Ludziki patrzą na słońce.** Średni kąt między twarzą a kierunkiem na słońce spadł
+    z **82,9° do 3,8°** w kohorcie z okularami; wszystkie miały wcześniej ten sam zaszyty
+    pochył 33,2° przy słońcu na 8,8°. Okulary spadają na totalność i wracają na pierścień
+    diamentowy, zgodnie z jedyną regułą, którą zna każdy obserwator.
+
+### Fixed
+
+- **`MINIMUM_IRRADIANCE` trzymał zaćmienie jasnym, na dwa sposoby.** Przez *całą* rampę
+  totalności — zakrycie 0,985 do 1,0 — naświetlenie spadało tylko z 0,02915 do 0,02500,
+  czternaście procent, bo podłoga dominowała człon `(1-zakrycie)^1,3` na długo przed końcem.
+  Każdy człon dodawany, bramkowany `totality`, idzie w tym samym przedziale od 0 do 1, więc
+  świat **jaśniał o 35 %**, gdy księżyc kończył zakrywać słońce, a najciemniejszą klatką
+  zaćmienia był drugi kontakt. Drugi skutek: z ukrytym billboardem niebo tuż przy słońcu nadal
+  czytało **236 z 255** przy totalności, bo lob rozproszeniowy Preethama przy niskim słońcu
+  jest rzędu 1000 w jednostkach liniowych, a 2,5 % z tysiąca to wciąż biel. Korona nie była za
+  słaba — niebo za nią było za jasne.
+
+  | totalność ÷ ta sama godzina bez zaćmienia | przed | po |
+  |---|---|---|
+  | cały kadr | 0,274 | **0,096** |
+  | miasto | 0,243 | **0,239** |
+  | niebo | 0,333 | **0,087** |
+  | niebo tuż przy słońcu (poziomy) | 234,7 | **108,9** |
+  | tarcza względem nieba obok niej | 1,08× | **1,53×** |
+  | piksele dosłownie czarne | 0,0000 % | **0,0000 %** |
+
+  Miasto prawie nie drgnęło, bo `eclipseDiffuseFraction` ma własną podłogę 0,13: to gasi niebo
+  i wiązkę bezpośrednią, która przy totalności i tak jest geometrycznie zerowa.
+
+- **Księżyc był w dziesięciu procentach przezroczysty.** Jego alfa niosła człon zachmurzenia,
+  `mix(0.35, 1.0, uTransmittance)`, a „czysta" pogoda w tym świecie to zachmurzenie 0,12 — więc
+  w bezchmurny dzień tarcza była przepuszczalna, a dziesięć procent obciętego nieba wypełniało
+  kęs do **218** przy niebie 254. To było całe wyjaśnienie, dlaczego faza częściowa nie miała
+  widocznego kęsa. Po naprawie: **7**. Chmura przed księżycem nie robi księżyca przezroczystym.
+
+- **Chunk `atmosphere-physics` przekraczał swój próg od 1431376.** Przeniesienie
+  `RainbowAtmosphere` do chunku ładowanego eagerly zdjęło 11 521 bajtów z bramki, która patrzy,
+  i położyło je pod bramkę, której nie sprawdzono: pierwsze ładowanie ważyło 252 577 B przed
+  i 252 635 B po, czyli podział nie oszczędził niczego, a smoke stał czerwony na **pierwszej**
+  asercji, więc nic za nią nie chodziło. Tęcza pojawia się dopiero po deszczu, więc nie
+  należy do pierwszego ładowania: jest pobierana przy pierwszej wilgoci w powietrzu, za
+  uśpionym obiektem zastępczym.
+
+  | | entry | atmosphere-physics | pierwsze ładowanie |
+  |---|---|---|---|
+  | przed | 238 049 | 17 978 (próg 9 000) | 1 281 381 |
+  | po | **230 562** | **6 457** | **1 271 863** |
+
+- **Rozgrzewka tęczy nie rozgrzewała niczego.** `ensureRainbow` składało jedną klatkę poza
+  pętlą, żeby zbudować program atmosfery przed pojawieniem się łuku. Nie mogło:
+  `presentWorld` ustawia `setAtmosphereEnabled(rainbow.isEffectActive())` co klatkę, uśpiony
+  obiekt odpowiada `false`, więc przebieg był dodany już wyłączony, a kompozytor `postprocessing`
+  otwiera pętlę od `if (!pass.enabled) continue`. Shader kompilował się i tak na pierwszej
+  klatce z tęczą. Dodatkowa kompozycja nie była darmowa: drugi pełny łańcuch na już
+  wyświetlonym stanie świata, duplikat wmieszany w historię rozdzielczości czasowej i liczniki
+  przebiegu metryk nadpisane poza kolejnością.
+
+- **Tułów skakał o 343,71° w jednej klatce na pierścieniu diamentowym.** Ujednolicenie azymutu
+  kohorty z kartką sprawiło, że zaczął przemiatać — wewnątrz `wrapPi`, które jest nieciągłe.
+  Żaden istniejący test nie mógł tego zobaczyć: wszystkie próbkowały dwa statyczne stany
+  i sprawdzały kąt twarzy do słońca, z którego tułów i głowa dokładnie się skracają.
+
+- **Promień pionowy nie miał ściany cienia.** `direction.xz / (length + 1e-4)` daje `vec2(0)`
+  dla promienia o dokładnie zerowej składowej poziomej, więc odległość do ściany wychodziła
+  zerowa — obserwator *stojący na ścianie umbry*, jedyny stan, którego `UMBRA_TRAVERSE_LIMIT`
+  ma zabraniać, gdzie `exp(-0*x)` to 1 i obręcz osiąga pełne wzmocnienie. Granica przy promieniu
+  pionowym to ściana nieskończenie daleka, więc kod zwracał jej przeciwieństwo.
+
 - **Zmierzch na kopule nieba: cień Ziemi i Pas Wenus, przejęte dokładnie tam, gdzie
   Preetham gaśnie.** Three.js liczy całe rozpraszanie z `vSunE`, które przy
   `cutoffAngle = 1.6110731556870734` jest **dokładnie zerem od 2,30769 stopnia pod
