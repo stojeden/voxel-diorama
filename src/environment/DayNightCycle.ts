@@ -248,14 +248,32 @@ export function environmentTransitionAt(progress: number): {
  * 0.6, which moves from -3.84 degrees to -6.90, leaving 5.25 h of June and 12.13 h of
  * autumn to fall in.
  *
- * `eclipseStars` reaches through the `Math.max` untouched, because stars at totality are a
- * feature and not a consequence of the sun being down. It has always been the term that
- * wins during an eclipse: swept across both eclipse paths, the night factor an eclipse
- * synthesises tops out at 0.6322, which was 0.364 of alpha under the old pair and is 0 under
- * this one, against the 0.88 the totality term pays regardless of the hour.
+ * **An eclipse gets its own arm, and this is the correction the review forced.** Raising the
+ * twilight threshold deleted 20.02 s of starfield from every 90 s eclipse: `eclipseStars` is
+ * `smootherStep(corona)` and the corona is exactly 0 below progress 0.36, so through the
+ * partial phases the only term carrying stars was the *night an eclipse synthesises*
+ * (0.4943-0.5048), which cleared the old 0.45 threshold at alpha 0.11 and clears 0.76 at
+ * nothing. Worst point measured at progress 0.3665, coverage 0.9852: alpha 0.1098 to 0.
+ *
+ * So the eclipse keeps the old curve on its own quantity instead of riding the twilight one
+ * by accident. That is not a workaround: a sky darkened by the moon crossing the sun and a
+ * sky darkened by the earth turning away reach the same brightness by different paths, and
+ * the threshold for "a star is visible" belongs to the brightness, not to the cause. What
+ * changed is that the eclipse path is now written down rather than inherited.
  */
-export function starAlphaAt(night: number, eclipseStars: number, cloudCover: number): number {
-  return Math.max(clamp01((night - 0.76) / 0.22), eclipseStars * 0.88) * (1 - cloudCover);
+export function starAlphaAt(
+  night: number,
+  eclipseStars: number,
+  eclipseNight: number,
+  cloudCover: number
+): number {
+  return (
+    Math.max(
+      clamp01((night - 0.76) / 0.22),
+      clamp01((eclipseNight - 0.45) / 0.5),
+      eclipseStars * 0.88
+    ) * (1 - cloudCover)
+  );
 }
 
 interface ShootingStar {
@@ -961,7 +979,12 @@ export class DayNightCycle {
     }
 
     // ── Stars ──
-    const starAlpha = starAlphaAt(night, eclipseState.stars, cloudCover);
+    const starAlpha = starAlphaAt(
+      night,
+      eclipseState.stars,
+      eclipseDarkness * 0.52 + eclipseState.totality * 0.12,
+      cloudCover
+    );
     this.starMaterial.opacity = starAlpha * 0.95;
     this.starField.visible = starAlpha > 0.02;
     this.starField.rotation.y = this.elapsed * 0.004;

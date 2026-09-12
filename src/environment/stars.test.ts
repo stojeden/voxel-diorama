@@ -39,7 +39,7 @@ const SAMPLES = 20000;
 
 /** A clear night with no eclipse: the two terms the sky itself does not supply are zero. */
 const alphaAt = (clock: number, declination: number) =>
-  starAlphaAt(nightFactorAt(clock, declination), 0, 0);
+  starAlphaAt(nightFactorAt(clock, declination), 0, 0, 0);
 
 /** The highest the sun stands at any instant of the day that already shows a star. */
 const firstStarElevationDeg = (declination: number) => {
@@ -141,15 +141,36 @@ describe('the stars wait for the dark', () => {
    */
   test('brings the stars out at totality even at noon', () => {
     const noonNight = 0;
-    expect(starAlphaAt(noonNight, 1, 0)).toBeCloseTo(0.88, 10);
-    expect(starAlphaAt(noonNight, 1, 0)).toBeGreaterThan(VISIBLE_ALPHA);
-    // The night an eclipse manufactures is not what lights them: 0.6322 is its ceiling.
-    expect(starAlphaAt(0.6322, 0, 0)).toBe(0);
+    expect(starAlphaAt(noonNight, 1, 0, 0)).toBeCloseTo(0.88, 10);
+    expect(starAlphaAt(noonNight, 1, 0, 0)).toBeGreaterThan(VISIBLE_ALPHA);
+  });
+
+  /**
+   * The partial phases, which the first draft of this change silently deleted.
+   *
+   * `eclipseStars` is `smootherStep(corona)` and the corona is exactly 0 below progress
+   * 0.36, so on the way into and out of totality the only thing carrying stars is the night
+   * the eclipse itself manufactures. Raising the twilight threshold to 0.76 took 20.02 s of
+   * starfield out of every 90 s eclipse before a review caught it; the worst point measured
+   * was progress 0.3665 at coverage 0.9852, alpha 0.1098 falling to 0.
+   *
+   * Mutation-checked: deleting the eclipse-night arm fails this at 0; moving its threshold
+   * to 0.76 fails it at 0; widening its span to 0.9 fails the totality-adjacent assertion.
+   */
+  test('keeps the stars through the partial phases, not only at totality', () => {
+    const deepPartial = 0.5048;
+    expect(starAlphaAt(0, 0, deepPartial, 0)).toBeGreaterThan(VISIBLE_ALPHA);
+    expect(starAlphaAt(0, 0, deepPartial, 0)).toBeCloseTo(0.1096, 3);
+    // The eclipse ceiling stays well clear of the visible gate all the way up.
+    expect(starAlphaAt(0, 0, 0.6322, 0)).toBeCloseTo(0.3644, 3);
+    // And an ordinary bright day with no eclipse still has none.
+    expect(starAlphaAt(0, 0, 0, 0)).toBe(0);
   });
 
   // Mutation-checked: dropping `* (1 - cloudCover)` fails this at 1.
   test('and overcast still hides them, eclipse or not', () => {
-    expect(starAlphaAt(1, 0, 1)).toBe(0);
-    expect(starAlphaAt(0, 1, 1)).toBe(0);
+    expect(starAlphaAt(1, 0, 0, 1)).toBe(0);
+    expect(starAlphaAt(0, 1, 0, 1)).toBe(0);
+    expect(starAlphaAt(0, 0, 0.6322, 1)).toBe(0);
   });
 });
