@@ -25,6 +25,7 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "test:browser": "node scripts/prepareBuild.mjs && node scripts/browserSmoke.mjs",
+    "test:software-render": "node scripts/prepareBuild.mjs && node scripts/softwareRenderSmoke.mjs",
     "test:performance": "npm run build && node scripts/performanceBenchmark.mjs",
     "test:acceptance": "node scripts/acceptance.mjs",
     "validate": "npm run typecheck && npm test && npm run test:browser"
