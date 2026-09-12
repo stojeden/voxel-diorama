@@ -194,17 +194,50 @@ export function goldenFactorAt(t: number, declination: number): number {
 }
 
 /** Exposure curve with highlight headroom for pale concrete and snow. */
+/** Where the high-sun ease begins and where it is fully in, in degrees of elevation. */
+const HIGH_SUN_START_DEG = 45;
+const HIGH_SUN_FULL_DEG = 60;
+/** How far the ease stops the camera down at its deepest. Measured, not chosen -- see below. */
+const HIGH_SUN_EXPOSURE_CUT = 0.15;
+
+/**
+ * How far past a mid sky the sun has climbed: 0 below 45 degrees, 1 at 60 and above.
+ *
+ * Only a Polish June reaches this. October noon sits at 28 degrees and never touches it, and
+ * neither does any hour of a June day before about ten in the morning.
+ */
+export function highSunFactor(elevationRad: number): number {
+  const deg = THREE.MathUtils.radToDeg(elevationRad);
+  return smooth((deg - HIGH_SUN_START_DEG) / (HIGH_SUN_FULL_DEG - HIGH_SUN_START_DEG));
+}
+
+/**
+ * Exposure curve with highlight headroom for pale concrete and snow, and a stop down at noon.
+ *
+ * **The noon ease is a measurement, not a taste.** At 61 degrees the sky pushes 8.8 per cent
+ * of the frame past 245 of 255 -- not clipped, but close enough to white that everything below
+ * it loses separation, which is what made a June noon read as flat. Sampling the rendered
+ * frame across a sweep of exposures: a cut of 15 per cent takes those near-white pixels from
+ * 8.8 per cent to 0.12 while the mean falls only from 151 to 143, and a cut of 22 buys almost
+ * nothing more for another four levels of mean. So 15 it is.
+ *
+ * It is deliberately an exposure change and not a lower sun: the shadows stay short, because
+ * short shadows are what noon looks like. The frame still reads as the brightest hour of the
+ * day -- golden hour means 122 against this 143.
+ */
 export function sceneExposure(
   night: number,
   golden: number,
   themeMultiplier = 1,
-  eclipse = 0
+  eclipse = 0,
+  highSun = 0
 ): number {
   const day = 1 - clamp01(night);
   return (
     (0.34 + day * 0.12 + clamp01(golden) * 0.04) *
     themeMultiplier *
-    (1 - clamp01(eclipse) * 0.18)
+    (1 - clamp01(eclipse) * 0.18) *
+    (1 - clamp01(highSun) * HIGH_SUN_EXPOSURE_CUT)
   );
 }
 

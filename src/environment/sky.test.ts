@@ -5,6 +5,7 @@ import {
   clockFromSolarPhase,
   directSunFactorAt,
   goldenFactorAt,
+  highSunFactor,
   JUNE_DECLINATION_DEG,
   nightFactorAt,
   noonElevation,
@@ -246,6 +247,30 @@ describe('sky colours', () => {
 });
 
 describe('render exposure', () => {
+  /**
+   * The noon ease, pinned to what the frame sampling actually showed.
+   *
+   * A June sun at 61 degrees put 8.8 per cent of the rendered frame past 245 of 255; a cut of
+   * 15 per cent took that to 0.12 per cent while the mean fell only from 151 to 143. October
+   * noon at 28 degrees must be untouched by it, and so must every hour outside the middle of
+   * a midsummer day.
+   */
+  test('eases exposure only when the sun is genuinely high', () => {
+    const rad = (d: number) => THREE.MathUtils.degToRad(d);
+    expect(highSunFactor(rad(28.3))).toBe(0);
+    expect(highSunFactor(rad(42.7))).toBe(0);
+    expect(highSunFactor(rad(61.2))).toBeCloseTo(1, 2);
+
+    const noon = sceneExposure(0, 0, 1, 0, highSunFactor(rad(61.2)));
+    const midMorning = sceneExposure(0, 0, 1, 0, highSunFactor(rad(42.7)));
+    expect(noon / midMorning).toBeCloseTo(0.85, 2);
+    // Nothing is asserted here about golden hour being darker, though it is: a rendered
+    // golden-hour frame means 122 against this noon's 143. That is a fact about the *picture*
+    // and the exposure number runs the other way -- golden hour carries a higher multiplier
+    // precisely because its sun is weaker. A first draft of this test compared the two
+    // multipliers and failed, correctly.
+  });
+
   test('keeps daylight and golden-hour highlights below the old washed-out peak', () => {
     expect(sceneExposure(0, 0)).toBeCloseTo(0.46, 2);
     expect(sceneExposure(0, 1)).toBeCloseTo(0.5, 2);

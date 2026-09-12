@@ -51,6 +51,7 @@ import {
 } from './experience/Checkpoints';
 import {
   clockFromSolarPhase,
+  highSunFactor,
   sceneBloomStrength,
   sceneExposure,
   sunColorAt,
@@ -924,7 +925,9 @@ function stepWorld(frame: FrameContext, carrier: WorldFrame): void {
     light.night,
     light.golden,
     themeMix(previousTheme.exposureMul, currentTheme.exposureMul, themeBlend),
-    light.eclipse
+    light.eclipse,
+    // Only a Polish June climbs high enough for this to do anything; October never does.
+    highSunFactor(sunElevationAt(t01, declination))
   );
 
   // ── Vehicles & life ──
