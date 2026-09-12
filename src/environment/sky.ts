@@ -193,6 +193,36 @@ export function sunDirectionAt(
     .normalize();
 }
 
+/**
+ * Unit direction toward the **antisolar point** — where a full moon stands.
+ *
+ * Half a turn of hour angle is only half the mirror. The point opposite the sun is also at
+ * the *opposite declination*, and dropping that negation is what made the moon seasonally
+ * inverted: with `+declination` kept, midnight put the moon at `noonElevation(declination)`,
+ * measured 61.21 degrees in June and 28.27 in October. Negating it gives
+ * `noonElevation(-declination)` — 14.33 in June and 47.27 in October — which is the real
+ * relation: the season that lifts the sun pushes its opposite point down by the same amount.
+ *
+ * The azimuth mirrors with it, which the elevation alone would not have caught. A June sun
+ * rises on a bearing of 49.50 degrees, north of east; the antisolar point rises at 130.50,
+ * the same 49.50 to the *south* of east, and both cross the meridian due south (+Z here) at
+ * their own noon. With the sign dropped the "moon" rose on exactly the sun's own bearing in
+ * every season — 49.50 in June, 105.63 in October — a midsummer full moon standing where the
+ * midsummer sun does, which is nowhere it can be.
+ *
+ * Exactly `-sunDirectionAt(t, declination)`: swept over 20 000 clock steps and five
+ * declinations from -23.44 to +23.44, the largest disagreement was 1.2e-15. Written as the
+ * mirrored spherical triangle rather than as that negation because the mirror is the claim
+ * being made, and because the one caller needs the sun's own vector left intact.
+ */
+export function antisolarDirectionAt(
+  t: number,
+  declination: number,
+  out: THREE.Vector3 = new THREE.Vector3()
+): THREE.Vector3 {
+  return sunDirectionAt((t + 0.5) % 1, -declination, out);
+}
+
 /** 1 deep at night, 0 in full daylight, smooth twilight band in between. */
 export function nightFactorAt(t: number, declination: number): number {
   const elevationDeg = THREE.MathUtils.radToDeg(sunElevationAt(t, declination));

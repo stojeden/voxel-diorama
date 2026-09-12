@@ -9,6 +9,7 @@ import {
   type ScheduledWindowMaterial,
 } from './CityRhythm';
 import {
+  antisolarDirectionAt,
   clamp01,
   directSunFactorAt,
   goldenFactorAt,
@@ -221,6 +222,40 @@ export function environmentTransitionAt(progress: number): {
     blend: clamped * clamped * (3 - 2 * clamped),
     intensity: ENVIRONMENT_INTENSITY,
   };
+}
+
+/**
+ * Where the night sky is dark enough to be starry, and where an eclipse is dark enough.
+ *
+ * The threshold is written against `nightFactorAt`, which is a smoothstep between
+ * `FULL_NIGHT_ELEVATION_DEG` and `FULL_DAY_ELEVATION_DEG` in `sky.ts`, so the honest way to
+ * choose it is to say what solar depression it means and then measure that back. The pair
+ * here means: **first star at 4.03 degrees of depression, fully starry at 9.90.**
+ *
+ * Which is the twilight definition, not a taste. The eye picks up the first naked-eye stars
+ * during *civil* twilight (0 to -6) and the sky is properly starry by *nautical* twilight
+ * (-6 to -12) -- so first light lands partway through civil, and full strength partway
+ * through nautical. The upper anchor is deliberately not -12 itself: at 52.23 north a June
+ * sun bottoms out at -14.33, and pinning full stars to the end of nautical twilight would
+ * leave a Polish June with a hair's width of properly starry sky.
+ *
+ * The pair it replaces was `(night - 0.45) / 0.5`, which is **+1.33 degrees** -- the first
+ * stars came out with the sun still above the horizon, every day of the year. (Before the
+ * 2026-09-12 ramp retune the same constants meant +4.93, in broad daylight; the retune
+ * moved the number without fixing it.) Measured over a 200 000-step day, star visibility
+ * goes from 7.79 h to 6.21 h in June and 13.93 h to 12.74 h in autumn, and both seasons
+ * still reach full strength. The shooting-star gate rides on this alpha too -- it needs
+ * 0.6, which moves from -3.84 degrees to -6.90, leaving 5.25 h of June and 12.13 h of
+ * autumn to fall in.
+ *
+ * `eclipseStars` reaches through the `Math.max` untouched, because stars at totality are a
+ * feature and not a consequence of the sun being down. It has always been the term that
+ * wins during an eclipse: swept across both eclipse paths, the night factor an eclipse
+ * synthesises tops out at 0.6322, which was 0.364 of alpha under the old pair and is 0 under
+ * this one, against the 0.88 the totality term pays regardless of the hour.
+ */
+export function starAlphaAt(night: number, eclipseStars: number, cloudCover: number): number {
+  return Math.max(clamp01((night - 0.76) / 0.22), eclipseStars * 0.88) * (1 - cloudCover);
 }
 
 interface ShootingStar {
@@ -866,9 +901,31 @@ export class DayNightCycle {
     this.sunLight.castShadow = this.shadowsEnabled && directShadowStrength > 0.05;
 
     // ── Moon (opposite side of the sky) ──
-    // The moon rides the anti-solar point, which is the old simplification kept deliberately:
-    // it makes the June moon sit low, which is what a summer full moon does.
-    const moonDir = sunDirectionAt((t + 0.5) % 1, declination, this.tmpMoonDir);
+    /**
+     * The moon rides the **real** antisolar point, declination mirrored and all.
+     *
+     * It used to ride `sunDirectionAt(t + 0.5, +declination)`, which turns the hour angle
+     * without turning the declination: a half-mirror that put the moon at the sun's own noon
+     * altitude at midnight. Measured, that was 61.21 degrees in June and 28.27 in October --
+     * the exact inverse of the sky, where a midsummer full moon crawls and an autumn one
+     * rides high. {@link antisolarDirectionAt} fixes the sign; the numbers become 14.33 and
+     * 47.27, and the azimuth mirrors too (a June moonrise moves from 49.50 degrees
+     * east-of-north, the sun's own bearing, to 130.50).
+     *
+     * **This is a visible change to every June night, and it is meant to be.** Both gates
+     * below read `moonDir.y`, so a moon that no longer climbs is dimmer and up for less of
+     * the night. Sampled over a full day at 200 000 steps, full moon and clear sky: the mesh
+     * is drawn for 8.67 h of a June day instead of 17.89, the moonlight is above 0.01 for
+     * 7.33 h instead of 10.31, and its 24-hour mean falls from 0.1746 to 0.1093. October is
+     * the other side of the same trade and gains: 14.68 h of mesh against 11.32, 13.56 h of
+     * light against 10.28, mean 0.2792 against 0.2014. Peak intensity is untouched in
+     * October (0.5600) and clipped by one per cent in June (0.5544 -- `moonDir.y * 4` no
+     * longer saturates, because 14.33 degrees is a sine of 0.2475).
+     *
+     * `uPhaseAngle` is set from SunCalc in {@link setMoonPhase} and is a separate axis: the
+     * crescent's shape never depended on this sign and is unchanged.
+     */
+    const moonDir = antisolarDirectionAt(t, declination, this.tmpMoonDir);
     this.moonMesh.position.copy(moonDir).multiplyScalar(540);
     const moonOpacity = THREE.MathUtils.smoothstep(moonDir.y, -0.08, 0.08);
     this.moonMaterial.uniforms.uOpacity.value = moonOpacity;
@@ -904,10 +961,7 @@ export class DayNightCycle {
     }
 
     // ── Stars ──
-    const starAlpha = Math.max(
-      clamp01((night - 0.45) / 0.5),
-      eclipseState.stars * 0.88
-    ) * (1 - cloudCover);
+    const starAlpha = starAlphaAt(night, eclipseState.stars, cloudCover);
     this.starMaterial.opacity = starAlpha * 0.95;
     this.starField.visible = starAlpha > 0.02;
     this.starField.rotation.y = this.elapsed * 0.004;

@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { OPENING_SOLAR_PHASE } from '../experience/AuthoredMoments';
 import {
   airMassAt,
+  antisolarDirectionAt,
   AUTUMN_DECLINATION_DEG,
   clockFromSolarPhase,
   directSunFactorAt,
@@ -291,6 +292,83 @@ describe('solar model', () => {
     };
     expect(goldenHours(JUNE)).toBeCloseTo(4.4, 1);
     expect(goldenHours(AUTUMN)).toBeCloseTo(4.2, 1);
+  });
+});
+
+/**
+ * The antisolar point, which is where `DayNightCycle` puts the moon.
+ *
+ * It shipped as `sunDirectionAt(t + 0.5, +declination)` -- half a turn of hour angle with the
+ * declination left alone -- and nothing here or anywhere else looked at it, so for as long as
+ * the sun had seasons the moon had them backwards. The failure is a sign, which no smoothness
+ * or finiteness check can see and which reads as plausible in a diff.
+ *
+ * Mutation-checked. Dropping the negation again fails all three tests below: the June moon
+ * comes back at 61.21 degrees instead of 14.33, the June moonrise bearing at 49.50 instead of
+ * 130.50, and the vector stops being the sun's negation by a distance of 0.796. Negating the
+ * result on top of the mirror fails all three as well (-14.33, 49.50, 2.000), and dropping
+ * the half turn while keeping the negation fails two of them (-61.21, 2.000) -- the azimuth
+ * survives that one, which is exactly why it is not the only assertion here. Turning the
+ * hour angle the other way instead, `(t - 0.5)`, is the same half turn: it changes nothing
+ * and fails nothing, correctly.
+ */
+describe('the antisolar point the moon rides', () => {
+  /** Bearing from north, clockwise, in the convention `sunDirectionAt` documents: +Z is south. */
+  const bearing = (v: THREE.Vector3) =>
+    (deg(Math.atan2(v.x, -v.z)) + 360) % 360;
+  /** The bearing at which a direction crosses up through the horizon. */
+  const riseBearing = (direction: (t: number) => THREE.Vector3) => {
+    const samples = 200_000;
+    let previous = direction(0).y;
+    for (let i = 1; i < samples; i++) {
+      const here = direction(i / samples);
+      if (previous < 0 && here.y >= 0) return bearing(here);
+      previous = here.y;
+    }
+    return Number.NaN;
+  };
+
+  test('is the sun mirrored in declination, so the seasons run the other way', () => {
+    // The whole point: the season that lifts the sun pushes its opposite point down, by the
+    // same amount. A midsummer full moon crawls along the horizon; an October one rides high.
+    expect(deg(Math.asin(antisolarDirectionAt(0, JUNE).y))).toBeCloseTo(14.33, 2);
+    expect(deg(Math.asin(antisolarDirectionAt(0, AUTUMN).y))).toBeCloseTo(47.27, 2);
+    expect(deg(noonElevation(-JUNE))).toBeCloseTo(14.33, 2);
+    // ...and it culminates at local midnight, due south, where +Z points.
+    const midnight = antisolarDirectionAt(0, JUNE);
+    expect(Math.abs(midnight.x)).toBeLessThan(1e-12);
+    expect(midnight.z).toBeGreaterThan(0);
+  });
+
+  test('mirrors the azimuth too, not only the altitude', () => {
+    // The elevation alone would pass a half-mirror at the equinox. The bearings are what
+    // separate them: a June sun rises 49.50 east-of-north, its opposite point 49.50 east-of-
+    // *south*, and 49.50 + 130.50 = 180 is the mirror stated as an identity.
+    const sunRise = riseBearing((t) => sunDirectionAt(t, JUNE, new THREE.Vector3()));
+    const moonRise = riseBearing((t) => antisolarDirectionAt(t, JUNE));
+    expect(sunRise).toBeCloseTo(49.5, 1);
+    expect(moonRise).toBeCloseTo(130.5, 1);
+    expect(sunRise + moonRise).toBeCloseTo(180, 1);
+    // October swaps which of the two rises north of east, and still sums to the mirror.
+    const autumnSun = riseBearing((t) => sunDirectionAt(t, AUTUMN, new THREE.Vector3()));
+    const autumnMoon = riseBearing((t) => antisolarDirectionAt(t, AUTUMN));
+    expect(autumnSun).toBeCloseTo(105.63, 1);
+    expect(autumnMoon).toBeCloseTo(74.37, 1);
+  });
+
+  test('is exactly the sun negated, at every hour of every season', () => {
+    const sun = new THREE.Vector3();
+    let worst = 0;
+    for (const declinationDeg of [-23.44, -9.5, 0, 12, 23.44]) {
+      const declination = THREE.MathUtils.degToRad(declinationDeg);
+      for (let i = 0; i < 2000; i++) {
+        const t = i / 2000;
+        sunDirectionAt(t, declination, sun).negate();
+        worst = Math.max(worst, antisolarDirectionAt(t, declination).distanceTo(sun));
+      }
+    }
+    // Measured 1.2e-15 over a 20 000-step sweep; this coarser one is the same identity.
+    expect(worst).toBeLessThan(1e-12);
   });
 });
 
