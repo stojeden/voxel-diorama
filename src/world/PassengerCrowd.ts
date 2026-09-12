@@ -244,7 +244,18 @@ function applySunGaze(
   // One bearing for every cohort, because the only thing that differs is how far round from
   // the sun the figure stands: half a turn with the card up, none at all without it. Two
   // branches writing one rotation is how the projection cohort drifted away from its prop.
-  const delta = wrapPi(gaze.yaw + Math.PI * hold - gaze.baseFacing);
+  //
+  // The wrap is taken on `toSun` alone, which does not sweep -- the clock is locked for the
+  // ninety seconds and `baseFacing` is captured when the turn begins -- and the half turn is
+  // added outside it. Written the other way round, as `wrapPi(yaw + PI * hold - baseFacing)`,
+  // the argument itself swept half a turn as the card left, crossed +/-PI, and `wrapPi` threw
+  // it 2PI the other way: `headYaw` flipped sign, and the torso moved 86.56 degrees in a
+  // single 16 ms frame for four of the seven stop facings in the fleet -- on the frame of the
+  // diamond ring. The endpoint tests never saw it because they sample two static states and
+  // assert the face-to-sun angle, which body and head cancel out of.
+  const toSun = wrapPi(gaze.yaw - gaze.baseFacing);
+  const halfTurn = toSun > 0 ? -Math.PI : Math.PI;
+  const delta = toSun + halfTurn * hold;
   // The neck takes what it comfortably can and the feet carry the rest, so the two sum to
   // the sun's own bearing once both terms are full -- not to something near it. A figure
   // reading a card looks straight ahead at it, so its neck gives nothing until the card does.

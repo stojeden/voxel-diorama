@@ -15,6 +15,7 @@ import {
   type PassengerSunGaze,
 } from './PassengerCrowd';
 import { eclipseWorldReactionAt } from '../experience/EclipseWorldReaction';
+import { EclipseTimeline } from '../experience/EclipseTimeline';
 import { eclipseViewClock } from '../experience/EclipseView';
 import { JUNE_DECLINATION_DEG, sunDirectionAt } from '../environment/sky';
 
@@ -562,4 +563,77 @@ describe('shared figure geometry', () => {
     // Kolory zostaja per figurka -- wspoldzielenie kształtu nie moze ich zrownac.
     expect(a.materials[0]).not.toBe(b.materials[0]);
   });
+});
+
+describe('the turn is continuous across the whole schedule', () => {
+  /**
+   * Endpoint tests cannot see a snap.
+   *
+   * The pinhole cohort's bearing was written `wrapPi(yaw + PI * hold - baseFacing)`, so the
+   * argument itself swept half a turn as the card left and crossed +/-PI on the way. `wrapPi`
+   * threw it 2PI the other way, `headYaw` flipped sign with it, and the torso moved 86.56
+   * degrees in one 16 ms frame -- on the frame of the diamond ring, which is the frame this
+   * whole rework exists to make beautiful. Four of the seven stop facings in the fleet hit it.
+   *
+   * Every test that existed sampled two static states and asserted the angle between the face
+   * and the sun, which body and head cancel out of exactly. So this one runs the real timeline
+   * at 60 fps from first contact to fourth and watches the shoulders instead.
+   */
+  const FRAME_SECONDS = 1 / 60;
+  /** Radians of body yaw in one frame. A brisk human turn is ~2.6 rad/s, so 0.26 is generous. */
+  const MAX_FRAME_YAW = 0.26;
+
+  test.each(['projection', 'glasses', 'watch'] as const)(
+    'a %s figure never jumps within a frame',
+    (pose) => {
+      const timeline = new EclipseTimeline();
+      timeline.seek(0, true);
+      const worst = { yaw: 0, head: 0, progress: 0, baseFacing: 0 };
+
+      // The seven stop facings the city actually builds, so the sweep covers the real fleet.
+      for (const baseFacing of [0.4, 1.3, 2.2, 3.1, -0.5, -1.4, -2.3]) {
+        const build = buildPassenger(() => 0.5);
+        build.group.rotation.y = baseFacing;
+        let previousYaw: number | null = null;
+        let previousHead: number | null = null;
+        timeline.seek(0, true);
+
+        for (let frame = 0; frame * FRAME_SECONDS <= timeline.durationSeconds; frame++) {
+          const state = timeline.update(frame === 0 ? 0 : FRAME_SECONDS);
+          const reaction = eclipseWorldReactionAt(state.coverage, state.totality);
+          const drive: EclipsePoseDrive = {
+            attention: reaction.attention,
+            eyeProtection: reaction.eyeProtection,
+            projection: reaction.projection,
+          };
+          const gaze: PassengerSunGaze = {
+            ...STAGED_SUN,
+            baseFacing,
+            bodyTurn: eclipseBodyTurn(reaction.movementScale),
+          };
+          applyPassengerEclipsePose(build, pose, drive, gaze);
+
+          if (previousYaw !== null && previousHead !== null) {
+            const dYaw = Math.abs(build.group.rotation.y - previousYaw);
+            const dHead = Math.abs(build.head.rotation.y - previousHead);
+            if (dYaw > worst.yaw) {
+              worst.yaw = dYaw;
+              worst.head = dHead;
+              worst.progress = state.progress;
+              worst.baseFacing = baseFacing;
+            }
+          }
+          previousYaw = build.group.rotation.y;
+          previousHead = build.head.rotation.y;
+        }
+      }
+
+      expect(
+        worst.yaw,
+        `najwiekszy skok tulowia ${((worst.yaw * 180) / Math.PI).toFixed(2)} st. przy postepie ` +
+          `${worst.progress.toFixed(5)}, ustawienie ${worst.baseFacing}`
+      ).toBeLessThan(MAX_FRAME_YAW);
+      expect(worst.head, 'glowa nie kompensuje skoku tulowia').toBeLessThan(MAX_FRAME_YAW);
+    }
+  );
 });

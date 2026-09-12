@@ -249,6 +249,12 @@ const rainbowFrame: RainbowFrameInput = {
 };
 
 let rainbowReady: Promise<void> | null = null;
+/**
+ * Frames the atmosphere pass is held enabled after its chunk lands, so its program links on a
+ * frame that draws nothing. Two, because one is the frame the composer rebuilds its chain on.
+ */
+const ATMOSPHERE_WARM_FRAMES = 2;
+let rainbowWarmFrames = 0;
 
 /**
  * Fetch the rainbow's chunk, once, and hand the composer its post-process.
@@ -270,10 +276,19 @@ let rainbowReady: Promise<void> | null = null;
  * tail of a downpour to land in rather than the frame the colours are wanted.
  *
  * **The compile.** `warmRenderer` exists so the first frame of an effect is not a compile
- * stall, and a pass that arrives after it has missed that. So the pass is composited once
- * here, while `uStrength` is still 0 and the arc is invisible, to link its program at a
- * moment nothing is on screen to hitch — rather than on the frame the rainbow appears, which
- * is the frame the owner is looking at.
+ * stall, and a pass that arrives after it has missed that. So the pass is held enabled for a
+ * few frames here, while `uStrength` is still 0 and the arc is invisible, to link its program
+ * at a moment nothing is on screen to hitch — rather than on the frame the rainbow appears,
+ * which is the frame the owner is looking at.
+ *
+ * This was an out-of-band `env.composer.render(0)` and it linked nothing. `presentWorld` sets
+ * `setAtmosphereEnabled(rainbow.isEffectActive())` every frame and the dormant handle answers
+ * false, so `attachAtmosphereEffect` added the pass already disabled — and postprocessing's
+ * composer begins its loop with `if (!pass.enabled) continue`, so the program was never built
+ * and the shader still compiled on the first frame the arc was drawn. The extra composite was
+ * not free either: it ran the whole chain a second time on an already-presented world state,
+ * blending a duplicate sample into the temporal history and overwriting the metrics pass's
+ * triangle and call counts out of band.
  */
 function ensureRainbow(): Promise<void> {
   rainbowReady ??= import('./environment/RainbowAtmosphere').then(({ RainbowAtmosphere }) => {
@@ -284,7 +299,7 @@ function ensureRainbow(): Promise<void> {
     // Replay anything a checkpoint or the debug handle pinned while the chunk was in flight.
     if (dormantRainbow.debugSource !== null) live.debugSetSource(dormantRainbow.debugSource);
     env.attachAtmosphereEffect(live.effect);
-    env.composer.render(0);
+    rainbowWarmFrames = ATMOSPHERE_WARM_FRAMES;
     rainbow = live;
   });
   return rainbowReady;
@@ -1156,7 +1171,11 @@ function presentWorld(frame: FrameContext, carrier: WorldFrame): void {
   // null check per frame instead of a call.
   if (rainbowReady === null && rainbowFrame.airborneMoisture > 0) void ensureRainbow();
   rainbow.update(rainbowFrame);
-  env.setAtmosphereEnabled(rainbow.isEffectActive());
+  // `|| rainbowWarmFrames` is the compile warm-up: the pass runs with the arc at zero strength
+  // for two frames after the chunk lands, which is the only way its program gets built before
+  // the frame the rainbow is actually wanted.
+  env.setAtmosphereEnabled(rainbow.isEffectActive() || rainbowWarmFrames > 0);
+  if (rainbowWarmFrames > 0) rainbowWarmFrames -= 1;
   const gradeNight = light.eclipse > 0.001 ? Math.min(light.night, 0.25) : light.night;
   env.gradeEffect.parameters.time.value = frame.elapsedSimulation;
   env.gradeEffect.parameters.golden.value = light.golden;
@@ -1341,8 +1360,17 @@ const debugHandle: DioramaDebugHandle = {
   },
   setQuality: (mode: QualityMode) => quality.setMode(mode),
   toggleProfiler,
+  /**
+   * Returns once the rainbow chunk has landed, if this weather is one that summons it.
+   *
+   * `debugSetImmediate('rain')` sets `airborneMoisture` outright, which now starts an 11 757
+   * byte fetch that did not exist when the rainbow was in the entry chunk. A harness that set
+   * the weather, waited a fixed number of frames and captured would race it and photograph a
+   * sky with no arc -- so the promise is handed back rather than left for the caller to guess at.
+   */
   setWeather: (kind: 'clear' | 'cloudy' | 'rain' | 'snow' | 'fog') => {
     weather.debugSetImmediate(kind);
+    return rainbowReady ?? Promise.resolve();
   },
   clearWeather: () => weather.setExternal(null),
   setRainbowSource: (index: number, strength = 1) => {

@@ -36,7 +36,7 @@ export interface DioramaDebugHandle {
   getMetrics: () => DioramaMetrics;
   setQuality: (mode: QualityMode) => void;
   toggleProfiler: () => Promise<boolean>;
-  setWeather: (kind: 'clear' | 'cloudy' | 'rain' | 'snow' | 'fog') => void;
+  setWeather: (kind: 'clear' | 'cloudy' | 'rain' | 'snow' | 'fog') => Promise<void>;
   clearWeather: () => void;
   loadCheckpoint: (id: CheckpointId) => void;
   releaseCheckpoint: () => void;
