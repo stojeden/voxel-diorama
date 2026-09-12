@@ -4,6 +4,18 @@ import type { EclipseWorldReactionState } from '../experience/EclipseWorldReacti
 import type { EclipsePassengerPose } from '../world/PassengerCrowd';
 import type { QualityLevel } from '../performance/QualityManager';
 
+/**
+ * Below this a prop is not drawn at all — the strength under which an instanced mesh is
+ * switched off rather than faded.
+ *
+ * Exported because it is the floor the eye-protection window has to clear at the two diamond
+ * rings: `eyeProtection` was 0.070 at both bead peaks under the old (0.08, 0.72) window, over
+ * this gate by four hundredths, so the glasses were drawn at seven percent opacity at the two
+ * frames the one eclipse-safety rule calls mandatory. A test that names this number rather
+ * than a literal cannot go quietly stale if the gate ever moves.
+ */
+export const PROP_VISIBILITY_GATE = 0.03;
+
 function buildGlassesGeometry(): THREE.BufferGeometry {
   const left = new THREE.BoxGeometry(0.28, 0.17, 0.065).translate(-0.18, 0, 0);
   const right = new THREE.BoxGeometry(0.28, 0.17, 0.065).translate(0.18, 0, 0);
@@ -166,8 +178,8 @@ export class EclipseCrowdProps {
       this.localCard,
       reaction.projection
     );
-    this.glasses.visible = this.glasses.count > 0 && reaction.eyeProtection > 0.03;
-    this.cards.visible = this.cards.count > 0 && reaction.projection > 0.03;
+    this.glasses.visible = this.glasses.count > 0 && reaction.eyeProtection > PROP_VISIBILITY_GATE;
+    this.cards.visible = this.cards.count > 0 && reaction.projection > PROP_VISIBILITY_GATE;
     if (this.glasses.visible) this.glasses.instanceMatrix.needsUpdate = true;
     if (this.cards.visible) this.cards.instanceMatrix.needsUpdate = true;
   }
@@ -177,7 +189,7 @@ export class EclipseCrowdProps {
     localTransform: THREE.Matrix4,
     strength: number
   ): number {
-    if (strength <= 0.03) return 0;
+    if (strength <= PROP_VISIBILITY_GATE) return 0;
     /**
      * The density budget caps how many props are DRAWN, not how far down the list we look.
      *

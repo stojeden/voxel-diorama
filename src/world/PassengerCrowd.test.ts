@@ -1,14 +1,16 @@
 import * as THREE from 'three';
 import { describe, expect, test } from 'vitest';
-import { EclipseCrowdProps } from '../effects/EclipseCrowdProps';
+import { EclipseCrowdProps, PROP_VISIBILITY_GATE } from '../effects/EclipseCrowdProps';
 import {
   applyPassengerEclipsePose,
   buildPassenger,
   eclipseBodyTurn,
   eclipsePassengerPoseFor,
+  eclipseTurnOrigin,
   SHARED_PASSENGER_GEOMETRY,
   sunGazeFrom,
   type EclipsePassengerPose,
+  type EclipsePoseDrive,
   type PassengerBuild,
   type PassengerSunGaze,
 } from './PassengerCrowd';
@@ -26,7 +28,11 @@ describe('eclipse passenger pose', () => {
     for (const material of passenger.materials) material.opacity = 1;
     scene.add(passenger.group);
 
-    applyPassengerEclipsePose(passenger, 'glasses', 1);
+    applyPassengerEclipsePose(passenger, 'glasses', {
+      attention: 1,
+      eyeProtection: 1,
+      projection: 0,
+    });
     const gaze = new THREE.Vector3(0, 0, 1).applyQuaternion(passenger.head.quaternion);
     expect(gaze.y).toBeGreaterThan(0);
 
@@ -109,6 +115,9 @@ function sunDirection(): THREE.Vector3 {
 const angleBetween = (a: THREE.Vector3, b: THREE.Vector3): number =>
   THREE.MathUtils.radToDeg(a.angleTo(b));
 
+/** Deep partial: everyone attending, both props out. What the drive looks like at coverage 0.96. */
+const FULL_PARTIAL: EclipsePoseDrive = { attention: 1, eyeProtection: 1, projection: 1 };
+
 describe('the crowd looks at the sun', () => {
   /**
    * The owner's third sentence, as arithmetic: "ludziki zakladaja okulary w tym czasie i
@@ -133,7 +142,7 @@ describe('the crowd looks at the sun', () => {
     const away: number[] = [];
     for (const figure of figures) {
       const gaze: PassengerSunGaze = { ...STAGED_SUN, baseFacing: figure.baseFacing, bodyTurn };
-      applyPassengerEclipsePose(figure.build, figure.pose, reaction.attention, gaze);
+      applyPassengerEclipsePose(figure.build, figure.pose, reaction, gaze);
       const angle = angleBetween(faceDirection(figure.build), sun);
       if (figure.pose === 'projection') away.push(angle);
       else sunward.push(angle);
@@ -142,12 +151,23 @@ describe('the crowd looks at the sun', () => {
     expect(sunward.length, 'ilu patrzy w slonce').toBe(23);
     expect(away.length, 'ilu ma slonce za plecami').toBe(9);
 
-    const mean = sunward.reduce((sum, angle) => sum + angle, 0) / sunward.length;
-    expect(mean, 'sredni kat twarzy do slonca').toBeLessThan(15);
+    /**
+     * Both cohorts as measured numbers, not as a bound with no regression in it.
+     *
+     * At coverage 0.96 `bodyTurn` is 0.9839 -- the freeze is not quite complete -- so the
+     * feet are 1.6 % short of the sun's bearing and the twenty-three sun-watchers average
+     * 0.7626 degrees off it, spread 0.0000 to 1.9566, all twenty-three inside 30. The nine
+     * card-holders average 164.6662 degrees off it, none inside 30: half a turn of azimuth
+     * away, less the 24.06-degree downward pitch of a head reading a card in its hands.
+     * Against 82.9 degrees mean and 1 of 32 inside 30 on the build this replaces.
+     */
+    const mean = (angles: number[]) => angles.reduce((sum, a) => sum + a, 0) / angles.length;
+    expect(mean(sunward), 'sredni kat twarzy do slonca').toBeCloseTo(0.7626, 4);
+    expect(Math.max(...sunward), 'najgorszy z patrzacych').toBeCloseTo(1.9566, 4);
     expect(sunward.filter((angle) => angle < 30).length, 'ilu w promieniu 30 stopni')
       .toBe(sunward.length);
-    // The pinhole cohort is correct at the other end of the same line, not at 90 degrees to it.
-    for (const angle of away) expect(angle).toBeGreaterThan(150);
+    expect(mean(away), 'sredni kat kartkowiczow do slonca').toBeCloseTo(164.6662, 4);
+    expect(away.filter((angle) => angle < 30).length, 'kartkowicze w promieniu 30 stopni').toBe(0);
 
     disposeFleet(figures);
   });
@@ -164,7 +184,7 @@ describe('the crowd looks at the sun', () => {
     if (!watcher) throw new Error('fleet has no sun-watcher');
     watcher.build.group.rotation.y = gaze.baseFacing;
 
-    applyPassengerEclipsePose(watcher.build, watcher.pose, reaction.attention, gaze);
+    applyPassengerEclipsePose(watcher.build, watcher.pose, reaction, gaze);
     const pitch = Math.asin(faceDirection(watcher.build).y);
     expect(THREE.MathUtils.radToDeg(pitch), 'kat wzniesienia twarzy').toBeCloseTo(
       THREE.MathUtils.radToDeg(STAGED_SUN.elevation),
@@ -187,7 +207,7 @@ describe('the crowd looks at the sun', () => {
     const highSun = 1.0;
     const gaze: PassengerSunGaze = { yaw: 0.6, elevation: highSun, baseFacing: 0.6, bodyTurn: 1 };
     build.group.rotation.y = gaze.baseFacing;
-    applyPassengerEclipsePose(build, 'glasses', 1, gaze);
+    applyPassengerEclipsePose(build, 'glasses', FULL_PARTIAL, gaze);
 
     expect(-build.head.rotation.x, 'zadarcie samej szyi').toBeCloseTo(0.4363, 6);
     expect(-build.group.rotation.x, 'odchylenie tulowia').toBeCloseTo(0.4363, 6);
@@ -211,14 +231,48 @@ describe('the crowd looks at the sun', () => {
     expect(eclipseBodyTurn(eclipseWorldReactionAt(1, 1).movementScale), 'w totalnosci').toBe(1);
 
     const build = buildPassenger(() => 0.3);
-    const walking: PassengerSunGaze = { yaw: 2.4, elevation: 0.15, baseFacing: -0.7, bodyTurn: 0 };
-    build.group.rotation.y = walking.baseFacing;
-    applyPassengerEclipsePose(build, 'glasses', 1, walking);
-    expect(build.group.rotation.y, 'stopy stoja gdzie staly').toBeCloseTo(-0.7, 9);
+    // A figure mid-path: the walk loop wrote TRAVEL from its own step this frame, and PLATFORM
+    // is the stop facing it will not hold again until it arrives.
+    const TRAVEL = 1.9;
+    const PLATFORM = -0.7;
+    const SUN_YAW = 3.9;
+    const walking: PassengerSunGaze = {
+      yaw: SUN_YAW,
+      elevation: 0.15,
+      baseFacing: PLATFORM,
+      bodyTurn: 0,
+    };
+    build.group.rotation.y = TRAVEL;
+    applyPassengerEclipsePose(build, 'glasses', FULL_PARTIAL, walking);
+    expect(build.group.rotation.y, 'stopy ida tam, gdzie szly').toBeCloseTo(TRAVEL, 9);
 
-    applyPassengerEclipsePose(build, 'glasses', 1, { ...walking, bodyTurn: 1 });
+    // The frame the turn starts, the origin is the heading the figure actually had.
+    const origin = eclipseTurnOrigin(null, 0.5, build.group.rotation.y);
+    expect(origin, 'obrot zaczyna sie tam, gdzie figurka stala').toBe(TRAVEL);
+    expect(eclipseTurnOrigin(origin, 0.9, 99), 'raz zapamietany, trzymany').toBe(TRAVEL);
+    expect(eclipseTurnOrigin(origin, 0, TRAVEL), 'po odmrozeniu stopy wracaja do petli chodu')
+      .toBeNull();
+
+    applyPassengerEclipsePose(build, 'glasses', FULL_PARTIAL, {
+      ...walking,
+      baseFacing: origin ?? TRAVEL,
+      bodyTurn: 0.5,
+    });
+    // 2.0 rad of bearing to make up, of which the neck comfortably takes 0.785 and the feet
+    // carry 1.215 -- half of it at bodyTurn 0.5, measured from TRAVEL and not from PLATFORM.
+    expect(build.group.rotation.y, 'polowa obrotu stop, liczona od kursu marszu')
+      .toBeCloseTo(TRAVEL + (2.0 - 0.785) * 0.5, 9);
+
+    applyPassengerEclipsePose(build, 'glasses', FULL_PARTIAL, {
+      ...walking,
+      baseFacing: origin ?? TRAVEL,
+      bodyTurn: 1,
+    });
     const face = faceDirection(build);
-    expect(Math.atan2(face.x, face.z), 'twarz dokladnie na azymucie slonca').toBeCloseTo(2.4, 6);
+    expect(Math.atan2(face.x, face.z), 'twarz dokladnie na azymucie slonca').toBeCloseTo(
+      SUN_YAW - 2 * Math.PI,
+      6
+    );
 
     for (const material of build.materials) material.dispose();
   });
@@ -249,8 +303,8 @@ describe('pinhole projection turns its back on the sun', () => {
     scene.add(watcher.group);
 
     const gaze = { ...STAGED_SUN, bodyTurn: 1 };
-    applyPassengerEclipsePose(holder, 'projection', 1, { ...gaze, baseFacing: 0.35 });
-    applyPassengerEclipsePose(watcher, 'glasses', 1, { ...gaze, baseFacing: 0.35 });
+    applyPassengerEclipsePose(holder, 'projection', FULL_PARTIAL, { ...gaze, baseFacing: 0.35 });
+    applyPassengerEclipsePose(watcher, 'glasses', FULL_PARTIAL, { ...gaze, baseFacing: 0.35 });
 
     const sunBearing = new THREE.Vector3(Math.sin(STAGED_SUN.yaw), 0, Math.cos(STAGED_SUN.yaw));
     const flatFace = (build: PassengerBuild) => {
@@ -285,6 +339,67 @@ describe('pinhole projection turns its back on the sun', () => {
     for (const build of [holder, watcher]) {
       for (const material of build.materials) material.dispose();
     }
+  });
+
+  /**
+   * The nine figures who spent the whole of totality with their backs turned, holding nothing.
+   *
+   * The pinhole posture -- body yaw sunYaw + pi, head pitched +0.42 rad DOWN at the card --
+   * was driven by `attention`, which is 1 from coverage 0.87 to the end of the eclipse. The
+   * card that explains it is drawn with `projection`, which carries `partialLight` and is
+   * exactly 0 through totality. So for the 14.6 s of totality nine of thirty-two figures --
+   * the projection cohort, 4 of 12 at the stations and 5 of 20 at the bus stops -- stood
+   * facing away from the one thing in the frame, reading a card that had been faded out.
+   *
+   * A real pinhole user has nothing to read at that point: the image is made by the
+   * photosphere, and the photosphere is what has just gone. It is also the one moment in the
+   * ninety seconds when looking straight at the sun is safe (AAS eclipse-basics/eclipse-
+   * phenomena: the corona is about as bright as a full moon). So they turn round and look up
+   * with everybody else, and they do it because the pose now reads the card's own strength.
+   */
+  test('comes round to the sun for totality, when the card has nothing left to show', () => {
+    const figures = buildFleet();
+    const partial = eclipseWorldReactionAt(0.96, 0);
+    const totality = eclipseWorldReactionAt(1, 1);
+    expect(totality.projection, 'kartka w totalnosci').toBe(0);
+    expect(totality.attention, 'uwaga w totalnosci').toBe(1);
+
+    const sun = sunDirection();
+    const angles: number[] = [];
+    for (const figure of figures) {
+      if (figure.pose !== 'projection') continue;
+      const gaze: PassengerSunGaze = {
+        ...STAGED_SUN,
+        baseFacing: figure.baseFacing,
+        bodyTurn: eclipseBodyTurn(partial.movementScale),
+      };
+      // Posed through the deep partial first, so this measures a figure that really did have
+      // its back to the sun a moment ago rather than one that never turned away.
+      applyPassengerEclipsePose(figure.build, figure.pose, partial, gaze);
+      expect(angleBetween(faceDirection(figure.build), sun)).toBeGreaterThan(150);
+
+      // The arms as the update loop hands them over: both crowds write their idle sway every
+      // frame before the pose runs, so a pose that no longer raises an arm leaves it resting.
+      figure.build.leftArm.rotation.x = 0;
+      figure.build.rightArm.rotation.x = 0;
+      applyPassengerEclipsePose(figure.build, figure.pose, totality, {
+        ...gaze,
+        bodyTurn: eclipseBodyTurn(totality.movementScale),
+      });
+      angles.push(angleBetween(faceDirection(figure.build), sun));
+      expect(figure.build.head.rotation.x, 'glowa juz nie wisi nad kartka').toBeLessThanOrEqual(0);
+      expect(figure.build.leftArm.rotation.x, 'rece opadaja razem z kartka').toBeCloseTo(0, 6);
+    }
+
+    // Measured: all nine inside 30 degrees, mean 0.0000 -- `bodyTurn` is exactly 1 in
+    // totality, so the feet finish the turn they were 1.6 % short of a moment earlier.
+    expect(angles.length, 'ilu ma kartki').toBe(9);
+    expect(angles.filter((angle) => angle < 30).length, 'kartkowicze w promieniu 30 stopni')
+      .toBe(9);
+    const mean = angles.reduce((sum, angle) => sum + angle, 0) / angles.length;
+    expect(mean, 'sredni kat kartkowiczow do slonca w totalnosci').toBeCloseTo(0, 6);
+
+    disposeFleet(figures);
   });
 });
 
