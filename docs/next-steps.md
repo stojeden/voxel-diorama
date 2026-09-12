@@ -180,6 +180,45 @@ so this is worth 45 minutes before it does.** The correct pattern is already in 
 `browserSmoke.mjs` reads `POSTMAN_UNIFORM_COLOR` out of the source at runtime, with a comment
 explaining that a literal once failed a deliberate colour change instead of a regression.
 
+## 11. The reflection probe is built once, from whatever sky the warm-up happened to have
+
+**This took CI down on 2026-09-12 and the revert that fixed it re-armed a second bug. Both are
+live.**
+
+`DayNightCycle.update` builds the PMREM environment probe on its **first call ever** --
+`if (!this.envTarget && !this.envTransitionActive)` -- and never again. The first call is
+`RendererWarmup`'s, so every reflective material in the diorama reflects the sky of one
+arbitrary instant during preload.
+
+That instant used to be dawn by accident. `declination` had been inserted into `update` ahead
+of a `nightFloor = 0`, so the warm-up's four-argument calls silently fed the night floor into
+the season: an equinox sun, 2.6 degrees up at the opening hour. Fixing that (`27eb9f6`) moved
+the probe to a June morning at 20.9 degrees -- brighter, correct, and **black on CI**. The
+scene drew 621k triangles with the sun at full intensity and every material rendered black;
+clearing `scene.environment` in the page took the captured frame from 4.9 kB to 89 kB, which
+is how the probe was identified.
+
+**The likely mechanism, and it is not about the season.** A brighter sky is a larger radiance,
+and `pmrem.fromScene` on a software rasteriser appears not to survive it -- the same code with
+a dim dawn sky produces a valid probe. If that is right, the declination was never the bug;
+it only decided whether the sky at that instant was dim enough to get away with. **Unverified:
+nobody has read back the probe's texels.** Confirm before fixing.
+
+**Two things are wrong and both need doing:**
+
+1. The probe should be built from a canonical sky the code chooses, not from whichever frame
+   happens to call `update` first. "Neutral reflection probe" is what the comment already
+   claims it is.
+2. The warm-up still passes `nightFloor` where `declination` belongs, so it still compiles
+   and seeds with an equinox sun. The required-parameter fix that closed that hole was
+   reverted with the rest of `27eb9f6`; restore it together with item 1, not before.
+
+**A local gate for this class of bug now exists.** None of the repository's harnesses render on
+a software rasteriser -- they all run on the developer's GPU, where this was invisible -- so
+the first signal was a red CI run twenty minutes after a push. Launching Chrome with
+`--use-gl=angle --use-angle=swiftshader --disable-gpu --enable-unsafe-swiftshader` reproduces
+it in about three minutes. Worth making a script.
+
 ## 9. Smaller, named here so they are not lost
 
 - **The 112 m / 102 m near-far gate and the 32 + 18 m ambient-occlusion cutoff are bare

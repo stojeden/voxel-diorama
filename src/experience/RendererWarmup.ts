@@ -28,12 +28,9 @@ export async function warmRenderer(options: RendererWarmupOptions): Promise<void
     object.visible = true;
   });
 
-  const themeDeclination = () =>
-    THREE.MathUtils.degToRad(options.getTheme().sunDeclinationDeg);
-
   const compileAt = async (progress: number, loading: number, label: string) => {
     ui.setLoadingProgress(loading, label);
-    dayNight.update(progress, 0, 0, themeDeclination(), options.getTheme().nightFloor);
+    dayNight.update(progress, 0, 0, options.getTheme().nightFloor);
     await env.renderer.compileAsync(env.scene, env.camera);
     env.composer.render(0);
   };
@@ -55,7 +52,7 @@ export async function warmRenderer(options: RendererWarmupOptions): Promise<void
       stars: 1,
       totality: 1,
     });
-    dayNight.update(eclipseViewTime, 0, 0, themeDeclination(), options.getTheme().nightFloor);
+    dayNight.update(eclipseViewTime, 0, 0, options.getTheme().nightFloor);
     await env.renderer.compileAsync(env.scene, env.camera);
     env.composer.render(0);
     env.renderer.getContext().finish();
@@ -79,7 +76,6 @@ export async function warmRenderer(options: RendererWarmupOptions): Promise<void
       options.getDayProgress(),
       0,
       weather.getCloudCover(),
-      themeDeclination(),
       options.getTheme().nightFloor
     );
     env.composer.render(0);
