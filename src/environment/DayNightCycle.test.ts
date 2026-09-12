@@ -3,15 +3,20 @@ import * as THREE from 'three';
 import { Sky } from 'three/addons/objects/Sky.js';
 import {
   cloudDaylightAt,
+  eclipseDiffuseFraction,
   environmentTransitionAt,
   preethamHandoff,
   shadowNormalBias,
   shadowTexelSize,
   snapShadowFocus,
+  starAlphaAt,
+  withEclipseSky,
   withRadianceCeiling,
   withTwilightDome,
 } from './DayNightCycle';
 import { beamTransmittanceColor, twilightSkyColorCached } from './SunlightSpectrum';
+import { adaptingLuminance } from './ViewerAdaptation';
+import { EclipseTimeline } from '../experience/EclipseTimeline';
 
 describe('PMREM environment transition', () => {
   test('crossfades maps without changing the total environment intensity', () => {
@@ -413,5 +418,229 @@ describe('the twilight dome patch', () => {
     expect(() => withTwilightDome('gl_FragColor = vec4( texColor, 1.0 );')).toThrow(
       /twilight dome/
     );
+  });
+});
+
+/**
+ * An eclipse has to remove the light it is removing.
+ *
+ * The fills, the dome, the reflections and the fog each carried their own eclipse ramp, every
+ * one of them shallower than the beam's, and a black clip in `CinematicGrade` had been hiding
+ * the difference by destroying the dark half of every totality frame. With the clip gone the
+ * `totality` checkpoint's whole-frame mean rose 53.12 to 82.36 at an exposure that did not
+ * move. {@link eclipseDiffuseFraction} replaces those ramps with one quantity and grounds it in
+ * published illuminance rather than in taste.
+ *
+ * Every assertion below is an **external** fact -- a published horizontal illuminance, a full
+ * moon, the geometry of an umbra, the arithmetic of a half-float target -- or a relation
+ * between two modules that neither of them states on its own. The illuminance figures are read
+ * back through `ViewerAdaptation`'s own table and the standard 0.18 mid-grey, so no constant in
+ * `DayNightCycle` is allowed to supply its own expected value.
+ *
+ * **Mutation results.** Each mutation was applied alone and the file re-run; the count is how
+ * many of these twelve tests went red. The harness asserts that each substitution actually
+ * changed the file before the run counts for anything -- a harness that cannot mutate looks
+ * exactly like a test that cannot fail, and this repository has been burned by that once.
+ *
+ * | mutation                                                          | tests failed |
+ * | ------------------------------------------------------------------ | ------------ |
+ * | `max(irradiance, floor)` -> `irradiance + (floor - 0.025) * totality` | 2          |
+ * | `max(irradiance, floor)` -> `irradiance` (no floor at all)          | 1            |
+ * | `max(irradiance, floor)` -> `floor` (no beam term)                  | 3            |
+ * | `UMBRAL_SKYGLOW` 0.13 -> 0.0014 (the physical figure)               | 1            |
+ * | `UMBRAL_SKYGLOW` 0.13 -> 0.30                                       | 3            |
+ * | dome `texColor * ( 1.0 - eclipseDarkness )` -> `texColor`           | 2            |
+ * | dome sum -> `mix( texColor, eclipseSky, eclipseDarkness * 0.88 )`   | 2            |
+ * | ring `1.0 - abs( direction.y )` -> `1.0 - clamp( ..., 0.0, 1.0 )`   | 1            |
+ * | `ECLIPSE_RING` raised over the half-float ceiling                   | 1            |
+ * | umbral sky no longer gated on `eclipseTotality`                     | 1            |
+ * | the ceiling patch removed from the constructor                      | 0 -- throws  |
+ *
+ * The last row is the one honest gap and it is left in the table rather than tidied away. No
+ * test here builds a `DayNightCycle`, so nothing in this file can observe the order the
+ * constructor applies the three sky patches in. {@link withEclipseSky} therefore refuses to run
+ * on a shader that is not already clamped, so that mutation stops the page at construction
+ * instead of shipping a half-float overflow to somebody else's rasteriser; the guard itself is
+ * covered by `refuses to be applied before the ceiling`.
+ *
+ * The first row is the defect this suite caught in its own author's first draft. Written as a
+ * sum, the diffuse light *rose* 0.0291 to 0.130 across second contact -- the world brightening
+ * as the moon finishes covering the sun, which is the same non-monotonicity, in the same
+ * direction, that this change was written to remove from the ambient fill.
+ */
+describe('an eclipse removes the light it removes', () => {
+  const timeline = new EclipseTimeline();
+  /** Standard mid-grey. `ViewerAdaptation` reflects the bare city off it, Lambertian. */
+  const BARE_ALBEDO = 0.18;
+  /** Undo `adaptingLuminance` to recover the published horizontal illuminance, in lux. */
+  const illuminanceLux = (elevationDeg: number) =>
+    (adaptingLuminance(elevationDeg, 0, 0) * Math.PI) / BARE_ALBEDO;
+  /** The band the staged eclipse's sun stands in, in every season. See `EclipseView.test.ts`. */
+  const ECLIPSE_SUN_ELEVATION = [3, 10] as const;
+  const totalityFraction = () => eclipseDiffuseFraction(timeline.seek(0.5).irradiance);
+
+  test('attenuates the diffuse sky exactly like the beam through every partial phase', () => {
+    // The moon's penumbra is thousands of kilometres across, so every parcel of air the camera
+    // can see scattering is lit by the *same* partially covered sun. Beam and skylight are then
+    // one quantity under one attenuation, and the beam's is what `EclipseTimeline` computes
+    // from the overlap area. Exact equality, because "the same attenuation" is the claim.
+    let checked = 0;
+    for (let progress = 0; progress <= 0.36; progress += 0.005) {
+      const state = timeline.seek(progress);
+      expect(state.totality).toBe(0);
+      if (state.irradiance <= totalityFraction()) continue;
+      expect(eclipseDiffuseFraction(state.irradiance)).toBe(state.irradiance);
+      checked++;
+    }
+    // ...and that is most of the run-up to second contact, not a handful of samples.
+    expect(checked).toBeGreaterThan(50);
+  });
+
+  test('never lets the world brighten as the moon covers more of the sun', () => {
+    // The one thing an eclipse may not do. A sum of a falling beam and a rising totality term
+    // does exactly this at second contact, because `irradiance` has already bottomed out on
+    // `EclipseTimeline`'s own floor and has nothing left to pay the rise with.
+    let previous = Number.POSITIVE_INFINITY;
+    for (let progress = 0; progress <= 0.5; progress += 0.001) {
+      const value = eclipseDiffuseFraction(timeline.seek(progress).irradiance);
+      expect(value).toBeLessThanOrEqual(previous);
+      previous = value;
+    }
+    // ...and the whole way down is a real fall, not a flat line that satisfies the above for
+    // the wrong reason.
+    expect(previous).toBeLessThan(0.2 * eclipseDiffuseFraction(timeline.seek(0).irradiance));
+  });
+
+  test('leaves an uneclipsed hour bit for bit unchanged', () => {
+    // Not "close to 1" -- exactly 1, and exactly 1 through the multiplication, because this
+    // multiplies the ambient, the hemisphere and the environment intensity on every frame of
+    // every hour of the day. `Object.is`, so a -0 could not pass either.
+    expect(timeline.seek(1).irradiance).toBe(1);
+    expect(Object.is(eclipseDiffuseFraction(1), 1)).toBe(true);
+    for (const intensity of [0.16, 0.22, 0.42, 0.7104359849976685, 2.0363, 1e-8, 0]) {
+      expect(intensity * eclipseDiffuseFraction(1)).toBe(intensity);
+    }
+  });
+
+  test('puts totality between a real totality and the hour it interrupts', () => {
+    // Published horizontal illuminance at totality is 1 to 100 lx. The staged eclipse's own sun
+    // stands 3 to 10 degrees up in every season, which this rig's own table puts in the klx.
+    for (const elevation of ECLIPSE_SUN_ELEVATION) {
+      const hour = illuminanceLux(elevation);
+      expect(hour).toBeGreaterThan(1_000);
+      const totality = hour * totalityFraction();
+      // Brighter than any real totality -- deliberately, and written down here rather than
+      // discovered later by somebody holding the frame against a photograph.
+      expect(totality).toBeGreaterThan(100);
+      // ...but still the better part of an order of magnitude below the hour it interrupts.
+      expect(hour / totality).toBeGreaterThan(7);
+    }
+  });
+
+  test('floors on the skyglow around the umbra, which is not the corona', () => {
+    // What lights the ground at totality is sunlit air outside a 100-270 km shadow, not the
+    // corona -- that is a full moon's worth of light, 0.25 lx, against the hour's own
+    // thousands. If this floor is ever tuned down to something the corona could account for,
+    // the physical story in the docblock has stopped being true and this says so.
+    const FULL_MOON_LUX = 0.25;
+    const floor = illuminanceLux(ECLIPSE_SUN_ELEVATION[0]) * totalityFraction();
+    expect(floor / FULL_MOON_LUX).toBeGreaterThan(100);
+  });
+
+  test('keeps the stars lit at totality', () => {
+    // The star gate reads the same eclipse state, and a totality starfield is a feature with
+    // tests of its own. A darker world may not be bought by turning it off.
+    const totality = timeline.seek(0.5);
+    expect(totality.stars).toBe(1);
+    const alpha = starAlphaAt(
+      totality.irradiance,
+      totality.stars,
+      (1 - totality.irradiance) * 0.52 + totality.totality * 0.12,
+      0
+    );
+    expect(alpha).toBeGreaterThan(0.8);
+  });
+
+  describe('the dome patch', () => {
+    const stock = new Sky().material.fragmentShader;
+    // The constructor's order, reproduced: the ceiling clamps, then the eclipse patch runs.
+    const patched = withEclipseSky(withRadianceCeiling(stock));
+    const vec3 = (name: string) =>
+      /vec3\(\s*([\d.]+),\s*([\d.]+),\s*([\d.]+)\s*\)/
+        .exec(patched.slice(patched.indexOf(`vec3 ${name} =`)))!
+        .slice(1, 4)
+        .map(Number);
+
+    test('attenuates the dome instead of crossfading away from it', () => {
+      // A crossfade cannot darken a sky: whatever the blend is, `1 - blend` of a
+      // full-brightness daytime dome survives it. Measured on the built bundle at the
+      // `totality` checkpoint, that remainder was 14.2 per cent of the dome and four fifths of
+      // the frame's light -- taking it alone to zero moved the whole frame from 0.4393 of the
+      // uneclipsed hour to 0.0998.
+      expect(patched).toContain('texColor * ( 1.0 - eclipseDarkness )');
+      expect(patched).not.toContain('mix( texColor, eclipseSky');
+      // ...and it is exactly `texColor` with no eclipse, which is what leaves a day identical.
+      const dome = (tex: number, sky: number, darkness: number) =>
+        tex * (1 - darkness) + sky * darkness;
+      for (const tex of [0, 0.004, 1, 142, 4096]) expect(dome(tex, 0.55, 0)).toBe(tex);
+    });
+
+    test('stays under the radiance ceiling although it now adds light', () => {
+      // The ceiling is applied upstream, and the twilight dome's rule is that nothing
+      // downstream of it may add radiance: over 65504 a half-float target stores NaN on one
+      // rasteriser and +Inf on another, and PMREM turned four such texels into 10 109. This
+      // patch sums, so it needs its own argument -- the result is a convex combination of
+      // `texColor`, already clamped, and a constant, so it cannot exceed the larger of the two.
+      // That holds only while the constant stays far below the ceiling, which is what is
+      // asserted; it is not a property the expression keeps on its own.
+      const ceiling = Number(/min\( texColor, vec3\( ([\d.]+) \) \)/.exec(patched)?.[1]);
+      expect(ceiling).toBeGreaterThan(1000);
+      const zenith = vec3('eclipseZenith');
+      const glow = vec3('eclipseGlow');
+      const ring = vec3('eclipseRing');
+      const brightest = Math.max(...zenith.map((z, i) => z + glow[i] + ring[i]));
+      expect(brightest).toBeLessThan(ceiling);
+      expect(patched.indexOf('min( texColor')).toBeLessThan(
+        patched.indexOf('texColor * ( 1.0 - eclipseDarkness )')
+      );
+    });
+
+    test('holds the 360-degree sunset to the horizon, above it and below it', () => {
+      // The diorama is a floating plate, so a good half of the frame is sky *below* the
+      // horizon. `1 - clamp( direction.y, 0.0, 1.0 )` is 1 for every one of those directions,
+      // which stood the ring at full strength across the whole lower dome and turned the frame
+      // into a pink wash. A 360-degree sunset is a band at the horizon: it falls off both ways.
+      expect(patched).toContain('1.0 - abs( direction.y )');
+      const falloff = Number(/abs\( direction\.y \), ([\d.]+) \)/.exec(patched)?.[1]);
+      expect(falloff).toBeGreaterThan(1);
+      const ring = (y: number) => Math.pow(1 - Math.abs(y), falloff);
+      expect(ring(0)).toBe(1);
+      // 30 degrees up and 30 degrees down are both off the band, and by the same amount.
+      expect(ring(0.5)).toBeCloseTo(ring(-0.5), 12);
+      expect(ring(0.5)).toBeLessThan(0.01);
+    });
+
+    test('adds the umbral sky only at totality, so partial phases keep their character', () => {
+      // Before second contact the only eclipse colour on the dome is the authored zenith tint,
+      // and a partial eclipse has to read as a dimmed day rather than a blue one.
+      expect(patched).toContain(
+        '( eclipseGlow + eclipseRing * eclipseHorizon ) * eclipseTotality'
+      );
+    });
+
+    test('refuses to be applied before the ceiling rather than quietly working', () => {
+      // This patch sums, so it is downstream of the clamp or it is item 11 again. The
+      // constructor's order cannot be asserted from here without building a renderer, so the
+      // patch enforces it itself and a rig assembled the wrong way round fails to start.
+      expect(() => withEclipseSky(stock)).toThrow(/eclipse atmosphere patch/);
+    });
+
+    test('fails loudly if the Sky shader stops writing where the patch expects', () => {
+      expect(() => withEclipseSky('void main() {}')).toThrow(/eclipse atmosphere patch/);
+      // A shader carrying the clamp but no longer the write is the other half of the guard.
+      expect(() => withEclipseSky('texColor = min( texColor, vec3( 60000.0 ) );')).toThrow(
+        /eclipse atmosphere patch/
+      );
+    });
   });
 });
