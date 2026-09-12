@@ -54,6 +54,21 @@ export class ExperienceDirector {
     };
   }
 
+  /**
+   * Authored solar phase to clock time. Identity until someone supplies a season.
+   *
+   * A tour chapter's `dayProgress` is a claim about the light -- "golden hour", "night" --
+   * and the clock hour that satisfies it moves with the season: golden hour is 04:40 in June
+   * and 07:30 in October. The director stays ignorant of latitude and declination and simply
+   * asks whoever owns the sun.
+   */
+  private phaseToClock: (phase: number) => number = (phase) => phase;
+
+  /** Supply the mapping from authored solar phase to clock time. */
+  setPhaseToClock(map: (phase: number) => number): void {
+    this.phaseToClock = map;
+  }
+
   update(frame: FrameContext, realTimeCycle: number | null): ExperienceFrameState {
     const tourWasActive = this.tour.isActive();
     const tourFrame = this.tour.update(frame.realDelta);
@@ -74,7 +89,7 @@ export class ExperienceDirector {
       }
       const override = tourFrame?.chapter.dayProgress;
       if (override !== undefined) {
-        const target = override * this.daySeconds;
+        const target = this.phaseToClock(override) * this.daySeconds;
         const blend = 1 - Math.exp(-0.6 * Math.max(frame.realDelta, 0.0001));
         this.renderTime += (target - this.renderTime) * blend;
       } else {

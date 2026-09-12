@@ -50,6 +50,7 @@ import {
   type CheckpointId,
 } from './experience/Checkpoints';
 import {
+  clockFromSolarPhase,
   sceneBloomStrength,
   sceneExposure,
   sunColorAt,
@@ -376,6 +377,20 @@ const THEME_BLEND_RATE = 0.45;
  */
 const themeMix = (from: number, to: number, blend: number) => from + (to - from) * blend;
 
+/**
+ * The season this frame is lit by, in radians, mid-morph included.
+ *
+ * Declination blends like every other theme scalar, so switching to Golden Autumn walks the
+ * sun down the sky and the sunset back across the afternoon over the same 2.2 seconds the
+ * palette takes, instead of teleporting the world into October between two frames.
+ */
+const sunDeclination = (): number =>
+  realTime?.isActive()
+    ? realTime.getDeclination()
+    : THREE.MathUtils.degToRad(
+        themeMix(previousTheme.sunDeclinationDeg, currentTheme.sunDeclinationDeg, themeBlend)
+      );
+
 function applyThemeBlend(): void {
   world.setThemeBlend(
     previousTheme.palette,
@@ -441,7 +456,7 @@ function applyTourChapter(frame: TourFrame): void {
     eclipseCheckpointLocked = false;
     experience.setClockLocked(false);
   } else {
-    experience.setTime(chapter.dayProgress);
+    experience.setTime(clockFromSolarPhase(chapter.dayProgress, sunDeclination()));
     experience.setClockLocked(true);
     eclipseState = eclipseTimeline.seek(chapter.eclipseProgress, false);
     eclipseCheckpointLocked = true;
@@ -558,7 +573,7 @@ function focusEclipseView(): void {
     endTourOverrides();
   }
 
-  sunDirectionAt(ECLIPSE_VIEW_TIME, eclipseViewSun);
+  sunDirectionAt(ECLIPSE_VIEW_TIME, sunDeclination(), eclipseViewSun);
   eclipseViewCamera.set(-eclipseViewSun.x, 0, -eclipseViewSun.z).normalize().multiplyScalar(148);
   eclipseViewCamera.y = 46;
   cameraDirector.focusEclipse(eclipseViewCamera, eclipseViewTarget);
@@ -625,7 +640,7 @@ function frameVehicleStop(subject: 'train' | 'bus'): void {
  */
 function frameRainbowView(): void {
   rainbow.getSourceCenter(ambientShowcaseTarget);
-  sunDirectionAt(experience.getState().t01, ambientShowcaseOffset);
+  sunDirectionAt(experience.getState().t01, sunDeclination(), ambientShowcaseOffset);
   ambientShowcaseOffset.y = 0;
   if (ambientShowcaseOffset.lengthSq() < 1e-6) ambientShowcaseOffset.set(0, 0, 1);
   ambientShowcaseOffset.normalize();
@@ -684,7 +699,7 @@ function applyBootCheckpoint(checkpoint: CheckpointDefinition): void {
   cameraDirector.stopTour();
   ui.setTourActive(false);
   activeCheckpoint = checkpoint;
-  experience.lockCheckpoint(checkpoint.timeOfDay);
+  experience.lockCheckpoint(clockFromSolarPhase(checkpoint.timeOfDay, sunDeclination()));
   weather.debugSetImmediate(checkpoint.weather);
   weather.debugSetAirborneMoisture(checkpoint.rainbowMoisture ?? 0);
   if (checkpoint.rainbowSource !== undefined) {
@@ -738,6 +753,16 @@ const postFocusTarget = new THREE.Vector3();
 const boardingStations = new Set<string>();
 /** The seam itself: one carrier, reused, written by `stepWorld` and read by `presentWorld`. */
 const worldFrame = createWorldFrame(experience.getState(), train.getStationState());
+/**
+ * Authored moments are written against the sun, not against a clock.
+ *
+ * "GOLDEN HOUR" and "CYBERPUNK" are claims about the light, and the hour that satisfies them
+ * moves with the season -- golden hour is 04:40 in June and 07:30 in October. Resolving them
+ * through the live declination keeps every checkpoint and tour chapter meaning what its name
+ * says; reading them as clock times would have put golden hour in the mid-morning glare and
+ * the neon chapter in dusk.
+ */
+experience.setPhaseToClock((phase) => clockFromSolarPhase(phase, sunDeclination()));
 
 /**
  * One frame, in three phases: the camera the viewer drives, the world, then the picture.
@@ -794,6 +819,8 @@ function animate(timestamp?: number) {
  */
 function stepWorld(frame: FrameContext, carrier: WorldFrame): void {
   const { presentationDelta, simulationDelta: delta } = carrier;
+  // Read once per frame: every light, colour and shadow below must agree on the same sun.
+  const declination = sunDeclination();
 
   // ── Clock: one owner for simulation, real time and tour overrides ──
   let experienceState = experience.update(
@@ -888,10 +915,11 @@ function stepWorld(frame: FrameContext, carrier: WorldFrame): void {
     t01,
     presentationDelta,
     skyCloud,
+    declination,
     themeMix(previousTheme.nightFloor, currentTheme.nightFloor, themeBlend)
   );
-  sunDirectionAt(t01, eclipseReflectionSun);
-  sunColorAt(t01, rainbowSunColor);
+  sunDirectionAt(t01, declination, eclipseReflectionSun);
+  sunColorAt(t01, declination, rainbowSunColor);
   env.renderer.toneMappingExposure = sceneExposure(
     light.night,
     light.golden,
@@ -996,6 +1024,7 @@ function stepWorld(frame: FrameContext, carrier: WorldFrame): void {
   // `world` is the generator; `carrier` is the seam. Two different things, one unlucky word.
   carrier.t01 = t01;
   carrier.skyCloud = skyCloud;
+  carrier.sunDeclination = declination;
   carrier.light = light;
   carrier.experienceState = experienceState;
   carrier.stationState = stationState;
@@ -1023,7 +1052,7 @@ function presentWorld(frame: FrameContext, carrier: WorldFrame): void {
   env.camera.updateWorldMatrix(true, false);
 
   // ── Post FX ──
-  rainbowFrame.sunElevation = sunElevationAt(t01);
+  rainbowFrame.sunElevation = sunElevationAt(t01, carrier.sunDeclination);
   rainbowFrame.directSun = light.directSun;
   rainbowFrame.cloudCover = skyCloud;
   rainbowFrame.rainIntensity = weather.getRainIntensity();

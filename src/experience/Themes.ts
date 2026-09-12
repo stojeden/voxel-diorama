@@ -1,3 +1,4 @@
+import { AUTUMN_DECLINATION_DEG, JUNE_DECLINATION_DEG } from '../environment/sky';
 import { COLORS } from '../world/WorldLayout';
 import type { TrainLivery } from '../world/Train';
 
@@ -29,6 +30,14 @@ export interface DioramaTheme {
   saturation: number;
   /** Extra sky haze. */
   turbidityAdd: number;
+  /**
+   * The season, as a solar declination in degrees.
+   *
+   * One number, because in the sky it is one number: latitude and declination fix the noon
+   * altitude, the length of the day and the depth of the night together. A theme cannot set
+   * a late sunset and a high sun independently any more than October can.
+   */
+  sunDeclinationDeg: number;
 }
 
 const BASE: Omit<DioramaTheme, 'id' | 'label' | 'palette'> = {
@@ -38,6 +47,8 @@ const BASE: Omit<DioramaTheme, 'id' | 'label' | 'palette'> = {
   sepia: 0,
   saturation: 1,
   turbidityAdd: 0,
+  // Midsummer unless a theme says otherwise: sun high, sunset late, night barely four hours.
+  sunDeclinationDeg: JUNE_DECLINATION_DEG,
 };
 
 export const THEMES: DioramaTheme[] = [
@@ -105,6 +116,9 @@ export const THEMES: DioramaTheme[] = [
     sepia: 0.1,
     saturation: 1.06,
     turbidityAdd: 1.6,
+    // Mid-October: noon sun at 28 degrees, day ten and a half hours, and the low sun keeps
+    // the light in the warm band from morning to evening -- which is what golden autumn is.
+    sunDeclinationDeg: AUTUMN_DECLINATION_DEG,
   },
   {
     ...BASE,

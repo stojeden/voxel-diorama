@@ -686,21 +686,28 @@ export class DayNightCycle {
     this.sunLight.castShadow = profile.shadows && this.smoothedSunStrength > 0.002;
   }
 
-  update(t: number, dtReal: number, cloudCover: number, nightFloor = 0): DayLightState {
+  update(
+    t: number,
+    dtReal: number,
+    cloudCover: number,
+    /** Solar declination: the season, in radians. Sets noon altitude and day length together. */
+    declination: number,
+    nightFloor = 0
+  ): DayLightState {
     this.elapsed += dtReal;
     const eclipseState = this.eclipseState;
     const eclipse = eclipseState.coverage;
     const eclipseDarkness = 1 - eclipseState.irradiance;
-    const elevation = sunElevationAt(t);
+    const elevation = sunElevationAt(t, declination);
     // Themes like Neon Noir keep the city in eternal dusk via nightFloor;
     // a solar eclipse pushes the world toward night for half a minute.
     const targetNight = Math.max(
-      nightFactorAt(t),
+      nightFactorAt(t, declination),
       nightFloor,
       eclipseDarkness * 0.52 + eclipseState.totality * 0.12
     );
-    const targetGolden = goldenFactorAt(t);
-    const targetSunStrength = directSunFactorAt(t);
+    const targetGolden = goldenFactorAt(t, declination);
+    const targetSunStrength = directSunFactorAt(t, declination);
     const lightingBlend = this.lightingInitialized ? 1 - Math.exp(-Math.max(0, dtReal) * 3.2) : 1;
     this.smoothedNight += (targetNight - this.smoothedNight) * lightingBlend;
     this.smoothedGolden += (targetGolden - this.smoothedGolden) * lightingBlend;
@@ -709,7 +716,7 @@ export class DayNightCycle {
     const night = this.smoothedNight;
     const golden = this.smoothedGolden;
     const day = 1 - night;
-    const sunDir = sunDirectionAt(t, this.tmpSunDir);
+    const sunDir = sunDirectionAt(t, declination, this.tmpSunDir);
 
     // ── Sky shader ──
     const uniforms = this.sky.material.uniforms;
@@ -779,13 +786,15 @@ export class DayNightCycle {
       (1 - nightFloor * 0.8) *
       eclipseState.irradiance;
     this.sunLight.intensity = directSun * 2.2;
-    sunColorAt(t, this.tmpSunColor);
+    sunColorAt(t, declination, this.tmpSunColor);
     this.sunLight.color.copy(this.tmpSunColor);
     const directShadowStrength = sunStrength * eclipseState.irradiance;
     this.sunLight.castShadow = this.shadowsEnabled && directShadowStrength > 0.05;
 
     // ── Moon (opposite side of the sky) ──
-    const moonDir = sunDirectionAt((t + 0.5) % 1, this.tmpMoonDir);
+    // The moon rides the anti-solar point, which is the old simplification kept deliberately:
+    // it makes the June moon sit low, which is what a summer full moon does.
+    const moonDir = sunDirectionAt((t + 0.5) % 1, declination, this.tmpMoonDir);
     this.moonMesh.position.copy(moonDir).multiplyScalar(540);
     const moonOpacity = THREE.MathUtils.smoothstep(moonDir.y, -0.08, 0.08);
     this.moonMaterial.uniforms.uOpacity.value = moonOpacity;
@@ -800,7 +809,7 @@ export class DayNightCycle {
     this.ambientLight.intensity =
       (0.16 + day * 0.5 + golden * 0.1) * (1 - eclipseDarkness * 0.38) +
       eclipseState.totality * 0.1;
-    skyColorAt(t, this.tmpColor);
+    skyColorAt(t, declination, this.tmpColor);
     this.ambientLight.color.copy(this.tmpColor).lerp(this.tmpWhite, 0.35);
     this.hemisphereLight.intensity =
       (0.22 + day * 0.5) * (1 - eclipseDarkness * 0.42) + eclipseState.totality * 0.08;

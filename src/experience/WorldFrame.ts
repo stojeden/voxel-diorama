@@ -32,6 +32,14 @@ export interface WorldFrame {
   simulationDelta: number;
   /** Cloud cover the sky was actually built with, including the theme's turbidity. */
   skyCloud: number;
+  /**
+   * Solar declination in radians: the season, already blended across a theme morph.
+   *
+   * Carried rather than recomputed, so presentation cannot read a different sun from the one
+   * the world was lit by -- a half-morphed frame has a half-morphed sun, and both halves of
+   * the frame have to agree on which.
+   */
+  sunDeclination: number;
   /** The lighting solution. A passthrough presenter wants this and not the sky dome. */
   light: DayLightState;
   experienceState: ExperienceFrameState;
@@ -55,6 +63,7 @@ export function createWorldFrame(
     presentationDelta: 0,
     simulationDelta: 0,
     skyCloud: 0,
+    sunDeclination: 0,
     light: { night: 0, golden: 0, sunElevation: 0, directSun: 0, eclipse: 0 },
     experienceState,
     stationState,

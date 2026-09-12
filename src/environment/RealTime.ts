@@ -1,5 +1,5 @@
 import SunCalc from 'suncalc';
-import { realTimeToCycleT } from './sky';
+import { declinationForDayOfYear } from './sky';
 import type { WeatherKind } from './Weather';
 
 /**
@@ -87,14 +87,33 @@ export class RealTimeSync {
     }
   }
 
-  /** Simulated-day parameter (0..1) matching the viewer's local sun. */
+  /**
+   * Simulated-day parameter (0..1) matching the viewer's local sun: their actual clock.
+   *
+   * This used to warp the day so that the measured sunrise landed on t=0.25, because the
+   * sun was a fixed sinusoid that rose there and nowhere else. The sun now comes from
+   * latitude and declination, so it reaches the horizon by itself, at the hour the season
+   * puts it -- and warping the clock underneath it would place the viewer's real sunrise
+   * against a sun already eighteen degrees up.
+   *
+   * The season that goes with this clock is {@link getDeclination}; a caller that takes one
+   * without the other gets today's hours under some other month's sun.
+   */
   getCycleT(now: Date = new Date()): number {
-    const times = SunCalc.getTimes(now, this.lat, this.lon);
-    return realTimeToCycleT(now, {
-      sunrise: times.sunrise,
-      solarNoon: times.solarNoon,
-      sunset: times.sunset,
-    });
+    return this.getDayFraction(now);
+  }
+
+  /**
+   * Today's solar declination, in radians.
+   *
+   * In real time the date decides the season, not the theme: a viewer who asks for the sky
+   * above them in October gets October's sun even under a theme whose own season is June.
+   * The theme still supplies its palette, its haze and its grade.
+   */
+  getDeclination(now: Date = new Date()): number {
+    const start = new Date(now.getFullYear(), 0, 0);
+    const dayOfYear = Math.floor((now.getTime() - start.getTime()) / 86_400_000);
+    return declinationForDayOfYear(dayOfYear);
   }
 
   /**
