@@ -178,6 +178,87 @@ export function shadowNormalBias(texel: number): number {
   return texel * 1.5;
 }
 
+/** What a cloud deck does to daylight, as three multipliers on the clear-sky rig. */
+export interface CloudDaylight {
+  /** Multiplies the direct beam. 1 under a clear sky, 0 under full overcast. */
+  beam: number;
+  /** Multiplies the *daylight half* of both fill lights. 1 clear, 5/3 full overcast. */
+  fill: number;
+  /** `sunLight.shadow.radius`, in shadow-map texels. 1 clear, 3 full overcast. */
+  penumbra: number;
+}
+
+/**
+ * Cloud cover moves three things, and before this it moved one.
+ *
+ * Measured on a running page (`document.hidden === false`, `elapsedSimulation` advancing),
+ * classic theme, noon, sun at 61.21 degrees, clear (cover 0.12) against rain (cover 0.92):
+ * `sunLight.intensity` 2.036 -> 0.945, `ambientLight.intensity` 0.660 -> 0.660,
+ * `hemisphereLight.intensity` 0.720 -> 0.720, `castShadow` true -> true. The old beam term
+ * was a flat `1 - cloudCover * 0.62`; neither fill light had a cloud term at all, and the
+ * shadow gate was fed `sunStrength * eclipseIrradiance`, which does not mention cloud. So
+ * an overcast noon was a darker copy of a sunny noon wearing the same hard shadows, which
+ * is the one thing an overcast noon is not.
+ *
+ * The numbers below are one published relation plus two standard endpoints. None is taste.
+ *
+ * **The relation.** Kasten & Czeplak (1980), *Solar Energy* 24, 177-189, fit global
+ * horizontal irradiance to cloud amount N in oktas as `G / G_clear = 1 - 0.75 (N/8)^3.4`.
+ * At full overcast that is 0.25 of clear.
+ *
+ * **The endpoints.** Clear noon daylight is about 100 000 lux, of which the diffuse sky is
+ * the standard clear-sky diffuse fraction of about 0.15 -- 85 000 lux of beam over 15 000
+ * of sky. Full overcast is 10 000 to 25 000 lux and has **no solar disc in it at all**:
+ * the CIE Standard Overcast Sky is a pure luminance distribution,
+ * `L(theta) = L_zenith (1 + 2 cos theta) / 3`, with no sun term. Kasten & Czeplak's own
+ * 0.25 puts overcast at 25 000 lux, the top of that band, so the two sources meet at the
+ * endpoint and 25 000 is the figure used here.
+ *
+ * Interpolating both components on Kasten & Czeplak's own `u = (N/8)^3.4`, in klux:
+ *
+ *     G(u) = 100 - 75u          their relation
+ *     D(u) =  15 + 10u          15 klux of clear sky -> 25 klux of overcast sky
+ *     B(u) = G - D = 85 (1 - u)
+ *
+ * which is `beam = 1 - u` and `fill = 1 + (10/15) u = 1 + (2/3) u`. The beam reaches zero
+ * because overcast is *defined* by the disc being gone, and the fill rises by two thirds
+ * because a deck turns the beam into sky rather than swallowing it. That second number is
+ * the whole point: the sky takes over as the source, so the scene loses its shadow without
+ * simply going dark.
+ *
+ * **`u` is taken over this product's dial, not over oktas.** `WEATHER` in Weather.ts reads
+ * clear 0.12, fog 0.55, cloudy 0.78, snow 0.85, rain 0.92 -- so 0.92 is the heaviest deck
+ * this product can ask for, and it means a nimbostratus rain deck, not 7.4 oktas of
+ * scattered cumulus. Read literally as oktas, 0.92 would give `u = 0.75`, leave 25 per
+ * cent of the beam standing and keep the hard shadow -- the right answer for broken cloud
+ * and the wrong one for rain. Mapping 0.12 to no cloud and 0.92 to full overcast is what
+ * makes the dial mean what the product uses it for. It is deliberately *not* clamped at
+ * the low end only: cover below 0.12 never occurs, and `clamp01` keeps both ends safe.
+ *
+ * **`penumbra` is an angle in disguise.** A shadow edge blurs over `d * theta` metres at
+ * distance `d` under an occluder, where `theta` is the source's angular diameter. The sun
+ * is 0.53 degrees, so a 10 m block casts a 0.0925 m penumbra. Measured live on the High
+ * profile, the shadow frustum settles at 69.41 m of radius on a 1024 map -- 0.13557 m per
+ * texel -- so the sun's own penumbra is 0.68 of one texel and is *below the grid*. That is
+ * why clear sky keeps `radius = 1`: the rig is already as sharp as the sun is, and no
+ * smaller number buys anything. Growing the radius is therefore the only direction that
+ * means something, and in three r185 (`shadowmap_pars_fragment.glsl.js`) PCFShadowMap
+ * spends it on five Vogel-disk samples, outermost at `sqrt(0.9) = 0.949` of the radius,
+ * rotated per pixel by interleaved gradient noise. Five rotated samples over a wider disk
+ * buy blur at the price of dither, not of banding, which is why this stops at 3 rather
+ * than at the 5-to-10 degrees a real thick deck subtends: past there the deck is opaque
+ * enough that `beam` takes the shadow off the gate entirely. Measured, at noon that
+ * happens at cover 0.908, so the widest penumbra ever actually drawn is 2.9 texels.
+ */
+export function cloudDaylightAt(cloudCover: number): CloudDaylight {
+  // Weather.ts: WEATHER.clear.cloud = 0.12 is the dial's floor, WEATHER.rain.cloud = 0.92
+  // its ceiling. Kasten & Czeplak's exponent is applied to that span, not to raw cover.
+  const u = clamp01((cloudCover - 0.12) / 0.8) ** 3.4;
+  // 2/3, not 0.667: it is 10/15 klux exactly, and only the exact value puts the
+  // reconstructed global back on `1 - 0.75u` to the last digit -- which the test checks.
+  return { beam: 1 - u, fill: 1 + (u * 2) / 3, penumbra: 1 + u * 2 };
+}
+
 /**
  * The shadow focus, rounded to whole texels in the light's own basis.
  *
@@ -863,6 +944,7 @@ export class DayNightCycle {
 
     // ── Sun light ──
     const sunStrength = this.smoothedSunStrength;
+    const cloudLight = cloudDaylightAt(cloudCover);
     /**
      * The shadow map's grid is pinned to whole texels, so it stops crawling.
      *
@@ -906,17 +988,25 @@ export class DayNightCycle {
     );
     this.sunLight.position.copy(sunDir).multiplyScalar(140).add(this.snappedFocus);
     this.sunLight.target.position.copy(this.snappedFocus);
-    // nightFloor (eternal-dusk themes) and an eclipse both mute the sun.
+    // nightFloor (eternal-dusk themes) and an eclipse both mute the sun; a cloud deck
+    // takes the beam apart and hands it to the sky — see {@link cloudDaylightAt}.
     const directSun =
-      sunStrength *
-      (1 - cloudCover * 0.62) *
-      (1 - nightFloor * 0.8) *
-      eclipseState.irradiance;
+      sunStrength * cloudLight.beam * (1 - nightFloor * 0.8) * eclipseState.irradiance;
     this.sunLight.intensity = directSun * 2.2;
     sunColorAt(t, declination, this.tmpSunColor);
     this.sunLight.color.copy(this.tmpSunColor);
-    const directShadowStrength = sunStrength * eclipseState.irradiance;
+    /**
+     * The shadow gate reads the beam, which is the only thing that casts one.
+     *
+     * `nightFloor` is still left out on purpose -- an eternal-dusk theme dims the world
+     * without putting a deck over it, and its shadows stay. `cloudLight.beam` is the term
+     * that was missing: without it this expression never mentioned cloud, so rain kept a
+     * hard shadow at full strength. Measured at noon, the gate now opens at cover 0.908,
+     * so rain (0.92) is shadowless and snow (0.85) still casts, softened.
+     */
+    const directShadowStrength = sunStrength * eclipseState.irradiance * cloudLight.beam;
     this.sunLight.castShadow = this.shadowsEnabled && directShadowStrength > 0.05;
+    this.sunLight.shadow.radius = cloudLight.penumbra;
 
     // ── Moon (opposite side of the sky) ──
     /**
@@ -955,13 +1045,27 @@ export class DayNightCycle {
     this.eclipseVisual.update(this.camera, sunDir, eclipseState, dtReal, cloudCover);
 
     // ── Fill lights ──
+    /**
+     * `cloudLight.fill` multiplies the `day * 0.5` term and nothing else, which is the
+     * only term that is skylight.
+     *
+     * The 0.16 and 0.22 floors are not sky: they are what the rig leaves lit when the sky
+     * has gone, and an overcast *night* is darker than a clear one, not brighter -- the
+     * moon above already pays that with its own `(1 - cloudCover * 0.8)`. Scaling the
+     * whole expression would have lifted the night floor by two thirds under rain for no
+     * reason. `golden * 0.1` is the low-sun warm-up and belongs to the beam's hour, not to
+     * the deck. Both eclipse terms keep their place around the outside, so an eclipse
+     * under a clear sky is arithmetically unchanged: measured at totality, clear, the
+     * fills read 0.315 and 0.317 before and after this change.
+     */
     this.ambientLight.intensity =
-      (0.16 + day * 0.5 + golden * 0.1) * (1 - eclipseDarkness * 0.38) +
+      (0.16 + day * 0.5 * cloudLight.fill + golden * 0.1) * (1 - eclipseDarkness * 0.38) +
       eclipseState.totality * 0.1;
     skyColorAt(t, declination, this.tmpColor);
     this.ambientLight.color.copy(this.tmpColor).lerp(this.tmpWhite, 0.35);
     this.hemisphereLight.intensity =
-      (0.22 + day * 0.5) * (1 - eclipseDarkness * 0.42) + eclipseState.totality * 0.08;
+      (0.22 + day * 0.5 * cloudLight.fill) * (1 - eclipseDarkness * 0.42) +
+      eclipseState.totality * 0.08;
     this.hemisphereLight.color.copy(this.tmpColor);
 
     // ── Fog colour tracks the horizon (density owned by Weather) ──
