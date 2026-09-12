@@ -114,7 +114,7 @@ export default defineConfig({
               // budget raise. Splitting keeps the growth visible, which is the same call
               // `experience-signals` and `playground` below already record.
               name: 'atmosphere-physics',
-              test: /src[\\/]environment[\\/](?:SunlightSpectrum|RainbowOptics|ViewerAdaptation)\.ts$/,
+              test: /src[\\/]environment[\\/](?:SunlightSpectrum|RainbowOptics|RainbowAtmosphere|ViewerAdaptation)\.ts$/,
               priority: 12,
               includeDependenciesRecursively: false,
             },
