@@ -419,8 +419,20 @@ export function withEclipseSky(fragmentShader: string): string {
       // `eclipseUmbra` is ( semi-major axis, observer offset along it ), km, along the sun's
       // bearing. `umbraWall` is the positive root of |here + wall * step| = 1 on the footprint
       // scaled to a unit circle; its outer max is insurance, so the ring cannot exceed its gain.
+      //
+      // `uV` falls back to the sun's own bearing rather than dividing by a softened length.
+      // Straight up and straight down have an exactly-zero horizontal component, and
+      // `xz / ( 0 + 1e-4 )` is vec2( 0 ), not a unit bearing: the solve then divides 0 by
+      // `max( uQ, 1e-9 )` and returns a wall distance of 0 -- the observer standing ON the
+      // umbra wall, the one state UMBRA_TRAVERSE_LIMIT exists to forbid, where `exp( -0 * x )`
+      // is 1 and the ring reaches its full gain. The true limit as the ray goes vertical is an
+      // infinitely distant wall, so the code returned the opposite of it and a ray that
+      // cancelled to exact zero put rgb( 208, 208, 209 ) at the pole of an rgb( 0, 6, 24 ) sky.
+      // With a real bearing the wall is 69 km or more and the height term, tan( elevation ) / 8,
+      // takes the ring to zero at the pole on its own.
       `vec2 uS = normalize( vSunDirection.xz + vec2( 1e-5 ) );
-vec2 uV = direction.xz / ( length( direction.xz ) + 1e-4 );
+float uLen = length( direction.xz );
+vec2 uV = uLen > 1e-4 ? direction.xz / uLen : uS;
 vec2 uStep = vec2( dot( uV, uS ) / eclipseUmbra.x,
 dot( uV, vec2( -uS.y, uS.x ) ) / ${UMBRA_SEMI_WIDTH_KM}.0 );
 float uHere = eclipseUmbra.y / eclipseUmbra.x, uQ = dot( uStep, uStep ), uD = uStep.x * uHere;
@@ -706,10 +718,15 @@ const ECLIPSE_RING_EXTINCTION_PER_KM = [0.00626, 0.0122, 0.0297];
  * and 5 per cent by 8.5 degrees, which is the measured "red color observed in the lowest 8
  * degrees of the sky" of Applied Optics 14, 2831 (1975).
  *
- * The term it replaces, `pow( 1 - abs( direction.y ), 12 )`, was at half value at 11.9 degrees
- * -- about six times too tall -- and, being a function of elevation alone, was the same height
- * in every direction. Here the height, the brightness and the hue all come off the same `L`, so
- * the near wall gives a taller, paler band and the far wall a thinner, redder one, for free.
+ * The term it replaces, `pow( 1 - abs( direction.y ), 12 )`, was at half value at **3.22**
+ * degrees, not the 11.9 an earlier draft of this comment claimed: 11.9 belongs to the
+ * exponent-3 term that the change before this one had already removed, and citing it here made
+ * the new law look like a six-fold correction when it is not one. Measured against what is
+ * actually there, this law is TALLER at the contacts (half at 4.57 degrees off the 69 km wall)
+ * and shorter only at mid-totality. What it buys is not height but shape: being a function of
+ * elevation alone, the old term was the same in every direction, while here the height, the
+ * brightness and the hue all come off the same `L`, so the near wall gives a taller, paler band
+ * and the far wall a thinner, redder one.
  */
 const ECLIPSE_RING_SCALE_HEIGHT_KM = 8;
 
@@ -725,7 +742,7 @@ const ECLIPSE_RING_SCALE_HEIGHT_KM = 8;
  * bearing. At the staged eclipse's 8.82 degrees that is 6.5:1, and the elongation is the reason
  * the sunward and antisolar horizons go black while the broadside horizons carry the ring.
  */
-const UMBRA_SEMI_WIDTH_KM = 159;
+export const UMBRA_SEMI_WIDTH_KM = 159;
 
 /**
  * The smallest `sin( elevation )` the footprint is allowed, so the semi-major axis stays finite.
@@ -745,8 +762,11 @@ const UMBRA_MIN_SIN_ELEVATION = 0.02;
  * reviewer measured on an earlier attempt at this model -- "a clipped rgb(242,231,194) ring at
  * C2/C3", a ring about 16 times too bright that clips to white.
  *
- * 0.9 keeps the nearest wall 103.6 km away at second and third contact, where the band is still
- * a band -- half brightness 3.1 degrees up rather than 2.0 at mid-totality -- and the brightest
+ * 0.9 keeps the nearest wall **69.3 km** away at second and third contact -- broadside, where
+ * the footprint is narrowest, `b * sqrt( 1 - 0.81 )`. An earlier draft of this comment said
+ * 103.6 km, which is the distance along the MAJOR axis: the wrong wall, and wrong in the
+ * unsafe direction, with the test that pins it computing 69.3 two files away. The band is still
+ * a band there -- half brightness 4.57 degrees up rather than 2.0 at mid-totality -- and the brightest
  * bearing of the whole traverse presents at rgb(184, 157, 96), which does not clip on any
  * channel. It is a clamp with a picture behind it, not a fudge factor: the observer really is at
  * the shadow's edge at C2, and the sky there really is about to be sunlit.
@@ -846,8 +866,16 @@ export function umbraWallDistanceKm(
   alongSun: number,
   acrossSun: number
 ): number {
-  const stepAlong = alongSun / semiMajorKm;
-  const stepAcross = acrossSun / UMBRA_SEMI_WIDTH_KM;
+  // The bearing is normalised here for the same reason the shader falls back to the sun's own:
+  // a zero-length bearing sends `quadratic` to zero, `wall` to 0/1e-9 = 0, and a wall distance
+  // of zero is the observer standing ON the umbra wall -- where `exp( -0 * x )` is 1 and the
+  // ring reaches full gain. In the shader's coordinates the sun's bearing IS ( 1, 0 ), so this
+  // stays a mirror of it rather than a second opinion.
+  const bearing = Math.hypot(alongSun, acrossSun);
+  const unitAlong = bearing > 1e-4 ? alongSun / bearing : 1;
+  const unitAcross = bearing > 1e-4 ? acrossSun / bearing : 0;
+  const stepAlong = unitAlong / semiMajorKm;
+  const stepAcross = unitAcross / UMBRA_SEMI_WIDTH_KM;
   const here = offsetKm / semiMajorKm;
   const quadratic = stepAlong * stepAlong + stepAcross * stepAcross;
   const cross = stepAlong * here;

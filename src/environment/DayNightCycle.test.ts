@@ -12,6 +12,7 @@ import {
   snapShadowFocus,
   starAlphaAt,
   umbraSemiMajorKm,
+  UMBRA_SEMI_WIDTH_KM,
   umbraTraverse,
   UMBRA_TRAVERSE_LIMIT,
   umbraWallDistanceKm,
@@ -463,7 +464,7 @@ describe('the twilight dome patch', () => {
  * | dome sum -> `mix( texColor, eclipseSky, eclipseDarkness )`          | 2            |
  * | ring `abs( direction.y )` -> `max( direction.y, 0.0 )`              | 1            |
  * | the ring's height law removed (band becomes the whole dome)         | 2            |
- * | `ECLIPSE_RING_SCALE_HEIGHT_KM` 8 -> 48 (the old cubic's 11.9 deg)   | 1            |
+ * | `ECLIPSE_RING_SCALE_HEIGHT_KM` 8 -> 48 (six times the scale height)  | 1            |
  * | footprint made circular (`a = b`, so no bearing at all)             | 2            |
  * | traverse pinned to mid-totality (no 180-degree swing)               | 1            |
  * | `UMBRA_TRAVERSE_LIMIT` 0.9 -> 0.99 (observer on the wall)           | 1            |
@@ -686,9 +687,10 @@ describe('an eclipse removes the light it removes', () => {
       expect(at(30)).toBeCloseTo(at(-30), 15);
       // Half brightness at 2.0 degrees and 5 per cent by 8.5 -- the measured "red color
       // observed in the lowest 8 degrees of the sky", Applied Optics 14, 2831 (1975). The
-      // `pow( 1 - |y|, 12 )` this replaces was at half value at 11.9 degrees, six times too
-      // tall, and at 3 -- the value before the darkness rework -- it was a wash over the
-      // whole sky.
+      // `pow( 1 - |y|, 12 )` this replaces was at half value at 3.22 degrees -- an earlier
+      // comment said 11.9, which belongs to the exponent-3 term the change before this one
+      // had already removed. So the gain here is shape, not height: the old term was the same
+      // in every direction, and at the contacts this law is the taller of the two.
       expect(at(2) / at(0)).toBeCloseTo(0.5, 2);
       expect(at(8.5) / at(0)).toBeLessThan(0.06);
       expect(at(8.5) / at(0)).toBeGreaterThan(0.03);
@@ -967,5 +969,44 @@ describe('an eclipse removes the light it removes', () => {
         /eclipse atmosphere patch/
       );
     });
+  });
+});
+
+describe('the umbra wall has a distance in every direction', () => {
+  /**
+   * Straight up and straight down have no horizontal bearing at all.
+   *
+   * The solve divided the ray's horizontal component by its own softened length, so an exactly
+   * vertical ray gave the zero vector, `quadratic` collapsed to zero, and the wall came back as
+   * 0 -- the observer standing ON the umbra wall, which is the single state
+   * `UMBRA_TRAVERSE_LIMIT` exists to forbid. There `exp( -0 * anything )` is 1, so the ring
+   * reached its full gain: a near-white dot at the pole of a near-black sky. The true limit as a
+   * ray goes vertical is an infinitely distant wall, so the old code returned its opposite.
+   */
+  test('a bearing that cancels to zero does not read as standing on the wall', () => {
+    const semiMajor = umbraSemiMajorKm((8.83 * Math.PI) / 180);
+    const offset = semiMajor * UMBRA_TRAVERSE_LIMIT;
+    const degenerate = umbraWallDistanceKm(semiMajor, offset, 0, 0);
+    expect(degenerate, 'zerowy kierunek nie moze znaczyc zera kilometrow').toBeGreaterThan(1);
+
+    // And it agrees with a real bearing, because that is what the shader substitutes.
+    expect(degenerate).toBeCloseTo(umbraWallDistanceKm(semiMajor, offset, 1, 0), 6);
+  });
+
+  test('every bearing keeps the observer inside the umbra at the traverse limit', () => {
+    const semiMajor = umbraSemiMajorKm((8.83 * Math.PI) / 180);
+    const offset = semiMajor * UMBRA_TRAVERSE_LIMIT;
+    let nearest = Infinity;
+    for (let i = 0; i < 720; i++) {
+      const angle = (i / 720) * Math.PI * 2;
+      nearest = Math.min(
+        nearest,
+        umbraWallDistanceKm(semiMajor, offset, Math.cos(angle), Math.sin(angle))
+      );
+    }
+    // Broadside, b * sqrt(1 - 0.81) = 69.31 km. The docblock used to say 103.6, which is the
+    // distance along the MAJOR axis -- the wrong wall, and wrong in the unsafe direction.
+    expect(nearest).toBeGreaterThan(60);
+    expect(nearest).toBeLessThan(80);
   });
 });
