@@ -67,9 +67,42 @@ export function sunriseHourAngle(declination: number): number {
   return Math.acos(cosH);
 }
 
-const FULL_NIGHT_ELEVATION_DEG = -10;
-const FULL_DAY_ELEVATION_DEG = 18;
-const DIRECT_SUN_FADE_ELEVATION_DEG = 14;
+/**
+ * Where the world reads as fully dark and where it reads as fully day, in degrees.
+ *
+ * These are art direction -- the sky has no switch at any elevation -- but they are
+ * anchored on the twilight definitions rather than on taste, because the pair they replace
+ * held a genuinely daylit sun in the dark. At -10 and +18 the middle of the ramp sat four
+ * degrees *above* the horizon: at 4.4 degrees, 36 minutes after a June sunrise and several
+ * thousand lux against noon's hundred thousand, `nightFactorAt` still returned 0.479 and
+ * the city lit every window. The opening moment is 2.87 degrees, inside exactly that band.
+ *
+ * Full night is now the end of **nautical twilight**. Below -12 degrees the horizon is no
+ * longer discernible and a city is entirely on its own light, which is the thing this
+ * factor drives. It is deliberately not the -18 of astronomical darkness: at 52 degrees
+ * north a June sun bottoms out at -14.33 (see {@link sunElevationAt}), so an -18 anchor
+ * would mean a Polish June never reached full night at all.
+ *
+ * Full day mirrors it one degree wider, at +13. The mirror is the point -- the same depth
+ * of twilight either side of the horizon -- and the extra degree is what keeps the instant
+ * of sunrise itself on the night side: a sun on the horizon is a few hundred lux, and this
+ * ramp returns 0.530 there, which is the "dawn stays in twilight" property the tests pin.
+ * The old +18 was 2 hours 14 minutes after a June sunrise; +13 is 1 hour 39.
+ */
+const FULL_NIGHT_ELEVATION_DEG = -12;
+const FULL_DAY_ELEVATION_DEG = 13;
+
+/**
+ * How far above the horizon the direct beam is held back before it counts at full weight.
+ *
+ * The fade exists so that the first shadowed frame does not read as a light switch, and it
+ * still does that. What it must not do is stand in for the atmosphere: at 14 degrees it
+ * was still only a quarter of the way in at 4.4 degrees, and a June sun needs 1 hour 46
+ * minutes to climb 14 degrees, so the beam was suppressed through an entire morning. Three
+ * degrees is 25 minutes of a June morning and 21 of an October one -- long enough that no
+ * single frame is the one the sun switched on in, over before the sun is properly up.
+ */
+const DIRECT_SUN_FADE_ELEVATION_DEG = 3;
 
 export function clamp01(value: number): number {
   if (value < 0) return 0;
@@ -170,15 +203,57 @@ export function nightFactorAt(t: number, declination: number): number {
 }
 
 /**
- * Direct sunlight ramps in more slowly than the solar disc crosses the horizon.
- * This keeps the first shadowed frame from reading as an abrupt light switch.
+ * Kasten-Young (1989) relative optical air mass: how many vertical atmospheres the beam
+ * crosses at a given elevation.
+ *
+ * 1.00 at the zenith, 1.15 at 60 degrees, 2.00 at 30 and 37.9 on the horizon -- the
+ * "thirty-eight vertical atmospheres" {@link sunColorAt} already talks about. The
+ * empirical second term is what keeps it finite down there, where a plain secant diverges.
+ * Valid above the geometric horizon only; the one caller returns before reaching it.
+ */
+export function airMassAt(elevationDeg: number): number {
+  return (
+    1 /
+    (Math.sin(THREE.MathUtils.degToRad(elevationDeg)) +
+      0.50572 * Math.pow(elevationDeg + 6.07995, -1.6364))
+  );
+}
+
+/** Meinel's clear-sky beam transmission over that path: 0.7 raised to AM^0.678. */
+function beamStrengthAt(elevationDeg: number): number {
+  return Math.pow(0.7, Math.pow(airMassAt(elevationDeg), 0.678));
+}
+
+/**
+ * Two air masses -- 30 degrees of elevation -- is where the beam counts as full strength.
+ *
+ * Above it the transmission is still climbing (0.676 at a June noon against 0.566 here),
+ * but the renderer's sun is already at 1 and the exposure curve owns the rest. Pinning the
+ * scale at 30 is what leaves the high sun exactly where this retune found it: a June noon
+ * returned 1.0 before and returns 1.0 now.
+ */
+const FULL_BEAM = beamStrengthAt(30);
+
+/**
+ * Direct sunlight: the beam the atmosphere actually delivers, not a second cosine.
+ *
+ * This used to be shaped by `sin(elevation)`, which is the *horizontal* irradiance -- the
+ * light landing on flat ground. That is the wrong quantity for a directional light, because
+ * three makes every surface pay its own N dot L: the sine was charged twice, and a low sun
+ * paid it hardest. At 4.4 degrees the old curve returned 0.037, a twenty-seventh of noon,
+ * for a beam that is really 0.23 of a June noon's -- air mass 11.4 against 1.14. So the
+ * scene had no key light at the hour the product opens on, and read as night with the sun
+ * up. What is left here is the honest part: the beam weakens because the path lengthens.
+ *
+ * The fade over the first {@link DIRECT_SUN_FADE_ELEVATION_DEG} degrees stays, for the
+ * reason it was written -- an abrupt first shadowed frame reads as a light switch -- and
+ * the early return also keeps the air-mass term away from the elevation where it breaks.
  */
 export function directSunFactorAt(t: number, declination: number): number {
-  const elevation = sunElevationAt(t, declination);
-  const elevationDeg = THREE.MathUtils.radToDeg(elevation);
-  const altitudeStrength = Math.pow(clamp01(Math.sin(elevation) * 1.5), 0.85);
+  const elevationDeg = THREE.MathUtils.radToDeg(sunElevationAt(t, declination));
   const horizonFade = smooth(elevationDeg / DIRECT_SUN_FADE_ELEVATION_DEG);
-  return altitudeStrength * horizonFade;
+  if (horizonFade <= 0) return 0;
+  return clamp01(beamStrengthAt(elevationDeg) / FULL_BEAM) * horizonFade;
 }
 
 /**

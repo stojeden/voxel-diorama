@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'vitest';
 import * as THREE from 'three';
+import { OPENING_SOLAR_PHASE } from '../experience/AuthoredMoments';
 import {
+  airMassAt,
   AUTUMN_DECLINATION_DEG,
   clockFromSolarPhase,
   directSunFactorAt,
@@ -31,6 +33,17 @@ const hoursBelow = (declination: number, limit: number) => {
     if (deg(sunElevationAt(i / samples, declination)) < limit) count++;
   }
   return (count / samples) * 24;
+};
+/** The morning clock time at which the sun stands at `elevationDeg`, found by bisection. */
+const clockAtElevation = (elevationDeg: number, declination: number) => {
+  let low = 0;
+  let high = 0.5;
+  for (let i = 0; i < 60; i++) {
+    const mid = (low + high) / 2;
+    if (deg(sunElevationAt(mid, declination)) < elevationDeg) low = mid;
+    else high = mid;
+  }
+  return (low + high) / 2;
 };
 
 describe('solar model', () => {
@@ -146,6 +159,79 @@ describe('solar model', () => {
       expect(strength).toBeGreaterThanOrEqual(previous - 1e-9);
       previous = strength;
     }
+  });
+
+  /**
+   * A low sun must read as a low sun. This is the defect the two ramps were retuned for.
+   *
+   * The external fact is the illuminance. At 4.4 degrees of elevation a clear sky delivers
+   * several thousand lux against the hundred thousand of noon; at the end of civil
+   * twilight, six degrees below the horizon, it delivers about one. The first is
+   * unambiguously day and the second unambiguously night, and the factor that decides how
+   * dark the city looks -- and that gates every window light in `DayNightCycle` -- has to
+   * agree with both of them.
+   *
+   * Against the constants this replaces, the second half of the test passed and the first
+   * half did not: -10 and +18 returned 0.479 at 4.4 degrees, so the diorama was still half
+   * in night 36 minutes into a June morning, with its own opening moment inside that band.
+   */
+  test.each([
+    ['June', JUNE],
+    ['autumn', AUTUMN],
+  ])('%s: a sun above the horizon reads as day, civil twilight still as night', (_label, declination) => {
+    expect(nightFactorAt(clockAtElevation(4.4, declination), declination)).toBeLessThan(0.3);
+    expect(nightFactorAt(clockAtElevation(-6, declination), declination)).toBeGreaterThan(0.8);
+  });
+
+  /**
+   * The direct beam at a low sun, checked against the path it crosses rather than taste.
+   *
+   * A directional light's intensity is the *beam*: three charges every surface its own
+   * N dot L, so the only loss left to model at a low sun is the length of the path. At 4.4
+   * degrees that path is 11.4 air masses against a June noon's 1.14, and Meinel's clear-sky
+   * transmission over them is 0.23 of the noon beam. The ramp keeps headroom above that --
+   * it pins full strength at 30 degrees rather than at the zenith, so the high sun is
+   * exactly where it was -- but it may not be an order of magnitude under it, which is what
+   * the old double cosine did: 0.037 against noon's 1.0.
+   */
+  test('the direct beam at a low sun is a quarter of noon, not a twenty-seventh', () => {
+    const noon = directSunFactorAt(0.5, JUNE);
+    expect(noon).toBeCloseTo(1, 3);
+    const ratio = directSunFactorAt(clockAtElevation(4.4, JUNE), JUNE) / noon;
+    expect(ratio).toBeGreaterThan(0.18);
+    expect(ratio).toBeLessThan(0.35);
+  });
+
+  /**
+   * The air mass is Kasten and Young's (1989), and it is held to their numbers.
+   *
+   * Two independent published facts. Above twenty degrees or so a relative air mass is
+   * within a percent of the plane-parallel secant 1/sin(h), which is what a textbook uses
+   * up there; and at the horizon, where that secant diverges, the Kasten-Young value is
+   * 37.92 -- the "thirty-eight vertical atmospheres" `sunColorAt` was already written
+   * around. A typo in either exponent misses one of the two.
+   */
+  test('air mass matches the published Kasten-Young values', () => {
+    for (const elevation of [30, 45, 60, 90]) {
+      expect(airMassAt(elevation)).toBeCloseTo(1 / Math.sin(THREE.MathUtils.degToRad(elevation)), 1);
+    }
+    expect(airMassAt(0)).toBeCloseTo(37.92, 1);
+  });
+
+  /**
+   * The opening moment arrives with a sun, because that is what it is authored to be.
+   *
+   * {@link OPENING_SOLAR_PHASE} resolves to 2.87 degrees under June's declination, 24
+   * minutes after sunrise. `DayNightCycle` casts the sun's shadow above a direct factor of
+   * 0.05, and the old ramp did not reach that until 4.93 degrees -- 40 minutes in -- so the
+   * frame the product opens on had no key light and no shadow, and its night factor was
+   * 0.561. Both halves of this would have failed before the retune.
+   */
+  test('the opening moment is lit by the sun it is authored around', () => {
+    const opening = clockFromSolarPhase(OPENING_SOLAR_PHASE, JUNE);
+    expect(deg(sunElevationAt(opening, JUNE))).toBeCloseTo(2.87, 1);
+    expect(directSunFactorAt(opening, JUNE)).toBeGreaterThan(0.05);
+    expect(nightFactorAt(opening, JUNE)).toBeLessThan(0.5);
   });
 
   test.each([
