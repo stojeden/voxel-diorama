@@ -329,6 +329,76 @@ ${SKY_OUTPUT_MARKER}`
 }
 
 /**
+ * The dome's eclipse patch: an **attenuation plus a skyglow**, where it used to be a crossfade.
+ *
+ * `mix( texColor, eclipseSky, blend )` cannot darken a sky. Whatever `blend` is, `1 - blend` of
+ * a full-brightness daytime dome survives it, and at the eclipse's own hour that remainder was
+ * the brightest thing in the frame by a wide margin. Measured on the built bundle at the
+ * `totality` checkpoint, with the fills already corrected: the crossfade left 14.2 per cent of
+ * the uneclipsed Preetham dome, and taking that one term to zero moved the *whole frame* from
+ * 0.4393 of the uneclipsed hour to 0.0998. A seventh of the sky was carrying four fifths of
+ * the light, which is why the eighth of the frame lying across the horizon was the least
+ * darkened part of the picture at 0.7049 while the top eighth was already at 0.1981.
+ *
+ * It is also why every constant in the old form was a knife edge: 0.88 to 1.0 on `blend` is a
+ * 4.4x move on the whole frame. The replacement scales the dome by the light the eclipse
+ * actually leaves it and *adds* the glow the umbra sits under, which is what those two
+ * quantities physically are:
+ *
+ *     texColor * irradiance + eclipseSky * eclipseDarkness
+ *
+ * written as `1.0 - eclipseDarkness` so the patch still needs only the two uniforms it already
+ * had. The dome takes **`irradiance`, not {@link eclipseDiffuseFraction}**: the umbral skyglow
+ * the fills floor on is, for the dome, the `eclipseSky` term standing right beside it, and
+ * giving it to both would count the same light twice.
+ *
+ * `eclipseDarkness` is 0 with no eclipse running, so an uneclipsed dome is
+ * `texColor * 1.0 + eclipseSky * 0.0` -- an exact identity in IEEE 754, not an approximate
+ * one, which is what lets an uneclipsed day be unchanged rather than nearly unchanged.
+ *
+ * Exported for the same reason as {@link withTwilightDome}: the patch is a pure string
+ * transform, so the test suite can hold it against the real shader Three.js ships and fail
+ * here rather than in a browser.
+ */
+export function withEclipseSky(fragmentShader: string): string {
+  if (
+    !fragmentShader.includes(SKY_OUTPUT_MARKER) ||
+    // Refuse to go first. This patch *sums* -- `+ eclipseSky * eclipseDarkness` -- so it is
+    // the second term downstream of the ceiling that adds radiance, after the twilight dome.
+    // It is safe because the sum is a convex combination of an already-clamped `texColor` and
+    // a constant far below the ceiling, and that argument only holds while the clamp really is
+    // upstream. Both orders compile and render; the wrong one's failure is a black frame on
+    // somebody else's rasteriser, so it is cheaper to make it impossible than to notice it.
+    !fragmentShader.includes(CEILING_CLAMP)
+  ) {
+    throw new Error('Three.js Sky shader changed; eclipse atmosphere patch needs updating');
+  }
+  return fragmentShader
+    .replace(
+      'uniform float time;',
+      `uniform float time;
+        uniform float eclipseDarkness;
+        uniform float eclipseTotality;`
+    )
+    .replace(
+      SKY_OUTPUT_MARKER,
+      `float eclipseHorizon = pow( 1.0 - abs( direction.y ), ${ECLIPSE_RING_FALLOFF.toFixed(1)} );
+        // The authored partial-phase tint, untouched: through every phase before second
+        // contact this is all there is, which is what keeps a partial eclipse looking like a
+        // dimmed day rather than a blue one.
+        vec3 eclipseZenith = vec3( 0.004, 0.009, 0.035 );
+        // ...and the two terms totality adds, which are separate things and are authored
+        // separately. See ECLIPSE_UMBRAL_SKY and ECLIPSE_RING.
+        vec3 eclipseGlow = vec3( ${ECLIPSE_UMBRAL_SKY.join(', ')} );
+        vec3 eclipseRing = vec3( ${ECLIPSE_RING.join(', ')} );
+        vec3 eclipseSky = eclipseZenith
+          + ( eclipseGlow + eclipseRing * eclipseHorizon ) * eclipseTotality;
+        texColor = texColor * ( 1.0 - eclipseDarkness ) + eclipseSky * eclipseDarkness;
+        ${SKY_OUTPUT_MARKER}`
+    );
+}
+
+/**
  * How much world one shadow-map texel covers, in metres.
  *
  * Worth having as a function because every number that matters downstream is derived
@@ -466,6 +536,118 @@ export function snapShadowFocus(
     .addScaledVector(up, alongUp)
     .addScaledVector(sunDir, alongLight);
 }
+
+/**
+ * How much of the hour's own diffuse light an eclipse leaves: sky fill, hemisphere, reflections.
+ *
+ * **During a partial phase the diffuse sky falls with the beam, and that is not an
+ * approximation.** The moon's penumbra is thousands of kilometres across, so every parcel of
+ * air the camera can see scattering -- the whole sky dome, out to the horizon and up through
+ * the scattering height -- is lit by the *same* partially covered sun. Beam and skylight are
+ * the same quantity attenuated by the same factor, and that factor is the `irradiance`
+ * {@link EclipseTimeline} already computes from the overlap area. The sun light has always
+ * used it; the fills used a separate, much shallower ramp, and that is the whole defect.
+ *
+ * **Deep coverage is where they separate, and that is what the floor is.** The umbra is only
+ * 100-270 km wide, so an observer near the middle of it stands in a small dark spot under a sky
+ * that is still lit everywhere beyond it. That surviving light is the 360-degree horizon glow,
+ * and it is the real reason totality is not black -- not the corona, which carries roughly a
+ * full moon's 0.25 lx, 3.5e-5 of this hour's own 7 094 lx and far below anything this rig can
+ * represent.
+ *
+ * **It is a `max`, and it has to be, because a sum is not monotonic.** The first version of
+ * this function was `irradiance + UMBRAL_SKYGLOW * totality`, which reads well and is wrong:
+ * `irradiance` bottoms out at {@link EclipseTimeline}'s own 0.025 floor, so it has only 0.004
+ * left to give across second contact while the skyglow term adds a whole 0.105 -- the diffuse
+ * light *rises* 0.0291 to 0.130 as the moon finishes covering the sun. That is the same defect,
+ * in the same direction, as the non-monotonic ambient fill this change was written to remove;
+ * it simply hid one phase later. A floor cannot do it: `max` of a decreasing function and a
+ * constant is decreasing, for every coverage, by construction.
+ *
+ * The floor binds only in the last 18 per cent of coverage -- `irradiance` is above 0.130 until
+ * coverage 0.820 -- so every partial phase before that is the beam's own attenuation,
+ * untouched. What the plateau costs is that the fills stop falling there; what keeps the
+ * approach to totality dramatic anyway is that nothing else plateaus with them. The sun keeps
+ * falling to 0.025, and the dome keeps falling on `irradiance` right through second contact,
+ * because it takes {@link withEclipseSky}'s own term and not this one.
+ *
+ * **The floor is 0.130 and the number is chosen, not found -- say so.** Published horizontal
+ * illuminance at totality is 1 to 100 lx, against 7 094 lx at this eclipse's own +8.82 degrees
+ * and 88 796 at a June noon (log-interpolated from the table in `./ViewerAdaptation`, which is
+ * where those anchors live). So the *physical* fraction is 1.4e-4 to 1.4e-2, and the whole band
+ * reads back off the same table as a sun between -7.21 and -1.74 degrees: real totality is
+ * twilight, and darker than any frame this product can ship.
+ *
+ * 0.130 stops well short of that. With the bracket terms around it the fills land at 7.7 to
+ * 13.0 per cent of the uneclipsed hour -- 549 to 922 lx, which the table reads back as a sun
+ * between +0.87 and +2.28 degrees. **Totality here is sunrise, not twilight: 5.5x the light of
+ * the brightest real totality and 549x the dimmest.** The honest name for that gap is
+ * legibility, not physics, and the number that sets it is this one, in one place, rather than
+ * the six tuning constants spread across four systems that it replaces.
+ *
+ * `irradiance` is exactly 1 whenever no eclipse is running and the floor is far below it, so
+ * this returns exactly 1.0 and every uneclipsed hour multiplies by it bit for bit.
+ */
+export function eclipseDiffuseFraction(irradiance: number): number {
+  return irradiance > UMBRAL_SKYGLOW ? irradiance : UMBRAL_SKYGLOW;
+}
+
+/**
+ * The fraction of an unobstructed sky's light that reaches the middle of the umbra.
+ *
+ * Not a legibility floor bolted under a curve: it is the light scattered in from the atmosphere
+ * outside a 100-270 km shadow, which is a real term with a real value. See
+ * {@link eclipseDiffuseFraction} for why it is 0.130 rather than the 1.4e-4 the lux figures ask
+ * for, and for what 0.130 costs in honesty.
+ *
+ * It is deliberately **not** applied to the sky dome, which carries its own, explicit skyglow in
+ * {@link ECLIPSE_SKY_LEVEL}; giving the dome both would count the same light twice.
+ */
+const UMBRAL_SKYGLOW = 0.13;
+
+/**
+ * The isotropic part of the umbral skyglow, in the dome's own linear units.
+ *
+ * **Blue, and authored apart from the ring, because they are different light.** At totality the
+ * whole sky is lit from outside a 100-270 km shadow: light arriving overhead has been scattered
+ * twice and comes in blue, while light arriving along the horizon has grazed a long path
+ * through still-sunlit air and comes in red -- the 360-degree sunset. A single `mix` between a
+ * zenith colour and a horizon colour cannot be both, because it spends the same photons twice;
+ * at any level high enough to carry the sky it turns the entire dome the horizon's colour.
+ *
+ * **These are new numbers, and that is the honest description of them.** The pair they replace
+ * -- `mix( vec3( 0.004, 0.009, 0.035 ), vec3( 0.24, 0.065, 0.025 ), ... )` -- was authored as a
+ * *tint* over a dome that was still mostly un-attenuated Preetham, and never as a radiance.
+ * Once {@link withEclipseSky} attenuates the dome properly, those two values have to carry the
+ * whole totality sky on their own; re-levelling them by one multiplier was tried first, and 1.6
+ * is the value that hits the ratios exactly -- whole frame 0.4002, ground band 0.2605 -- while
+ * turning the frame into a uniform orange wash with the corona and the stars lost in it. The
+ * scalars were right and the picture was wrong, which is the whole reason this split exists.
+ *
+ * Both terms are gated on `eclipseTotality`, so every partial phase keeps the authored
+ * `eclipseZenith` alone and is unchanged in character.
+ */
+const ECLIPSE_UMBRAL_SKY = [0.035, 0.055, 0.172];
+
+/** The 360-degree sunset, added on top of {@link ECLIPSE_UMBRAL_SKY} and only at totality. */
+const ECLIPSE_RING = [0.55, 0.15, 0.055];
+
+/**
+ * How tightly the ring hugs the horizon, as the exponent on `1 - abs( direction.y )`.
+ *
+ * 3 -- the authored value -- still carries 56.4 per cent of the ring's colour 10 degrees up and
+ * 12.5 per cent 30 degrees up. That was invisible while the ring was a tint on a bright dome;
+ * once the ring *is* the dome it is a wash over the whole sky. 12 leaves 10.1 per cent at 10
+ * degrees and 0.02 at 30, which is a band rather than a gradient.
+ *
+ * The `abs` matters more than the exponent, and it is the half of this that a photograph would
+ * not have caught. `1 - clamp( direction.y, 0.0, 1.0 )` is exactly 1 for *every* downward
+ * direction, and this diorama is a floating plate: a good half of the frame is sky below the
+ * horizon, so the ring stood at full strength across all of it however tight the exponent was.
+ * Measured, moving the exponent 6 -> 12 under `clamp` changed the whole frame by 0.0038; adding
+ * the `abs` changed it by 0.0552.
+ */
+const ECLIPSE_RING_FALLOFF = 12;
 
 export function environmentTransitionAt(progress: number): {
   blend: number;
@@ -897,32 +1079,7 @@ export class DayNightCycle {
     const material = this.sky.material;
     material.uniforms.eclipseDarkness = { value: 0 };
     material.uniforms.eclipseTotality = { value: 0 };
-
-    const outputMarker = SKY_OUTPUT_MARKER;
-    if (!material.fragmentShader.includes(outputMarker)) {
-      throw new Error('Three.js Sky shader changed; eclipse atmosphere patch needs updating');
-    }
-    material.fragmentShader = material.fragmentShader
-      .replace(
-        'uniform float time;',
-        `uniform float time;
-        uniform float eclipseDarkness;
-        uniform float eclipseTotality;`
-      )
-      .replace(
-        outputMarker,
-        `float eclipseHorizon = pow( 1.0 - clamp( direction.y, 0.0, 1.0 ), 3.0 );
-        vec3 eclipseZenith = vec3( 0.004, 0.009, 0.035 );
-        vec3 eclipseHorizonColor = vec3( 0.24, 0.065, 0.025 );
-        vec3 eclipseSky = mix(
-          eclipseZenith,
-          eclipseHorizonColor,
-          eclipseHorizon * eclipseTotality
-        );
-        float eclipseBlend = eclipseDarkness * mix( 0.68, 0.88, eclipseTotality );
-        texColor = mix( texColor, eclipseSky, eclipseBlend );
-        gl_FragColor = vec4( texColor, 1.0 );`
-      );
+    material.fragmentShader = withEclipseSky(material.fragmentShader);
     material.needsUpdate = true;
   }
 
@@ -1103,6 +1260,8 @@ export class DayNightCycle {
     const eclipseState = this.eclipseState;
     const eclipse = eclipseState.coverage;
     const eclipseDarkness = 1 - eclipseState.irradiance;
+    /** Exactly 1.0 whenever no eclipse is running — see {@link eclipseDiffuseFraction}. */
+    const eclipseDiffuse = eclipseDiffuseFraction(eclipseState.irradiance);
     const elevation = sunElevationAt(t, declination);
     // Themes like Neon Noir keep the city in eternal dusk via nightFloor;
     // a solar eclipse pushes the world toward night for half a minute.
@@ -1125,11 +1284,26 @@ export class DayNightCycle {
 
     // ── Sky shader ──
     const uniforms = this.sky.material.uniforms;
-    // An eclipse chokes the scattered light: the whole sky dims with the sun.
+    /**
+     * An eclipse chokes the scattered light — but it does it to the *illumination*, not to
+     * the air.
+     *
+     * These two used to carry `(1 - eclipseDarkness * 0.82)` and `(1 - eclipseDarkness *
+     * 0.94)`. A Rayleigh coefficient is a property of the atmosphere's composition and a Mie
+     * coefficient of its aerosol load; the moon passing in front of the sun changes neither.
+     * Scaling them does not dim a Preetham sky so much as *reshape* it: the shader's radiance
+     * is not proportional to either coefficient. That was measured rather than assumed — an
+     * intermediate build drove both from the diffuse fraction, which stood rayleigh at 7.5 per
+     * cent of its clear value, and the dome was still bright enough that the 14.2 per cent of
+     * it surviving the old crossfade carried four fifths of the frame's light. The attenuation
+     * belongs on the dome's output, and {@link withEclipseSky} applies it there.
+     *
+     * Both terms are unchanged at every uneclipsed hour: the factors they lost were exactly 1
+     * whenever `eclipseDarkness` was 0.
+     */
     const turbidity = 2.0 + cloudCover * 11 + golden * 1.6;
-    const rayleigh = (2.4 + golden * 1.4) * (1 - eclipseDarkness * 0.82);
-    const mie =
-      (0.0035 + golden * 0.014 + cloudCover * 0.008) * (1 - eclipseDarkness * 0.94);
+    const rayleigh = 2.4 + golden * 1.4;
+    const mie = 0.0035 + golden * 0.014 + cloudCover * 0.008;
     uniforms.turbidity.value = turbidity;
     uniforms.rayleigh.value = rayleigh;
     uniforms.mieCoefficient.value = mie;
@@ -1284,18 +1458,22 @@ export class DayNightCycle {
      * moon above already pays that with its own `(1 - cloudCover * 0.8)`. Scaling the
      * whole expression would have lifted the night floor by two thirds under rain for no
      * reason. `golden * 0.1` is the low-sun warm-up and belongs to the beam's hour, not to
-     * the deck. Both eclipse terms keep their place around the outside, so an eclipse
-     * under a clear sky is arithmetically unchanged: measured at totality, clear, the
-     * fills read 0.315 and 0.317 before and after this change.
+     * the deck.
+     *
+     * **The eclipse term around the outside is now the beam's own `irradiance`, and the two
+     * additive `totality` terms are gone.** They were `(1 - eclipseDarkness * 0.38) +
+     * totality * 0.1` and `(1 - eclipseDarkness * 0.42) + totality * 0.08`, a shallower ramp
+     * than the sun's with a legibility bonus added back at the bottom -- which left the
+     * ambient fill *non-monotonic*: measured on the built bundle, it read 0.3630 at progress
+     * 0.25 and rose to 0.3733 at totality, so the world got brighter as the moon finished
+     * covering the sun. {@link eclipseDiffuseFraction} replaces both with one term that falls
+     * with the beam and floors on the umbra's own skyglow.
      */
     this.ambientLight.intensity =
-      (0.16 + day * 0.5 * cloudLight.fill + golden * 0.1) * (1 - eclipseDarkness * 0.38) +
-      eclipseState.totality * 0.1;
+      (0.16 + day * 0.5 * cloudLight.fill + golden * 0.1) * eclipseDiffuse;
     skyColorAt(t, declination, this.tmpColor);
     this.ambientLight.color.copy(this.tmpColor).lerp(this.tmpWhite, 0.35);
-    this.hemisphereLight.intensity =
-      (0.22 + day * 0.5 * cloudLight.fill) * (1 - eclipseDarkness * 0.42) +
-      eclipseState.totality * 0.08;
+    this.hemisphereLight.intensity = (0.22 + day * 0.5 * cloudLight.fill) * eclipseDiffuse;
     this.hemisphereLight.color.copy(this.tmpColor);
 
     // ── Fog colour tracks the horizon (density owned by Weather) ──
@@ -1304,6 +1482,25 @@ export class DayNightCycle {
       this.scene.fog.color
         .copy(this.tmpColor)
         .lerp(new THREE.Color(0x9aa3ad), cloudCover * fogGrey * day);
+      /**
+       * The fog keeps its hue lerp and **not** the diffuse fraction, which is a deliberate
+       * exception and the one place this change stops short.
+       *
+       * Fog is in-scattered light along the view ray -- the radiance of the air itself -- so by
+       * the argument the rest of this change is built on it should take `eclipseDiffuse` like
+       * the fills and the dome. A hue lerp cannot darken, and at totality this leaves the air
+       * at 24 per cent of the hour's own colour while the fills sit at 7.7 to 13.0.
+       *
+       * It was measured both ways at the shipped configuration, and it is the ground that
+       * decides: `.multiplyScalar(eclipseDiffuse)` moves the whole frame 0.4094 to 0.4012 --
+       * barely -- and the city 0.2844 to 0.2290, which overshoots the darkness this change was
+       * asked for by a wide margin and takes the streets with it. It also stopped being the
+       * outlier it once was: while the dome was still a crossfade the fog band was the least
+       * darkened eighth of the frame at 0.7049, and with the dome attenuated properly the
+       * profile across the frame is smooth without it.
+       *
+       * So it is left alone, and left written down: a real inconsistency, costed, not taken.
+       */
       if (eclipseDarkness > 0.001) {
         this.scene.fog.color.lerp(
           new THREE.Color(0x171d36),
@@ -1421,8 +1618,10 @@ export class DayNightCycle {
 
     // ── Environment map (reflections in glass) — throttled regeneration ──
     this.updateEnvironmentTransition(dtReal);
-    this.scene.environmentIntensity =
-      ENVIRONMENT_INTENSITY * (1 - eclipseDarkness * 0.72);
+    // The reflection probe is skylight like the two fills, so it takes the same term. It used
+    // `(1 - eclipseDarkness * 0.72)`, which left 29.8 per cent of a clear hour's reflections
+    // in the glass at totality.
+    this.scene.environmentIntensity = ENVIRONMENT_INTENSITY * eclipseDiffuse;
     // PMREM generation is synchronous and a two-map crossfade doubles the
     // environment lookup cost on every physical material. Build the neutral
     // reflection probe once during preload; continuous sky/light/weather
