@@ -346,20 +346,35 @@ export function highSunFactor(elevationRad: number): number {
  * machine did not reproduce them -- the deltas were inside the run-to-run spread and one of
  * them changed sign between runs. So 122 is no longer current and
  * is left here only as the number the ease was set against.
+ *
+ * **`adaptation` is the viewer, and everything above it is the art.** The four factors before
+ * it are authored: what the look wants of an hour, a theme, an eclipse and a high sun. The
+ * fifth is `ViewerAdaptation`'s estimate of how far a person standing in the diorama would
+ * have dark-adapted, and it is a separate argument rather than another term in the curve
+ * because the two answer to different things -- one to taste, one to published illuminance.
+ *
+ * It defaults to 1, so every call written before it existed is arithmetically unchanged and
+ * every assertion above still reads what it read. It is also clamped at 1 from below at its
+ * source, so **the noon ease survives bit for bit**: at the June noon the gain is normalised
+ * against, this multiplies by exactly 1.0. Measured at 61.21 degrees on the built bundle, the
+ * exposure is identical and the near-white fraction still *falls*, 2.752 per cent to 0.140 --
+ * that is the black clip leaving `CinematicGrade`, not this.
  */
 export function sceneExposure(
   night: number,
   golden: number,
   themeMultiplier = 1,
   eclipse = 0,
-  highSun = 0
+  highSun = 0,
+  adaptation = 1
 ): number {
   const day = 1 - clamp01(night);
   return (
     (0.34 + day * 0.12 + clamp01(golden) * 0.04) *
     themeMultiplier *
     (1 - clamp01(eclipse) * 0.18) *
-    (1 - clamp01(highSun) * HIGH_SUN_EXPOSURE_CUT)
+    (1 - clamp01(highSun) * HIGH_SUN_EXPOSURE_CUT) *
+    adaptation
   );
 }
 

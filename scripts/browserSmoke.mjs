@@ -88,13 +88,16 @@ async function assertBundleBudgets() {
   const cameraControls = assetNames.find((name) => /^camera-controls-.*\.js$/.test(name));
   const postprocessing = assetNames.find((name) => /^postprocessing-.*\.js$/.test(name));
   const experienceSignals = assetNames.find((name) => /^experience-signals-.*\.js$/.test(name));
+  const atmospherePhysics = assetNames.find((name) => /^atmosphere-physics-.*\.js$/.test(name));
   assert.ok(entry, 'application entry chunk is missing');
   assert.ok(bootstrap, 'application bootstrap chunk is missing');
   assert.ok(three, 'Three.js vendor chunk is missing');
   assert.ok(cameraControls, 'camera-controls vendor chunk is missing');
   assert.ok(postprocessing, 'postprocessing vendor chunk is missing');
   assert.ok(experienceSignals, 'experience signals chunk is missing');
+  assert.ok(atmospherePhysics, 'atmosphere physics chunk is missing');
   const entryBytes = (await stat(`dist/assets/${entry}`)).size;
+  const atmospherePhysicsBytes = (await stat(`dist/assets/${atmospherePhysics}`)).size;
   const bootstrapBytes = (await stat(`dist/assets/${bootstrap}`)).size;
   const threeBytes = (await stat(`dist/assets/${three}`)).size;
   const cameraControlsBytes = (await stat(`dist/assets/${cameraControls}`)).size;
@@ -138,6 +141,19 @@ async function assertBundleBudgets() {
   assert.ok(
     experienceSignalsBytes <= 15_000,
     `experience signals chunk budget exceeded: ${experienceSignalsBytes} bytes`
+  );
+  /**
+   * The atmosphere chunk had no budget of its own until 2026-09-12, and it is the one place a
+   * split can hide weight: it is **eagerly loaded**, so every byte in it is first-load weight
+   * exactly like the entry chunk's, and the entry gate above cannot see it. Three modules have
+   * now landed there -- `SunlightSpectrum`, `RainbowOptics`, `ViewerAdaptation` -- and it
+   * stands at 6 457 bytes. 9 000 is room for one more without a fresh argument, and a gate
+   * where there was none, which is the point: "prefer the split to the purchase" only holds
+   * while the split is measured too.
+   */
+  assert.ok(
+    atmospherePhysicsBytes <= 9_000,
+    `atmosphere physics chunk budget exceeded: ${atmospherePhysicsBytes} bytes`
   );
 }
 
@@ -1145,8 +1161,48 @@ try {
     await window.__diorama.controls.setLookAt(70, 48, 80, 0, 6, 0, false);
   });
 
+  /**
+   * Floors on how much of the frame is above luminance 4, added 2026-09-12 with the viewer
+   * adaptation. Every existing assertion in this loop is about the WHITE end; nothing guarded
+   * the black end, and that is how a contrast lift that clipped 46 per cent of the opening
+   * frame to exactly rgb(0,0,0) shipped unnoticed.
+   *
+   * Measured through this harness's own instrument -- `sampleRenderedFrame`, a 320-pixel JPEG
+   * read every eighth pixel, 1 000 samples -- at this camera, three repeats each:
+   *
+   * ```
+   *                 before          after
+   *   opening    54.1/55.8/54.4   100.0/100.0/100.0
+   *   sunrise    90.7/93.4/95.5   100.0/100.0/100.0
+   *   noon       96.8/96.8/96.3   100.0/100.0/100.0
+   *   sunset     94.0/94.1/94.7   100.0/100.0/100.0
+   *   night      22.0/19.0/19.4    64.9/96.0/96.7
+   * ```
+   *
+   * Only the two frames the change exists for carry a bound, and both have better than 0.15
+   * of margin on each side. The daylight three are left alone: they were never the complaint,
+   * and a bound with 0.03 of headroom is a flake waiting to happen.
+   *
+   * **Both bounds were proved by running this harness against the old pipeline**, not merely
+   * observed to pass against the new one. On `main` they read `opening shadows are crushed
+   * (65.5%, floor 85%)` and, with the opening bound lifted so the run could get that far,
+   * `night shadows are crushed (21.8%, floor 40%)`. This page reaches the sweep with more
+   * history behind it than a bare probe does, which is why 65.5 here and 54-56 there; the
+   * number that governs a gate is the one its own harness produces.
+   *
+   * **The night spread is the settle, and it is why that bound is 0.40 and not 0.60.** This
+   * loop waits 350 ms, which is about one time constant of `DayNightCycle`'s real-time
+   * lighting filter, so the first sample after a jump from sunset is still adapting -- 64.9
+   * against a settled 96. On CI, where a frame costs about five seconds, one frame settles it
+   * completely and the same assertion reads 96. The bound has to hold for both, and does.
+   */
+  const DARK_FLOOR = { opening: 0.85, night: 0.4 };
   const exposureSamples = {};
-  for (const [label, time] of [['sunrise', 0.28], ['noon', 0.5], ['sunset', 0.72], ['night', 0.86]]) {
+  for (const [label, time] of [
+    // The frame a viewer actually meets: sun +2.87 degrees, a dawn.
+    ['opening', 0.172045],
+    ['sunrise', 0.28], ['noon', 0.5], ['sunset', 0.72], ['night', 0.86],
+  ]) {
     await page.evaluate((t) => window.__diorama.setTime(t), time);
     await page.waitForTimeout(350);
     const sample = await sampleRenderedFrame(page);
@@ -1157,6 +1213,15 @@ try {
       clippedRatio < 0.12,
       `${label} highlights are overexposed (${(clippedRatio * 100).toFixed(1)}%)`
     );
+    const visibleRatio = sample.visibleSamples / sample.totalSamples;
+    const floor = DARK_FLOOR[label];
+    if (floor !== undefined) {
+      assert.ok(
+        visibleRatio > floor,
+        `${label} shadows are crushed (${(visibleRatio * 100).toFixed(1)}% of the frame is ` +
+          `above luminance 4, floor ${(floor * 100).toFixed(0)}%)`
+      );
+    }
   }
 
   await page.evaluate(() => {

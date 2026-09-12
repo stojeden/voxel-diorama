@@ -104,8 +104,9 @@ export default defineConfig({
             },
             {
               // The atmosphere's physics: Rayleigh optical depth, the ozone Chappuis band,
-              // air mass, refraction, and the spectral-to-RGB conversion both the rainbow and
-              // the twilight model integrate through.
+              // air mass, refraction, the spectral-to-RGB conversion both the rainbow and
+              // the twilight model integrate through, and the illuminance-against-elevation
+              // table the viewer's dark adaptation is driven from.
               //
               // Split for room, not for laziness -- this code runs on the first frame and is
               // loaded eagerly. The entry chunk had 435 bytes left of its 249 500 when the
@@ -113,7 +114,7 @@ export default defineConfig({
               // budget raise. Splitting keeps the growth visible, which is the same call
               // `experience-signals` and `playground` below already record.
               name: 'atmosphere-physics',
-              test: /src[\\/]environment[\\/](?:SunlightSpectrum|RainbowOptics)\.ts$/,
+              test: /src[\\/]environment[\\/](?:SunlightSpectrum|RainbowOptics|ViewerAdaptation)\.ts$/,
               priority: 12,
               includeDependenciesRecursively: false,
             },
