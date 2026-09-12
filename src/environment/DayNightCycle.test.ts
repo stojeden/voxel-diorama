@@ -1,10 +1,12 @@
 import { describe, expect, test } from 'vitest';
 import * as THREE from 'three';
+import { Sky } from 'three/addons/objects/Sky.js';
 import {
   environmentTransitionAt,
   shadowNormalBias,
   shadowTexelSize,
   snapShadowFocus,
+  withRadianceCeiling,
 } from './DayNightCycle';
 
 describe('PMREM environment transition', () => {
@@ -19,6 +21,40 @@ describe('PMREM environment transition', () => {
     for (let index = 1; index < samples.length; index++) {
       expect(samples[index].blend).toBeGreaterThan(samples[index - 1].blend);
     }
+  });
+});
+
+describe('environment probe radiance ceiling', () => {
+  /** Largest finite half float, and the spacing between halves just below it. */
+  const HALF_MAX = 65504;
+  const HALF_STEP_NEAR_MAX = 32;
+
+  // The real shader Three.js ships, so a rename upstream fails here and not in a browser.
+  const patched = withRadianceCeiling(new Sky().material.fragmentShader);
+  const ceiling = Number(/min\( texColor, vec3\( ([\d.]+) \) \)/.exec(patched)?.[1]);
+
+  test('keeps the probe sky inside a half-float render target', () => {
+    // Every PMREM target is HalfFloatType. Over the ceiling, SwiftShader stores NaN
+    // where an M1 stores +Inf -- 4 solar-disc texels became 10 126 NaN texels of the
+    // atlas, and the frame came back 94.4 per cent black with the geometry still drawn.
+    expect(ceiling).toBeLessThanOrEqual(HALF_MAX);
+    // Exactly representable, so rounding to nearest cannot lift it back over the limit.
+    expect(ceiling % HALF_STEP_NEAR_MAX).toBe(0);
+    // ...and far above anything the sky itself reaches: the brightest the disc-less sky
+    // measured across a sweep of season and hour was 142.
+    expect(ceiling).toBeGreaterThan(1000);
+  });
+
+  test('clamps before the write, not after it', () => {
+    expect(patched.indexOf('min( texColor')).toBeLessThan(
+      patched.indexOf('gl_FragColor = vec4( texColor')
+    );
+  });
+
+  test('fails loudly if the Sky shader stops writing where the patch expects', () => {
+    // The patch is silent when it misses, and what it prevents is a black frame on one
+    // class of rasteriser only -- the kind of thing that reaches CI rather than a desk.
+    expect(() => withRadianceCeiling('void main() {}')).toThrow(/radiance ceiling/);
   });
 });
 

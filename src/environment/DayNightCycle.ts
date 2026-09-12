@@ -111,6 +111,49 @@ function blendedEnvironmentShaderChunk(): string {
 
 const BLENDED_ENVIRONMENT_SHADER_CHUNK = blendedEnvironmentShaderChunk();
 
+/** Where the Preetham sky writes its result; both sky patches hang off this line. */
+const SKY_OUTPUT_MARKER = 'gl_FragColor = vec4( texColor, 1.0 );';
+
+/**
+ * The largest radiance the probe's sky is allowed to emit.
+ *
+ * A half-float render target -- which is what every PMREM target is -- holds 65504 and no
+ * more. Preetham's solar disc is `vSunE * 19000 * Fex`, and after the shader's final
+ * `* 0.04` that clears 65504 as soon as the sun is about twenty degrees up: measured
+ * 44 926 at an elevation of 16.7 degrees and over the ceiling at 26.6.
+ *
+ * What happens next is not the same on every rasteriser, which is why this hid for so long.
+ * Storing an over-range float as a half gives +Inf on an Apple M1 (measured: 4 texels
+ * flagged over-range, zero NaN, scene renders) and NaN on SwiftShader (the same 4 texels,
+ * all NaN). PMREM then convolves those 4 NaN texels into 10 126 of the atlas's 786 432, the
+ * environment map poisons every physical material's IBL term, and the frame comes back
+ * black -- 94.4 per cent of it under luminance 8, with 621k triangles still drawn.
+ *
+ * 60000 is under the ceiling, exactly representable as a half (the spacing up there is 32),
+ * and above every radiance the sky has been measured to produce short of the disc itself.
+ * Nothing is given up: the disc still reaches the probe, it simply stops overflowing. The
+ * blur that follows is a weighted average, so no later stage can climb back over the limit.
+ */
+const ENVIRONMENT_RADIANCE_CEILING = 60000;
+
+/**
+ * Hold the probe sky's output inside what a half-float target can store.
+ *
+ * Exported for the test that pins the marker: if a Three.js upgrade renames that line the
+ * patch would silently stop applying, and the failure it prevents is a black frame on one
+ * class of GPU only -- exactly the kind that reaches CI and not a desk.
+ */
+export function withRadianceCeiling(fragmentShader: string): string {
+  if (!fragmentShader.includes(SKY_OUTPUT_MARKER)) {
+    throw new Error('Three.js Sky shader changed; environment radiance ceiling needs updating');
+  }
+  return fragmentShader.replace(
+    SKY_OUTPUT_MARKER,
+    `texColor = min( texColor, vec3( ${ENVIRONMENT_RADIANCE_CEILING}.0 ) );
+    ${SKY_OUTPUT_MARKER}`
+  );
+}
+
 /**
  * How much world one shadow-map texel covers, in metres.
  *
@@ -409,6 +452,10 @@ export class DayNightCycle {
     this.envScene = new THREE.Scene();
     this.envSky = new Sky();
     this.envSky.scale.setScalar(2000);
+    this.envSky.material.fragmentShader = withRadianceCeiling(
+      this.envSky.material.fragmentShader
+    );
+    this.envSky.material.needsUpdate = true;
     this.envScene.add(this.envSky);
     this.pmrem = new THREE.PMREMGenerator(renderer);
 
@@ -522,7 +569,7 @@ export class DayNightCycle {
     material.uniforms.eclipseDarkness = { value: 0 };
     material.uniforms.eclipseTotality = { value: 0 };
 
-    const outputMarker = 'gl_FragColor = vec4( texColor, 1.0 );';
+    const outputMarker = SKY_OUTPUT_MARKER;
     if (!material.fragmentShader.includes(outputMarker)) {
       throw new Error('Three.js Sky shader changed; eclipse atmosphere patch needs updating');
     }
