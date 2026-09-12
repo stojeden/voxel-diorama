@@ -5,6 +5,34 @@ import { BlendFunction, Effect } from 'postprocessing';
  * Lightweight cinematic grade. Tone mapping and LUTs are handled by the
  * shared postprocessing EffectPass; this effect adds only film response,
  * grain and vignette so it can be fused into the same fullscreen shader.
+ *
+ * **The contrast lift used to be a black clip, and a deep one.** It was written
+ * `(color - 0.5) * 1.025 + 0.5`, which subtracts 0.0125 from a linear value and so sends
+ * everything below 0.0122 to zero. This runs *after* ACES, so in scene-linear terms it clips
+ * 14.184x deeper than ACES's own `saturate` does -- at the shipped opening exposure the black
+ * point is scene-linear 0.0606 rather than 0.0043. Measured on the built bundle at 1440x900,
+ * the fraction of the frame at exactly rgb(0,0,0): 45.24 per cent at the opening moment
+ * (sun +2.87), 78.49 at sun -6, and 6.16 per cent at a June noon. Those pixels were not dark,
+ * they were destroyed, and the authored night blue two lines above -- `+ vec3(0, 0, 0.008)`
+ * -- went with them.
+ *
+ * The replacement is `mix(color, smoothstep(0, 1, color), 0.05)`. `smoothstep` has slope 1.5
+ * at mid-grey, so a 5 per cent mix has slope exactly 1.0250 there and an 8 per cent mix
+ * exactly 1.0400 -- bit-for-bit the two gains the old line had at `uGolden` 0 and 1 -- while
+ * passing through 0 at 0 and 1 at 1. Deviation from the old curve is under one code level
+ * everywhere above linear 0.2, and the built-in clamps, so a highlight above 1 cannot fold
+ * back down. Measured: exactly-black goes to 0.00 per cent at every elevation from -6 to
+ * +61.21, and near-white at noon *falls* from 2.752 per cent to 0.140, because the old line
+ * also pushed everything above linear 0.9878 past white.
+ *
+ * **The grain had to become signal-dependent in the same change.** It is +-0.007 of linear,
+ * re-randomised every frame, and on a night sky the old clip was silently swallowing it: dead
+ * sky plus positive grain is still under 0.0122, so it went to zero and the sky read as clean
+ * black. Without the clip that same +-0.007 lands on the near-black leg of the sRGB transfer,
+ * whose slope there is 12.92 rising, and arrives as 0..18 of 255 of uncorrelated per-pixel
+ * flicker with `taa` off by default -- a crawling-noise sky. Real grain is a density
+ * fluctuation and scales with signal anyway, so it is gated on the input luma. The midtones
+ * keep the grain they had; only the part that was already being thrown away is gone.
  */
 export class CinematicGradeEffect extends Effect {
   readonly parameters: {
@@ -61,11 +89,11 @@ export class CinematicGradeEffect extends Effect {
           color = mix(color, sepia, uSepia);
 
           float grain = (gradeHash(uv * uResolution * 0.5 + fract(uTime) * 43.7) - 0.5) * 0.014;
-          color += grain * (0.45 + uNight * 0.55);
+          color += grain * (0.45 + uNight * 0.55) * smoothstep(0.0, 0.05, luma);
 
           float vignette = 1.0 - length(uv - 0.5) * (0.25 + uNight * 0.1);
           color *= smoothstep(0.0, 1.0, vignette);
-          color = (color - 0.5) * (1.025 + uGolden * 0.015) + 0.5;
+          color = mix(color, smoothstep(0.0, 1.0, color), 0.05 + uGolden * 0.03);
 
           outputColor = vec4(color, inputColor.a);
         }

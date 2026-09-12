@@ -59,6 +59,7 @@ import {
   sunDirectionAt,
   sunElevationAt,
 } from './environment/sky';
+import { adaptingLuminance, viewerAdaptation } from './environment/ViewerAdaptation';
 import {
   QualityManager,
   type QualityMode,
@@ -942,7 +943,18 @@ function stepWorld(frame: FrameContext, carrier: WorldFrame): void {
     themeMix(previousTheme.exposureMul, currentTheme.exposureMul, themeBlend),
     light.eclipse,
     // Only a Polish June climbs high enough for this to do anything; October never does.
-    highSunFactor(sunElevationAt(t01, declination))
+    highSunFactor(light.sunElevation),
+    // The viewer, not the sky: how far a person standing in the diorama would have
+    // dark-adapted to this hour. A pure function of the clock, the city's own lamps and the
+    // snow on the roofs -- no history, no render target, and nothing about where the camera
+    // is pointed, so the exposure stays reproducible frame for frame.
+    viewerAdaptation(
+      adaptingLuminance(
+        THREE.MathUtils.radToDeg(light.sunElevation),
+        light.night,
+        weather.getSnowCover()
+      )
+    )
   );
 
   // ── Vehicles & life ──
