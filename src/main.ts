@@ -931,7 +931,8 @@ function stepWorld(frame: FrameContext, carrier: WorldFrame): void {
     presentationDelta,
     skyCloud,
     declination,
-    themeMix(previousTheme.nightFloor, currentTheme.nightFloor, themeBlend)
+    themeMix(previousTheme.nightFloor, currentTheme.nightFloor, themeBlend),
+    weather.getCloudCover()
   );
   sunDirectionAt(t01, declination, eclipseReflectionSun);
   sunColorAt(t01, declination, rainbowSunColor);

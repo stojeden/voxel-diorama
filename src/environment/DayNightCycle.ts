@@ -900,7 +900,22 @@ export class DayNightCycle {
      * than left to rot.)
      * A default here is what let the compiler stay quiet; there is not one any more.
      */
-    nightFloor: number
+    nightFloor: number,
+    /**
+     * What the **weather** put in the sky, which is not what `cloudCover` carries.
+     *
+     * `cloudCover` arrives as `skyCloud` -- the weather's cover plus the theme's
+     * `turbidityAdd * 0.1` -- because a theme's haze genuinely belongs in the dome's
+     * turbidity and mie terms. It does not belong in occlusion: haze is not a cloud deck, and
+     * feeding it to `cloudDaylightAt` made a **clear** cyberpunk sky (turbidityAdd 5, so cover
+     * 0.62) brighten its sun by 19.9 per cent and blur its shadow, with autumn and retro
+     * moved a little too. Measured by a reviewer, on three of the five shipped themes.
+     *
+     * Deliberately the last parameter rather than sitting beside `cloudCover`: two adjacent
+     * numbers that both mean "cloud" is the shape of mistake this file has already paid for
+     * twice.
+     */
+    weatherCloud: number
   ): DayLightState {
     this.elapsed += dtReal;
     const eclipseState = this.eclipseState;
@@ -944,7 +959,7 @@ export class DayNightCycle {
 
     // ── Sun light ──
     const sunStrength = this.smoothedSunStrength;
-    const cloudLight = cloudDaylightAt(cloudCover);
+    const cloudLight = cloudDaylightAt(weatherCloud);
     /**
      * The shadow map's grid is pinned to whole texels, so it stops crawling.
      *

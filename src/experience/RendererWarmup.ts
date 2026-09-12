@@ -34,7 +34,9 @@ export async function warmRenderer(options: RendererWarmupOptions): Promise<void
 
   const compileAt = async (clock: number, loading: number, label: string) => {
     ui.setLoadingProgress(loading, label);
-    dayNight.update(clock, 0, 0, themeDeclination(), options.getTheme().nightFloor);
+    // A cloudless warm-up on purpose: these passes exist to compile shader permutations,
+    // and the sky the world opens on is the last call in the `finally` below.
+    dayNight.update(clock, 0, 0, themeDeclination(), options.getTheme().nightFloor, 0);
     await env.renderer.compileAsync(env.scene, env.camera);
     env.composer.render(0);
   };
@@ -73,7 +75,7 @@ export async function warmRenderer(options: RendererWarmupOptions): Promise<void
       stars: 1,
       totality: 1,
     });
-    dayNight.update(eclipseViewTime, 0, 0, themeDeclination(), options.getTheme().nightFloor);
+    dayNight.update(eclipseViewTime, 0, 0, themeDeclination(), options.getTheme().nightFloor, 0);
     await env.renderer.compileAsync(env.scene, env.camera);
     env.composer.render(0);
     env.renderer.getContext().finish();
@@ -98,7 +100,8 @@ export async function warmRenderer(options: RendererWarmupOptions): Promise<void
       0,
       weather.getCloudCover(),
       themeDeclination(),
-      options.getTheme().nightFloor
+      options.getTheme().nightFloor,
+      weather.getCloudCover()
     );
     env.composer.render(0);
     env.renderer.getContext().finish();
