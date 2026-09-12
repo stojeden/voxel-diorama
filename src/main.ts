@@ -14,9 +14,10 @@ import { RailSignals } from './world/RailSignals';
 import { DayNightCycle } from './environment/DayNightCycle';
 import { Weather } from './environment/Weather';
 import {
-  RainbowAtmosphere,
+  DormantRainbow,
   type RainbowFrameInput,
-} from './environment/RainbowAtmosphere';
+  type RainbowHandle,
+} from './environment/RainbowHandle';
 import type { RealTimeSync } from './environment/RealTime';
 import { PortalGlow } from './effects/PortalGlow';
 import { Balloon } from './effects/Balloon';
@@ -97,8 +98,13 @@ const requestedQuality = qualityParam === 'low' || qualityParam === 'medium' || 
 // An explicit query parameter is a benchmark/debug override. Checkpoints only
 // provide the default profile when the caller did not request one.
 const quality = new QualityManager(undefined, requestedQuality ?? requestedCheckpoint?.quality);
-const rainbow = new RainbowAtmosphere(worldRandom.stream('rainbow-source'));
-const env = bootstrap(quality.getProfile(), rainbow.effect, { temporalResolve });
+/**
+ * The rainbow is fetched on demand; until then the frame loop talks to a real object that
+ * reports the truth about a dry sky. `DormantRainbow` is the whole of the eager cost.
+ */
+const dormantRainbow = new DormantRainbow();
+let rainbow: RainbowHandle = dormantRainbow;
+const env = bootstrap(quality.getProfile(), { temporalResolve });
 const ui = mountUi();
 ui.setLoadingProgress(4, 'RENDERER GOTOWY');
 
@@ -241,6 +247,49 @@ const rainbowFrame: RainbowFrameInput = {
   realDelta: 0,
   elapsed: 0,
 };
+
+let rainbowReady: Promise<void> | null = null;
+
+/**
+ * Fetch the rainbow's chunk, once, and hand the composer its post-process.
+ *
+ * `RainbowAtmosphere` is 11.5 kB of the built bundle and draws nothing whatsoever until a
+ * shower has been and gone, so it has no business in the first load. It used to be moved out
+ * of the entry chunk into the eagerly-loaded `atmosphere-physics` chunk, which is not the
+ * same thing: that chunk is fetched on the first frame like the entry, so the split saved
+ * nobody a single byte and only moved the weight to a gate that was not watching. This is the
+ * defect that prevents.
+ *
+ * **When.** Called from the frame loop the first tick `weather.getAirborneMoisture()` is
+ * anything but zero. That is the earliest instant the module can matter and it is not the
+ * first frame: `RainbowAtmosphere.update` computes `extinction = airborneMoisture * clearing`
+ * and holds both `uStrength` and `uExtinction` at or below it, so with no moisture in the air
+ * the effect provably cannot put a pixel on the screen. It is also early with room to spare —
+ * `Weather` only raises moisture while `rain > 0.4`, and the arc needs that same shower to
+ * fall back under 0.5 before `clearing` lets any sunlight through, so the fetch has the whole
+ * tail of a downpour to land in rather than the frame the colours are wanted.
+ *
+ * **The compile.** `warmRenderer` exists so the first frame of an effect is not a compile
+ * stall, and a pass that arrives after it has missed that. So the pass is composited once
+ * here, while `uStrength` is still 0 and the arc is invisible, to link its program at a
+ * moment nothing is on screen to hitch — rather than on the frame the rainbow appears, which
+ * is the frame the owner is looking at.
+ */
+function ensureRainbow(): Promise<void> {
+  rainbowReady ??= import('./environment/RainbowAtmosphere').then(({ RainbowAtmosphere }) => {
+    // `stream` is keyed by name, not by call order, so a late construction draws exactly the
+    // same sequence an eager one would have: the zone a seed picks does not depend on when.
+    const live = new RainbowAtmosphere(worldRandom.stream('rainbow-source'));
+    live.setQuality(quality.getProfile().level);
+    // Replay anything a checkpoint or the debug handle pinned while the chunk was in flight.
+    if (dormantRainbow.debugSource !== null) live.debugSetSource(dormantRainbow.debugSource);
+    env.attachAtmosphereEffect(live.effect);
+    env.composer.render(0);
+    rainbow = live;
+  });
+  return rainbowReady;
+}
+
 let activeCheckpoint: CheckpointDefinition | null = null;
 /**
  * Nothing in the runtime starts the tour on its own. This flag keeps that an
@@ -714,6 +763,12 @@ function applyBootCheckpoint(checkpoint: CheckpointDefinition): void {
   } else {
     rainbow.releaseDebugSource();
   }
+  // A checkpoint puts moisture in the air outright instead of raining for it, so the fetch
+  // does not get the tail of a shower to land in. Start it here, and -- at boot -- let the
+  // warm-up wait on it, or the frame a harness screenshots is a frame without the arc.
+  if ((checkpoint.rainbowMoisture ?? 0) > 0 || checkpoint.rainbowSource !== undefined) {
+    void ensureRainbow();
+  }
   applyTheme(checkpoint.theme, true);
   setCyberFactorImmediate(checkpoint.theme === 'cyberpunk' ? 1 : 0);
   if (checkpoint.trainProgress !== undefined) train.seekRouteProgress(checkpoint.trainProgress);
@@ -1096,6 +1151,10 @@ function presentWorld(frame: FrameContext, carrier: WorldFrame): void {
   rainbowFrame.wind = weather.getWind();
   rainbowFrame.realDelta = presentationDelta;
   rainbowFrame.elapsed = frame.elapsedSimulation;
+  // The first moisture in the air is the trigger for the rainbow's chunk; see `ensureRainbow`.
+  // Guarded on the promise rather than on the module, so a loaded rainbow costs this loop one
+  // null check per frame instead of a call.
+  if (rainbowReady === null && rainbowFrame.airborneMoisture > 0) void ensureRainbow();
   rainbow.update(rainbowFrame);
   env.setAtmosphereEnabled(rainbow.isEffectActive());
   const gradeNight = light.eclipse > 0.001 ? Math.min(light.night, 0.25) : light.night;
@@ -1291,6 +1350,9 @@ const debugHandle: DioramaDebugHandle = {
       Number.isFinite(strength) ? THREE.MathUtils.clamp(strength, 0, 1) : 0
     );
     rainbow.debugSetSource(Number.isFinite(index) ? index : 0);
+    // The chunk is lazy, so hand the fetch back: a harness that does not await this would
+    // otherwise photograph the frame before the arc exists and report a missing rainbow.
+    return ensureRainbow();
   },
   releaseRainbowSource: () => rainbow.releaseDebugSource(),
   loadCheckpoint: (id: CheckpointId) => {
@@ -1505,23 +1567,29 @@ const hybridReady: Promise<void> = hybridStrategy || wantsSpikeFrame
       if (spikeCheckpoint) applyBootCheckpoint(spikeCheckpoint);
     })
   : Promise.resolve();
-void hybridReady.then(() => warmRenderer({
-  env,
-  ui,
-  dayNight,
-  weather,
-  focusTarget: postFocusTarget,
-  // A clock reading, because that is what `dayNight.update` takes -- resolved against the
-  // same theme declination the warm-up lights that frame with.
-  eclipseViewTime: eclipseViewClock(THREE.MathUtils.degToRad(currentTheme.sunDeclinationDeg)),
-  getTheme: () => currentTheme,
-  getDayProgress: () => experience.getState().t01,
-  getEclipseState: () => eclipseState,
-})).finally(() => {
-  rendererWarm = true;
-  timer.reset();
-  animate();
-});
+void hybridReady
+  // A boot checkpoint can ask for the rainbow (`applyBootCheckpoint`). Wait for its chunk
+  // before warming, so `warmRenderer` compiles the atmosphere pass along with everything
+  // else rather than leaving it to stall the first frame that actually shows the arc.
+  .then(() => rainbowReady)
+  .then(() => warmRenderer({
+    env,
+    ui,
+    dayNight,
+    weather,
+    focusTarget: postFocusTarget,
+    // A clock reading, because that is what `dayNight.update` takes -- resolved against the
+    // same theme declination the warm-up lights that frame with.
+    eclipseViewTime: eclipseViewClock(THREE.MathUtils.degToRad(currentTheme.sunDeclinationDeg)),
+    getTheme: () => currentTheme,
+    getDayProgress: () => experience.getState().t01,
+    getEclipseState: () => eclipseState,
+  }))
+  .finally(() => {
+    rendererWarm = true;
+    timer.reset();
+    animate();
+  });
 
 // HMR cleanup
 if (import.meta.hot) {
