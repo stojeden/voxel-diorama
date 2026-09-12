@@ -38,6 +38,16 @@ export interface RuntimeEnv {
   setOcclusionExclusions: (objects: Iterable<THREE.Object3D>) => void;
   setBloomStrength: (strength: number) => void;
   setAtmosphereEnabled: (enabled: boolean) => void;
+  /**
+   * Insert the atmosphere post-process once its chunk has landed. The rainbow is fetched
+   * lazily (see `ensureRainbow` in main.ts), so its effect does not exist when the composer
+   * is built; the pass still has to go in at the place it always occupied — after ambient
+   * occlusion and temporal resolve, before bloom — or the arc would be bloomed and
+   * occlusion-tested against a picture it had already been composited into.
+   *
+   * Idempotent: a second call is ignored rather than stacking a second pass.
+   */
+  attachAtmosphereEffect: (effect: Effect) => void;
   setEnvironmentGrade: (golden: number, night: number) => void;
   /** A theme's grade, or a point between two; `t` of 1 lands on `to` exactly. */
   setThemeGradeBlend: (
@@ -105,7 +115,6 @@ export interface BootstrapOptions {
 
 export function bootstrap(
   initialQuality: QualityProfile,
-  atmosphereEffect?: Effect,
   options: BootstrapOptions = {}
 ): RuntimeEnv {
   const {
@@ -257,10 +266,14 @@ export function bootstrap(
 
   // Ownership transfers to EffectPass/EffectComposer. Its single dispose path
   // also releases resources owned directly by the effect (the spectral LUT).
-  const atmospherePass = atmosphereEffect
-    ? new EffectPass(camera, atmosphereEffect)
-    : null;
-  if (atmospherePass) composer.addPass(atmospherePass);
+  //
+  // The slot is reserved now and filled later: nothing appended after this point may take
+  // the index, because the rainbow has to composite before bloom reads the frame.
+  const atmosphereSlot = composer.passes.length;
+  let atmospherePass: EffectPass | null = null;
+  // Remembered rather than read off the pass: the frame loop can ask for a state before the
+  // chunk lands, and losing that call would leave the pass enabled over a dormant effect.
+  let atmosphereEnabled = true;
 
   const bloomEffect = new SelectiveBloomEffect(scene, camera, {
     intensity: 0.22,
@@ -418,7 +431,14 @@ export function bootstrap(
       bloomEffect.intensity = strength;
     },
     setAtmosphereEnabled: (enabled) => {
+      atmosphereEnabled = enabled;
       if (atmospherePass) atmospherePass.enabled = enabled;
+    },
+    attachAtmosphereEffect: (effect) => {
+      if (atmospherePass) return;
+      atmospherePass = new EffectPass(camera, effect);
+      atmospherePass.enabled = atmosphereEnabled;
+      composer.addPass(atmospherePass, atmosphereSlot);
     },
     setEnvironmentGrade: (golden, night) => {
       gradeEffect.parameters.golden.value = golden;

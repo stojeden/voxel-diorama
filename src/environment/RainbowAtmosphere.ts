@@ -15,6 +15,21 @@ import {
   rainbowRayAtImpact,
   type RainbowOrder,
 } from './RainbowOptics';
+import {
+  DormantRainbow,
+  RAINBOW_SOURCE_REST,
+  rainbowZoneIndex,
+  type RainbowDebugState,
+  type RainbowFrameInput,
+  type RainbowHandle,
+} from './RainbowHandle';
+
+/**
+ * Re-exported so the frame loop's contract has one import site whichever half it holds.
+ * `DormantRainbow` stands in for this class until its chunk lands; see `RainbowHandle.ts`.
+ */
+export type { RainbowDebugState, RainbowFrameInput, RainbowHandle };
+export { DormantRainbow };
 
 const SPECTRAL_LUT_WIDTH = 1024;
 const SPECTRAL_LUT_HEIGHT = 2;
@@ -30,31 +45,6 @@ const SOLAR_DISC_RADIUS_RAD = THREE.MathUtils.degToRad(0.2666);
 // Relative phase-function energy is physical; absolute scene radiometry is not.
 // This single shared exposure maps that energy into the existing HDR pipeline.
 const RAINBOW_EXPOSURE_CALIBRATION = 7;
-
-export interface RainbowFrameInput {
-  camera: THREE.PerspectiveCamera;
-  sunDirection: THREE.Vector3;
-  sunElevation: number;
-  sunColor: THREE.Color;
-  directSun: number;
-  cloudCover: number;
-  rainIntensity: number;
-  airborneMoisture: number;
-  wind: number;
-  realDelta: number;
-  elapsed: number;
-}
-
-export interface RainbowDebugState {
-  visible: boolean;
-  effectActive: boolean;
-  strength: number;
-  extinction: number;
-  source: string;
-  sourceIndex: number;
-  sourceCenter: [number, number, number];
-  sourceRadii: [number, number, number];
-}
 
 function smoothstep(edge0: number, edge1: number, value: number): number {
   if (edge0 === edge1) return value < edge0 ? 0 : 1;
@@ -502,7 +492,7 @@ class RainbowRenderEffect extends Effect {
  * Observer-relative rainbow caustic, spatially limited by a deterministic,
  * depth-clipped rain curtain selected from natural zones in WorldLayout.
  */
-export class RainbowAtmosphere {
+export class RainbowAtmosphere implements RainbowHandle {
   readonly effect: Effect;
   private readonly renderEffect: RainbowRenderEffect;
   private readonly random: RandomSource;
@@ -669,7 +659,7 @@ export class RainbowAtmosphere {
   /** Freeze only the natural source selection; irradiance remains physical. */
   debugSetSource(index: number): void {
     this.debugLocked = true;
-    this.selectSource(Number.isFinite(index) ? index : 0, false);
+    this.selectSource(index, false);
   }
 
   releaseDebugSource(): void {
@@ -694,17 +684,17 @@ export class RainbowAtmosphere {
     const count = RAINBOW_MOISTURE_ZONES.length;
     const index = requestedIndex === undefined
       ? Math.min(count - 1, Math.floor(this.random() * count))
-      : ((Math.round(requestedIndex) % count) + count) % count;
+      : rainbowZoneIndex(requestedIndex);
     const zone = RAINBOW_MOISTURE_ZONES[index];
     const jitterX = jitter ? (this.random() - 0.5) * zone.jitterX * 2 : 0;
     const jitterZ = jitter ? (this.random() - 0.5) * zone.jitterZ * 2 : 0;
-    const height = jitter ? 26 + this.random() * 4 : 27;
+    const height = jitter ? 26 + this.random() * 4 : RAINBOW_SOURCE_REST.height;
     this.sourceIndex = index;
     this.sourceCenter.set(zone.x + jitterX, height, zone.z + jitterZ);
     this.sourceRadii.set(
-      jitter ? 46 + this.random() * 17 : 62,
+      jitter ? 46 + this.random() * 17 : RAINBOW_SOURCE_REST.radiusX,
       height - zone.baseY,
-      jitter ? 25 + this.random() * 13 : 30
+      jitter ? 25 + this.random() * 13 : RAINBOW_SOURCE_REST.radiusZ
     );
   }
 

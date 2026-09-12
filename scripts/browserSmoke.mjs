@@ -89,6 +89,7 @@ async function assertBundleBudgets() {
   const postprocessing = assetNames.find((name) => /^postprocessing-.*\.js$/.test(name));
   const experienceSignals = assetNames.find((name) => /^experience-signals-.*\.js$/.test(name));
   const atmospherePhysics = assetNames.find((name) => /^atmosphere-physics-.*\.js$/.test(name));
+  const worldLayout = assetNames.find((name) => /^world-layout-.*\.js$/.test(name));
   assert.ok(entry, 'application entry chunk is missing');
   assert.ok(bootstrap, 'application bootstrap chunk is missing');
   assert.ok(three, 'Three.js vendor chunk is missing');
@@ -96,8 +97,10 @@ async function assertBundleBudgets() {
   assert.ok(postprocessing, 'postprocessing vendor chunk is missing');
   assert.ok(experienceSignals, 'experience signals chunk is missing');
   assert.ok(atmospherePhysics, 'atmosphere physics chunk is missing');
+  assert.ok(worldLayout, 'world layout chunk is missing');
   const entryBytes = (await stat(`dist/assets/${entry}`)).size;
   const atmospherePhysicsBytes = (await stat(`dist/assets/${atmospherePhysics}`)).size;
+  const worldLayoutBytes = (await stat(`dist/assets/${worldLayout}`)).size;
   const bootstrapBytes = (await stat(`dist/assets/${bootstrap}`)).size;
   const threeBytes = (await stat(`dist/assets/${three}`)).size;
   const cameraControlsBytes = (await stat(`dist/assets/${cameraControls}`)).size;
@@ -145,15 +148,43 @@ async function assertBundleBudgets() {
   /**
    * The atmosphere chunk had no budget of its own until 2026-09-12, and it is the one place a
    * split can hide weight: it is **eagerly loaded**, so every byte in it is first-load weight
-   * exactly like the entry chunk's, and the entry gate above cannot see it. Three modules have
-   * now landed there -- `SunlightSpectrum`, `RainbowOptics`, `ViewerAdaptation` -- and it
-   * stands at 6 457 bytes. 9 000 is room for one more without a fresh argument, and a gate
-   * where there was none, which is the point: "prefer the split to the purchase" only holds
-   * while the split is measured too.
+   * exactly like the entry chunk's, and the entry gate above cannot see it. Three modules live
+   * there -- `SunlightSpectrum`, `RainbowOptics`, `ViewerAdaptation` -- and it stands at
+   * 6 457 bytes. 9 000 is room for one more without a fresh argument, and a gate where there
+   * was none, which is the point: "prefer the split to the purchase" only holds while the
+   * split is measured too.
+   *
+   * That gate earned itself the same afternoon. `RainbowAtmosphere` was added to the group's
+   * glob in vite.config.js without raising the budget or correcting this comment, taking the
+   * chunk to 17 978 bytes and turning the FIRST assertion of the smoke red -- so nothing
+   * behind it ran either. The move was not merely over budget, it was pointless: the chunk is
+   * eager, so the entry's 11 521 byte saving was cancelled byte for byte by the 11 521 that
+   * landed here. It is measured back out now -- the rainbow is fetched on demand, in its own
+   * `rainbow` chunk, the first frame `airborneMoisture` is non-zero (`ensureRainbow` in
+   * main.ts) -- and the number below is deliberately unchanged. A budget met by raising it is
+   * not a budget. `src/main.importGraph.test.ts` holds the laziness itself, because a chunk
+   * boundary alone does not make anything lazy and that is precisely what went wrong here.
    */
   assert.ok(
     atmospherePhysicsBytes <= 9_000,
     `atmosphere physics chunk budget exceeded: ${atmospherePhysicsBytes} bytes`
+  );
+  /**
+   * `WorldLayout` is the second eagerly-loaded chunk, and it is new only as a *chunk*: the
+   * city's coordinates were inlined in the entry, under the entry gate, until the rainbow
+   * became a lazy import. Shared between an eager importer and a lazy one, it has to be split
+   * out -- and the moment it was, 9 823 bytes stopped being counted by the gate above.
+   *
+   * That is precisely how the atmosphere chunk went wrong, so the weight arrives at a gate
+   * instead of vanishing from one. Measured at 9 823 bytes on 2026-09-12, so 11 000 leaves
+   * 1 177 free: room for a street or a stop without a fresh argument, and not room for a
+   * feature to move in unnoticed the way one just did next door. Deliberately tighter in
+   * proportion than the 9 000 above (which was set 2 543 over its own measurement), because
+   * this is settled data with no pending work against it rather than a growing model.
+   */
+  assert.ok(
+    worldLayoutBytes <= 11_000,
+    `world layout chunk budget exceeded: ${worldLayoutBytes} bytes`
   );
 }
 

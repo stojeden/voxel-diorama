@@ -113,8 +113,41 @@ export default defineConfig({
               // sky dome's own twilight was still unwired, and the alternative was another
               // budget raise. Splitting keeps the growth visible, which is the same call
               // `experience-signals` and `playground` below already record.
+              //
+              // `RainbowAtmosphere` was added to this glob on 2026-09-12 and taken back out
+              // the same day. Because the chunk is eager, moving it here moved 11 521 bytes
+              // from a gate that was watching to a gate that was not and saved the first load
+              // nothing; it is now fetched on demand as `rainbow` below. Anything added to
+              // this list is first-load weight -- put it here only if it truly runs on frame
+              // one, and expect the 9 000 byte gate in `browserSmoke.mjs` to say so.
               name: 'atmosphere-physics',
-              test: /src[\\/]environment[\\/](?:SunlightSpectrum|RainbowOptics|RainbowAtmosphere|ViewerAdaptation)\.ts$/,
+              test: /src[\\/]environment[\\/](?:SunlightSpectrum|RainbowOptics|ViewerAdaptation)\.ts$/,
+              priority: 12,
+              includeDependenciesRecursively: false,
+            },
+            {
+              // The city's coordinates: block grid, lake, routes, stops, the moisture zones.
+              // Pure data with no dependency but Three, and it was inlined in the entry chunk
+              // until the rainbow became a lazy import -- at which point it is shared between
+              // an eager importer and a lazy one, so rolldown must give it a chunk of its own.
+              //
+              // Named rather than left to rolldown's automatic naming because it is EAGER
+              // (index.html modulepreloads it), so it is first-load weight that the entry gate
+              // can no longer see, and `browserSmoke.mjs` needs a stable name to put a gate on.
+              // That is the whole lesson of the atmosphere-physics chunk: weight that leaves a
+              // watched gate has to arrive at another one.
+              name: 'world-layout',
+              test: /src[\\/]world[\\/]WorldLayout\.ts$/,
+              priority: 12,
+              includeDependenciesRecursively: false,
+            },
+            {
+              // The rainbow, fetched only once the air holds moisture -- see `ensureRainbow`
+              // in main.ts. It is the largest module in `src/environment` and it cannot put a
+              // pixel on the screen before a shower has been and gone, so it is not first-load
+              // weight. Named rather than left anonymous so the split stays measurable.
+              name: 'rainbow',
+              test: /src[\\/]environment[\\/]RainbowAtmosphere\.ts$/,
               priority: 12,
               includeDependenciesRecursively: false,
             },
