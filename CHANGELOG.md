@@ -11,6 +11,30 @@ a wersjonowanie projektu docelowo stosuje [Semantic Versioning](https://semver.o
 
 ### Added
 
+- **Zmierzch na kopule nieba: cień Ziemi i Pas Wenus, przejęte dokładnie tam, gdzie
+  Preetham gaśnie.** Three.js liczy całe rozpraszanie z `vSunE`, które przy
+  `cutoffAngle = 1.6110731556870734` jest **dokładnie zerem od 2,30769 stopnia pod
+  horyzontem** — 61% zmierzchu cywilnego bez kopuły. Trzecia łatka na tym samym znaczniku
+  (`withTwilightDome`, nakładana **przed** `withRadianceCeiling`, bo jako jedyna z trzech
+  *dodaje* radiancję; łatka odmawia założenia po zacisku) dokłada model ozonowy z
+  `SunlightSpectrum`: barwa zenitu z `twilightSkyColorCached` (0,231 0,541 1,000 przez cały
+  zmierzch cywilny), barwa pasa z `beamTransmittanceColor(0)` (1,0000 0,1881 0,0000 — jedyna
+  droga zmierzchowa, która przechodzi *pod* ozonem). Przekazanie jest dokładnym dopełnieniem
+  `1 − vSunE(e)/vSunE(0)`: 0 na horyzoncie, 0,430 przy −1°, 0,865 przy −2°, 1 przy −2,30769°,
+  a nad horyzontem **dokładnie zero**, więc dzień jest bit w bit ten sam.
+- **Gradient pionowy nad antysłonecznym horyzontem wreszcie właściwą stroną.** Zmierzone na
+  żywej kopule, słońce −3,00°, radiancja liniowa: R/B **0,588 na 3°** i **1,413 na 12°**
+  (przedtem 0,588 i 2,190; odniesienie z audytu przy słońcu +0,5°: 3,96 i 1,14 — tu
+  odtworzone niezależnie jako 3,74 i 0,94). Poniżej 3° człon nie dokłada nic: to cień Ziemi.
+  Horyzont po stronie słońca zyskał 13,5× jasności i się ocieplił (R/B 0,596 → 1,522) —
+  łuk zmierzchowy, którego Preetham w ogóle nie rysował.
+- **Czego to nie naprawiło, i to jest ta połowa, którą widać.** Prezentowana klatka przy
+  zmierzchu cywilnym dalej jest czarna, ale już nie przez kopułę: przy słońcu −3,79° pas
+  nieba w kadrze daje 0,0296 z członem i 0,0302 bez, czyli poniżej szumu przyrządu, przy
+  czym ten sam pas z członem wymuszonym na czerwono daje 49,3. Kopuła musiałaby być około
+  **pięćdziesiąt razy** jaśniejsza od fizycznej, żeby ACES plus grade dały jeden poziom
+  luminancji — to rejon punktu 13 (`sceneExposure` 0,362 przy −3,8° wobec 0,394 w południe).
+  Szczegóły i krzywa przenoszenia w `docs/next-steps.md`, punkt 12.
 - **Akumulacja czasowa za flagą `?taa=1`, domyślnie wyłączona i na razie nieskuteczna.**
   Jitter projekcji po sekwencji Haltona, reprojekcja z bufora głębi po macierzy poprzedniej
   klatki, zaciskanie historii do sąsiedztwa 3×3, historia w ping-pongu, wstawione po

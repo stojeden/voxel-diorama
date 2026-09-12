@@ -19,6 +19,7 @@ import {
   sunDirectionAt,
   sunElevationAt,
 } from './sky';
+import { beamTransmittanceColor, twilightSkyColorCached } from './SunlightSpectrum';
 
 /**
  * Full day/night lighting rig:
@@ -112,8 +113,10 @@ function blendedEnvironmentShaderChunk(): string {
 
 const BLENDED_ENVIRONMENT_SHADER_CHUNK = blendedEnvironmentShaderChunk();
 
-/** Where the Preetham sky writes its result; both sky patches hang off this line. */
+/** Where the Preetham sky writes its result; all three sky patches hang off this line. */
 const SKY_OUTPUT_MARKER = 'gl_FragColor = vec4( texColor, 1.0 );';
+/** The last uniform of the stock fragment shader; the patches declare theirs after it. */
+const SKY_UNIFORM_MARKER = 'uniform float time;';
 
 /**
  * The largest radiance the probe's sky is allowed to emit.
@@ -136,6 +139,8 @@ const SKY_OUTPUT_MARKER = 'gl_FragColor = vec4( texColor, 1.0 );';
  * blur that follows is a weighted average, so no later stage can climb back over the limit.
  */
 const ENVIRONMENT_RADIANCE_CEILING = 60000;
+/** What the clamp above leaves behind, so a later patch can refuse to land after it. */
+const CEILING_CLAMP = 'min( texColor';
 
 /**
  * Hold the probe sky's output inside what a half-float target can store.
@@ -150,9 +155,177 @@ export function withRadianceCeiling(fragmentShader: string): string {
   }
   return fragmentShader.replace(
     SKY_OUTPUT_MARKER,
-    `texColor = min( texColor, vec3( ${ENVIRONMENT_RADIANCE_CEILING}.0 ) );
+    `texColor = ${CEILING_CLAMP}, vec3( ${ENVIRONMENT_RADIANCE_CEILING}.0 ) );
     ${SKY_OUTPUT_MARKER}`
   );
+}
+
+/**
+ * Where Preetham's sky stops existing: 2.30769 degrees below the horizon.
+ *
+ * Three.js computes every in-scattering term from `vSunE = sunIntensity( dot( sunDir, up ) )`,
+ * and `sunIntensity` is `EE * max( 0, 1 - exp( -( cutoffAngle - zenithAngle ) / steepness ) )`
+ * with `cutoffAngle = 1.6110731556870734`. That is pi/2 plus this many radians, so `vSunE`
+ * -- and with it `Lin`, the whole of the dome's colour -- is exactly zero from here down.
+ * Read off the shipped shader and evaluated: 81.51 at +5 degrees, 26.49 at 0, 15.10 at -1,
+ * 3.57 at -2, 0.0000 at -2.308. Sixty-one per cent of civil twilight, unlit.
+ */
+const PREETHAM_CUTOFF_RAD = 1.6110731556870734 - Math.PI / 2;
+const PREETHAM_STEEPNESS = 1.5;
+
+/** `vSunE / EE`: Three.js's own `sunIntensity`, as a fraction of its value at the horizon. */
+function preethamSunFraction(elevationRad: number): number {
+  return Math.max(0, 1 - Math.exp(-(elevationRad + PREETHAM_CUTOFF_RAD) / PREETHAM_STEEPNESS));
+}
+const PREETHAM_HORIZON_FRACTION = preethamSunFraction(0);
+
+/**
+ * How much of the dome the twilight model is responsible for: exactly what Preetham lost.
+ *
+ * Not a ramp anyone chose. It is `1 - vSunE( elevation ) / vSunE( 0 )`, so the two terms sum
+ * to one sun's worth of horizon at every elevation between them: 0 at the horizon, 0.430 at
+ * -1 degree where `vSunE` still has 57 per cent, 0.865 at -2, and 1 at -2.30769 where
+ * `vSunE` reaches zero. Above the horizon it is clamped to zero, so daylight is untouched --
+ * bit for bit, since the whole term is multiplied by this.
+ */
+export function preethamHandoff(elevationRad: number): number {
+  return clamp01(1 - preethamSunFraction(elevationRad) / PREETHAM_HORIZON_FRACTION);
+}
+
+/**
+ * How fast twilight dies as a line of sight has to climb to escape Earth's shadow.
+ *
+ * Earth's shadow is a cone, so a ray leaving the observer at elevation `alpha` into the
+ * antisolar azimuth does not clear it until it is `z*` up, and `z*` is fixed by
+ * `shadowHeightKm` -- the shadow's height overhead, which that function already returns and
+ * a test already pins at 3.9 km for a sun 2 degrees down and 35 km at 6. Small angles give
+ * `z* = alpha h / ( alpha - beta )`, so the climb above the shadow is `z* - h = h beta / gap`
+ * with `gap` the elevation above the shadow's edge. Toward the sun the shadow's edge is
+ * *below* the horizon, `gap` is `alpha + beta`, and `z* - h` comes out negative: nothing to
+ * climb, which is the bright twilight arch.
+ *
+ * How much that climb costs was measured, by extending `twilightSkyColor`'s integral from
+ * the observer's zenith to a slanted antisolar line of sight -- same air profile, same
+ * tangent-slant tables, same ozone -- and reading the radiance off against elevation:
+ *
+ * ```
+ *   sun -3, radiance relative to its own maximum, and the climb z* - h it needed:
+ *     alpha:   5      6      8      10     12     15     20     30
+ *     share:   0.006  0.033  0.164  0.353  0.537  0.748  0.931  1.000
+ *     z*-h km: 13.1   8.7    5.2    3.7    2.9    2.2    1.5    0.97
+ * ```
+ *
+ * That is `exp( -( z* - h ) / Z )` with Z about 2.2 km here, and fitting the same way at
+ * other depressions gives Z = 0.28, 1.13, 2.16 and 3.30 km for a sun 1, 2, 3 and 4 degrees
+ * down -- against shadow heights of 0.97, 3.88, 8.74 and 15.56 km. Z tracks the shadow
+ * height at about a quarter of it (3.5, 3.4, 4.0, 4.7 times), so the kilometres cancel:
+ *
+ *   `( z* - h ) / Z = 4 beta / gap`
+ *
+ * ...and the shadow height leaves the frame arithmetic entirely, having decided its shape.
+ * A first draft used a fixed 27 km emission scale instead and it was far too soft: it left
+ * 55 per cent of the light in at 6 degrees where this model and the integral both say 2-3.
+ */
+const TWILIGHT_SHADOW_CLIMB = 4;
+
+/**
+ * How fast the Belt of Venus gives its red back to the ozone blue, in radians of elevation.
+ *
+ * Lee, *Measuring and modeling twilight's Belt of Venus*, Applied Optics 54(4):B194 (2015):
+ * a reddish band over the antisolar horizon through clear civil twilight, the bluish-grey
+ * dark segment immediately under it, and -- the part a single band colour cannot have --
+ * colour and luminance extrema at different elevations. Here the colour extremum sits on the
+ * shadow's edge, where the light has grazed the limb, and the luminance extremum is tens of
+ * degrees higher, where there is more sunlit air in view.
+ *
+ * The number is fitted, not chosen. Extending `twilightSkyColor`'s integral from the
+ * observer's zenith to a slanted antisolar line of sight -- same absorbers, same tables --
+ * and reading the red fraction out of the resulting R/B gives an e-folding of
+ *
+ * ```
+ *   sun:       -2      -3      -4
+ *   fit (rad): 0.1435  0.1595  0.2305     (means over view elevations 8, 10, 12, 15, 20 deg)
+ * ```
+ *
+ * 0.20 sits at the top of that range, and deliberately so: that integral is single
+ * scattering with no stratospheric aerosol, and `SunlightSpectrum` names the missing layer
+ * itself -- "the aerosol layer that makes the purple light". Adding a 20 km aerosol layer to
+ * the same integral widens the fit to 0.188 / 0.219 / 0.344 at the same three depressions.
+ * So 0.20 is the single-scattering fit carrying the layer that single scattering leaves out,
+ * and it is the one number here that a measurement did not hand over on its own.
+ */
+const TWILIGHT_BELT_FALLOFF_RAD = 0.2;
+
+/**
+ * The radiance the hand-off has to be worth, so the dome does not step at -2.308 degrees.
+ *
+ * `twilightSkyColorCached` returns brightness relative to the same column at sunset, so one
+ * number turns it into the shader's own units: what Preetham puts at the zenith with the sun
+ * exactly on the horizon, divided by the luminance of the hue this replaces it with.
+ * Measured on the live dome with tone mapping off, at the diorama's own sunset uniforms
+ * (turbidity 4.64, rayleigh 3.55, mie 0.0160, weather clear): with the sun at -0.0011
+ * degrees the zenith comes back at linear (0.0080, 0.0179, 0.0339), luminance 0.01699. The
+ * hue it hands over to is (0.2312, 0.5417, 1.0000), luminance 0.5083, and the zenith keeps
+ * 0.992 of the term, so the scale is 0.01699 / ( 0.992 * 0.5083 ).
+ */
+const TWILIGHT_SUNSET_RADIANCE = 0.0337;
+
+/**
+ * Carry the twilight model onto the dome, in the two places Preetham gets it wrong.
+ *
+ * **Where it goes.** Three patches now hang off `SKY_OUTPUT_MARKER` and their order is not
+ * arbitrary. This one runs FIRST, before `withRadianceCeiling`, because it is the only one of
+ * the three that *adds* radiance: the ceiling has to stay downstream of it or item 11's
+ * half-float overflow comes back through a new door. The eclipse patch, which only ever mixes
+ * toward a darker colour, stays where it is between the clamp and the write.
+ *
+ * **What it draws.** Two things Preetham cannot:
+ *
+ *  - the zenith twilight, from `twilightSkyColorCached` -- the Chappuis-band model that
+ *    already drives the fog and the fills. Hue only; the brightness comes from the hand-off.
+ *  - Earth's shadow and the Belt of Venus over the antisolar horizon. `gap` is the view
+ *    elevation above the shadow's edge, which is at the solar depression on the antisolar
+ *    side and below the horizon on the sunlit side -- one `dot` with the sun's azimuth does
+ *    both. `exp( -K / gap )` is the sunlit air a line of sight can see, zero inside the
+ *    shadow and rising through the dark segment's edge; `exp( -gap / 0.2 )` is how much of
+ *    that light came the reddened way, over the limb.
+ *
+ * **It has to go at the output write and not one line earlier.** Three.js's own cloud block
+ * sits between the composition and the write, and nothing here drives its uniforms -- read
+ * off the live material, `cloudCoverage` and `cloudDensity` are still the stock 0.4. Its
+ * `cloudColor *= vSunE * 0.00002` is zero through all of this, so anything added before it
+ * would be multiplied toward black across 40 per cent of the sky above the horizon in a
+ * noise pattern. (That block also runs a five-octave fbm twice -- 40 `sin` per sky fragment
+ * -- for a cloud layer the diorama never asked for. Not this change's to remove.)
+ *
+ * Preetham paints the antisolar horizon red and pales upward -- measured R/B 3.96 at 3
+ * degrees of elevation against 1.14 at 15. This is that gradient the right way up.
+ */
+export function withTwilightDome(fragmentShader: string): string {
+  if (
+    !fragmentShader.includes(SKY_OUTPUT_MARKER) ||
+    !fragmentShader.includes(SKY_UNIFORM_MARKER) ||
+    // Refuse to go second. Both orders compile and render; only this one keeps the clamp
+    // downstream of the addition, and the other one's failure is a black frame on somebody
+    // else's GPU. Cheaper to make it impossible than to notice it.
+    fragmentShader.includes(CEILING_CLAMP)
+  ) {
+    throw new Error('twilight dome: Sky shader changed, or the ceiling came first');
+  }
+  const limb = beamTransmittanceColor(0);
+  const peak = Math.max(...limb);
+  return fragmentShader
+    .replace(SKY_UNIFORM_MARKER, `${SKY_UNIFORM_MARKER}\nuniform vec3 twilight,twilightHue;`)
+    .replace(
+      SKY_OUTPUT_MARKER,
+      `if ( twilight.x > 0.0 ) {
+float anti = -dot( direction.xz, vSunDirection.xz ) / ( length( direction.xz ) + 1e-4 );
+float gap = max( direction.y - twilight.y * anti, 1e-4 );
+texColor += twilight.x * exp( -max( twilight.z * anti / gap, 0.0 ) ) * mix( twilightHue,
+vec3( ${limb.map((c) => (c / peak).toFixed(4)).join()} ), exp( -gap / ${TWILIGHT_BELT_FALLOFF_RAD} ) );
+}
+${SKY_OUTPUT_MARKER}`
+    );
 }
 
 /**
@@ -591,8 +764,17 @@ export class DayNightCycle {
      *
      * Applied before `installEclipseSkyShader`, because both patch the same output write and
      * the eclipse patch must see the clamped expression rather than replace it.
+     *
+     * ...and after `withTwilightDome`, which is the only one of the three that adds radiance
+     * rather than mixing toward something darker. The ceiling has to sit downstream of every
+     * such term or the half-float overflow of item 11 returns through the new one.
      */
+    this.sky.material.fragmentShader = withTwilightDome(this.sky.material.fragmentShader);
     this.sky.material.fragmentShader = withRadianceCeiling(this.sky.material.fragmentShader);
+    // Deliberately not mirrored onto `envSky`: the reflection probe is built once at preload,
+    // so a twilight term there would be baked into every reflective surface for the whole day.
+    this.sky.material.uniforms.twilight = { value: new THREE.Vector3() };
+    this.sky.material.uniforms.twilightHue = { value: new THREE.Vector3() };
     this.installEclipseSkyShader();
     scene.add(this.sky);
 
@@ -956,6 +1138,27 @@ export class DayNightCycle {
     uniforms.showSunDisc.value = eclipseState.active ? 0 : 1;
     uniforms.eclipseDarkness.value = eclipseDarkness;
     uniforms.eclipseTotality.value = eclipseState.totality;
+    /**
+     * ...and the half of the day Preetham does not have. `elevation` is the real sun, not the
+     * smoothed lighting blend, because the hand-off is defined against `vSunE`, which the
+     * vertex shader computes from that same sun.
+     *
+     * `x` is the radiance of the whole term, `y` where Earth's shadow's edge stands (the
+     * solar depression, signed by azimuth in the shader), and `z` what a line of sight pays
+     * to climb over it. All three are dead above the horizon.
+     */
+    const twilight = uniforms.twilight.value as THREE.Vector3;
+    const handoff = preethamHandoff(elevation) * (1 - cloudCover * 0.7);
+    twilight.x = 0;
+    if (handoff > 0) {
+      const dusk = twilightSkyColorCached(elevation);
+      twilight.set(
+        handoff * dusk.relativeBrightness * TWILIGHT_SUNSET_RADIANCE,
+        -elevation,
+        TWILIGHT_SHADOW_CLIMB * -elevation
+      );
+      (uniforms.twilightHue.value as THREE.Vector3).fromArray(dusk.color);
+    }
 
     // ── Sun light ──
     const sunStrength = this.smoothedSunStrength;

@@ -4,11 +4,14 @@ import { Sky } from 'three/addons/objects/Sky.js';
 import {
   cloudDaylightAt,
   environmentTransitionAt,
+  preethamHandoff,
   shadowNormalBias,
   shadowTexelSize,
   snapShadowFocus,
   withRadianceCeiling,
+  withTwilightDome,
 } from './DayNightCycle';
+import { beamTransmittanceColor, twilightSkyColorCached } from './SunlightSpectrum';
 
 describe('PMREM environment transition', () => {
   test('crossfades maps without changing the total environment intensity', () => {
@@ -295,5 +298,120 @@ describe('cloud cover reshapes daylight', () => {
     expect(cloudDaylightAt(-1)).toEqual({ beam: 1, fill: 1, penumbra: 1 });
     expect(cloudDaylightAt(2).fill).toBe(cloudDaylightAt(OVERCAST).fill);
     expect(cloudDaylightAt(2).penumbra).toBe(3);
+  });
+});
+
+describe("the twilight dome's hand-off from Preetham", () => {
+  /**
+   * Three.js's own `sunIntensity`, rebuilt from the constants in the shader it ships.
+   *
+   * Read out of the source rather than copied, because the whole point of the hand-off is
+   * that it is the exact complement of *that* function: if an upgrade retunes `cutoffAngle`
+   * or `steepness`, the elevation where the dome goes dark moves and this has to move with
+   * it. A copied 1.611 would keep agreeing with itself while disagreeing with the renderer.
+   */
+  const vertexShader = new Sky().material.vertexShader;
+  const constant = (name: string) =>
+    Number(new RegExp(`float ${name} = ([\\d.]+)`).exec(vertexShader)?.[1]);
+  const cutoffAngle = constant('cutoffAngle');
+  const steepness = constant('steepness');
+  const sunIntensity = (elevationRad: number) =>
+    Math.max(0, 1 - Math.exp(-(cutoffAngle - (Math.PI / 2 - elevationRad)) / steepness));
+
+  test('reaches full strength exactly where Three.js stops lighting the sky', () => {
+    expect(Number.isFinite(cutoffAngle)).toBe(true);
+    expect(Number.isFinite(steepness)).toBe(true);
+    // 2.30769 degrees below the horizon: 61% of civil twilight with no dome at all.
+    const cutoffDeg = THREE.MathUtils.radToDeg(cutoffAngle - Math.PI / 2);
+    expect(cutoffDeg).toBeCloseTo(2.30769, 5);
+    expect(sunIntensity(THREE.MathUtils.degToRad(-cutoffDeg))).toBe(0);
+    expect(preethamHandoff(THREE.MathUtils.degToRad(-cutoffDeg))).toBe(1);
+    expect(preethamHandoff(THREE.MathUtils.degToRad(-6))).toBe(1);
+  });
+
+  test('is the complement of vSunE, so the two sum to one sky', () => {
+    const horizon = sunIntensity(0);
+    for (const degrees of [-2.2, -2, -1.5, -1, -0.5, -0.1]) {
+      const elevation = THREE.MathUtils.degToRad(degrees);
+      expect(preethamHandoff(elevation) + sunIntensity(elevation) / horizon).toBeCloseTo(1, 12);
+    }
+    // The measured shape, from the table in the defect report: vSunE keeps 57% of its
+    // sunset value one degree down and 13% two degrees down.
+    expect(preethamHandoff(THREE.MathUtils.degToRad(-1))).toBeCloseTo(0.43, 2);
+    expect(preethamHandoff(THREE.MathUtils.degToRad(-2))).toBeCloseTo(0.865, 3);
+  });
+
+  test('is exactly zero in daylight, so the dome is untouched above the horizon', () => {
+    // Not "close to zero": the whole term is multiplied by this, so an exact zero is what
+    // makes a daylit frame bit-identical with the patch in place. Measured on the live
+    // build at +20 degrees and at noon, the frame moved by 0.002% and 0.085% -- which is
+    // the composer's own frame-to-frame noise, not this.
+    for (const degrees of [0, 0.5, 2.3, 20, 61]) {
+      expect(preethamHandoff(THREE.MathUtils.degToRad(degrees))).toBe(0);
+    }
+  });
+});
+
+describe('the twilight dome patch', () => {
+  const stock = new Sky().material.fragmentShader;
+  // The constructor's order, reproduced: twilight adds, then the ceiling clamps.
+  const patched = withRadianceCeiling(withTwilightDome(stock));
+
+  test('keeps the radiance ceiling downstream of the only term that adds light', () => {
+    // Item 11: over 65504 a half-float target stores NaN on one rasteriser and +Inf on
+    // another, and PMREM turned four such texels into 10 109. The eclipse patch only ever
+    // mixes toward something darker; this one sums. If it ever lands after the clamp the
+    // overflow is back, and nothing else in the suite would notice.
+    const added = patched.indexOf('texColor += twilight.x');
+    const clamped = patched.indexOf('min( texColor');
+    const written = patched.indexOf('gl_FragColor = vec4( texColor');
+    expect(added).toBeGreaterThan(0);
+    expect(added).toBeLessThan(clamped);
+    expect(clamped).toBeLessThan(written);
+  });
+
+  test('takes the belt colour from the atmosphere, not from a palette', () => {
+    // The Belt of Venus is lit by a beam that has grazed the limb -- the one twilight path
+    // that goes *under* the ozone layer rather than through its Chappuis band, which is why
+    // it is pink where the zenith is blue. So the literal in the shader has to be the
+    // spectrum this repo already computes for a sun on the horizon, normalised.
+    const limb = beamTransmittanceColor(0);
+    const peak = Math.max(...limb);
+    const expected = limb.map((c) => (c / peak).toFixed(4)).join();
+    expect(patched).toContain(`vec3( ${expected} )`);
+    // ...and that spectrum really is the red end: blue is gone entirely at the limb.
+    expect(limb[2] / peak).toBe(0);
+    expect(limb[0] / peak).toBe(1);
+  });
+
+  test('mixes between two colours whose red/blue straddle one, the right way up', () => {
+    // Hosek & Wilkie name Preetham's inverted antisolar gradient as its headline defect,
+    // and the diorama measures it: R/B 3.96 at 3 degrees of elevation against 1.14 at 15,
+    // where the sky is blue-grey low and pink above. The fix is only as good as its two
+    // endpoints, so pin them: the ozone model's hue at the top, the limb's at the bottom.
+    const limb = beamTransmittanceColor(0);
+    expect(limb[0] / Math.max(limb[2], 1e-30)).toBeGreaterThan(1);
+    for (const degrees of [-0.5, -1, -2, -2.308, -3, -4, -6]) {
+      const hue = twilightSkyColorCached(THREE.MathUtils.degToRad(degrees)).color;
+      // Measured across that whole span: 0.231 to 0.233, never anywhere near red.
+      expect(hue[0] / hue[2]).toBeLessThan(0.25);
+      expect(hue[2]).toBe(1);
+    }
+  });
+
+  test('refuses to be applied after the ceiling rather than quietly working', () => {
+    // The wrong order compiles and renders: it is only wrong on a rasteriser that stores
+    // over-range halves as NaN, which is not the one anybody develops on. So the patch
+    // itself will not go second, and a rig assembled the wrong way round fails to build
+    // instead of shipping item 11 again.
+    expect(() => withTwilightDome(withRadianceCeiling(stock))).toThrow(/ceiling came first/);
+  });
+
+  test('fails loudly if the Sky shader stops offering either anchor', () => {
+    expect(() => withTwilightDome('void main() {}')).toThrow(/twilight dome/);
+    expect(() => withTwilightDome('uniform float time;')).toThrow(/twilight dome/);
+    expect(() => withTwilightDome('gl_FragColor = vec4( texColor, 1.0 );')).toThrow(
+      /twilight dome/
+    );
   });
 });

@@ -294,35 +294,182 @@ Five wrong explanations preceded the right one. What settled it was reading the 
 `npm run test:software-render` now answers it in three minutes, and was validated in both
 directions before being trusted.
 
-## 12. The sky dome is switched off for most of twilight, and the best physics here never touches it
+## 12. ~~The sky dome is switched off for most of twilight~~ — **half fixed 2026-09-12**
 
-Measured 2026-09-12 by porting the shader to CPU and probing the live build.
+The dome now carries `SunlightSpectrum`'s twilight below the horizon, and the two defects the
+audit named are gone from it. **The presented frame at civil twilight is still black, and the
+reason is not the dome.** Both halves are below, with the numbers.
 
-Three.js's `Sky` computes all in-scattering from `sunIntensity(dot(sunDir, up))`, whose
-`cutoffAngle` is 92.308 degrees of zenith angle. The dome's contribution is **exactly zero from
-2.308 degrees below the horizon onward**, and it has already lost 87% by −2:
+### What the dome was
 
-| sun elevation | `vSunE` | fraction of its value at sunset |
+Three.js computes all in-scattering from `vSunE = sunIntensity( dot( sunDir, up ) )`, whose
+`cutoffAngle = 1.6110731556870734` is **2.30769 degrees** of depression. Evaluated off the
+shipped shader: 81.51 at +5 degrees, 26.49 at 0, 15.10 at −1, 3.57 at −2, and **0.0000 at
+−2.30769** — 61% of civil twilight with no dome at all. Preetham also reddens the *antisolar*
+horizon, the inverse of the real blue-grey shadow with the Belt of Venus above it, which
+Hosek & Wilkie name as its headline defect.
+
+Measured again here on the live GPU, sun at +0.499 degrees, tone mapping off, the diorama's
+own uniforms (turbidity 4.60, rayleigh 3.52, mie 0.0156), reading the dome alone at an exact
+direction — an instrument independent of the CPU port the audit used, and agreeing with it:
+
+| view elevation | antisolar R/B, CPU port | antisolar R/B, live dome |
 | --- | --- | --- |
-| 0 | 26.49 | 100% |
-| −1 | 15.10 | 57% |
-| −2 | 3.57 | 13% |
-| **−2.308** | **0.0000** | **0%** |
+| 3 | 3.96 | **3.74** |
+| 15 | 1.14 | **0.94** |
 
-That is **61% of civil twilight** with the largest surface on screen reduced to a flat dark wash,
-while `SunlightSpectrum`'s ozone model drives the fog, ambient and hemisphere lights through a full
-colour ramp. Sky and light visibly disagree, twice a day.
+### What replaced it
 
-Preetham also paints the **anti-solar** horizon red — measured R/B 3.96 at 3 degrees of elevation,
-1.14 by 15 — the inverse of reality, where a blue-grey Earth's shadow sits low with the pink Belt
-of Venus above it. Hosek & Wilkie name this as Preetham's headline defect. `OVERVIEW_SHOT` and
-`golden-hour` both look toward −X/−Z with sunrise at +X, so **the wrongest part of the dome is dead
-centre of the two most-used shots at dawn.**
+`withTwilightDome()` is a third patch on `SKY_OUTPUT_MARKER`, applied **before**
+`withRadianceCeiling` because it is the only one of the three that *adds* radiance; the
+eclipse patch only ever mixes darker, so it stays between the clamp and the write. The patch
+now throws if it is handed an already-clamped shader, so the wrong order cannot ship.
 
-The seam is `installEclipseSkyShader()`, which already patches this shader and guards with a
-version check. Do not mirror to `envSky`: the probe is built once at preload.
+- **The hand-off is Preetham's exact complement**, `1 − vSunE(e)/vSunE(0)`: 0 at the horizon,
+  0.430 at −1, 0.865 at −2, 1 at −2.30769. Above the horizon it is exactly 0, so a daylit
+  frame is bit-identical.
+- **Colour comes from the module that knows why.** The zenith hue is
+  `twilightSkyColorCached(e).color` — (0.231, 0.541, 1.000) through the whole of civil
+  twilight — and the belt's is `beamTransmittanceColor(0)` normalised, (1.0000, 0.1881,
+  0.0000): the one twilight path that grazes *under* the ozone rather than through its
+  Chappuis band, which is why the belt is pink where the zenith is blue.
+- **Earth's shadow is geometry, not a band.** A line of sight must climb `z* − h = h·beta/gap`
+  above the shadow before it is lit, where `h` is `shadowHeightKm` and `gap` the elevation
+  over the shadow's edge — which sits at the solar depression on the antisolar side and
+  *below* the horizon toward the sun, so the same expression gives the dark segment and the
+  bright twilight arch. Extending `twilightSkyColor`'s integral to a slanted antisolar line of
+  sight measures the cost of that climb as `exp(−(z*−h)/Z)` with Z = 0.28, 1.13, 2.16 and 3.30
+  km for a sun 1, 2, 3 and 4 degrees down — about a quarter of the shadow height each time, so
+  the kilometres cancel and the shader carries `4·beta/gap`.
+- **The belt fades over 0.20 rad.** Fitted to that same integral: 0.1435, 0.1595 and 0.2305 at
+  2, 3 and 4 degrees down. 0.20 is the top of that range, because the integral is single
+  scattering with no stratospheric aerosol — the layer `SunlightSpectrum` names as missing.
+  Adding a 20 km aerosol layer to it moves the fit to 0.188 / 0.219 / 0.344. This is the one
+  number a measurement did not hand over on its own.
+- **Brightness is continuous across the hand-off**, not chosen: Preetham's zenith with the sun
+  on the horizon measures linear (0.0080, 0.0179, 0.0339), luminance 0.01699, and the hue that
+  replaces it has luminance 0.5083.
 
-**This changes what dawn looks like, so it is the owner's call before it starts.**
+### The dome, before and after
+
+Linear radiance, dome alone, term forced off in the same tick as the control.
+
+Sun **−3.00**, antisolar azimuth:
+
+| view elevation | R/B before | R/B after | luminance before | after |
+| --- | --- | --- | --- | --- |
+| 1 | 0.135 | 0.135 | 2.78e−4 | 2.78e−4 |
+| 3 | 0.588 | **0.588** | 3.37e−4 | 3.37e−4 |
+| 6 | 1.360 | 1.578 | 4.37e−4 | 5.70e−4 |
+| 10 | 1.819 | 1.668 | 7.13e−4 | 1.47e−3 |
+| 12 | 2.190 | **1.413** | 8.40e−4 | 2.00e−3 |
+| 20 | 2.044 | 0.856 | 1.33e−3 | 3.75e−3 |
+| 30 | 1.766 | 0.589 | 1.62e−3 | 4.77e−3 |
+| zenith | 1.378 | 0.452 | 3.06e−3 | 7.93e−3 |
+| solar side, 3 | 0.596 | 1.522 | 3.38e−4 | 4.58e−3 |
+
+The acceptance pair is met: **0.588 at 3 degrees and 1.413 at 12**, against a baseline note of
+3.96 and 1.14. Below 3 degrees the term contributes exactly nothing — that is Earth's shadow,
+and it is supposed to be dark. The solar horizon gained a factor of 13.5 and went warm: the
+twilight arch, which Preetham had switched off entirely.
+
+Sun **−3.96**, zenith: 3.06e−3 → 5.17e−3 and R/B 1.378 → 0.655. Sun **−2.91** (autumn,
+t01 0.27064): 3.08e−3 → 7.45e−3 and R/B 1.225 → 0.493.
+
+### Daylight is untouched
+
+Whole presented frame, both captures inside one tick with nothing between the renders:
+
+| sun | with the term | with it forced off | delta |
+| --- | --- | --- | --- |
+| +19.95 | 93.9902 | 93.9882 | **+0.002%** |
+| +61.21 | 106.9665 | 107.0577 | **−0.085%** |
+
+Both are inside the composer's own frame-to-frame noise; `twilight.x` is exactly 0 in all
+four captures. The budget bought 1 144 B of a 1 209 B allowance, leaving 65.
+
+### What is NOT fixed, and it is the part the owner will see
+
+**The presented frame at civil twilight is still black, and the dome is no longer why.** At sun
+−3.79, aimed at the antisolar sky, the top 30% of the frame reads mean luminance **0.0296 with
+the term and 0.0302 without** — a difference below the instrument's own noise, on a band that
+is entirely dome (forcing the term to flat red at strength 4 takes the same band to 49.3).
+
+Sweeping the term's radiance against that band measures the gap:
+
+| `twilight.x` | band mean luminance |
+| --- | --- |
+| 0.0055 (physical, sun −3.8) | 0.030 |
+| 0.03 | 0.033 |
+| 0.1 | 0.056 |
+| 0.3 | 6.72 |
+| 1 | 75.9 |
+
+The dome would need roughly **fifty times** the physically correct twilight radiance before
+ACES plus the cinematic grade put one luminance level on the sky, at the exposure
+`sceneExposure` gives night (0.362 measured at that moment, against 0.394 at noon). That is
+item 13's territory, one floor down: the exposure ramp barely opens up at twilight, so a
+correct sky is graded to black. **Making the dome brighter to compensate would be the wrong
+fix** — it would put a step at −2.308 where the whole design is continuity — so this is left
+for the owner alongside item 13.
+
+Sweeping the sun across the hand-off, camera aimed at the solar horizon, mean luminance of the
+upper 55% of the presented frame, both captures in one tick:
+
+| sun | `twilight.x` | exposure | sky band, term on | term off |
+| --- | --- | --- | --- | --- |
+| +2.00 | 0 | 0.427 | 136.72 | 136.70 |
+| +0.99 | 0 | 0.419 | 97.87 | 97.86 |
+| 0.00 | 1.4e−5 | 0.409 | 50.22 | 50.23 |
+| −0.50 | 6.4e−3 | 0.406 | 30.82 | 30.68 |
+| −0.99 | 1.2e−2 | 0.396 | 14.75 | 14.58 |
+| −1.51 | 1.5e−2 | 0.390 | 3.85 | 3.74 |
+| −1.99 | 1.6e−2 | 0.386 | 0.140 | 0.111 |
+| −2.30 | 1.7e−2 | 0.381 | 0.011 | 0.012 |
+| −3.00 | 1.0e−2 | 0.374 | 0.014 | 0.014 |
+| −6.00 | 3.8e−4 | 0.351 | 0.017 | 0.018 |
+
+**A factor of 4500 in 2.3 degrees, and the term's own strength is at its maximum exactly where
+the picture reaches zero.** Exposure moves 7% across that whole span. Nothing about the dome can
+answer this; it is the grade, and it is the reason the owner's four screenshots look the way
+they do.
+
+**The solar-side twilight arch is warm but not bright enough relative to the zenith.** In this
+model the arch and the zenith are both fully lit — there is no shadow to climb over toward the
+sun — so the arch comes out at 0.75 of the zenith's luminance rather than the several times
+brighter a real one is, and it reads bright only because it is saturated orange. The physical
+term is there in the geometry: toward the sun the ray is lit *below* the shadow height, which is
+`exp( +4 beta / gap )`, and it is clamped off at 1 because it runs away as `gap` reaches the
+horizon — `exp(2095)` at the clamp floor, which is an overflow, not a sky. A bounded form of it
+is the obvious next improvement and wants its own measurement.
+
+**Preetham's antisolar inversion above the horizon is also untouched**, by construction: the
+hand-off is zero there, so at +0.5 degrees the dome still measures R/B 3.74 at 3 degrees of
+elevation against 0.94 at 15, before and after. `OVERVIEW_SHOT` and the `golden-hour`
+checkpoint sit in exactly that range. Fixing it means a term that is live in daylight, which is
+a different decision and a different budget.
+
+### Found on the way, not fixed
+
+**Nothing in the diorama drives Three.js's cloud uniforms.** Read off the live material,
+`cloudCoverage` and `cloudDensity` are still the stock 0.4 and `cloudScale` 0.0002, so the Sky
+shader's own cloud block is live on every sky fragment above the horizon: a five-octave fbm
+twice over, 40 `sin` per fragment, for a layer no art direction asked for. Below −2.308 degrees
+its `cloudColor *= vSunE * 0.00002` is zero, so what it actually does at twilight is multiply
+up to 40% of the sky toward black in a noise pattern. The twilight term is added after it, at
+the output write, for exactly that reason. Turning the block off is a free win on sky-heavy
+frames and a visible change to the daylit sky, so it is a separate decision.
+
+### One trap for whoever measures this next
+
+**`dayNight.sunLight.position` is not the sun direction.** `update` writes
+`sunDir * 140 + snappedFocus`, so normalising it mixes in the shadow focus: at one probed
+moment it read +2.551 degrees where the sun was at +0.499. Read
+`sky.material.uniforms.sunPosition` instead — that is the unit vector the vertex shader takes
+`vSunE` from. Two more traps cost a run each: `captureFrame` twice around an `await
+image.decode()` lets a frame tick through, which made a daylight comparison come back 29% apart
+with the term provably zero in both; and the probe camera must be narrow, since a 20-degree
+field of view centred on 3 degrees of elevation averages straight across the shadow's edge.
 
 ## 13. The lighting ramps read a 4.4-degree sun as night
 
@@ -334,6 +481,12 @@ art direction, not a physics gap.
 It matters now because the opening moment was restored to its authored dawn at 2.87 degrees, so
 **the product opens inside this range** — and any improvement to the sky will be judged against a
 scene these ramps are holding dark.
+
+That last sentence stopped being a prediction on 2026-09-12: item 12 put a physically correct
+twilight on the dome and the presented sky did not move, because `sceneExposure` gives 0.362 at
+a sun 3.8 degrees down against 0.394 at noon. **Whatever is done here should be measured on the
+sky band, not only on the city** — item 12 carries the transfer curve that says the dome would
+need fifty times its real radiance to reach one luminance level through the current grade.
 
 ---
 
