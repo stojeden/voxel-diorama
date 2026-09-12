@@ -49,6 +49,7 @@ import {
   type CheckpointDefinition,
   type CheckpointId,
 } from './experience/Checkpoints';
+import { eclipseViewCameraPosition, eclipseViewClock } from './experience/EclipseView';
 import {
   clockFromSolarPhase,
   highSunFactor,
@@ -208,15 +209,20 @@ env.loadingManager.onProgress = (_url, loaded, total) => {
 
 // ─── State ───
 let cameraMode: CameraMode = 'free';
-const ECLIPSE_VIEW_TIME = 0.715;
 const eclipseTimeline = new EclipseTimeline({ durationSeconds: 96 });
 let eclipseState = eclipseTimeline.getState();
 let eclipseReaction = eclipseWorldReactionAt(0, 0);
 let eclipseDebugStrength: number | null = null;
 let eclipseCheckpointLocked = false;
 const eclipseSchedule = new EclipseSchedule((index) => worldRandom.sample('eclipse-schedule', index));
-let previousDayProgress = 0.262;
-const eclipseViewSun = new THREE.Vector3();
+/**
+ * The clock the eclipse schedule last saw, so it can spot the trigger hour being crossed.
+ *
+ * A clock reading, not a solar phase: it is compared against `t01`. It is seeded from the
+ * experience's own opening clock once the season is known -- see `setPhaseToClock` below --
+ * and nothing reads it before then, because only the frame loop does.
+ */
+let previousDayProgress = 0;
 const eclipseViewCamera = new THREE.Vector3();
 const eclipseViewTarget = new THREE.Vector3(0, 36, 0);
 const eclipseReflectionSun = new THREE.Vector3();
@@ -574,9 +580,8 @@ function focusEclipseView(): void {
     endTourOverrides();
   }
 
-  sunDirectionAt(ECLIPSE_VIEW_TIME, sunDeclination(), eclipseViewSun);
-  eclipseViewCamera.set(-eclipseViewSun.x, 0, -eclipseViewSun.z).normalize().multiplyScalar(148);
-  eclipseViewCamera.y = 46;
+  // Opposite the sun of the same hour the clock is locked to -- one conversion, in one place.
+  eclipseViewCameraPosition(sunDeclination(), eclipseViewCamera);
   cameraDirector.focusEclipse(eclipseViewCamera, eclipseViewTarget);
 }
 
@@ -592,7 +597,7 @@ function startEclipse(source: EclipseStartSource = 'manual'): void {
     weather.setExternal(null);
     ui.setRealTime(false);
   }
-  if (manual) experience.setTime(ECLIPSE_VIEW_TIME);
+  if (manual) experience.setTime(eclipseViewClock(sunDeclination()));
   experience.setClockLocked(true);
   eclipseState = eclipseTimeline.start();
   eclipseSchedule.recordOccurrence();
@@ -685,7 +690,7 @@ if (import.meta.env.DEV && !requestedCheckpoint) {
   };
   const checkpoint = eclipseCheckpoint ? checkpoints[eclipseCheckpoint] : undefined;
   if (checkpoint !== undefined) {
-    experience.setTime(ECLIPSE_VIEW_TIME);
+    experience.setTime(eclipseViewClock(sunDeclination()));
     eclipseState = eclipseTimeline.seek(checkpoint, false);
     eclipseCheckpointLocked = true;
     focusEclipseView();
@@ -733,6 +738,25 @@ function releaseCheckpoint(): void {
 
 if (requestedCheckpoint) applyBootCheckpoint(requestedCheckpoint);
 
+/**
+ * Authored moments are written against the sun, not against a clock.
+ *
+ * "GOLDEN HOUR" and "CYBERPUNK" are claims about the light, and the hour that satisfies them
+ * moves with the season -- golden hour is 04:40 in June and 07:30 in October. Resolving them
+ * through the live declination keeps every checkpoint and tour chapter meaning what its name
+ * says; reading them as clock times would have put golden hour in the mid-morning glare and
+ * the neon chapter in dusk.
+ *
+ * Installing this also resolves the experience's own opening moment, which is authored the
+ * same way ("just after sunrise") and could only be seeded through the identity mapping
+ * while nobody owned the sun. It has to happen before the first frame reads the clock, which
+ * is why it sits here, above the animation section and above the boot checkpoint's only
+ * other chance to speak.
+ */
+experience.setPhaseToClock((phase) => clockFromSolarPhase(phase, sunDeclination()));
+/** The schedule's "previous" clock starts where the experience actually opens. */
+previousDayProgress = experience.getState().t01;
+
 // ─── Animation ───
 const timer = new THREE.Timer();
 timer.connect(document);
@@ -754,16 +778,6 @@ const postFocusTarget = new THREE.Vector3();
 const boardingStations = new Set<string>();
 /** The seam itself: one carrier, reused, written by `stepWorld` and read by `presentWorld`. */
 const worldFrame = createWorldFrame(experience.getState(), train.getStationState());
-/**
- * Authored moments are written against the sun, not against a clock.
- *
- * "GOLDEN HOUR" and "CYBERPUNK" are claims about the light, and the hour that satisfies them
- * moves with the season -- golden hour is 04:40 in June and 07:30 in October. Resolving them
- * through the live declination keeps every checkpoint and tour chapter meaning what its name
- * says; reading them as clock times would have put golden hour in the mid-morning glare and
- * the neon chapter in dusk.
- */
-experience.setPhaseToClock((phase) => clockFromSolarPhase(phase, sunDeclination()));
 
 /**
  * One frame, in three phases: the camera the viewer drives, the world, then the picture.
@@ -829,7 +843,7 @@ function stepWorld(frame: FrameContext, carrier: WorldFrame): void {
     realTime?.isActive() ? realTime.getCycleT() : null
   );
   if (eclipseState.running) {
-    experience.setTime(ECLIPSE_VIEW_TIME);
+    experience.setTime(eclipseViewClock(declination));
     experienceState = experience.getState();
   }
   const t01 = experienceState.t01;
@@ -1369,7 +1383,7 @@ const debugHandle: DioramaDebugHandle = {
     startEclipse();
   },
   setEclipseProgress: (progress: number, running = false) => {
-    experience.setTime(ECLIPSE_VIEW_TIME);
+    experience.setTime(eclipseViewClock(sunDeclination()));
     experience.setClockLocked(true);
     eclipseDebugStrength = null;
     eclipseState = eclipseTimeline.seek(progress, running);
@@ -1478,7 +1492,9 @@ void hybridReady.then(() => warmRenderer({
   dayNight,
   weather,
   focusTarget: postFocusTarget,
-  eclipseViewTime: ECLIPSE_VIEW_TIME,
+  // A clock reading, because that is what `dayNight.update` takes -- resolved against the
+  // same theme declination the warm-up lights that frame with.
+  eclipseViewTime: eclipseViewClock(THREE.MathUtils.degToRad(currentTheme.sunDeclinationDeg)),
   getTheme: () => currentTheme,
   getDayProgress: () => experience.getState().t01,
   getEclipseState: () => eclipseState,

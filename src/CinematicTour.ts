@@ -1,3 +1,5 @@
+import { ECLIPSE_VIEW_SOLAR_PHASE } from './experience/AuthoredMoments';
+
 export type TourChapterId =
   | 'train'
   | 'bus'
@@ -14,6 +16,11 @@ export interface TourChapter {
   readonly label: string;
   readonly duration: number;
   readonly cameraRig: TourCameraRig;
+  /**
+   * The chapter's moment as a **solar phase** (0.25 sunrise, 0.5 noon, 0.75 sunset), never a
+   * clock reading: "GOLDEN HOUR" is a claim about the light, and the hour that satisfies it
+   * moves with the season. `ExperienceDirector.setPhaseToClock` resolves it.
+   */
   readonly dayProgress: number;
   readonly weather: 'clear';
   readonly theme: 'classic' | 'cyberpunk';
@@ -35,7 +42,7 @@ export const TOUR_CHAPTERS: readonly TourChapter[] = [
   { id: 'lake', label: 'JEZIORO', duration: 5, cameraRig: 'lake', dayProgress: 0.52, weather: 'clear', theme: 'classic', eclipseProgress: null },
   { id: 'residents', label: 'MIESZKAŃCY', duration: 5, cameraRig: 'residents', dayProgress: 0.48, weather: 'clear', theme: 'classic', eclipseProgress: null },
   { id: 'golden-hour', label: 'GOLDEN HOUR', duration: 5, cameraRig: 'golden-hour', dayProgress: 0.28, weather: 'clear', theme: 'classic', eclipseProgress: null },
-  { id: 'totality', label: 'TOTALNOŚĆ', duration: 6, cameraRig: 'totality', dayProgress: 0.715, weather: 'clear', theme: 'classic', eclipseProgress: 0.5 },
+  { id: 'totality', label: 'TOTALNOŚĆ', duration: 6, cameraRig: 'totality', dayProgress: ECLIPSE_VIEW_SOLAR_PHASE, weather: 'clear', theme: 'classic', eclipseProgress: 0.5 },
   { id: 'cyberpunk', label: 'CYBERPUNK', duration: 7, cameraRig: 'cyberpunk', dayProgress: 0.86, weather: 'clear', theme: 'cyberpunk', eclipseProgress: null },
 ] as const;
 

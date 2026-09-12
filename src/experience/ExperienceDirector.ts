@@ -1,6 +1,7 @@
 import type { RandomSource } from '../core/Random';
 import { fallbackRandom } from '../core/Random';
 import { CinematicTour, type TourChapterId, type TourFrame } from '../CinematicTour';
+import { OPENING_SOLAR_PHASE } from './AuthoredMoments';
 import type { FrameContext } from './FrameContext';
 
 export interface ExperienceFrameState {
@@ -15,7 +16,14 @@ export interface ExperienceFrameState {
 
 export interface ExperienceDirectorOptions {
   daySeconds: number;
-  initialDayProgress?: number;
+  /**
+   * The moment the experience opens on, as a **solar phase** -- not a clock reading.
+   *
+   * Defaults to {@link OPENING_SOLAR_PHASE}, "just after sunrise". It is resolved through
+   * {@link ExperienceDirector.setPhaseToClock}, so it is its own clock time until somebody
+   * supplies a season, and is re-seeded the moment one arrives.
+   */
+  initialDayPhase?: number;
   random?: RandomSource;
   onNewDay?: () => void;
 }
@@ -32,6 +40,10 @@ export class ExperienceDirector {
   private timeScale = 1;
   private simTime: number;
   private renderTime: number;
+  /** The authored opening moment, kept on the phase axis so a season can still resolve it. */
+  private readonly openingPhase: number;
+  /** True while the clock still holds the unresolved opening phase and nothing else. */
+  private openingUnresolved = true;
   private moonPhase = 0.35;
   private auroraEnabled: boolean;
   private readonly frameState: ExperienceFrameState;
@@ -40,7 +52,10 @@ export class ExperienceDirector {
     this.daySeconds = options.daySeconds;
     this.random = options.random ?? fallbackRandom('experience');
     this.onNewDay = options.onNewDay;
-    this.simTime = (options.initialDayProgress ?? 0.262) * this.daySeconds;
+    // The opening moment is a solar phase, and nobody owns the sun yet at construction time:
+    // seed the clock with the identity mapping and let `setPhaseToClock` re-seed it.
+    this.openingPhase = options.initialDayPhase ?? OPENING_SOLAR_PHASE;
+    this.simTime = this.openingPhase * this.daySeconds;
     this.renderTime = this.simTime;
     this.auroraEnabled = this.random() < 0.5;
     this.frameState = {
@@ -64,12 +79,22 @@ export class ExperienceDirector {
    */
   private phaseToClock: (phase: number) => number = (phase) => phase;
 
-  /** Supply the mapping from authored solar phase to clock time. */
+  /**
+   * Supply the mapping from authored solar phase to clock time.
+   *
+   * This also resolves the opening moment, which the constructor could only seed through the
+   * identity mapping -- the season is not known that early. Only while the clock still holds
+   * that unresolved seed: a boot checkpoint or an explicit `setTime` has already spoken about
+   * which hour the viewer should be looking at, and must not be walked back to dawn.
+   */
   setPhaseToClock(map: (phase: number) => number): void {
     this.phaseToClock = map;
+    if (this.openingUnresolved) this.setTime(map(this.openingPhase));
   }
 
   update(frame: FrameContext, realTimeCycle: number | null): ExperienceFrameState {
+    // The clock is running on its own now; re-seeding the opening moment would be a jump.
+    this.openingUnresolved = false;
     const tourWasActive = this.tour.isActive();
     const tourFrame = this.tour.update(frame.realDelta);
     if (tourWasActive && !this.tour.isActive()) this.simTime = this.renderTime;
@@ -132,7 +157,9 @@ export class ExperienceDirector {
     return this.timeScale;
   }
 
+  /** Set the clock. `t01` is a clock reading; an authored solar phase must be resolved first. */
   setTime(t01: number): void {
+    this.openingUnresolved = false;
     this.simTime = t01 * this.daySeconds;
     this.renderTime = this.simTime;
   }
