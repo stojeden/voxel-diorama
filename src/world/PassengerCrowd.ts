@@ -55,6 +55,8 @@ interface Passenger {
   currentOpacity: number;
   targetOpacity: number;
   eclipsePose: EclipsePassengerPose;
+  /** Heading this figure began its sun turn from; null while the walk loop still owns the feet. */
+  turnOrigin: number | null;
 }
 
 interface StationCrowd {
@@ -114,10 +116,35 @@ export function sunGazeFrom(direction: THREE.Vector3): SunGaze {
 
 /** One figure's share of that: the sun, plus where this figure stands and how far it has turned. */
 export interface PassengerSunGaze extends SunGaze {
-  /** The yaw this figure holds when it is watching nothing. */
+  /**
+   * The yaw this figure turns FROM — its heading at the frame the turn began.
+   *
+   * Not the platform facing. It used to be, and the pose wrote `rotation.y = baseFacing + ...`
+   * on every frame `attention` was up, AFTER the walk loop had already written
+   * `atan2(dirX, dirZ)` from the actual step: a figure crossing the platform was stamped with
+   * its static stop facing for the whole of the partial phase, moonwalking sideways down its
+   * own path. Feed it `eclipseTurnOrigin`, which holds the figure's own heading from the
+   * frame the turn started and hands back the live heading until then.
+   */
   baseFacing: number;
   /** 0 while the crowd still walks, exactly 1 once it has frozen. Gates the body turn only. */
   bodyTurn: number;
+}
+
+/**
+ * The strengths a pose is driven by — the same three numbers the props are drawn with.
+ *
+ * Structurally an `EclipseWorldReactionState`, so both call sites hand the pose the very
+ * object `EclipseCrowdProps.update` is given. That identity is the point: the projection
+ * cohort's turn-away used to run off `attention`, which is 1 through the whole of totality,
+ * while the card it explains was faded out by `projection`, which is 0 there. Nine of
+ * thirty-two figures therefore spent totality with their backs to the eclipse holding
+ * nothing. One quantity per prop, read by the prop and by the pose, and they cannot part.
+ */
+export interface EclipsePoseDrive {
+  attention: number;
+  eyeProtection: number;
+  projection: number;
 }
 
 /**
@@ -131,6 +158,27 @@ export interface PassengerSunGaze extends SunGaze {
  */
 export function eclipseBodyTurn(movementScale: number): number {
   return THREE.MathUtils.clamp((1 - movementScale) / 0.96, 0, 1);
+}
+
+/**
+ * The heading a figure turns away from, remembered from the frame its turn began.
+ *
+ * `bodyTurn` is a ramp, not a switch — it is `freeze`, which climbs over coverage 0.82 to
+ * 0.98, about eight seconds of the ninety — so the turn has to interpolate from a fixed
+ * origin or it is not an interpolation at all. Reading the figure's live `rotation.y` as
+ * that origin every frame would make the turn an exponential chase whose speed depends on
+ * the frame rate; reading the stop's platform facing is the defect this replaces. So:
+ * capture the heading once, on the frame the turn starts, and hold it until the turn is let
+ * go. Null while `bodyTurn` is zero, which is also the signal that the walk loop still owns
+ * the feet.
+ */
+export function eclipseTurnOrigin(
+  remembered: number | null,
+  bodyTurn: number,
+  facingNow: number
+): number | null {
+  if (bodyTurn <= 0) return null;
+  return remembered ?? facingNow;
 }
 
 /**
@@ -169,53 +217,70 @@ const PROJECTION_HEAD_PITCH = 0.42;
 
 const wrapPi = (angle: number): number => Math.atan2(Math.sin(angle), Math.cos(angle));
 
+/**
+ * How much of the turned-away pinhole posture is in force, 0..1 — the card's own strength.
+ *
+ * A pinhole user stands with their BACK to the sun: the card is held up with the sun behind
+ * them, the image falls on a surface in front, and they look DOWN at it
+ * (AAS eye-safety/projection). All of which stops being true at second contact. The
+ * photosphere is what makes a pinhole image, so with the photosphere gone there is no image
+ * on the card and nothing to look down at -- and totality is the one moment in the ninety
+ * seconds when it is safe to look straight at the sun with nothing in front of the eyes. So
+ * the posture is the card: it leaves exactly as the card fades and returns with it at third
+ * contact, which is why this reads `projection` and not `attention`.
+ */
+function projectionHold(pose: EclipsePassengerPose, drive: EclipsePoseDrive): number {
+  return pose === 'projection' ? THREE.MathUtils.clamp(drive.projection, 0, 1) : 0;
+}
+
 function applySunGaze(
   passenger: PassengerBuild,
   pose: EclipsePassengerPose,
-  attention: number,
+  drive: EclipsePoseDrive,
   gaze: PassengerSunGaze
 ): void {
-  if (pose === 'projection') {
-    /**
-     * A pinhole user stands with their BACK to the sun. The card with the hole is held up
-     * with the sun behind them, the image falls on a surface in front, and they look DOWN
-     * at it (AAS eye-safety/projection). Posing them like the glasses wearers put the card
-     * in the one place the image cannot land, and it is why `EclipseCrowdProps` has to take
-     * its cohort from the stamped pose rather than from a second, differently ordered
-     * index: turning the wrong figures round is worse than turning none.
-     */
-    const away = wrapPi(gaze.yaw + Math.PI - gaze.baseFacing);
-    passenger.group.rotation.y = gaze.baseFacing + away * gaze.bodyTurn;
-    passenger.group.rotation.x = 0;
-    passenger.head.rotation.y = THREE.MathUtils.lerp(passenger.head.rotation.y, 0, attention);
-    passenger.head.rotation.x = THREE.MathUtils.lerp(0, PROJECTION_HEAD_PITCH, attention);
-    return;
-  }
-
-  const delta = wrapPi(gaze.yaw - gaze.baseFacing);
-  const headYaw = THREE.MathUtils.clamp(delta, -COMFORTABLE_NECK_TWIST, COMFORTABLE_NECK_TWIST);
+  const attention = drive.attention;
+  const hold = projectionHold(pose, drive);
+  // One bearing for every cohort, because the only thing that differs is how far round from
+  // the sun the figure stands: half a turn with the card up, none at all without it. Two
+  // branches writing one rotation is how the projection cohort drifted away from its prop.
+  const delta = wrapPi(gaze.yaw + Math.PI * hold - gaze.baseFacing);
   // The neck takes what it comfortably can and the feet carry the rest, so the two sum to
-  // the sun's own bearing once both terms are full -- not to something near it.
-  passenger.group.rotation.y = gaze.baseFacing + (delta - headYaw) * gaze.bodyTurn;
+  // the sun's own bearing once both terms are full -- not to something near it. A figure
+  // reading a card looks straight ahead at it, so its neck gives nothing until the card does.
+  const headYaw =
+    THREE.MathUtils.clamp(delta, -COMFORTABLE_NECK_TWIST, COMFORTABLE_NECK_TWIST) * (1 - hold);
+  if (gaze.bodyTurn > 0) {
+    // Guarded, because `rotation.y` belongs to the walk loop until the turn starts: the walk
+    // wrote `atan2(dirX, dirZ)` from the figure's actual step a few lines earlier this frame,
+    // and an unguarded write here stamped the stop's static facing over it for the whole
+    // partial phase -- a figure walking north while facing east.
+    passenger.group.rotation.y = gaze.baseFacing + (delta - headYaw) * gaze.bodyTurn;
+  }
   passenger.head.rotation.y = THREE.MathUtils.lerp(passenger.head.rotation.y, headYaw, attention);
 
   const elevation = Math.max(gaze.elevation, 0);
+  const skyward = -Math.min(elevation, SUSTAINED_NECK_EXTENSION);
   passenger.head.rotation.x = THREE.MathUtils.lerp(
     0,
-    -Math.min(elevation, SUSTAINED_NECK_EXTENSION),
+    THREE.MathUtils.lerp(skyward, PROJECTION_HEAD_PITCH, hold),
     attention
   );
+  // Nobody leans back to read a card in their hands, so the lean fades in with the card's
+  // departure exactly as the skyward pitch does.
   passenger.group.rotation.x =
     -Math.min(Math.max(elevation - SUSTAINED_NECK_EXTENSION, 0), SUSTAINED_TRUNK_LEAN) *
-    gaze.bodyTurn;
+    gaze.bodyTurn *
+    (1 - hold);
 }
 
 export function applyPassengerEclipsePose(
   passenger: PassengerBuild,
   pose: EclipsePassengerPose,
-  attention: number,
+  drive: EclipsePoseDrive,
   gaze?: PassengerSunGaze | null
 ): void {
+  const attention = drive.attention;
   if (!gaze) {
     // No sun plumbed through: the shipped constant tilt, unchanged. Optional rather than
     // defaulted, so a caller that forgets the sun keeps the old pose instead of silently
@@ -227,26 +292,32 @@ export function applyPassengerEclipsePose(
     passenger.head.rotation.x = 0;
     passenger.group.rotation.x = 0;
   } else {
-    applySunGaze(passenger, pose, attention, gaze);
+    applySunGaze(passenger, pose, drive, gaze);
   }
   if (attention <= 0.001) return;
   passenger.legs.rotation.x *= 1 - attention;
+  // Each arm is driven by the prop it is holding, never by `attention`: a hand still pressing
+  // a filter to its face through totality, or still offering a card the shader has faded to
+  // nothing, is the same disagreement as the body yaw, one limb further out. Both quantities
+  // fall to zero inside totality, which drops the arms and is what a real crowd does the
+  // instant the glasses come off.
   if (pose === 'glasses') {
     passenger.rightArm.rotation.x = THREE.MathUtils.lerp(
       passenger.rightArm.rotation.x,
       -1.72,
-      attention
+      THREE.MathUtils.clamp(drive.eyeProtection, 0, 1)
     );
   } else if (pose === 'projection') {
+    const hold = projectionHold(pose, drive);
     passenger.leftArm.rotation.x = THREE.MathUtils.lerp(
       passenger.leftArm.rotation.x,
       -1.18,
-      attention
+      hold
     );
     passenger.rightArm.rotation.x = THREE.MathUtils.lerp(
       passenger.rightArm.rotation.x,
       -1.18,
-      attention
+      hold
     );
   }
 }
@@ -409,6 +480,7 @@ export class PassengerCrowd {
           currentOpacity: 0,
           targetOpacity: 0.92,
           eclipsePose,
+          turnOrigin: null,
         });
       }
 
@@ -563,13 +635,17 @@ export class PassengerCrowd {
     p.group.visible = p.currentOpacity > 0.01;
     let gaze: PassengerSunGaze | null = null;
     if (this.sunGaze) {
+      const bodyTurn = eclipseBodyTurn(this.eclipseReaction.movementScale);
+      p.turnOrigin = eclipseTurnOrigin(p.turnOrigin, bodyTurn, p.group.rotation.y);
       this.gaze.yaw = this.sunGaze.yaw;
       this.gaze.elevation = this.sunGaze.elevation;
-      this.gaze.baseFacing = p.facingTrack;
-      this.gaze.bodyTurn = eclipseBodyTurn(this.eclipseReaction.movementScale);
+      // The figure's own heading, not the platform's: `facingTrack` is where it rests, and a
+      // figure halfway down its boarding path is not resting.
+      this.gaze.baseFacing = p.turnOrigin ?? p.group.rotation.y;
+      this.gaze.bodyTurn = bodyTurn;
       gaze = this.gaze;
     }
-    applyPassengerEclipsePose(p, p.eclipsePose, this.eclipseReaction.attention, gaze);
+    applyPassengerEclipsePose(p, p.eclipsePose, this.eclipseReaction, gaze);
   }
 
   debugStartDwell(stationLabel: string): boolean {

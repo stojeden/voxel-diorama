@@ -12,6 +12,7 @@ import {
   applyPassengerEclipsePose,
   buildPassenger,
   eclipseBodyTurn,
+  eclipseTurnOrigin,
   SHARED_PASSENGER_GEOMETRY,
   eclipsePassengerPoseFor,
   easeInOut,
@@ -333,6 +334,8 @@ interface BusPassenger {
   targetOpacity: number;
   atStop: boolean;
   eclipsePose: EclipsePassengerPose;
+  /** Heading this figure began its sun turn from; null while the walk loop still owns the feet. */
+  turnOrigin: number | null;
 }
 
 interface StopCrowd {
@@ -381,6 +384,7 @@ function buildStopCrowd(scene: THREE.Scene, stop: BusStop, random: RandomSource)
       targetOpacity: 0.92,
       atStop: true,
       eclipsePose,
+      turnOrigin: null,
     });
   }
 
@@ -618,6 +622,13 @@ export function createBus(scene: THREE.Scene, random = fallbackRandom('bus')): B
       if (p.atStop) {
         p.build.body.position.y = 1.4 + Math.sin(clock * 1.3 + p.phase) * 0.015;
         p.build.head.rotation.y = Math.sin(clock * 0.4 + p.phase * 2) * 0.4;
+        // The idle loop has to write the arms, not only the head: the eclipse pose blends
+        // each arm FROM wherever it finds it, so an arm nothing returns to rest is an arm
+        // left holding a filter to its face after the filter has faded -- and, once the
+        // eclipse is over, for the rest of the day. The station crowd's idle sway, same
+        // numbers, so the two crowds stand the same way.
+        p.build.leftArm.rotation.x = Math.sin(clock * 0.9 + p.phase) * 0.08;
+        p.build.rightArm.rotation.x = -Math.sin(clock * 0.9 + p.phase) * 0.08;
       }
       p.targetOpacity = p.atStop ? 0.92 : 0;
     } else {
@@ -675,13 +686,17 @@ export function createBus(scene: THREE.Scene, random = fallbackRandom('bus')): B
     p.build.group.visible = p.currentOpacity > 0.01;
     let gaze: PassengerSunGaze | null = null;
     if (sunGaze) {
+      const bodyTurn = eclipseBodyTurn(eclipseReaction.movementScale);
+      p.turnOrigin = eclipseTurnOrigin(p.turnOrigin, bodyTurn, p.build.group.rotation.y);
       passengerGaze.yaw = sunGaze.yaw;
       passengerGaze.elevation = sunGaze.elevation;
-      passengerGaze.baseFacing = p.facing;
-      passengerGaze.bodyTurn = eclipseBodyTurn(eclipseReaction.movementScale);
+      // The figure's own heading, not the shelter's: `facing` is where it waits, and a figure
+      // halfway along the walking path to the bus door is not waiting.
+      passengerGaze.baseFacing = p.turnOrigin ?? p.build.group.rotation.y;
+      passengerGaze.bodyTurn = bodyTurn;
       gaze = passengerGaze;
     }
-    applyPassengerEclipsePose(p.build, p.eclipsePose, eclipseReaction.attention, gaze);
+    applyPassengerEclipsePose(p.build, p.eclipsePose, eclipseReaction, gaze);
   }
 
   return {

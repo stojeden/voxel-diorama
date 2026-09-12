@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { eclipseWorldReactionAt } from './EclipseWorldReaction';
 import { EclipseTimeline } from './EclipseTimeline';
+import { PROP_VISIBILITY_GATE } from '../effects/EclipseCrowdProps';
 
 describe('eclipse world reactions', () => {
   test('keeps ordinary city life unchanged outside an eclipse', () => {
@@ -48,10 +49,38 @@ describe('eclipse world reactions', () => {
       return eclipseWorldReactionAt(state.coverage, state.totality);
     };
 
-    expect(at(0.39).eyeProtection, 'okulary przy pierwszym diamentowym pierscieniu')
-      .toBeGreaterThan(0.5);
-    expect(at(0.61).eyeProtection, 'okulary przy drugim diamentowym pierscieniu')
-      .toBeGreaterThan(0.5);
+    // The two peaks are found by sweeping the schedule, not asserted at a remembered
+    // progress: if the ring phases ever move, the test follows them instead of quietly
+    // measuring the wrong two frames. Both land on 0.390 and 0.610, the middle of each
+    // ring phase, where `beads` reaches 1.
+    const beadPeaks: number[] = [];
+    for (const [start, end] of [[0.36, 0.42], [0.58, 0.64]]) {
+      let peak = start;
+      let best = -1;
+      for (let step = 0; step <= 600; step++) {
+        const progress = start + ((end - start) * step) / 600;
+        const beads = timeline.seek(progress).beads;
+        if (beads > best) {
+          best = beads;
+          peak = progress;
+        }
+      }
+      expect(best, 'szczyt paciorkow Baily ego').toBeCloseTo(1, 6);
+      beadPeaks.push(peak);
+    }
+    expect(beadPeaks[0]).toBeCloseTo(0.39, 6);
+    expect(beadPeaks[1]).toBeCloseTo(0.61, 6);
+
+    // The claim the (0.86, 0.14) window makes: at a bead peak the filter is not merely over
+    // the gate `EclipseCrowdProps` draws on, it is fully opaque. The old (0.08, 0.72) window
+    // gave 0.070 here -- over the gate by four hundredths, so the props were drawn at seven
+    // percent at the two frames the one eclipse-safety rule calls mandatory.
+    for (const peak of beadPeaks) {
+      const eyeProtection = at(peak).eyeProtection;
+      expect(eyeProtection, `okulary na szczycie paciorkow (${peak.toFixed(3)})`)
+        .toBeGreaterThan(PROP_VISIBILITY_GATE);
+      expect(eyeProtection, `pelne okulary na pierscieniu (${peak.toFixed(3)})`).toBe(1);
+    }
 
     for (const progress of [0.45, 0.5, 0.55]) {
       expect(at(progress).eyeProtection, `okulary w srodku totalnosci (${progress})`).toBe(0);
