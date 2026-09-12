@@ -272,6 +272,69 @@ settle of this kind — `settleFrames(page)` waits two frames and carries a comm
 knew this trap — and its camera loops count input steps rather than time. Decomposing it needs
 its own measurement.
 
+
+## 11. ~~The reflection probe renders black~~ — **root-caused and fixed 2026-09-12**
+
+**It was never the probe's build moment and never the season.** Three.js's Preetham solar disc is
+`vSunE * 19000 * Fex`, which clears the half-float ceiling of 65504 once the sun is about 17
+degrees up — and every PMREM target is `HalfFloatType`. Four over-range texels at the disc became
+**10 109 NaN of 786 432** after PMREM's convolution, and every material lit by that probe rendered
+black: a 4.9 kB frame where a healthy one is 89–114 kB.
+
+An unrelated bug had been feeding the warm-up an accidental declination that held the sun below 17
+degrees. Fixing that correct bug removed the accidental shield, so it presented as "the seasonal
+sun broke rendering". October noon at 30 degrees was equally black.
+
+**The store, not the arithmetic, is what hid it:** the same four texels are `+Inf` on ANGLE Metal
+and `NaN` on SwiftShader, and CI has no GPU. `withRadianceCeiling()` clamps both skies — the
+probe's and the visible one, which had the same overflow and drew the sun as a **black dot** with
+the frame's mean luminance unchanged at 228, which is why it outlived the entire investigation.
+
+Five wrong explanations preceded the right one. What settled it was reading the texels back.
+`npm run test:software-render` now answers it in three minutes, and was validated in both
+directions before being trusted.
+
+## 12. The sky dome is switched off for most of twilight, and the best physics here never touches it
+
+Measured 2026-09-12 by porting the shader to CPU and probing the live build.
+
+Three.js's `Sky` computes all in-scattering from `sunIntensity(dot(sunDir, up))`, whose
+`cutoffAngle` is 92.308 degrees of zenith angle. The dome's contribution is **exactly zero from
+2.308 degrees below the horizon onward**, and it has already lost 87% by −2:
+
+| sun elevation | `vSunE` | fraction of its value at sunset |
+| --- | --- | --- |
+| 0 | 26.49 | 100% |
+| −1 | 15.10 | 57% |
+| −2 | 3.57 | 13% |
+| **−2.308** | **0.0000** | **0%** |
+
+That is **61% of civil twilight** with the largest surface on screen reduced to a flat dark wash,
+while `SunlightSpectrum`'s ozone model drives the fog, ambient and hemisphere lights through a full
+colour ramp. Sky and light visibly disagree, twice a day.
+
+Preetham also paints the **anti-solar** horizon red — measured R/B 3.96 at 3 degrees of elevation,
+1.14 by 15 — the inverse of reality, where a blue-grey Earth's shadow sits low with the pink Belt
+of Venus above it. Hosek & Wilkie name this as Preetham's headline defect. `OVERVIEW_SHOT` and
+`golden-hour` both look toward −X/−Z with sunrise at +X, so **the wrongest part of the dome is dead
+centre of the two most-used shots at dawn.**
+
+The seam is `installEclipseSkyShader()`, which already patches this shader and guards with a
+version check. Do not mirror to `envSky`: the probe is built once at preload.
+
+**This changes what dawn looks like, so it is the owner's call before it starts.**
+
+## 13. The lighting ramps read a 4.4-degree sun as night
+
+Measured on the live build: at 4.4 degrees `directSunFactorAt` gives 0.037 and `nightFactorAt`
+0.49, so the city shows with every window lit where a real sun that high gives a clearly daylit,
+strongly warm scene. `FULL_NIGHT_ELEVATION_DEG = -10` and `DIRECT_SUN_FADE_ELEVATION_DEG = 14` are
+art direction, not a physics gap.
+
+It matters now because the opening moment was restored to its authored dawn at 2.87 degrees, so
+**the product opens inside this range** — and any improvement to the sky will be judged against a
+scene these ramps are holding dark.
+
 ---
 
 ## Suggested order
