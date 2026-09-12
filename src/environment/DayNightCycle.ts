@@ -446,6 +446,19 @@ export class DayNightCycle {
     // ── Atmosphere ──
     this.sky = new Sky();
     this.sky.scale.setScalar(2000);
+    /**
+     * The same ceiling the reflection probe needs, for the same reason and a different buffer.
+     *
+     * `bootstrap` builds the composer's frame buffer as `HalfFloatType` too, so the solar disc
+     * overflows there as well: aimed at the sun on a software rasteriser that buffer holds 294
+     * NaN texels and the sun draws as a black DOT. It does not black out the frame the way the
+     * probe did -- mean luminance stays at 228 -- which is exactly why it outlived the
+     * investigation that found the probe.
+     *
+     * Applied before `installEclipseSkyShader`, because both patch the same output write and
+     * the eclipse patch must see the clamped expression rather than replace it.
+     */
+    this.sky.material.fragmentShader = withRadianceCeiling(this.sky.material.fragmentShader);
     this.installEclipseSkyShader();
     scene.add(this.sky);
 
