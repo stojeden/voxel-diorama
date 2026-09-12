@@ -44,22 +44,48 @@ const VERTEX_SHADER = /* glsl */ `
 const ECLIPSE_HOUR_SKY_RADIANCE = 25;
 
 /**
- * How far above the sky the *dimmest* part of the photosphere is drawn -- three stops.
+ * The scene-linear radiance at which the presented picture runs out of headroom.
  *
- * A ratio TO `ECLIPSE_HOUR_SKY_RADIANCE`, and deliberately pinned to the extreme limb
- * (mu = 0, where the limb law bottoms out at 0.30) rather than to disc centre, because a
- * deep crescent is made entirely of limb. Pinning the *floor* is what makes the promise
- * hold at every partial phase: the sky can only darken as coverage grows, so 8:1 against
- * the uneclipsed sky is the worst case, not the typical one.
+ * The composer tone-maps with three's ACES fit (`RRTAndODTFit`, which first multiplies by
+ * `toneMappingExposure / 0.6`). Both ACES matrices have unit row sums, so for a neutral
+ * colour the whole chain collapses to the scalar fit, and the fit reaches 1.0 -- code 255,
+ * nothing above it distinguishable from anything else above it -- at an input of 25.668.
+ * The same measurement that fixes {@link ECLIPSE_HOUR_SKY_RADIANCE} fixes the exposure:
+ * sky radiance 25 read luma 254.4, i.e. display-linear 0.99466, i.e. a fit input of 19.428,
+ * so `toneMappingExposure / 0.6` is 0.7771 at this hour. 25.668 / 0.7771 = 33.03.
+ *
+ * This is the number the shipped ladder was missing. `PHOTOSPHERE_LIMB_OVER_SKY = 8` put
+ * the disc's DIMMEST point at 200 and its centre at 666.7 -- both six to twenty times over
+ * saturation -- so the 3.33:1 limb law this file is built around produced a disc of one
+ * single code. Every magnitude below is now placed against 33.03 as well as against the
+ * sky, because a ratio to the sky says whether a thing is visible and a ratio to this says
+ * whether it has any internal structure left once the tone curve has had it.
+ */
+const ACES_SATURATION_RADIANCE = 33.03;
+
+/**
+ * Where the *dimmest* part of the photosphere sits relative to saturation -- one stop under.
+ *
+ * Pinned at the extreme limb (mu = 0, where the limb law bottoms out at 0.30) because a deep
+ * crescent is made entirely of limb, and pinned under saturation rather than over the sky
+ * because the darkness rework changed what "the sky" means. The dome is now
+ * `texColor * irradiance + eclipseSky * eclipseDarkness` (DayNightCycle.ts:396), so the sky
+ * beside the sun falls with coverage instead of standing at 25: 10.52 at coverage 0.50,
+ * 4.65 at 0.75, 1.85 at 0.90, 0.74 at totality. It is only at the ACES clip point when there
+ * is no eclipse yet to see.
+ *
+ * At 0.5 the disc runs 16.52 (limb) to 55.05 (centre): the limb lands on the curve's slope,
+ * the centre saturates, and the outer 6.5 per cent of the radius -- which is where a
+ * coverage-0.90 crescent lives -- keeps presented variation instead of being one flat code.
+ * The crescent's mean radiance still beats the sky beside it by 4.05x at coverage 0.50,
+ * 8.12x at 0.75 and 17.1x at 0.90, which is the contrast the baseline measured as broken.
  *
  * The true ratio is about 1e5 -- the photosphere is 1.6e9 cd/m^2 at every coverage, because
- * the moon removes area and never surface brightness. One exposure cannot hold both, which
- * is why eclipse photographers publish exposure ladders instead. Three stops is the
- * compression: enough that the crescent is unambiguously a highlight and still clips the
- * tone curve at its own limb, little enough to leave 43x of half-float headroom for the
- * beads that have to outshine it later.
+ * the moon removes area and never surface brightness. One exposure cannot hold that, which
+ * is why eclipse photographers publish exposure ladders instead; this is the partial-phase
+ * rung of one, and {@link INNER_CORONA_OVER_UMBRAL_SKY} is the totality rung.
  */
-const PHOTOSPHERE_LIMB_OVER_SKY = 8;
+const PHOTOSPHERE_LIMB_UNDER_SATURATION = 0.5;
 
 /**
  * Visible-light limb darkening: I(mu)/I(centre) = 0.3 + 0.93 mu - 0.23 mu^2 at 550 nm,
@@ -85,7 +111,42 @@ const LIMB_PEAK = solarLimbIntensity(1);
 
 /** Radiance at disc centre. The limb law then takes it down to `* LIMB_MINIMUM`. */
 const PHOTOSPHERE_RADIANCE =
-  (ECLIPSE_HOUR_SKY_RADIANCE * PHOTOSPHERE_LIMB_OVER_SKY) / LIMB_MINIMUM;
+  (ACES_SATURATION_RADIANCE * PHOTOSPHERE_LIMB_UNDER_SATURATION) / LIMB_MINIMUM;
+
+/**
+ * Scene-linear radiance of the sky the *corona* sits on: the sky beside the sun at totality.
+ *
+ * Two terms, both from the darkness rework rather than from here. The dome keeps
+ * `texColor * irradiance` and `EclipseTimeline`'s irradiance floors at 0.025, so the
+ * Preetham sky beside the sun falls from 25 to 0.625. On top of that the patch *adds*
+ * `eclipseSky * eclipseDarkness`: at the staged sun -- elevation 8.83 deg, so
+ * `direction.y = 0.1535` and `eclipseHorizon = (1 - 0.1535)^12 = 0.1363` -- the zenith,
+ * umbral-glow and ring terms of DayNightCycle.ts:389-395 sum to a red-leading 0.114, times
+ * an `eclipseDarkness` of 0.975. 0.625 + 0.111 = 0.736.
+ *
+ * It is a copy of somebody else's constants and it is only ever used to *place* the corona,
+ * never to draw the sky, so a drift of a few per cent moves the corona by a few per cent and
+ * nothing else. It is written down because the alternative -- anchoring the corona to the
+ * photosphere, as the shipped ladder did -- means any retune of the disc silently retunes
+ * the one thing that has to stay visible for the whole 15 seconds of totality.
+ */
+const UMBRAL_SKY_RADIANCE = 0.736;
+
+/**
+ * How far the inner corona is drawn over the sky it sits on -- three stops, the same margin
+ * the crescent gets over the deep-partial sky.
+ *
+ * This replaces `INNER_CORONA_RADIANCE = photosphere * LIMB_MINIMUM / 32`, which chained the
+ * corona to the photosphere through the Q ladder and was only survivable while the
+ * photosphere was 20x too bright. Cutting the disc to its saturation anchor would have
+ * dragged the corona to 0.31 -- 0.42x the sky it is drawn on, i.e. invisible, i.e. the
+ * owner's fourth sentence deleted by arithmetic done three constants away.
+ *
+ * The two ends are anchored separately because they are separately exposed in life too: a
+ * bead is Q=12 and the inner corona Q=7 in NASA RP-1318 because no single exposure holds
+ * them. Inside totality the Q ladder still fixes everything relative to this number.
+ */
+const INNER_CORONA_OVER_UMBRAL_SKY = 8;
 
 /**
  * NASA RP-1318's eclipse exposure guide, as the ladder it is: brightness goes as 2^Q, so
@@ -115,17 +176,16 @@ const DIAMOND_OVER_BEADS = 1.25;
 const DIAMOND_OVER_INNER_CORONA = BEADS_OVER_INNER_CORONA * DIAMOND_OVER_BEADS;
 
 /**
- * The inner corona, closing the chain: a bead is exposed photosphere seen through a lunar
- * valley, so it is drawn at limb radiance, and the Q ladder then puts the corona 32x below
- * it. Nothing here is chosen -- the photosphere ratio above and the Q table fix it.
+ * The inner corona, from the sky it sits on rather than from the disc it surrounds.
  *
- * It lands at 1/100 of disc centre where the physical figure is 1e-6, i.e. a compression of
- * about 1e4. That is the gain a dark-adapting eye applies between partial phase and
- * totality, and it is the same admission the Q ladder itself makes: a corona and a
- * photosphere have never been photographed in one exposure either.
+ * 5.888 against an umbral sky of 0.736: the composite under additive blending is 6.624, so
+ * the corona's rim presents at code 240 against a 174 sky. It lands at 0.107 of disc centre
+ * where the physical figure is 1e-6, a compression of about 1e5 -- which is the gain a
+ * dark-adapting eye applies between partial phase and totality, and the same admission the
+ * Q ladder itself makes: a corona and a photosphere have never been photographed in one
+ * exposure either.
  */
-const INNER_CORONA_RADIANCE =
-  (PHOTOSPHERE_RADIANCE * LIMB_MINIMUM) / BEADS_OVER_INNER_CORONA;
+const INNER_CORONA_RADIANCE = UMBRAL_SKY_RADIANCE * INNER_CORONA_OVER_UMBRAL_SKY;
 
 /**
  * Corona brightness as a power law in r = distance from disc *centre* in solar radii,
@@ -137,20 +197,38 @@ const INNER_CORONA_RADIANCE =
  * (Thomson scattering off free electrons) carries r = 1-2, the F term (sunlight off
  * interplanetary dust) takes over beyond 2 and is what makes the streamers reach.
  *
- * Cross-check against the ladder: this profile falls 52.8x from r = 1.1 to r = 2.0 where
+ * Cross-check against the ladder: this profile falls 48.0x from r = 1.1 to r = 2.0 where
  * Q7 -> Q1 says 64x, and is 1.9x bright at r = 1.5. A single exponent cannot also hold the
  * r^-15.9 slope inside r = 1.2; being slightly bright in the rim is the cheap side to err
  * on for a 1.6-degree drawn sun.
+ *
+ * **Both terms are evaluated at r, and the SUM is then normalised at the anchor.** The
+ * shipped form divided r by 1.1 first and fed that to both powers, which scales K by 1.1^7
+ * and F by 1.1^2.5 -- different factors, so F came out low by 1.1^4.5 = 1.536, i.e. 35 per
+ * cent. That moved the K/F crossover from 2.44 to 2.69 R_sun, outside the drawn range, and
+ * made the comment above -- that the F term takes over beyond 2 -- false everywhere the
+ * corona is actually drawn. The fix is arithmetic, not taste: `CORONA_F_FRACTION` is quoted
+ * by the dossier against r, so it has to be evaluated against r.
  */
 const CORONA_ANCHOR_RADII = 1.1;
 const CORONA_K_EXPONENT = -7;
 const CORONA_F_EXPONENT = -2.5;
 const CORONA_F_FRACTION = 0.018;
 
+const coronaRawProfile = (r: number): number =>
+  r ** CORONA_K_EXPONENT + CORONA_F_FRACTION * r ** CORONA_F_EXPONENT;
+
+/** Makes the profile exactly 1 at the anchor, so INNER_CORONA_RADIANCE is the radiance there. */
+const CORONA_ANCHOR_NORMALISE = 1 / coronaRawProfile(CORONA_ANCHOR_RADII);
+
+/** The profile at the reference azimuth, i.e. the one whose {@link CORONA_RAY_REACH} is 1. */
 export function coronaRadialProfile(solarRadii: number): number {
-  const r = Math.max(1, solarRadii) / CORONA_ANCHOR_RADII;
-  return r ** CORONA_K_EXPONENT + CORONA_F_FRACTION * r ** CORONA_F_EXPONENT;
+  return coronaRawProfile(Math.max(1, solarRadii)) * CORONA_ANCHOR_NORMALISE;
 }
+
+/** Where K stops carrying the corona and F takes over: r^-7 = 0.018 r^-2.5 at 0.018^(-1/4.5). */
+export const CORONA_K_F_CROSSOVER_RADII =
+  CORONA_F_FRACTION ** (1 / (CORONA_K_EXPONENT - CORONA_F_EXPONENT));
 
 /**
  * Where the drawn corona ends, as a ratio of SUN_RADIUS rather than a uv distance.
@@ -163,8 +241,57 @@ export function coronaRadialProfile(solarRadii: number): number {
 const CORONA_OUTER_START_RADII = 1.9;
 const CORONA_OUTER_END_RADII = 2.6;
 
+/**
+ * Per-azimuth reach: how far THIS ray goes, as a multiplier on the two radii above and on
+ * the F term's radial scale. 0.8 to 1.4, so the drawn corona ends between 2.08 and 3.64
+ * R_sun depending on which way you look, instead of on a circle.
+ *
+ * Restores what the HDR rework quietly dropped. The shipped shader had a `rayLength` /
+ * `streamers = exp(-radial / rayLength * 3.7)` pair -- a per-azimuth radial SCALE -- and the
+ * rework replaced it with `rayGain`, a pure amplitude multiplier on one common profile, so
+ * every ray ended at the same radius and the corona's outline went back to being a circle.
+ * A corona's silhouette is the feature: solar-minimum streamers reach 2-3 R_sun over the
+ * equator while the polar plumes stop just past the limb, and the owner's fourth sentence --
+ * the effect must be visible across the whole sky -- is about reach, not about brightness.
+ *
+ * It scales the F term's radius, not K's, because F is the dust component that carries the
+ * corona past 2.44 R_sun (see {@link CORONA_K_F_CROSSOVER_RADII}); stretching K instead
+ * would brighten the rim, which is not what a streamer is. The anchor at r = 1.1 is exact
+ * only at reach 1.0 and runs 3.5 per cent hot at reach 1.4, which is under the rounding of
+ * every constant it multiplies.
+ */
+const CORONA_RAY_REACH_MIN = 0.8;
+const CORONA_RAY_REACH_MAX = 1.4;
+/** Biases reach toward the minimum, so long streamers are the few and not the many. */
+const CORONA_RAY_REACH_SHAPE = 1.4;
+
 /** Solar-minimum coronae are flattened; this keeps the drawn one off a perfect circle. */
 const CORONA_EQUATORIAL_STRETCH = 1.22;
+
+/**
+ * The floor under the moon's interior, and the reason it exists.
+ *
+ * `earthshine * uTotality * 1.3` with `uTotality` exactly 0 below coverage 0.985 and the
+ * layer's alpha at 1 writes those pixels as literal 0.0, by design, for the whole of both
+ * partial phases -- and exactly-black pixels are a standing invariant at 0.0000 per cent in
+ * this project, measured in every baseline frame. The final pass has dithering on, so a
+ * value sitting on the code-0/code-1 boundary rounds to black about half the time, which is
+ * how the old twilight clip announced itself too.
+ *
+ * 0.012 scene-linear is 2.1x the radiance that first rounds UP to code 1. That threshold is
+ * derived, not guessed: sRGB's linear segment puts the code-0/code-1 boundary at
+ * (0.5/255)/12.92 = 1.5176e-4 display-linear; inverting the ACES fit gives a tone-map input
+ * of 4.3836e-3; dividing by this hour's `toneMappingExposure / 0.6` of 0.7771 gives
+ * 5.641e-3 scene-linear. The 2.1x margin covers the exposure moving under it -- the eclipse
+ * cut alone takes it to 0.82x, and it would have to fall to 0.365 before the floor stopped
+ * clearing the boundary.
+ *
+ * Physically it is the airlight in the column in front of the moon: the moon is outside the
+ * atmosphere, so the same scattered sunlight that makes the sky beside it bright is also in
+ * front of it. Drawn at 0.012 against a 10.5 sky at coverage 0.50 the disc still reads code
+ * 3 against code 251 -- the bite the owner wants, minus the literal black.
+ */
+const MOON_MINIMUM_RADIANCE = 0.012;
 
 const BEAD_RADIANCE = INNER_CORONA_RADIANCE * BEADS_OVER_INNER_CORONA;
 const DIAMOND_RADIANCE = INNER_CORONA_RADIANCE * DIAMOND_OVER_INNER_CORONA;
@@ -182,22 +309,29 @@ const PROMINENCE_LOOP_COUNT = 3;
  *
  * Pinned because a half-float render target holds 65504 and no more, and because going over
  * it is invisible on a dev GPU: Metal stores +Inf, SwiftShader stores NaN, and the frame
- * comes back black in CI only. This billboard raises radiance by 546x, so it is exactly the
- * kind of change that ceiling was written for.
+ * comes back black in CI only.
+ *
+ * The sum is now what the shader can *add* to the framebuffer rather than what it can put
+ * in it, because the layer blends additively -- so what has to clear the ceiling is this
+ * plus the brightest sky underneath it, and 25 against a 76x margin is noise.
  */
 /**
  * The whole ladder, in one place, for the test and for whoever retunes it against a
- * measured exposure. Every entry is `ECLIPSE_HOUR_SKY_RADIANCE` times a stated ratio.
+ * measured exposure. Two anchors -- the sky at the eclipse hour and the sky at totality --
+ * and every other entry a stated ratio to one of those or to the tone curve's saturation.
  */
 export const SOLAR_RADIANCE = {
   sky: ECLIPSE_HOUR_SKY_RADIANCE,
-  limbOverSky: PHOTOSPHERE_LIMB_OVER_SKY,
+  umbralSky: UMBRAL_SKY_RADIANCE,
+  saturation: ACES_SATURATION_RADIANCE,
   photosphere: PHOTOSPHERE_RADIANCE,
+  limb: PHOTOSPHERE_RADIANCE * LIMB_MINIMUM,
   innerCorona: INNER_CORONA_RADIANCE,
   beads: BEAD_RADIANCE,
   diamond: DIAMOND_RADIANCE,
   chromosphere: CHROMOSPHERE_RADIANCE,
   prominence: PROMINENCE_RADIANCE,
+  moonFloor: MOON_MINIMUM_RADIANCE,
 } as const;
 
 export const MAX_SOLAR_RADIANCE =
@@ -208,12 +342,47 @@ export const MAX_SOLAR_RADIANCE =
   BEAD_RADIANCE +
   DIAMOND_RADIANCE * (1 + 2 * DIAMOND_SPIKE_WEIGHT);
 
-/** `32` is an int in GLSL and `32.0` is not; every interpolated constant goes through here. */
-const glslFloat = (value: number): string => {
+/**
+ * `32` is an int in GLSL and `32.0` is not; every interpolated constant goes through here.
+ *
+ * Exported so the test builds its expected shader substrings from {@link SOLAR_RADIANCE}
+ * through this same helper. Six assertions used to pin derived values as literal strings
+ * ('limbI * 666.6667;'), every one a function of a constant whose own doc comment tells the
+ * next person to re-edit it -- so the first honest retune of the ladder broke six tests that
+ * were measuring nothing except their own arithmetic.
+ */
+export const glslFloat = (value: number): string => {
   const rounded = Number(value.toFixed(4));
   return Number.isInteger(rounded) ? `${rounded}.0` : `${rounded}`;
 };
 
+/**
+ * THE COMPOSITE, WRITTEN DOWN, BECAUSE THE LAST ONE WAS SQUARING ITS OWN OUTPUT.
+ *
+ * This layer is drawn with `blendSrc = blendDst = OneFactor`, so the framebuffer gets
+ *
+ *     result = emitted + sky
+ *
+ * and `gl_FragColor.a` reaches the blend equation through `blendSrcAlpha = ZeroFactor`,
+ * i.e. not at all. Every term below is therefore a radiance ADDED to whatever the sky pass
+ * already put there, which is what an emissive astronomical object physically is: a corona
+ * is light arriving from beyond the atmosphere on top of the airlight in front of it, not a
+ * surface that replaces the sky.
+ *
+ * What it replaces was `transparent: true` with `NormalBlending`, i.e.
+ * `alpha * color + (1 - alpha) * sky`, with `alpha = clamp(corona)` and
+ * `color = coronaColor * corona * 6.25` -- so the emitted light went as **corona squared**,
+ * and the composite `6.25 c^2 + 25 (1 - c)` was monotonically DECREASING in c: 25 at c = 0,
+ * 14.1 at 0.5, 6.25 at 1. The corona was drawn as a hole in the sky up to 4x darker than
+ * the sky, and the more faithfully the Q ladder was followed the darker the hole got. The
+ * radial profile inherited the same square: 52.8x of authored falloff from r = 1.1 to 2.0
+ * was emitting 2793x, and beyond 2.6 R_sun it emitted exactly nothing.
+ *
+ * The moon keeps `NormalBlending`, because the moon is the one thing here that genuinely
+ * occludes. It does not need to occlude the sun -- `visibleSun = sunMask * (1 - moonMask)`
+ * already cuts the photosphere out of its disc -- so the two layers want opposite blend
+ * modes and now have them.
+ */
 const SOLAR_FRAGMENT_SHADER = /* glsl */ `
   varying vec2 vUv;
   uniform float uTime;
@@ -265,32 +434,39 @@ const SOLAR_FRAGMENT_SHADER = /* glsl */ `
     // Limb darkening is stronger in blue, so the crescent is genuinely redder than the disc.
     vec3 sunColor = mix(vec3(1.0, 0.42, 0.08), vec3(1.0, 0.9, 0.46), mu);
     vec3 color = sunColor * visibleSun * limbI * ${glslFloat(PHOTOSPHERE_RADIANCE)};
-    float alpha = visibleSun;
 
     float angle = atan(p.y, p.x);
     vec2 q = vec2(p.x, p.y * ${glslFloat(CORONA_EQUATORIAL_STRETCH)});
     float coronaRadii = length(q) / SUN_RADIUS;
-    float r = max(coronaRadii, 1.0) / ${glslFloat(CORONA_ANCHOR_RADII)};
+    // True solar radii, clamped at the limb, feeding BOTH powers. Dividing by the anchor
+    // first scaled K by 1.1^7 and F by 1.1^2.5, which left F 35 per cent light and pushed
+    // the K/F crossover out to 2.69 R_sun, past everything this shader draws.
+    float r = max(coronaRadii, 1.0);
     float coarseRays = 0.5 + 0.5 * sin(angle * 11.0 + sin(angle * 3.0) * 2.4);
     float fineRays = 0.5 + 0.5 * sin(angle * 37.0 - uTime * 0.11);
     float rayGain = 0.35 + 0.65 * pow(coarseRays, 1.7) * mix(0.75, 1.0, fineRays * uDetail);
+    // Each azimuth gets its own reach as well as its own amplitude: without this every ray
+    // ends on the same circle and the corona has no silhouette.
+    float rayReach = mix(${glslFloat(CORONA_RAY_REACH_MIN)}, ${glslFloat(CORONA_RAY_REACH_MAX)},
+      pow(coarseRays, ${glslFloat(CORONA_RAY_REACH_SHAPE)}));
     float kCorona = pow(r, ${glslFloat(CORONA_K_EXPONENT)}) * rayGain;
-    float fCorona = ${glslFloat(CORONA_F_FRACTION)} * pow(r, ${glslFloat(CORONA_F_EXPONENT)})
+    float fCorona = ${glslFloat(CORONA_F_FRACTION)}
+      * pow(r / rayReach, ${glslFloat(CORONA_F_EXPONENT)})
       * mix(0.6, 1.0, coarseRays);
     float limbGate = smoothstep(SUN_RADIUS - 0.01, SUN_RADIUS + 0.012, sunDistance);
     float outerFade = 1.0 - smoothstep(
-      ${glslFloat(CORONA_OUTER_START_RADII)}, ${glslFloat(CORONA_OUTER_END_RADII)}, coronaRadii);
-    float corona = (kCorona + fCorona) * limbGate * outerFade * uCorona;
+      ${glslFloat(CORONA_OUTER_START_RADII)} * rayReach,
+      ${glslFloat(CORONA_OUTER_END_RADII)} * rayReach, coronaRadii);
+    float corona = (kCorona + fCorona) * ${glslFloat(CORONA_ANCHOR_NORMALISE)}
+      * limbGate * outerFade * uCorona;
     // Near-neutral: the K corona is a touch bluer than the photosphere and the F corona a
     // touch warmer. Brightness carries the structure, not hue.
     vec3 coronaColor = mix(vec3(0.92, 0.95, 1.0), vec3(1.0, 0.97, 0.92), coarseRays);
     color += coronaColor * corona * ${glslFloat(INNER_CORONA_RADIANCE)};
-    alpha = max(alpha, clamp(corona, 0.0, 1.0));
 
     float chromosphere =
       exp(-pow((sunDistance - SUN_RADIUS) * 260.0, 2.0)) * uTotality;
     color += vec3(1.0, 0.08, 0.023) * chromosphere * ${glslFloat(CHROMOSPHERE_RADIANCE)};
-    alpha = max(alpha, chromosphere);
 
     float prominence = prominenceLoop(p, 2.48, 0.052, 0.050, 0.3);
     prominence += prominenceLoop(p, -0.43, 0.044, 0.038, 2.1) *
@@ -304,17 +480,20 @@ const SOLAR_FRAGMENT_SHADER = /* glsl */ `
       clamp(prominence, 0.0, 1.0)
     );
     color += prominenceColor * prominence * ${glslFloat(PROMINENCE_RADIANCE)};
-    alpha = max(alpha, prominence * 0.92);
 
     float edgeContact = exp(-pow((moonDistance - MOON_RADIUS) * 260.0, 2.0));
     float solarEdge = exp(-pow((sunDistance - SUN_RADIUS) * 210.0, 2.0));
     float beadCells = step(0.69, hash(floor((angle + 3.14159265) * 15.0)));
     float beads = edgeContact * solarEdge * beadCells * uBeads;
-    // A bead is limb, so it carries the limb's own gradient: dimmer on the sun-limb side,
-    // brighter on the side still facing open photosphere.
-    float beadShade = mix(0.62, 1.0, smoothstep(0.0, 0.35, mu));
-    color += vec3(1.0, 0.73, 0.34) * beads * beadShade * ${glslFloat(BEAD_RADIANCE)};
-    alpha = max(alpha, beads);
+    // No per-pixel bead shade here any more. It was mix(0.62, 1.0, smoothstep(0.0, 0.35,
+    // mu)) and it landed on exactly the wrong pixel: a bead is gated by solarEdge, which
+    // peaks at sunDistance == SUN_RADIUS, where mu == 0 -- so at the bead's brightest point
+    // the "gradient" was identically its 0.62 floor, and the shipped bead peaked at 124
+    // while this file, the constants block and the test all said 200. The gradient it was
+    // reaching for is real but wants the MOON-limb coordinate, not the sun's mu; inventing
+    // that here would be a second guess on top of the first, so the bead is its Q=12 value
+    // and the constant now tells the truth.
+    color += vec3(1.0, 0.73, 0.34) * beads * ${glslFloat(BEAD_RADIANCE)};
 
     float contactSide = uSeparation >= 0.0 ? -1.0 : 1.0;
     vec2 diamondCenter = vec2(contactSide * SUN_RADIUS, 0.0);
@@ -325,12 +504,16 @@ const SOLAR_FRAGMENT_SHADER = /* glsl */ `
     float diamond = (diamondCore
       + (diamondHorizontal + diamondVertical) * ${glslFloat(DIAMOND_SPIKE_WEIGHT)}) * uBeads;
     color += vec3(1.0, 0.78, 0.4) * diamond * ${glslFloat(DIAMOND_RADIANCE)};
-    alpha = max(alpha, clamp(diamond, 0.0, 1.0));
 
+    // Cloud attenuates the beam and that is the whole of it now. The old form also faded
+    // alpha to 0.16, which under NormalBlending was how the cloudy sky got to show through
+    // the disc; additive blending never took the sky away, so keeping that factor would
+    // have dimmed the sun twice for one cloud.
     color *= uTransmittance;
-    alpha *= mix(0.16, 1.0, uTransmittance);
-    if (alpha < 0.002) discard;
-    gl_FragColor = vec4(color, clamp(alpha, 0.0, 1.0));
+    // Below this nothing the encoder can represent changes, even against the darkest sky
+    // this scene reaches: it is a fifth of the radiance that first rounds up to code 1.
+    if (max(color.r, max(color.g, color.b)) < ${glslFloat(MOON_MINIMUM_RADIANCE / 10)}) discard;
+    gl_FragColor = vec4(color, 1.0);
   }
 `;
 
@@ -360,8 +543,14 @@ const MOON_FRAGMENT_SHADER = /* glsl */ `
     // over the bite at every coverage, which is half of why there was no bite to see.
     // uTotality is 0 below coverage 0.985, and 1.3 is the 0.5 + 0.8 the old term reached.
     float visibility = smoothstep(0.0, 0.055, uCoverage);
+    // ...and this is the floor under it. uTotality being exactly 0 through both partial
+    // phases wrote every interior pixel as literal 0.0 at alpha 1, which is a standing
+    // invariant of this project broken by design; with dithering on in the final pass those
+    // pixels round to rgb(0,0,0) about half the time. The max() is last so cloud cannot
+    // take the disc back under it. See MOON_MINIMUM_RADIANCE for where 0.012 comes from.
+    vec3 interior = earthshine * uTotality * 1.3 * uTransmittance;
     gl_FragColor = vec4(
-      earthshine * uTotality * 1.3 * uTransmittance,
+      max(interior, vec3(${glslFloat(MOON_MINIMUM_RADIANCE)})),
       mask * visibility * mix(0.35, 1.0, uTransmittance)
     );
   }
@@ -415,7 +604,18 @@ export class EclipseVisual {
       transparent: true,
       depthWrite: false,
       depthTest: true,
-      blending: THREE.NormalBlending,
+      // `result = emitted + sky`, spelled out rather than taken from AdditiveBlending,
+      // which is `SrcAlpha, One` unless `premultipliedAlpha` is also set and would put the
+      // squaring straight back. The alpha channel is left alone -- ZeroFactor on src, One
+      // on dst -- because the composer's buffer alpha belongs to the passes downstream and
+      // an additive layer has no business accumulating into it. See SOLAR_FRAGMENT_SHADER.
+      blending: THREE.CustomBlending,
+      blendEquation: THREE.AddEquation,
+      blendSrc: THREE.OneFactor,
+      blendDst: THREE.OneFactor,
+      blendEquationAlpha: THREE.AddEquation,
+      blendSrcAlpha: THREE.ZeroFactor,
+      blendDstAlpha: THREE.OneFactor,
       fog: false,
       toneMapped: false,
     });
@@ -431,6 +631,10 @@ export class EclipseVisual {
       transparent: true,
       depthWrite: false,
       depthTest: true,
+      // The one layer here that genuinely occludes, so the one that keeps NormalBlending:
+      // `alpha * moon + (1 - alpha) * sky`. Drawn after the solar layer (renderOrder -19
+      // against -20), so at totality it also takes back the inner corona it covers.
+      blending: THREE.NormalBlending,
       fog: false,
       toneMapped: false,
     });
