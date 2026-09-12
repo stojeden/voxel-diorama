@@ -36,6 +36,18 @@
         "--strictPort"
       ],
       "port": 4190
+    },
+    {
+      "name": "voxel-diorama-preview",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "vite",
+        "preview",
+        "--port",
+        "4386",
+        "--strictPort"
+      ],
+      "port": 4386
     }
   ]
 }
