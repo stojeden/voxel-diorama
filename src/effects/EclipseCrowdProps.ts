@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { EclipseWorldReactionState } from '../experience/EclipseWorldReaction';
+import type { EclipsePassengerPose } from '../world/PassengerCrowd';
 import type { QualityLevel } from '../performance/QualityManager';
 
 function buildGlassesGeometry(): THREE.BufferGeometry {
@@ -49,9 +50,18 @@ export class EclipseCrowdProps {
   private readonly glasses: THREE.InstancedMesh;
   private readonly cards: THREE.InstancedMesh;
   private readonly localGlasses = new THREE.Matrix4().makeTranslation(0, 0, 0.33);
+  /**
+   * The card is held in FRONT of the figure, not behind it.
+   *
+   * It was at local -0.72 z -- 0.51 m behind the back, on the side opposite both the face
+   * and the two raised arms, which swing to +Z. That was invisible while every figure faced
+   * an arbitrary direction; now that a projection user turns their back to the sun on
+   * purpose, a card behind them is a card in the sun's own shadow, which is the one place a
+   * pinhole image cannot fall. +0.62 puts it just past the hands at their -1.18 rad reach.
+   */
   private readonly localCard = new THREE.Matrix4()
     .makeRotationX(-Math.PI / 2)
-    .premultiply(new THREE.Matrix4().makeTranslation(0, 1.48, -0.72));
+    .premultiply(new THREE.Matrix4().makeTranslation(0, 1.46, 0.62));
   private readonly instanceMatrix = new THREE.Matrix4();
   private density = 1;
 
@@ -67,13 +77,22 @@ export class EclipseCrowdProps {
       }
     });
     passengers.sort((a, b) => a.name.localeCompare(b.name));
-    for (let index = 0; index < passengers.length; index++) {
-      if (index % 3 === 1) {
-        this.cardCandidates.push(passengers[index]);
+    /**
+     * Who holds a card is read off the figure, not derived a second time.
+     *
+     * This used to be `index % 3 === 1` over the name-sorted global list above, while the
+     * pose came from `eclipsePassengerPoseFor(i)` over a per-stop index. Two derivations of
+     * one fact, and they agree only at the first stop: with four figures to a bus stop the
+     * second stop's global 4..7 map to per-stop 0..3, so the global rule picked per-stop 0
+     * and 3 -- both posed as glasses wearers. The result was cards hovering on figures
+     * wearing glasses and figures holding both arms up with nothing between them.
+     */
+    for (const passenger of passengers) {
+      const pose = passenger.userData.eclipsePose as EclipsePassengerPose | undefined;
+      if (pose === 'projection') {
+        this.cardCandidates.push(passenger);
       } else {
-        this.glassesCandidates.push(
-          passengers[index].getObjectByName('passenger-head') ?? passengers[index]
-        );
+        this.glassesCandidates.push(passenger.getObjectByName('passenger-head') ?? passenger);
       }
     }
 
@@ -159,9 +178,20 @@ export class EclipseCrowdProps {
     strength: number
   ): number {
     if (strength <= 0.03) return 0;
+    /**
+     * The density budget caps how many props are DRAWN, not how far down the list we look.
+     *
+     * It used to bound the loop index, so every candidate that was skipped for being faded
+     * out or off-screen burned one of the budgeted slots and the visible figures further
+     * down the list got nothing. The candidate order makes that systematic rather than
+     * unlucky: the name sort puts all twenty bus-stop figures ahead of the twelve station
+     * ones, and a bus-stop figure is invisible whenever it is riding the bus -- so the
+     * reliably-visible station crowd sat past the cap and went bare-eyed. Same ceiling,
+     * same instance capacity, same single draw call; it just fills.
+     */
     const limit = Math.ceil(candidates.length * this.density);
     let count = 0;
-    for (let index = 0; index < limit; index++) {
+    for (let index = 0; index < candidates.length && count < limit; index++) {
       const passenger = candidates[index];
       if (!isWorldVisible(passenger) || groupOpacity(passenger) < 0.15) continue;
       passenger.updateWorldMatrix(true, false);

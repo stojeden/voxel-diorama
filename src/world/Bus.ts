@@ -11,11 +11,14 @@ import {
 import {
   applyPassengerEclipsePose,
   buildPassenger,
+  eclipseBodyTurn,
   SHARED_PASSENGER_GEOMETRY,
   eclipsePassengerPoseFor,
   easeInOut,
   type EclipsePassengerPose,
   type PassengerBuild,
+  type PassengerSunGaze,
+  type SunGaze,
 } from './PassengerCrowd';
 import { mergeStaticMeshes } from '../performance/mergeStaticMeshes';
 import { createBusUnderGlow, type BusUnderGlowHandle } from './cyber/busGlow';
@@ -352,7 +355,11 @@ function buildStopCrowd(scene: THREE.Scene, stop: BusStop, random: RandomSource)
     const pathMetrics = polylineLengths(path);
 
     const build = buildPassenger(random);
+    const eclipsePose = eclipsePassengerPoseFor(i);
     build.group.name = `bus-passenger-${stop.label}-${i}`;
+    // Stamped at build time so the props read the pose instead of re-deriving it from a
+    // different index space -- see the same stamp in PassengerCrowd.
+    build.group.userData.eclipsePose = eclipsePose;
     build.group.position.copy(waitPos);
     build.group.rotation.y = facing;
     scene.add(build.group);
@@ -373,7 +380,7 @@ function buildStopCrowd(scene: THREE.Scene, stop: BusStop, random: RandomSource)
       currentOpacity: 0,
       targetOpacity: 0.92,
       atStop: true,
-      eclipsePose: eclipsePassengerPoseFor(i),
+      eclipsePose,
     });
   }
 
@@ -415,6 +422,8 @@ export interface BusHandle {
    */
   setRoadWetness: (wetness: number) => void;
   setEclipseReaction: (reaction: EclipseWorldReactionState) => void;
+  /** Where the sun is, or null outside an eclipse — the bearing the stop crowds look along. */
+  setSunGaze: (gaze: SunGaze | null) => void;
   setHeadlightsEnabled: (enabled: boolean) => void;
   dispose: () => void;
 }
@@ -460,6 +469,9 @@ export function createBus(scene: THREE.Scene, random = fallbackRandom('bus')): B
     projection: 0,
     dogAlert: 0,
   };
+  let sunGaze: SunGaze | null = null;
+  /** Refilled per figure per frame rather than allocated twenty times a frame. */
+  const passengerGaze: PassengerSunGaze = { yaw: 0, elevation: 0, baseFacing: 0, bodyTurn: 0 };
   const finalStopsRemaining = new Set<string>();
   const morningStopsRemaining = new Set<string>();
 
@@ -661,7 +673,15 @@ export function createBus(scene: THREE.Scene, random = fallbackRandom('bus')): B
     // twenty bus-stop figures are at zero -- measured at 24 draw calls in the opening
     // overview, against a 1400 budget that the owner's window reaches 1418 of.
     p.build.group.visible = p.currentOpacity > 0.01;
-    applyPassengerEclipsePose(p.build, p.eclipsePose, eclipseReaction.attention);
+    let gaze: PassengerSunGaze | null = null;
+    if (sunGaze) {
+      passengerGaze.yaw = sunGaze.yaw;
+      passengerGaze.elevation = sunGaze.elevation;
+      passengerGaze.baseFacing = p.facing;
+      passengerGaze.bodyTurn = eclipseBodyTurn(eclipseReaction.movementScale);
+      gaze = passengerGaze;
+    }
+    applyPassengerEclipsePose(p.build, p.eclipsePose, eclipseReaction.attention, gaze);
   }
 
   return {
@@ -919,6 +939,9 @@ export function createBus(scene: THREE.Scene, random = fallbackRandom('bus')): B
     },
     setEclipseReaction(reaction) {
       eclipseReaction = reaction;
+    },
+    setSunGaze(gaze) {
+      sunGaze = gaze;
     },
     setHeadlightsEnabled(enabled) {
       headlightsEnabled = enabled;
