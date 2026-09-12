@@ -1,4 +1,12 @@
 import * as THREE from 'three';
+import { beamTransmittanceColor, twilightSkyColorCached } from './SunlightSpectrum';
+
+/** Two degrees below the horizon, the physical twilight hue is fully in. */
+const TWILIGHT_BLEND_DEPTH_RAD = THREE.MathUtils.degToRad(2);
+/** Scattered light this faint hands the sky back to the authored night colour. */
+const TWILIGHT_HANDBACK_BRIGHTNESS = 0.002;
+/** How far the blend is allowed to go: the stops keep a say, they were not guesses. */
+const TWILIGHT_MAX_BLEND = 0.8;
 
 /**
  * Pure solar/colorimetry helpers for the day/night cycle.
@@ -252,11 +260,42 @@ export function skyColorAt(
   }
   const range = upper.time - lower.time;
   const frac = range > 0 ? (clamped - lower.time) / range : 0;
-  return out.lerpColors(lower.color, upper.color, smooth(frac));
+  out.lerpColors(lower.color, upper.color, smooth(frac));
+
+  /**
+   * Below the horizon, take the hue from the atmosphere and keep the brightness from the art.
+   *
+   * The stops were chosen by eye and they are good; what they cannot know is *why* twilight
+   * is the colour it is, which is ozone. So the physical model supplies chromaticity only:
+   * it is rescaled to the stop's own luminance before the blend, because it is normalised to
+   * its brightest channel and would otherwise light the night sky up like noon.
+   *
+   * The blend fades in over the first two degrees below the horizon and fades back out as
+   * the scattered light collapses past civil twilight -- by then there is nothing left for
+   * single scattering to describe, and the table's own night colour is the better answer.
+   */
+  const elevation = sunElevationAt(t, declination);
+  if (elevation >= 0) return out;
+  const twilight = twilightSkyColorCached(elevation);
+  const depth = clamp01(-elevation / TWILIGHT_BLEND_DEPTH_RAD);
+  const lit = clamp01(twilight.relativeBrightness / TWILIGHT_HANDBACK_BRIGHTNESS);
+  const weight = depth * lit * TWILIGHT_MAX_BLEND;
+  if (weight <= 0) return out;
+
+  const luminance = (r: number, g: number, b: number) => 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  const [pr, pg, pb] = twilight.color;
+  const physicalLuma = Math.max(luminance(pr, pg, pb), 1e-6);
+  const stopLuma = luminance(out.r, out.g, out.b);
+  const scale = stopLuma / physicalLuma;
+  out.setRGB(
+    out.r + (pr * scale - out.r) * weight,
+    out.g + (pg * scale - out.g) * weight,
+    out.b + (pb * scale - out.b) * weight,
+    THREE.LinearSRGBColorSpace
+  );
+  return out;
 }
 
-const SUN_WARM = new THREE.Color(0xff7a33);
-const SUN_COOL = new THREE.Color(0xfff2dd);
 const BLACK = new THREE.Color(0x000000);
 
 /** The sun's altitude at solar noon: 90 degrees minus the gap between latitude and declination. */
@@ -265,11 +304,18 @@ export function noonElevation(declination: number): number {
 }
 
 /**
- * Direct sunlight colour: deep warm near the horizon, near-white at noon.
+ * Direct sunlight colour, from the atmosphere rather than from two hand-picked endpoints.
  *
- * Normalised against the season's own noon rather than a fixed 58 degrees, so October noon
- * reads as October noon -- warm, because the sun never climbs out of the warm band -- instead
- * of as a permanently half-risen June.
+ * This used to interpolate between a chosen orange and a chosen off-white by elevation. It
+ * now asks {@link beamTransmittanceColor} what the atmosphere does to the spectrum along the
+ * actual path: Rayleigh scattering over the Kasten-Young air mass, ozone over its own, and
+ * aerosol. At sixty degrees that is a near-neutral white; on the horizon, where the beam
+ * crosses thirty-eight vertical atmospheres, blue is gone by four orders of magnitude and
+ * what is left is the red of a real sunset.
+ *
+ * Normalised to its brightest channel, because this is a *colour*: the brightness of direct
+ * sun is already owned by `directSunFactorAt` and the exposure curve, and returning an
+ * unnormalised transmittance here would dim the sun twice.
  */
 export function sunColorAt(
   t: number,
@@ -278,8 +324,9 @@ export function sunColorAt(
 ): THREE.Color {
   const elevation = sunElevationAt(t, declination);
   if (elevation <= 0) return out.copy(BLACK);
-  const high = clamp01(elevation / Math.max(noonElevation(declination), 1e-3));
-  return out.lerpColors(SUN_WARM, SUN_COOL, smooth(Math.min(high * 1.8, 1)));
+  const [r, g, b] = beamTransmittanceColor(elevation);
+  const peak = Math.max(r, g, b, 1e-9);
+  return out.setRGB(r / peak, g / peak, b / peak, THREE.LinearSRGBColorSpace);
 }
 
 export interface RealSunTimes {
