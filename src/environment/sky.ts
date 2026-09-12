@@ -298,7 +298,15 @@ export function highSunFactor(elevationRad: number): number {
  *
  * It is deliberately an exposure change and not a lower sun: the shadows stay short, because
  * short shadows are what noon looks like. The frame still reads as the brightest hour of the
- * day -- golden hour means 122 against this 143.
+ * day -- golden hour meant 122 against this 143 when the ease was measured.
+ *
+ * **Half of that last pair is now historical.** The 2026-09 ramp retune left noon alone on
+ * purpose: at 61.21 degrees `nightFactorAt` and `directSunFactorAt` return exactly what they
+ * returned before it, and the noon frame re-measured across it moved from 108.24 to 108.27 of
+ * 255 (default camera, 640x400, High, seed 20260724) -- so the 143 stands. The golden hour
+ * rose with the beam: the same camera at the golden-hour clock went from 47.37 to 50.30 under
+ * those conditions, which are not the ones that produced 122, so 122 is no longer current and
+ * is left here only as the number the ease was set against.
  */
 export function sceneExposure(
   night: number,
