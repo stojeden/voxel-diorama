@@ -83,7 +83,7 @@ write and the eclipse patch keep working and the dome simply is not drawn. It ne
 the flag: the constructor takes positional arguments after `hooks`, and `DayNightHooks` is about
 light handles, not about what gets drawn.
 
-## 3. The entry chunk has 766 bytes free
+## 3. ~~The entry chunk has 766 bytes free~~ — 2 100 free after the 2026-09-12 split
 
 244 734 of 245 500, after that ceiling was raised deliberately on 2026-09-11. AR needs a
 device-orientation permission flow, a quaternion-to-camera mapping, `getUserMedia` plumbing
@@ -92,6 +92,13 @@ and a mode switch — several kB at least. It cannot live in `main.ts`.
 **The consequence is a decision, not a number: the AR path has to be a lazy chunk from its
 first line.** That seam is cheap to create up front and expensive to retrofit around a
 half-written feature.
+
+**Updated 2026-09-12.** The ceiling went to 249 500 to fit the seasonal sun (920 B) and the
+atmospheric light model (2 530 B), then came straight back to 245 500: splitting
+`SunlightSpectrum` and `RainbowOptics` into an eagerly-loaded `atmosphere-physics` chunk took
+the entry from 249 065 to **243 400**, which is 2 100 bytes of room rather than the 435 the
+raise had left. The lesson is the cheaper one the file already argued for elsewhere — reach for
+the split before the purchase.
 
 ## 4. ~~The `three` ceiling~~ — checked, and it is not a ceiling
 

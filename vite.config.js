@@ -103,6 +103,21 @@ export default defineConfig({
               includeDependenciesRecursively: false,
             },
             {
+              // The atmosphere's physics: Rayleigh optical depth, the ozone Chappuis band,
+              // air mass, refraction, and the spectral-to-RGB conversion both the rainbow and
+              // the twilight model integrate through.
+              //
+              // Split for room, not for laziness -- this code runs on the first frame and is
+              // loaded eagerly. The entry chunk had 435 bytes left of its 249 500 when the
+              // sky dome's own twilight was still unwired, and the alternative was another
+              // budget raise. Splitting keeps the growth visible, which is the same call
+              // `experience-signals` and `playground` below already record.
+              name: 'atmosphere-physics',
+              test: /src[\\/]environment[\\/](?:SunlightSpectrum|RainbowOptics)\.ts$/,
+              priority: 12,
+              includeDependenciesRecursively: false,
+            },
+            {
               // Small, cohesive and independently cacheable world-signal logic.
               // Keeping it out of the near-limit entry chunk leaves room for the
               // UI redesign without hiding growth behind a larger budget.

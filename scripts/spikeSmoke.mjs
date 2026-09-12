@@ -101,7 +101,7 @@ async function assertBundles() {
     spike: (await stat(`dist/assets/${spike}`)).size,
   };
   // Kept in step with the budget in `browserSmoke.mjs`, where the reasoning lives.
-  assert.ok(sizes.entry <= 249_500, `entry chunk over budget: ${sizes.entry}`);
+  assert.ok(sizes.entry <= 245_500, `entry chunk over budget: ${sizes.entry}`);
   assert.ok(sizes.main <= 50_000, `main chunk over budget: ${sizes.main}`);
   return sizes;
 }

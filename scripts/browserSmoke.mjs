@@ -111,8 +111,15 @@ async function assertBundleBudgets() {
    * So this is a deliberate purchase, made by the owner, not a ceiling nudged to make a red
    * gate green. 245 500 leaves 766 bytes free, more headroom than the 531 it replaces, so the
    * next change meets a real budget rather than this one again.
+   *
+   * **Raised to 249 500 and then put back, 2026-09-12.** The seasonal sun cost 920 bytes and
+   * the atmospheric light model 2 530, both measured by stubbing rather than estimated, and
+   * the owner agreed to the raise. It turned out not to be needed: moving `SunlightSpectrum`
+   * and `RainbowOptics` into an eagerly-loaded `atmosphere-physics` chunk took the entry from
+   * 249 065 to 243 400. The features stayed, the ceiling came back down, and the raise lasted
+   * one afternoon. Prefer the split to the purchase.
    */
-  assert.ok(entryBytes <= 249_500, `application chunk budget exceeded: ${entryBytes} bytes`);
+  assert.ok(entryBytes <= 245_500, `application chunk budget exceeded: ${entryBytes} bytes`);
   assert.ok(bootstrapBytes <= 50_000, `application bootstrap budget exceeded: ${bootstrapBytes} bytes`);
   assert.ok(threeBytes <= 800_000, `Three.js chunk budget exceeded: ${threeBytes} bytes`);
   assert.ok(cameraControlsBytes <= 60_000, `camera-controls chunk budget exceeded: ${cameraControlsBytes} bytes`);
