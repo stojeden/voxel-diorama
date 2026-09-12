@@ -446,9 +446,12 @@ describe('BITE CONTRAST: the crescent against the sky beside it', () => {
       measured.push(crescent / sky);
       expect(crescent / sky).toBeGreaterThanOrEqual(BITE_CONTRAST_TARGET);
     }
-    // 4.05 / 8.12 / 17.1: it improves with coverage because the disc holds its surface
-    // brightness while the sky loses its light, which is what an eclipse physically is.
-    expect(measured[0]).toBeCloseTo(4.05, 1);
+    // It improves with coverage because the disc holds its surface brightness while the sky
+    // loses its light, which is what an eclipse physically is. The value at coverage 0.50 was
+    // 4.05 when this was written and is 4.19 now: `MINIMUM_IRRADIANCE` fell from 0.025 to
+    // 0.0025, so `skyBesideDisc` reads a sky that has lost more of its light. The metric moved
+    // in the right direction for a reason outside this file, and is pinned no more loosely.
+    expect(measured[0]).toBeCloseTo(4.19, 1);
     expect(measured[2] / measured[0]).toBeGreaterThan(3);
   });
 
