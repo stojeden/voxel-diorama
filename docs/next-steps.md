@@ -199,10 +199,14 @@ explaining that a literal once failed a deliberate colour change instead of a re
   surviving because the boundary type is `unknown`. Nothing reads it. Declare it or delete it.
 - **The `.claude/worktrees/` worktree is a stale full copy of the repo.** Excluded from vitest
   on 2026-09-11, but it still confuses every editor search. Deleting it is thirty seconds.
-- **`primaryCalls` and `primaryTriangles` cost a dedicated composer pass on every production
-  frame and no gate asserts either.** Either assert them or drop the pass. `primaryCalls` is
-  exactly the number that would say whether stereo rendering doubled the scene cost or the
-  post cost.
+- **`primaryCalls` and `primaryTriangles` are unasserted, but they are not expensive —
+  ~~a dedicated composer pass on every production frame~~ was wrong, corrected 2026-09-12.**
+  The capture is a `LambdaPass` from the `postprocessing` library, which renders nothing: its
+  body copies two integers out of `renderer.info.render` between passes, and the file's own
+  comment at `bootstrap.ts:253` already said "a LambdaPass cannot render". There is no frame
+  cost to reclaim here, so the only open question is the real one: nothing asserts either
+  number, and `primaryCalls` is exactly what would say whether stereo rendering doubled the
+  scene cost or the post cost.
 
 ## 10. ~~The smoke step costs 41 minutes of CI, and 21 of them are one settle loop~~ — **done 2026-09-11**
 
