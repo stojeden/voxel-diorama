@@ -58,7 +58,15 @@ const POSTMAN_UNIFORM_COLOR = await readFile('src/world/Postman.ts', 'utf8')
   });
 
 const HOST = '127.0.0.1';
-const PORT = 4173;
+/**
+ * Overridable because a developer's machine is not the only thing on it.
+ *
+ * 4173 is vite's own preview default, so anything else previewing a build takes it first and
+ * this harness dies with "Port 4173 is already in use" sixty seconds into a page load --
+ * which reads as a product failure and is not one. CI is a clean container and keeps the
+ * default; `BROWSER_SMOKE_PORT` is for the machine with other work on it.
+ */
+const PORT = Number(process.env.BROWSER_SMOKE_PORT ?? 4173);
 const URL = `http://${HOST}:${PORT}`;
 const IS_CI = process.env.CI === 'true';
 const WRITE_SCREENSHOTS = !IS_CI;
