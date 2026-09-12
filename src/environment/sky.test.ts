@@ -188,18 +188,33 @@ describe('solar model', () => {
    *
    * A directional light's intensity is the *beam*: three charges every surface its own
    * N dot L, so the only loss left to model at a low sun is the length of the path. At 4.4
-   * degrees that path is 11.4 air masses against a June noon's 1.14, and Meinel's clear-sky
-   * transmission over them is 0.23 of the noon beam. The ramp keeps headroom above that --
-   * it pins full strength at 30 degrees rather than at the zenith, so the high sun is
-   * exactly where it was -- but it may not be an order of magnitude under it, which is what
-   * the old double cosine did: 0.037 against noon's 1.0.
+   * degrees that path is 11.42 air masses against a June noon's 1.14, and Meinel's clear-sky
+   * transmission over them is **0.230** of the noon beam. That is the published number and it
+   * is asserted as the published number: an earlier draft pinned full strength at 30 degrees
+   * instead of at the top, which returned 0.275 and was covered by a band wide enough to hide
+   * the difference. The old double cosine returned 0.037 -- an order of magnitude under.
    */
-  test('the direct beam at a low sun is a quarter of noon, not a twenty-seventh', () => {
+  test('the direct beam at a low sun is Meinel\'s 0.230 of noon, not a twenty-seventh', () => {
     const noon = directSunFactorAt(0.5, JUNE);
-    expect(noon).toBeCloseTo(1, 3);
     const ratio = directSunFactorAt(clockAtElevation(4.4, JUNE), JUNE) / noon;
-    expect(ratio).toBeGreaterThan(0.18);
-    expect(ratio).toBeLessThan(0.35);
+    expect(ratio).toBeCloseTo(0.23, 2);
+  });
+
+  /**
+   * Midday keeps its shape, which pinning the scale lower would have flattened.
+   *
+   * With full strength pinned at 30 degrees every elevation above it clamps to exactly 1, so
+   * a June middle of the day delivers identical light from ten in the morning to four in the
+   * afternoon. Pinned at the top the beam still climbs the way the air mass says: 0.836 at 30
+   * degrees, 0.941 at 45, 1.0 at the 61.21 this latitude tops out at.
+   */
+  test('the beam still climbs through midday instead of clamping', () => {
+    const at = (deg: number) => directSunFactorAt(clockAtElevation(deg, JUNE), JUNE);
+    expect(at(30)).toBeCloseTo(0.836, 2);
+    expect(at(45)).toBeCloseTo(0.941, 2);
+    expect(at(61.21)).toBeCloseTo(1, 2);
+    expect(at(45)).toBeGreaterThan(at(30));
+    expect(at(61.21)).toBeGreaterThan(at(45));
   });
 
   /**

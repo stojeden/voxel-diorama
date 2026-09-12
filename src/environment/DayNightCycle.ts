@@ -759,7 +759,11 @@ export class DayNightCycle {
      * four-argument call compiling unchanged while silently feeding the night floor into the
      * season. Three of them in `RendererWarmup` then seeded the smoothed sun with a
      * declination of zero, which at the rainbow checkpoint's hour is an elevation of 0.43
-     * degrees instead of 18.7 -- direct sunlight of 6e-5 instead of 0.54, and no rainbow.
+     * degrees instead of 18.7 -- near-zero direct sunlight instead of most of it, and no
+     * rainbow. (The two figures this once quoted, 6e-5 and 0.54, were `directSunFactorAt`
+     * before the 2026-09-12 ramp retune replaced its double cosine with an air-mass beam;
+     * the shape of the failure is unchanged, the numbers are not, so they are gone rather
+     * than left to rot.)
      * A default here is what let the compiler stay quiet; there is not one any more.
      */
     nightFloor: number

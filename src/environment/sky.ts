@@ -206,7 +206,7 @@ export function nightFactorAt(t: number, declination: number): number {
  * Kasten-Young (1989) relative optical air mass: how many vertical atmospheres the beam
  * crosses at a given elevation.
  *
- * 1.00 at the zenith, 1.15 at 60 degrees, 2.00 at 30 and 37.9 on the horizon -- the
+ * 1.00 at the zenith, 1.15 at 60 degrees, 1.99 at 30 and 37.9 on the horizon -- the
  * "thirty-eight vertical atmospheres" {@link sunColorAt} already talks about. The
  * empirical second term is what keeps it finite down there, where a plain secant diverges.
  * Valid above the geometric horizon only; the one caller returns before reaching it.
@@ -225,14 +225,22 @@ function beamStrengthAt(elevationDeg: number): number {
 }
 
 /**
- * Two air masses -- 30 degrees of elevation -- is where the beam counts as full strength.
+ * Full strength is the brightest beam this latitude ever receives: a June noon.
  *
- * Above it the transmission is still climbing (0.676 at a June noon against 0.566 here),
- * but the renderer's sun is already at 1 and the exposure curve owns the rest. Pinning the
- * scale at 30 is what leaves the high sun exactly where this retune found it: a June noon
- * returned 1.0 before and returns 1.0 now.
+ * Pinning it lower -- 30 degrees was tried -- clamps everything above that to exactly 1 and
+ * has two costs nobody would notice until they looked. A June midday stops varying at all,
+ * where the beam really does keep climbing from 0.836 at 30 degrees to 1.0 at 61.21; and every
+ * season whose noon sits below the pin is quietly lifted, autumn's 28.27-degree noon by 31 per
+ * cent rather than the 9 it gets here, a winter solstice by 65 rather than 38. Pinning at the
+ * top leaves the curve its shape and makes the number this file already cites come out true:
+ * 4.4 degrees returns 0.2300, which is Meinel's ratio for 11.42 air masses against 1.14.
+ *
+ * `noonElevation` is the same function the season tests use, so the pin follows the latitude
+ * rather than repeating it as a literal.
  */
-const FULL_BEAM = beamStrengthAt(30);
+const FULL_BEAM = beamStrengthAt(
+  THREE.MathUtils.radToDeg(noonElevation(THREE.MathUtils.degToRad(JUNE_DECLINATION_DEG)))
+);
 
 /**
  * Direct sunlight: the beam the atmosphere actually delivers, not a second cosine.
@@ -302,10 +310,11 @@ export function highSunFactor(elevationRad: number): number {
  *
  * **Half of that last pair is now historical.** The 2026-09 ramp retune left noon alone on
  * purpose: at 61.21 degrees `nightFactorAt` and `directSunFactorAt` return exactly what they
- * returned before it, and the noon frame re-measured across it moved from 108.24 to 108.27 of
- * 255 (default camera, 640x400, High, seed 20260724) -- so the 143 stands. The golden hour
- * rose with the beam: the same camera at the golden-hour clock went from 47.37 to 50.30 under
- * those conditions, which are not the ones that produced 122, so 122 is no longer current and
+ * returned before it, so the 143 stands on arithmetic rather than on a re-render. The golden
+ * hour rose with the beam, but by how much is **not recorded here on purpose**: the figures a
+ * first draft carried came from a single ad-hoc probe, and a paired re-measurement on the same
+ * machine did not reproduce them -- the deltas were inside the run-to-run spread and one of
+ * them changed sign between runs. So 122 is no longer current and
  * is left here only as the number the ease was set against.
  */
 export function sceneExposure(
