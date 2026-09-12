@@ -692,7 +692,17 @@ export class DayNightCycle {
     cloudCover: number,
     /** Solar declination: the season, in radians. Sets noon altitude and day length together. */
     declination: number,
-    nightFloor = 0
+    /**
+     * Required, and deliberately not optional.
+     *
+     * `declination` was inserted ahead of a `nightFloor = 0`, which left every existing
+     * four-argument call compiling unchanged while silently feeding the night floor into the
+     * season. Three of them in `RendererWarmup` then seeded the smoothed sun with a
+     * declination of zero, which at the rainbow checkpoint's hour is an elevation of 0.43
+     * degrees instead of 18.7 -- direct sunlight of 6e-5 instead of 0.54, and no rainbow.
+     * A default here is what let the compiler stay quiet; there is not one any more.
+     */
+    nightFloor: number
   ): DayLightState {
     this.elapsed += dtReal;
     const eclipseState = this.eclipseState;
