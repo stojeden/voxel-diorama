@@ -1,5 +1,16 @@
 import * as THREE from 'three';
-import type { Clock01 } from '../units';
+import type { WallClock01 } from '../units';
+
+/**
+ * Everything in this file is an HOUR, not a light level.
+ *
+ * Its constants are wall-clock minutes -- 390 to 430 is 06:30 to 07:10, 1080 is 18:00 -- and
+ * the module describes household and timetable behaviour, not daylight. So it takes
+ * `WallClock01`, and it used to take `Clock01` only because that is what its two callers
+ * happen to hand it. A brand stamped to match the caller rather than the meaning is worse
+ * than no brand: it made `residentialWindowActivityAt(clockT, cohort)` -- the CORRECT call --
+ * a type error, which points the next reader at the bug instead of away from it.
+ */
 
 export const MINUTES_PER_DAY = 24 * 60;
 export const WINDOW_COHORT_COUNT = 5;
@@ -22,11 +33,11 @@ const WINDOW_DAYLIGHT_OFF_MINUTES = [390, 400, 410, 420, 430] as const;
 const WINDOW_EVENING_ON_MINUTES = [1080, 1095, 1110, 1125, 1140] as const;
 const WINDOW_FADE_MINUTES = 8;
 
-export function minuteOfDay(t01: Clock01): number {
+export function minuteOfDay(t01: WallClock01): number {
   return (((t01 % 1) + 1) % 1) * MINUTES_PER_DAY;
 }
 
-export function busServiceWindowAt(t01: Clock01): BusServiceWindow {
+export function busServiceWindowAt(t01: WallClock01): BusServiceWindow {
   const minute = minuteOfDay(t01);
   const epsilon = 1e-6;
   if (minute + epsilon >= BUS_FINAL_LOOP_MINUTE) return 'final-loop';
@@ -54,7 +65,7 @@ function fadeDown(minute: number, eventMinute: number): number {
  * deliberately describes household behaviour, not daylight; DayNightCycle
  * multiplies it by the current night strength.
  */
-export function residentialWindowActivityAt(t01: Clock01, cohort: number): number {
+export function residentialWindowActivityAt(t01: WallClock01, cohort: number): number {
   const index = THREE.MathUtils.clamp(Math.floor(cohort), 0, WINDOW_COHORT_COUNT - 1);
   const minute = minuteOfDay(t01);
 
@@ -82,7 +93,7 @@ export function residentialWindowActivityAt(t01: Clock01, cohort: number): numbe
   return 0;
 }
 
-export function residentialWindowAverageAt(t01: Clock01): number {
+export function residentialWindowAverageAt(t01: WallClock01): number {
   let sum = 0;
   for (let cohort = 0; cohort < WINDOW_COHORT_COUNT; cohort++) {
     sum += residentialWindowActivityAt(t01, cohort);

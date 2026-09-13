@@ -12,7 +12,7 @@ import { emitProp, emitStreetscape } from './streetscape';
 import { geometryFor } from './strategies/DirectSurfaceStrategy';
 import { P, PALETTE } from './palette';
 import { Emitter, type SurfacePrimitive } from './surface';
-import { clock01 } from '../../units.testing';
+import { solarPhase01, clock01 } from '../../units.testing';
 
 /**
  * One metric system for the whole world. Every number here is measured off the
@@ -123,7 +123,7 @@ function trueBounds(root: THREE.Object3D, keep: (mesh: THREE.Mesh) => boolean = 
 const postmanRig = (() => {
   const scene = new THREE.Scene();
   const postman = new Postman(scene);
-  for (let i = 0; i < 30; i++) postman.update(0.016, 100 + i * 0.016, clock01(0.34));
+  for (let i = 0; i < 30; i++) postman.update(0.016, 100 + i * 0.016, solarPhase01(0.34));
   const bike = scene.children.find((child) => child.name === 'postman-bike')!;
   const dog = scene.children.find((child) => child.name === 'postman-dog')!;
   bike.updateWorldMatrix(true, true);

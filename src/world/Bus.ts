@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { Clock01 } from '../units';
+import type { WallClock01, Clock01 } from '../units';
 import {
   BUS_ROUTE_CURVE,
   BUS_STOPS,
@@ -555,7 +555,10 @@ export function createBus(scene: THREE.Scene, random = fallbackRandom('bus')): B
   }
 
   function syncServiceSchedule(t01: Clock01): void {
-    const serviceWindow = busServiceWindowAt(t01);
+    // A timetable is an hour, and this function only holds the lighting clock. Same crossing
+    // as `DayNightCycle`'s, named for the same reason: identical today, and the cast is where
+    // the compiler will ask for a conversion if the two axes ever separate again.
+    const serviceWindow = busServiceWindowAt(t01 as number as WallClock01);
     if (!serviceInitialized) {
       if (serviceWindow === 'off') enterOffService();
       else if (serviceWindow === 'final-loop') beginFinalLoop();

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { QualityProfile } from '../performance/QualityManager';
-import type { Clock01, Radians } from '../units';
+import type { WallClock01, Clock01, Radians } from '../units';
 import { fallbackRandom, type RandomSource } from '../core/Random';
 import { EclipseVisual, type EclipseRenderState } from './EclipseVisual';
 import { Sky } from 'three/addons/objects/Sky.js';
@@ -1900,7 +1900,17 @@ export class DayNightCycle {
     const stationGlow = clamp01((night - 0.015) / 0.72);
     this.hooks.stationGlowMesh.visible = stationGlow > 0.01;
     this.hooks.stationGlowMaterial.uniforms.uNight.value = stationGlow;
-    const residentialActivity = residentialWindowAverageAt(t);
+    /**
+     * The one crossing in this file, named rather than hidden.
+     *
+     * `CityRhythm` schedules an HOUR -- its constants are wall-clock minutes -- and this
+     * system only ever holds the lighting clock. The two are the same number today, because
+     * the real-time warp was removed when the sun became seasonal, so this re-labels rather
+     * than converts. It is an explicit cast for the same reason `RealTime.getCycleT` is one:
+     * the day a warp comes back, the compiler asks here instead of accepting the relabel.
+     */
+    const hourOfDay = t as number as WallClock01;
+    const residentialActivity = residentialWindowAverageAt(hourOfDay);
     for (let i = 0; i < this.hooks.windowLights.length; i++) {
       const light = this.hooks.windowLights[i];
       light.visible =
@@ -1910,7 +1920,7 @@ export class DayNightCycle {
       light.distance = 20;
     }
     for (const schedule of this.hooks.windowGlowMaterials) {
-      const activity = residentialWindowActivityAt(t, schedule.cohort);
+      const activity = residentialWindowActivityAt(hourOfDay, schedule.cohort);
       schedule.activity = activity;
       schedule.material.color.copy(schedule.darkColor).lerp(schedule.litColor, activity);
       schedule.material.emissive.copy(schedule.litColor);

@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 import * as THREE from 'three';
 import { POSTMAN_STOP_TS, POSTMAN_UNIFORM_COLOR, Postman } from './Postman';
 import { GROUND_SURFACE_Y } from './WorldLayout';
-import { clock01 } from '../units.testing';
+import { solarPhase01, clock01 } from '../units.testing';
 
 describe('postman and dog interaction', () => {
   test('keeps the complete opaque rider visible while the dog gives chase', () => {
@@ -12,7 +12,7 @@ describe('postman and dog interaction', () => {
     let maxReaction = 0;
 
     for (let frame = 0; frame < 140; frame++) {
-      postman.update(0.25, frame * 0.25, clock01(0.32));
+      postman.update(0.25, frame * 0.25, solarPhase01(0.32));
       const state = postman.getDebugState();
       if (state.dogMode === 'chase') {
         sawChase = true;
@@ -41,7 +41,7 @@ describe('postman and dog interaction', () => {
     const scene = new THREE.Scene();
     const postman = new Postman(scene);
 
-    postman.update(0.1, 0, clock01(0.2));
+    postman.update(0.1, 0, solarPhase01(0.2));
     let state = postman.getDebugState();
     expect(state.bikeVisible).toBe(false);
     expect(state.riderGroupVisible).toBe(false);
@@ -49,7 +49,7 @@ describe('postman and dog interaction', () => {
     let sawActive = false;
     let sawFinished = false;
     for (let frame = 0; frame < 600; frame++) {
-      postman.update(0.25, frame * 0.25, clock01(0.32));
+      postman.update(0.25, frame * 0.25, solarPhase01(0.32));
       state = postman.getDebugState();
       expect(state.bikeVisible).toBe(state.active);
       expect(state.riderGroupVisible).toBe(state.active);
@@ -77,15 +77,15 @@ describe('postman and dog interaction', () => {
     expect(state.deliveryStops[1]).toBeLessThan(state.deliveryStops[2]);
 
     // Moving the clock backwards within the same day must not restart a route.
-    postman.update(0.1, 200, clock01(0.6));
-    postman.update(0.1, 201, clock01(0.32));
+    postman.update(0.1, 200, solarPhase01(0.6));
+    postman.update(0.1, 201, solarPhase01(0.32));
     state = postman.getDebugState();
     expect(state.active).toBe(false);
 
     // Only an actual day wrap arms the next morning round.
-    postman.update(0.1, 202, clock01(0.95));
-    postman.update(0.1, 203, clock01(0.02));
-    postman.update(0.1, 204, clock01(0.32));
+    postman.update(0.1, 202, solarPhase01(0.95));
+    postman.update(0.1, 203, solarPhase01(0.02));
+    postman.update(0.1, 204, solarPhase01(0.32));
     state = postman.getDebugState();
     expect(state.active).toBe(true);
     expect(state.bikeVisible).toBe(true);
@@ -125,7 +125,7 @@ describe('postman and dog interaction', () => {
 
     for (let frame = 0; frame < 240 && postman.getDebugState().dogMode !== 'chase'; frame++) {
       elapsed += 0.25;
-      postman.update(0.25, elapsed, clock01(0.32));
+      postman.update(0.25, elapsed, solarPhase01(0.32));
     }
     expect(postman.getDebugState().dogMode).toBe('chase');
 
@@ -138,7 +138,7 @@ describe('postman and dog interaction', () => {
     });
     for (let frame = 0; frame < 32; frame++) {
       elapsed += 0.25;
-      postman.update(0.25, elapsed, clock01(0.32));
+      postman.update(0.25, elapsed, solarPhase01(0.32));
     }
     expect(postman.getDebugState().dogMode).toBe('returnHome');
 
@@ -151,7 +151,7 @@ describe('postman and dog interaction', () => {
     });
     for (let frame = 0; frame < 240 && postman.getDebugState().dogMode !== 'home'; frame++) {
       elapsed += 0.25;
-      postman.update(0.25, elapsed, clock01(0.32));
+      postman.update(0.25, elapsed, solarPhase01(0.32));
     }
     expect(postman.getDebugState().dogMode).toBe('home');
     postman.dispose();

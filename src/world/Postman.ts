@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { DOG_HOME, GROUND_SURFACE_Y, MAIL_STOPS, POSTMAN_ROUTE_CURVE } from './WorldLayout';
-import type { Clock01 } from '../units';
+import type { SolarPhase01 } from '../units';
 import {
   PASSENGER_SCALE,
   SHARED_PASSENGER_GEOMETRY,
@@ -42,8 +42,21 @@ const RIDER_LEAN = 0.26;
 const LEG_PEDAL_ANGLE = -0.5;
 const ARM_REACH_ANGLE = -1.05;
 const RIDE_SPEED = 6;
-const MORNING_START = 0.28 as Clock01;
-const MORNING_END = 0.5 as Clock01;
+/**
+ * The round runs from just after sunrise to noon, on the SOLAR PHASE axis.
+ *
+ * These were `Clock01` and compared against `t01`, which made "every day at dawn" mean 06:43
+ * in every season: in June the postman left two and a half hours after a 04:08 sunrise, and
+ * in December he left in the dark. 0.28 is the same authored literal the golden-hour tour
+ * chapter and the golden-clear-overview checkpoint both use as a solar phase, which is what
+ * it always was -- 0.25 is sunrise by definition, whatever the season did to the clock.
+ *
+ * This is the EIGHTH instance of the two-axis confusion in this repository, and the first one
+ * the type system found rather than a person. It was invisible for the usual reason: read as
+ * a clock the number is perfectly plausible, and nothing crashes.
+ */
+const MORNING_START = 0.28 as SolarPhase01;
+const MORNING_END = 0.5 as SolarPhase01;
 const STOP_DURATION = 2;
 export const POSTMAN_UNIFORM_COLOR = 0x2f77b8;
 
@@ -343,7 +356,7 @@ export class Postman {
   private t = 0;
   private stopTimer = 0;
   private nextStopIndex = 0;
-  private previousT01: Clock01 | null = null;
+  private previousPhase: SolarPhase01 | null = null;
   private deliveryStops: number[] = [];
   private readonly riderWorldPosition = new THREE.Vector3();
 
@@ -358,11 +371,11 @@ export class Postman {
     scene.add(this.dog.group);
   }
 
-  update(delta: number, elapsed: number, t01: Clock01): void {
-    const isMorning = t01 >= MORNING_START && t01 <= MORNING_END;
-    const dayWrapped = this.previousT01 !== null && t01 < this.previousT01 - 0.5;
+  update(delta: number, elapsed: number, solarPhase: SolarPhase01): void {
+    const isMorning = solarPhase >= MORNING_START && solarPhase <= MORNING_END;
+    const dayWrapped = this.previousPhase !== null && solarPhase < this.previousPhase - 0.5;
     if (dayWrapped) this.doneToday = false;
-    this.previousT01 = t01;
+    this.previousPhase = solarPhase;
 
     // Start the round at dawn.
     if (isMorning && !this.active && !this.doneToday) {

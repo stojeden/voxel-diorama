@@ -53,6 +53,7 @@ import {
 import { eclipseViewCameraPosition, eclipseViewClock } from './experience/EclipseView';
 import {
   clockFromSolarPhase,
+  solarPhaseAt,
   highSunFactor,
   sceneBloomStrength,
   sceneExposure,
@@ -448,7 +449,16 @@ const THEME_BLEND_RATE = 0.45;
  * were only 15% of it. The lesson is in the order: the palette was the obvious suspect and
  * the wrong one.
  */
-const themeMix = (from: number, to: number, blend: number) => from + (to - from) * blend;
+/**
+ * Generic so a blend of two `Degrees` is still `Degrees`.
+ *
+ * It used to hand back a bare `number`, which laundered the brand off the busiest
+ * degrees-to-radians conversion in the product: `sunDeclination()` blends two
+ * `sunDeclinationDeg` and then converts, and with the brand erased a DELETED conversion
+ * still compiled there. Generics erase, so the emitted function is unchanged.
+ */
+const themeMix = <T extends number>(from: T, to: T, blend: number): T =>
+  (from + (to - from) * blend) as T;
 
 /**
  * The season this frame is lit by, in radians, mid-morph included.
@@ -1124,7 +1134,9 @@ function stepWorld(frame: FrameContext, carrier: WorldFrame): void {
     lakeLife.update(actorDelta, weather.getSnowCover() > 0.5);
     lakesideCow.update(actorDelta, frame.elapsedSimulation, light.night);
     fisherman.update(actorDelta, frame.elapsedSimulation, light.night, weather.getSnowCover());
-    postman.update(actorDelta, frame.elapsedSimulation, t01);
+    // The round is authored from sunrise to noon, so it reads the phase, not the clock: the
+    // literals are 0.28 and 0.5, and 0.25 is sunrise in every season.
+    postman.update(actorDelta, frame.elapsedSimulation, solarPhaseAt(t01, carrier.sunDeclination));
     balloon.update(actorDelta, frame.elapsedSimulation, light.night, weather.getCloudCover(), weather.getWind());
 
     boardingStations.clear();

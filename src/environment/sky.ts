@@ -520,11 +520,26 @@ export interface RealSunTimes {
 }
 
 /**
- * Map a real wall-clock instant onto the simulated 0..1 day so that the
- * REAL sunrise lands on t=0.25, solar noon on t=0.5 and sunset on t=0.75.
- * Falls back to plain fraction-of-day when times are invalid (polar nights).
+ * Map a real wall-clock instant onto the canonical solar phase, so that the REAL sunrise
+ * lands on 0.25, solar noon on 0.5 and sunset on 0.75.
+ *
+ * It returns a `SolarPhase01`, not a `Clock01`, and the change is a correction: mapping
+ * sunrise onto 0.25 whatever the date did to the hour IS the definition of the phase axis,
+ * and this file's own tests assert exactly that (04:30 -> 0.25, 12:45 -> 0.5, 21:00 -> 0.75).
+ * It was branded `Clock01` when the brands went in, to match its name and its one historical
+ * caller, which is how a brand ends up stamped on the wrong axis.
+ *
+ * THE POLAR FALLBACK IS A DIFFERENT ANIMAL, and it is the reason this function needs a note
+ * rather than just a type. When the sun times are invalid -- a polar night has no sunrise to
+ * anchor 0.25 to -- it returns the plain fraction of the day, which is a clock reading wearing
+ * a phase label. There is no better answer (a phase without a sunrise is undefined), but a
+ * caller at 71 degrees north would get an axis it did not ask for.
+ *
+ * NOTHING IN THE PRODUCT CALLS THIS. `RealTimeSync.getCycleT` replaced it when the sun became
+ * seasonal and the warp was removed; only this file's tests reach it now. It is left in place
+ * rather than deleted because removing it is the owner's call, not a refactor's.
  */
-export function realTimeToCycleT(now: Date, times: RealSunTimes): Clock01 {
+export function realTimeToCycleT(now: Date, times: RealSunTimes): SolarPhase01 {
   const dayStart = new Date(now);
   dayStart.setHours(0, 0, 0, 0);
   const dayMs = 24 * 3600 * 1000;
@@ -534,7 +549,7 @@ export function realTimeToCycleT(now: Date, times: RealSunTimes): Clock01 {
   const noon = times.solarNoon?.getTime?.();
   const ss = times.sunset?.getTime?.();
   if (!sr || !noon || !ss || Number.isNaN(sr) || Number.isNaN(noon) || Number.isNaN(ss)) {
-    return clamp01(frac) as Clock01;
+    return clamp01(frac) as number as SolarPhase01;
   }
 
   const nowMs = now.getTime();
@@ -544,8 +559,8 @@ export function realTimeToCycleT(now: Date, times: RealSunTimes): Clock01 {
   const lerpSeg = (x: number, x0: number, x1: number, y0: number, y1: number) =>
     y0 + ((x - x0) / Math.max(x1 - x0, 1)) * (y1 - y0);
 
-  if (nowMs < sr) return clamp01(lerpSeg(nowMs, startMs, sr, 0, 0.25)) as Clock01;
-  if (nowMs < noon) return clamp01(lerpSeg(nowMs, sr, noon, 0.25, 0.5)) as Clock01;
-  if (nowMs < ss) return clamp01(lerpSeg(nowMs, noon, ss, 0.5, 0.75)) as Clock01;
-  return clamp01(lerpSeg(nowMs, ss, endMs, 0.75, 1)) as Clock01;
+  if (nowMs < sr) return clamp01(lerpSeg(nowMs, startMs, sr, 0, 0.25)) as number as SolarPhase01;
+  if (nowMs < noon) return clamp01(lerpSeg(nowMs, sr, noon, 0.25, 0.5)) as number as SolarPhase01;
+  if (nowMs < ss) return clamp01(lerpSeg(nowMs, noon, ss, 0.5, 0.75)) as number as SolarPhase01;
+  return clamp01(lerpSeg(nowMs, ss, endMs, 0.75, 1)) as number as SolarPhase01;
 }

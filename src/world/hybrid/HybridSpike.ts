@@ -393,7 +393,11 @@ export function attachHybridSpike(options: HybridSpikeOptions): HybridHandle {
       // same wind strength the weather publishes.
       smoke.update(elapsed, wind, night);
       for (let cohort = 0; cohort < WINDOW_COHORT_COUNT; cohort++) {
-        uniforms.uCohort.value[cohort] = residentialWindowActivityAt(t01, cohort);
+        // `clockT`, not `t01`: these are household windows going on and off at an HOUR, the
+        // same kind of thing `groceryGlow` reads the wall clock for six lines up. It was the
+        // lighting clock here purely because `const t01 = sunT` was in scope, which is
+        // harmless only while the two coincide.
+        uniforms.uCohort.value[cohort] = residentialWindowActivityAt(clockT, cohort);
       }
       for (const lodGroup of lodGroups) {
         const distance = Math.max(0.5, camera.position.distanceTo(lodGroup.center) - lodGroup.radius);

@@ -8,9 +8,14 @@
  * hundred inline `as` casts across the suite, in exactly the assertions a reader is meant to be
  * able to read.
  *
- * Nothing in `src/` outside a `*.test.ts` may import this module. Nothing reachable from
- * `index.html` imports it, which is why it does not reach `dist/`; the entry chunk's hash is
- * what checks that, and it is checked.
+ * Nothing in `src/` outside a `*.test.ts` may import this module, and nothing reachable from
+ * `index.html` imports it, which is why it does not reach `dist/`.
+ *
+ * That used to say "the entry chunk's hash is what checks that, and it is checked", which was
+ * true of nothing: no baseline hash is stored anywhere in this repository. It is checked now,
+ * by `main.importGraph.test.ts`, which walks the static import graph from `main.ts` and also
+ * asserts that `units.ts` itself has nothing to emit. All three guards were proved by putting
+ * the defect back.
  */
 import type { Clock01, Degrees, Radians, SolarPhase01, WallClock01 } from './units';
 

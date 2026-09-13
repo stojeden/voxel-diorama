@@ -117,3 +117,37 @@ describe('main.ts initial import graph', () => {
     }
   });
 });
+
+describe('the test-only unit constructors stay out of the product', () => {
+  const graph = staticImportGraph('./main.ts');
+
+  /**
+   * `src/units.ts` has no constructors on purpose: an arrow function is runtime code, and the
+   * branded-types refactor is required to cost exactly zero bytes. `src/units.testing.ts` has
+   * them, for the suite, and its own docblock claimed "the entry chunk's hash is what checks
+   * that, and it is checked" -- which was not true of anything. No baseline hash is stored
+   * anywhere in this repository. This is the check that comment was describing.
+   */
+  it('is not reachable from the entry', () => {
+    expect([...graph].sort()).not.toContain('./units.testing.ts');
+  });
+
+  it('is imported only by tests', () => {
+    const offenders = Object.entries(SOURCES)
+      .filter(([name]) => !name.endsWith('.test.ts') && name !== './units.testing.ts')
+      .filter(([, source]) => /from ['"][^'"]*units\.testing['"]/.test(source))
+      .map(([name]) => name);
+    expect(offenders).toEqual([]);
+  });
+
+  /** And the brands themselves must stay type-only, or they would be in the bundle. */
+  it('leaves src/units.ts with nothing to emit', () => {
+    const source = SOURCES['./units.ts'];
+    expect(source).toBeDefined();
+    const emitting = source
+      .split('\n')
+      .map((line, index) => [index + 1, line.trim()] as const)
+      .filter(([, line]) => /^export (const|function|class|let|var)\b/.test(line));
+    expect(emitting).toEqual([]);
+  });
+});
