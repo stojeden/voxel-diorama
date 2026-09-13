@@ -70,6 +70,7 @@ import type { FrameTiming } from './debug/frameTiming';
 import type { DioramaDebugHandle } from './debug/DioramaDebugTypes';
 import { isSpikeGroundCell, parseWorldMode, SPIKE_BLOCK_SET, strategyOf } from './world/hybrid/spikeFlag';
 import type { HybridFrame, HybridHandle } from './world/hybrid/HybridSpike';
+import type { Clock01, Degrees, Radians, SolarPhase01, WallClock01 } from './units';
 
 const query = new URLSearchParams(window.location.search);
 const requestedCheckpoint = getCheckpoint(query.get('checkpoint'));
@@ -124,8 +125,8 @@ let hybrid: HybridHandle | null = null;
 const hybridFrame: HybridFrame = {
   camera: env.camera,
   viewportHeightPx: 0,
-  sunT: 0,
-  clockT: 0,
+  sunT: 0 as Clock01,
+  clockT: 0 as WallClock01,
   night: 0,
   dt: 0,
   elapsed: 0,
@@ -229,7 +230,7 @@ const eclipseSchedule = new EclipseSchedule((index) => worldRandom.sample('eclip
  * experience's own opening clock once the season is known -- see `setPhaseToClock` below --
  * and nothing reads it before then, because only the frame loop does.
  */
-let previousDayProgress = 0;
+let previousDayProgress: Clock01 = 0 as Clock01;
 const eclipseViewCamera = new THREE.Vector3();
 const eclipseViewTarget = new THREE.Vector3(0, 36, 0);
 const eclipseReflectionSun = new THREE.Vector3();
@@ -237,7 +238,7 @@ const rainbowSunColor = new THREE.Color();
 const rainbowFrame: RainbowFrameInput = {
   camera: env.camera,
   sunDirection: eclipseReflectionSun,
-  sunElevation: 0,
+  sunElevation: 0 as Radians,
   sunColor: rainbowSunColor,
   directSun: 0,
   cloudCover: 0,
@@ -334,7 +335,7 @@ const experience = new ExperienceDirector({
   random: worldRandom.stream('experience'),
   onNewDay: () => {
     eclipseSchedule.beginNextDay();
-    previousDayProgress = 0;
+    previousDayProgress = 0 as Clock01;
   },
 });
 
@@ -456,12 +457,12 @@ const themeMix = (from: number, to: number, blend: number) => from + (to - from)
  * sun down the sky and the sunset back across the afternoon over the same 2.2 seconds the
  * palette takes, instead of teleporting the world into October between two frames.
  */
-const sunDeclination = (): number =>
+const sunDeclination = (): Radians =>
   realTime?.isActive()
     ? realTime.getDeclination()
-    : THREE.MathUtils.degToRad(
+    : (THREE.MathUtils.degToRad(
         themeMix(previousTheme.sunDeclinationDeg, currentTheme.sunDeclinationDeg, themeBlend)
-      );
+      ) as Radians);
 
 function applyThemeBlend(): void {
   world.setThemeBlend(
@@ -925,7 +926,12 @@ function stepWorld(frame: FrameContext, carrier: WorldFrame): void {
    * `t01` is warped onto the viewer's real sunrise and sunset, so 0.75 is *sunset*, not
    * six in the evening; anything that means an hour has to ask the wall clock instead.
    */
-  const clockT = realTime?.isActive() ? realTime.getDayFraction() : t01;
+  const clockT: WallClock01 = realTime?.isActive()
+    ? realTime.getDayFraction()
+    : // Simulation only: the two axes are the same number, so this re-labels rather than
+      // converts. The cast is the seam -- in real time the branch above supplies a genuine
+      // wall clock, and neither branch can silently become the other.
+      (t01 as number as WallClock01);
 
   // Natural eclipses are world events, not camera commands. Day zero is quiet;
   // later days use a deterministic named RNG stream and never occur back-to-back.
@@ -1026,7 +1032,7 @@ function stepWorld(frame: FrameContext, carrier: WorldFrame): void {
     // is pointed, so the exposure stays reproducible frame for frame.
     viewerAdaptation(
       adaptingLuminance(
-        THREE.MathUtils.radToDeg(light.sunElevation),
+        THREE.MathUtils.radToDeg(light.sunElevation) as Degrees,
         light.night,
         weather.getSnowCover()
       )
@@ -1207,7 +1213,14 @@ function presentWorld(frame: FrameContext, carrier: WorldFrame): void {
       );
     } else {
       const timeScale = experience.getTimeScale();
-      ui.setClock(`${formatClock(t01)}${timeScale > 1 ? ` · ${timeScale}×` : ''}`);
+      // Simulation branch only -- real time prints the viewer's own wall clock a few lines
+      // up -- and here the two axes are the same number, so this re-labels rather than
+      // converts. `clockT` above holds the same value and is not substituted, because this
+      // refactor changes no runtime expression; the cast is written inline for the same
+      // reason, since a named local for it is the one thing here that would emit a byte.
+      ui.setClock(
+        `${formatClock(t01 as number as WallClock01)}${timeScale > 1 ? ` · ${timeScale}×` : ''}`
+      );
     }
     if (!realTime?.isActive() && weather.getSetting() === 'auto') {
       ui.setWeatherLabel(`POGODA: AUTO · ${weather.getLabel().replace('AUTO · ', '')}`);
@@ -1279,7 +1292,7 @@ const loadDiagnostics = () => import('./debug/frameTiming');
 
 const debugHandle: DioramaDebugHandle = {
   ready: false,
-  setTime: (t01: number) => experience.setTime(t01),
+  setTime: (t01: Clock01) => experience.setTime(t01),
   getState: () => ({
     t01: experience.getState().t01,
     /** Rendered frames of the single RAF loop — one loop, one counter. */
@@ -1608,7 +1621,9 @@ void hybridReady
     focusTarget: postFocusTarget,
     // A clock reading, because that is what `dayNight.update` takes -- resolved against the
     // same theme declination the warm-up lights that frame with.
-    eclipseViewTime: eclipseViewClock(THREE.MathUtils.degToRad(currentTheme.sunDeclinationDeg)),
+    eclipseViewTime: eclipseViewClock(
+      THREE.MathUtils.degToRad(currentTheme.sunDeclinationDeg) as Radians
+    ),
     getTheme: () => currentTheme,
     getDayProgress: () => experience.getState().t01,
     getEclipseState: () => eclipseState,

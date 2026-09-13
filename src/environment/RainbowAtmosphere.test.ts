@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { RainbowAtmosphere, type RainbowFrameInput } from './RainbowAtmosphere';
+import { radians } from '../units.testing';
 
 function frame(overrides: Partial<RainbowFrameInput> = {}): RainbowFrameInput {
   const camera = new THREE.PerspectiveCamera(45, 16 / 9, 0.1, 1_000);
@@ -10,7 +11,7 @@ function frame(overrides: Partial<RainbowFrameInput> = {}): RainbowFrameInput {
   return {
     camera,
     sunDirection: new THREE.Vector3(-0.8, 0.42, -0.4).normalize(),
-    sunElevation: THREE.MathUtils.degToRad(24),
+    sunElevation: radians(THREE.MathUtils.degToRad(24)),
     sunColor: new THREE.Color(1, 0.9, 0.75),
     directSun: 1,
     cloudCover: 0.12,
@@ -36,7 +37,7 @@ describe('RainbowAtmosphere', () => {
     });
 
     rainbow.update(frame({
-      sunElevation: THREE.MathUtils.degToRad(-2),
+      sunElevation: radians(THREE.MathUtils.degToRad(-2)),
       directSun: 0,
       realDelta: 30,
     }));
@@ -205,7 +206,7 @@ describe('RainbowAtmosphere', () => {
     rainbow.update(frame({
       camera,
       airborneMoisture: 0.8,
-      sunElevation: THREE.MathUtils.degToRad(50),
+      sunElevation: radians(THREE.MathUtils.degToRad(50)),
       realDelta: 0,
     }));
 
@@ -237,7 +238,7 @@ describe('RainbowAtmosphere', () => {
     rainbow.setQuality('medium');
     rainbow.update(frame({
       camera: groundCamera,
-      sunElevation: THREE.MathUtils.degToRad(50),
+      sunElevation: radians(THREE.MathUtils.degToRad(50)),
       realDelta: 0,
     }));
     expect(rainbow.isVisible()).toBe(false);
@@ -245,28 +246,28 @@ describe('RainbowAtmosphere', () => {
     rainbow.setQuality('high');
     rainbow.update(frame({
       camera: groundCamera,
-      sunElevation: THREE.MathUtils.degToRad(50),
+      sunElevation: radians(THREE.MathUtils.degToRad(50)),
       realDelta: 0,
     }));
     expect(rainbow.isVisible()).toBe(true);
 
     rainbow.update(frame({
       camera: groundCamera,
-      sunElevation: THREE.MathUtils.degToRad(58),
+      sunElevation: radians(THREE.MathUtils.degToRad(58)),
       realDelta: 0,
     }));
     expect(rainbow.isVisible()).toBe(true);
 
     rainbow.update(frame({
       camera: groundCamera,
-      sunElevation: THREE.MathUtils.degToRad(80),
+      sunElevation: radians(THREE.MathUtils.degToRad(80)),
       realDelta: 0,
     }));
     expect(rainbow.isVisible()).toBe(true);
 
     rainbow.update(frame({
       camera: groundCamera,
-      sunElevation: THREE.MathUtils.degToRad(90),
+      sunElevation: radians(THREE.MathUtils.degToRad(90)),
       realDelta: 0,
     }));
     expect(rainbow.isVisible()).toBe(false);
@@ -275,7 +276,7 @@ describe('RainbowAtmosphere', () => {
     groundCamera.updateMatrixWorld();
     rainbow.update(frame({
       camera: groundCamera,
-      sunElevation: THREE.MathUtils.degToRad(58),
+      sunElevation: radians(THREE.MathUtils.degToRad(58)),
       realDelta: 0,
     }));
     expect(rainbow.isVisible()).toBe(true);
@@ -285,7 +286,7 @@ describe('RainbowAtmosphere', () => {
     awayCamera.updateMatrixWorld();
     rainbow.update(frame({
       camera: awayCamera,
-      sunElevation: THREE.MathUtils.degToRad(24),
+      sunElevation: radians(THREE.MathUtils.degToRad(24)),
       realDelta: 0,
     }));
     expect(rainbow.isVisible()).toBe(false);

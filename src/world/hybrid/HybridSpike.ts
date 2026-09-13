@@ -20,6 +20,7 @@ import { buildDirect } from './strategies/DirectSurfaceStrategy';
 import { parseKey, type GeometryStrategy } from './strategies/strategy';
 import type { Cluster, Layer, MaterialClass } from './surface';
 import type { HybridStrategyName } from './spikeFlag';
+import type { Clock01, WallClock01 } from '../../units';
 
 export { getSpikeCheckpoint, SPIKE_CHECKPOINTS, STREET_EYE_SHOT } from './spikeCheckpoints';
 
@@ -62,14 +63,20 @@ export interface HybridMetrics {
  * lighting phase so the viewer's real sunrise lands on 0.25 and their real sunset on 0.75,
  * which is right for the sky and useless as a clock. Anything about *light* reads `sunT`;
  * anything about an *hour* reads `clockT`.
+ *
+ * They carry different brands for that reason and not for tidiness: two adjacent bare
+ * numbers whose own doc comment has to say they are different is the exact shape this
+ * codebase has already paid for six times, and it is the worst shape of all here -- every
+ * test passes in simulation, where the two genuinely are equal, and only a viewer with real
+ * time on ever sees the swap. The compiler now refuses it.
  */
 export interface HybridFrame {
   camera: THREE.PerspectiveCamera;
   viewportHeightPx: number;
   /** Lighting phase, 0..1 of the cycle. Warped against the wall clock in real time. */
-  sunT: number;
+  sunT: Clock01;
   /** Hour of day, 0..1 of a real 24 h. The hour the HUD prints, in either mode. */
-  clockT: number;
+  clockT: WallClock01;
   night: number;
   /** Real seconds since the previous frame. Zero while a checkpoint is locked. */
   dt: number;

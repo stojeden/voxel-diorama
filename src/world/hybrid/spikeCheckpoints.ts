@@ -1,6 +1,7 @@
 import { CHECKPOINT_REVISION, type CheckpointDefinition, type CheckpointId } from '../../experience/Checkpoints';
 import { OVERVIEW_SHOT, type CameraShot } from '../../experience/ShotDefinitions';
 import { BUS_STOPS } from '../WorldLayout';
+import type { SolarPhase01 } from '../../units';
 
 /**
  * Gate 1 frames. These live in the spike chunk on purpose: the product's
@@ -15,7 +16,11 @@ export const STREET_EYE_SHOT: CameraShot = {
   target: [-9, 1.9, 30],
 };
 
-function define(id: SpikeCheckpointId, timeOfDay: number, camera: CameraShot): CheckpointDefinition {
+function define(
+  id: SpikeCheckpointId,
+  timeOfDay: SolarPhase01,
+  camera: CameraShot
+): CheckpointDefinition {
   return {
     id: id as unknown as CheckpointId,
     revision: CHECKPOINT_REVISION,
@@ -31,10 +36,10 @@ function define(id: SpikeCheckpointId, timeOfDay: number, camera: CameraShot): C
 }
 
 export const SPIKE_CHECKPOINTS: Record<SpikeCheckpointId, CheckpointDefinition> = {
-  'spike-overview': define('spike-overview', 0.5, OVERVIEW_SHOT),
-  'spike-street': define('spike-street', 0.5, STREET_EYE_SHOT),
-  'spike-golden': define('spike-golden', 0.28, OVERVIEW_SHOT),
-  'spike-night-street': define('spike-night-street', 0.9, STREET_EYE_SHOT),
+  'spike-overview': define('spike-overview', 0.5 as SolarPhase01, OVERVIEW_SHOT),
+  'spike-street': define('spike-street', 0.5 as SolarPhase01, STREET_EYE_SHOT),
+  'spike-golden': define('spike-golden', 0.28 as SolarPhase01, OVERVIEW_SHOT),
+  'spike-night-street': define('spike-night-street', 0.9 as SolarPhase01, STREET_EYE_SHOT),
 };
 
 export function getSpikeCheckpoint(value: string | null | undefined): CheckpointDefinition | null {

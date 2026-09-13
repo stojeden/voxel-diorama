@@ -1,6 +1,7 @@
 import type { DayLightState } from '../environment/DayNightCycle';
 import type { ExperienceFrameState } from './ExperienceDirector';
 import type { TrainPublicState } from '../world/Train';
+import type { Clock01, Radians } from '../units';
 
 /**
  * What presentation needs from a stepped world, and nothing else.
@@ -18,7 +19,7 @@ import type { TrainPublicState } from '../world/Train';
  */
 export interface WorldFrame {
   /** Lighting phase in [0,1). Not the hour of day when real time warps the cycle. */
-  t01: number;
+  t01: Clock01;
   /**
    * The three deltas, carried rather than recomputed.
    *
@@ -39,7 +40,7 @@ export interface WorldFrame {
    * the world was lit by -- a half-morphed frame has a half-morphed sun, and both halves of
    * the frame have to agree on which.
    */
-  sunDeclination: number;
+  sunDeclination: Radians;
   /** The lighting solution. A passthrough presenter wants this and not the sky dome. */
   light: DayLightState;
   experienceState: ExperienceFrameState;
@@ -58,13 +59,13 @@ export function createWorldFrame(
   stationState: TrainPublicState
 ): WorldFrame {
   return {
-    t01: 0,
+    t01: 0 as Clock01,
     realDelta: 0,
     presentationDelta: 0,
     simulationDelta: 0,
     skyCloud: 0,
-    sunDeclination: 0,
-    light: { night: 0, golden: 0, sunElevation: 0, directSun: 0, eclipse: 0 },
+    sunDeclination: 0 as Radians,
+    light: { night: 0, golden: 0, sunElevation: 0 as Radians, directSun: 0, eclipse: 0 },
     experienceState,
     stationState,
     eclipseActive: false,

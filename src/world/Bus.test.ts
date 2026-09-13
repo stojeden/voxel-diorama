@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { createBus } from './Bus';
 import { busStopWaitingPositions } from './BusStopNavigation';
 import { BUS_STOPS } from './WorldLayout';
+import { clock01 } from '../units.testing';
 
 const at = (hours: number, minutes = 0) => (hours * 60 + minutes) / (24 * 60);
 
@@ -11,14 +12,14 @@ describe('bus service clock', () => {
     const scene = new THREE.Scene();
     const bus = createBus(scene);
 
-    bus.update(1 / 60, 1, false, at(2, 30));
+    bus.update(1 / 60, 1, false, clock01(at(2, 30)));
     expect(bus.getServiceDebugState()).toMatchObject({
       mode: 'off',
       visible: false,
       waitingPassengers: 0,
     });
 
-    bus.update(1 / 60, 1, false, at(4, 50));
+    bus.update(1 / 60, 1, false, clock01(at(4, 50)));
     expect(bus.getServiceDebugState()).toMatchObject({
       mode: 'morning-release',
       visible: true,
@@ -32,7 +33,7 @@ describe('bus service clock', () => {
     const scene = new THREE.Scene();
     const bus = createBus(scene);
 
-    bus.update(1 / 60, 1, false, at(23, 30));
+    bus.update(1 / 60, 1, false, clock01(at(23, 30)));
     expect(bus.getServiceDebugState()).toMatchObject({
       mode: 'final-loop',
       visible: true,
@@ -51,7 +52,7 @@ describe('bus service clock', () => {
 
     for (let elapsed = 0; elapsed < availableSeconds; elapsed += frame) {
       const t01 = (start + elapsed / 240) % 1;
-      bus.update(frame, 1, false, t01);
+      bus.update(frame, 1, false, clock01(t01));
       if (bus.getServiceDebugState().mode === 'off') break;
     }
 
@@ -69,12 +70,12 @@ describe('bus service clock', () => {
     const bus = createBus(scene);
     const frame = 1 / 30;
     const start = at(2, 30);
-    bus.update(frame, 1, false, start);
-    bus.update(frame, 1, false, at(4, 50));
+    bus.update(frame, 1, false, clock01(start));
+    bus.update(frame, 1, false, clock01(at(4, 50)));
 
     for (let elapsed = 0; elapsed < 100; elapsed += frame) {
       const t01 = (at(4, 50) + elapsed / 240) % 1;
-      bus.update(frame, 1, false, t01);
+      bus.update(frame, 1, false, clock01(t01));
       if (bus.getServiceDebugState().mode === 'normal') break;
     }
 
@@ -118,7 +119,7 @@ describe('bus glazing', () => {
     // Noon: the pane takes its brightness from the sky it reflects, so its own colour
     // is dark and it emits nothing. It used to be the `windowLit` cream with a 0.25
     // emissive on top, which made four flat bright rectangles on a yellow bus.
-    bus.update(1 / 60, 0, false, at(12));
+    bus.update(1 / 60, 0, false, clock01(at(12)));
     const day = glazingOf(scene);
     expect(day.emissiveIntensity, 'daylight glazing must not glow').toBeCloseTo(0, 5);
     expect(relativeLuminance(day.color), `daylight glass luminance ${relativeLuminance(day.color).toFixed(3)}`)
@@ -130,7 +131,7 @@ describe('bus glazing', () => {
     // Night: the interior is lit, and it is lit warm -- the emissive is the interior
     // colour, not the colour of the glass. Lerping it from the glass made the night
     // bus glow dark blue.
-    bus.update(1 / 60, 1, false, at(22));
+    bus.update(1 / 60, 1, false, clock01(at(22)));
     const night = glazingOf(scene);
     expect(night.emissiveIntensity, 'night glazing must glow').toBeGreaterThan(1);
     expect(night.emissive.r, 'a lit interior is warm').toBeGreaterThan(night.emissive.b);
@@ -141,7 +142,7 @@ describe('bus glazing', () => {
     const scene = new THREE.Scene();
     const bus = createBus(scene);
     bus.setCyberLook(1);
-    bus.update(1 / 60, 1, false, at(22));
+    bus.update(1 / 60, 1, false, clock01(at(22)));
     const material = glazingOf(scene);
     // Cyan pane, cyan interior: blue above red on both, and the interior still emits.
     expect(material.color.b).toBeGreaterThan(material.color.r);
@@ -149,7 +150,7 @@ describe('bus glazing', () => {
     expect(material.emissiveIntensity).toBeGreaterThan(1);
 
     bus.setCyberLook(0);
-    bus.update(1 / 60, 1, false, at(22));
+    bus.update(1 / 60, 1, false, clock01(at(22)));
     expect(material.emissive.r, 'back to a warm interior').toBeGreaterThan(material.emissive.b);
   });
 });

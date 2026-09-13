@@ -20,6 +20,8 @@ import {
   withRadianceCeiling,
   withTwilightDome,
 } from './DayNightCycle';
+import type { Degrees, Radians } from '../units';
+import { clock01, degrees, radians } from '../units.testing';
 // The module's own source text: nothing in `tsc` or `vitest` reads a comment, so the doc-link
 // test below has to read the file. `?raw` keeps it inside Vite's own resolution.
 import dayNightCycleSource from './DayNightCycle.ts?raw';
@@ -329,7 +331,7 @@ describe("the twilight dome's hand-off from Preetham", () => {
     Number(new RegExp(`float ${name} = ([\\d.]+)`).exec(vertexShader)?.[1]);
   const cutoffAngle = constant('cutoffAngle');
   const steepness = constant('steepness');
-  const sunIntensity = (elevationRad: number) =>
+  const sunIntensity = (elevationRad: Radians) =>
     Math.max(0, 1 - Math.exp(-(cutoffAngle - (Math.PI / 2 - elevationRad)) / steepness));
 
   test('reaches full strength exactly where Three.js stops lighting the sky', () => {
@@ -338,21 +340,21 @@ describe("the twilight dome's hand-off from Preetham", () => {
     // 2.30769 degrees below the horizon: 61% of civil twilight with no dome at all.
     const cutoffDeg = THREE.MathUtils.radToDeg(cutoffAngle - Math.PI / 2);
     expect(cutoffDeg).toBeCloseTo(2.30769, 5);
-    expect(sunIntensity(THREE.MathUtils.degToRad(-cutoffDeg))).toBe(0);
-    expect(preethamHandoff(THREE.MathUtils.degToRad(-cutoffDeg))).toBe(1);
-    expect(preethamHandoff(THREE.MathUtils.degToRad(-6))).toBe(1);
+    expect(sunIntensity(radians(THREE.MathUtils.degToRad(-cutoffDeg)))).toBe(0);
+    expect(preethamHandoff(radians(THREE.MathUtils.degToRad(-cutoffDeg)))).toBe(1);
+    expect(preethamHandoff(radians(THREE.MathUtils.degToRad(-6)))).toBe(1);
   });
 
   test('is the complement of vSunE, so the two sum to one sky', () => {
-    const horizon = sunIntensity(0);
+    const horizon = sunIntensity(radians(0));
     for (const degrees of [-2.2, -2, -1.5, -1, -0.5, -0.1]) {
       const elevation = THREE.MathUtils.degToRad(degrees);
-      expect(preethamHandoff(elevation) + sunIntensity(elevation) / horizon).toBeCloseTo(1, 12);
+      expect(preethamHandoff(radians(elevation)) + sunIntensity(radians(elevation)) / horizon).toBeCloseTo(1, 12);
     }
     // The measured shape, from the table in the defect report: vSunE keeps 57% of its
     // sunset value one degree down and 13% two degrees down.
-    expect(preethamHandoff(THREE.MathUtils.degToRad(-1))).toBeCloseTo(0.43, 2);
-    expect(preethamHandoff(THREE.MathUtils.degToRad(-2))).toBeCloseTo(0.865, 3);
+    expect(preethamHandoff(radians(THREE.MathUtils.degToRad(-1)))).toBeCloseTo(0.43, 2);
+    expect(preethamHandoff(radians(THREE.MathUtils.degToRad(-2)))).toBeCloseTo(0.865, 3);
   });
 
   test('is exactly zero in daylight, so the dome is untouched above the horizon', () => {
@@ -361,7 +363,7 @@ describe("the twilight dome's hand-off from Preetham", () => {
     // build at +20 degrees and at noon, the frame moved by 0.002% and 0.085% -- which is
     // the composer's own frame-to-frame noise, not this.
     for (const degrees of [0, 0.5, 2.3, 20, 61]) {
-      expect(preethamHandoff(THREE.MathUtils.degToRad(degrees))).toBe(0);
+      expect(preethamHandoff(radians(THREE.MathUtils.degToRad(degrees)))).toBe(0);
     }
   });
 });
@@ -389,7 +391,7 @@ describe('the twilight dome patch', () => {
     // that goes *under* the ozone layer rather than through its Chappuis band, which is why
     // it is pink where the zenith is blue. So the literal in the shader has to be the
     // spectrum this repo already computes for a sun on the horizon, normalised.
-    const limb = beamTransmittanceColor(0);
+    const limb = beamTransmittanceColor(radians(0));
     const peak = Math.max(...limb);
     const expected = limb.map((c) => (c / peak).toFixed(4)).join();
     expect(patched).toContain(`vec3( ${expected} )`);
@@ -403,10 +405,10 @@ describe('the twilight dome patch', () => {
     // and the diorama measures it: R/B 3.96 at 3 degrees of elevation against 1.14 at 15,
     // where the sky is blue-grey low and pink above. The fix is only as good as its two
     // endpoints, so pin them: the ozone model's hue at the top, the limb's at the bottom.
-    const limb = beamTransmittanceColor(0);
+    const limb = beamTransmittanceColor(radians(0));
     expect(limb[0] / Math.max(limb[2], 1e-30)).toBeGreaterThan(1);
     for (const degrees of [-0.5, -1, -2, -2.308, -3, -4, -6]) {
-      const hue = twilightSkyColorCached(THREE.MathUtils.degToRad(degrees)).color;
+      const hue = twilightSkyColorCached(radians(THREE.MathUtils.degToRad(degrees))).color;
       // Measured across that whole span: 0.231 to 0.233, never anywhere near red.
       expect(hue[0] / hue[2]).toBeLessThan(0.25);
       expect(hue[2]).toBe(1);
@@ -502,7 +504,7 @@ describe('an eclipse removes the light it removes', () => {
   /** Standard mid-grey. `ViewerAdaptation` reflects the bare city off it, Lambertian. */
   const BARE_ALBEDO = 0.18;
   /** Undo `adaptingLuminance` to recover the published horizontal illuminance, in lux. */
-  const illuminanceLux = (elevationDeg: number) =>
+  const illuminanceLux = (elevationDeg: Degrees) =>
     (adaptingLuminance(elevationDeg, 0, 0) * Math.PI) / BARE_ALBEDO;
   /** The band the staged eclipse's sun stands in, in every season. See `EclipseView.test.ts`. */
   const ECLIPSE_SUN_ELEVATION = [3, 10] as const;
@@ -555,7 +557,7 @@ describe('an eclipse removes the light it removes', () => {
     // Published horizontal illuminance at totality is 1 to 100 lx. The staged eclipse's own sun
     // stands 3 to 10 degrees up in every season, which this rig's own table puts in the klx.
     for (const elevation of ECLIPSE_SUN_ELEVATION) {
-      const hour = illuminanceLux(elevation);
+      const hour = illuminanceLux(degrees(elevation));
       expect(hour).toBeGreaterThan(1_000);
       const totality = hour * totalityFraction();
       // Brighter than any real totality -- deliberately, and written down here rather than
@@ -572,7 +574,7 @@ describe('an eclipse removes the light it removes', () => {
     // thousands. If this floor is ever tuned down to something the corona could account for,
     // the physical story in the docblock has stopped being true and this says so.
     const FULL_MOON_LUX = 0.25;
-    const floor = illuminanceLux(ECLIPSE_SUN_ELEVATION[0]) * totalityFraction();
+    const floor = illuminanceLux(degrees(ECLIPSE_SUN_ELEVATION[0])) * totalityFraction();
     expect(floor / FULL_MOON_LUX).toBeGreaterThan(100);
   });
 
@@ -739,7 +741,7 @@ describe('an eclipse removes the light it removes', () => {
       // The owner's fourth sentence. A ring that looks the same in every direction is not a
       // shadow you are standing inside; the footprint is an ellipse 6.5:1 at this eclipse's
       // 8.82 degree sun, and the observer crosses it from one end to the other.
-      const semiMajor = umbraSemiMajorKm((8.819420050862682 * Math.PI) / 180);
+      const semiMajor = umbraSemiMajorKm(radians((8.819420050862682 * Math.PI) / 180));
       expect(semiMajor / 159).toBeCloseTo(6.52, 2);
       const wall = (traverse: number, alongSun: number, acrossSun: number) =>
         umbraWallDistanceKm(semiMajor, semiMajor * UMBRA_TRAVERSE_LIMIT * traverse, alongSun, acrossSun);
@@ -831,7 +833,7 @@ describe('an eclipse removes the light it removes', () => {
         ).map((d) => Math.round(255 * transfer(Math.min(1, Math.max(0, d)))));
 
       const zenith = vec3('eclipseZenith');
-      const semiMajor = umbraSemiMajorKm((8.819420050862682 * Math.PI) / 180);
+      const semiMajor = umbraSemiMajorKm(radians((8.819420050862682 * Math.PI) / 180));
       const skyAt = (traverse: number, alongSun: number, acrossSun: number) => {
         const wall = umbraWallDistanceKm(
           semiMajor,
@@ -984,7 +986,7 @@ describe('the umbra wall has a distance in every direction', () => {
    * ray goes vertical is an infinitely distant wall, so the old code returned its opposite.
    */
   test('a bearing that cancels to zero does not read as standing on the wall', () => {
-    const semiMajor = umbraSemiMajorKm((8.83 * Math.PI) / 180);
+    const semiMajor = umbraSemiMajorKm(radians((8.83 * Math.PI) / 180));
     const offset = semiMajor * UMBRA_TRAVERSE_LIMIT;
     const degenerate = umbraWallDistanceKm(semiMajor, offset, 0, 0);
     expect(degenerate, 'zerowy kierunek nie moze znaczyc zera kilometrow').toBeGreaterThan(1);
@@ -994,7 +996,7 @@ describe('the umbra wall has a distance in every direction', () => {
   });
 
   test('every bearing keeps the observer inside the umbra at the traverse limit', () => {
-    const semiMajor = umbraSemiMajorKm((8.83 * Math.PI) / 180);
+    const semiMajor = umbraSemiMajorKm(radians((8.83 * Math.PI) / 180));
     const offset = semiMajor * UMBRA_TRAVERSE_LIMIT;
     let nearest = Infinity;
     for (let i = 0; i < 720; i++) {

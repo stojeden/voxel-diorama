@@ -6,6 +6,8 @@ import {
   nightFactorAt,
   sunElevationAt,
 } from './sky';
+import type { Radians } from '../units';
+import { clock01, radians } from '../units.testing';
 
 /**
  * The aurora is the one visual nothing else guards, and it is driven from outside its own file.
@@ -22,16 +24,16 @@ import {
  * aurora waits for the sun to actually set.
  */
 
-const JUNE = THREE.MathUtils.degToRad(JUNE_DECLINATION_DEG);
-const AUTUMN = THREE.MathUtils.degToRad(AUTUMN_DECLINATION_DEG);
+const JUNE = THREE.MathUtils.degToRad(JUNE_DECLINATION_DEG) as Radians;
+const AUTUMN = THREE.MathUtils.degToRad(AUTUMN_DECLINATION_DEG) as Radians;
 /** The gate in `DayNightCycle.update`, minus the cloud and per-day terms. */
 const auroraStrength = (night: number) => Math.min(1, Math.max(0, (night - 0.6) / 0.3));
 const SAMPLES = 4000;
 
-const nightAt = (clock: number, declination: number) =>
-  nightFactorAt(clock, declination);
+const nightAt = (clock: number, declination: Radians) =>
+  nightFactorAt(clock01(clock), declination);
 
-const hoursVisible = (declination: number) => {
+const hoursVisible = (declination: Radians) => {
   let lit = 0;
   for (let i = 0; i < SAMPLES; i++) {
     if (auroraStrength(nightAt(i / SAMPLES, declination)) > 0.015) lit++;
@@ -39,7 +41,7 @@ const hoursVisible = (declination: number) => {
   return (lit / SAMPLES) * 24;
 };
 
-const peakStrength = (declination: number) => {
+const peakStrength = (declination: Radians) => {
   let peak = 0;
   for (let i = 0; i < SAMPLES; i++) {
     peak = Math.max(peak, auroraStrength(nightAt(i / SAMPLES, declination)));
@@ -92,7 +94,7 @@ describe('the aurora can still happen', () => {
       if (auroraStrength(nightAt(clock, JUNE)) > 0) {
         highestLitSun = Math.max(
           highestLitSun,
-          THREE.MathUtils.radToDeg(sunElevationAt(clock, JUNE))
+          THREE.MathUtils.radToDeg(sunElevationAt(clock01(clock), JUNE))
         );
       }
     }

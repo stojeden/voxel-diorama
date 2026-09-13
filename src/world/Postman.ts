@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { DOG_HOME, GROUND_SURFACE_Y, MAIL_STOPS, POSTMAN_ROUTE_CURVE } from './WorldLayout';
+import type { Clock01 } from '../units';
 import {
   PASSENGER_SCALE,
   SHARED_PASSENGER_GEOMETRY,
@@ -41,8 +42,8 @@ const RIDER_LEAN = 0.26;
 const LEG_PEDAL_ANGLE = -0.5;
 const ARM_REACH_ANGLE = -1.05;
 const RIDE_SPEED = 6;
-const MORNING_START = 0.28;
-const MORNING_END = 0.5;
+const MORNING_START = 0.28 as Clock01;
+const MORNING_END = 0.5 as Clock01;
 const STOP_DURATION = 2;
 export const POSTMAN_UNIFORM_COLOR = 0x2f77b8;
 
@@ -342,7 +343,7 @@ export class Postman {
   private t = 0;
   private stopTimer = 0;
   private nextStopIndex = 0;
-  private previousT01: number | null = null;
+  private previousT01: Clock01 | null = null;
   private deliveryStops: number[] = [];
   private readonly riderWorldPosition = new THREE.Vector3();
 
@@ -357,7 +358,7 @@ export class Postman {
     scene.add(this.dog.group);
   }
 
-  update(delta: number, elapsed: number, t01: number): void {
+  update(delta: number, elapsed: number, t01: Clock01): void {
     const isMorning = t01 >= MORNING_START && t01 <= MORNING_END;
     const dayWrapped = this.previousT01 !== null && t01 < this.previousT01 - 0.5;
     if (dayWrapped) this.doneToday = false;

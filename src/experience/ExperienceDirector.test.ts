@@ -8,21 +8,23 @@ import {
   clockFromSolarPhase,
   sunElevationAt,
 } from '../environment/sky';
+import type { Radians } from '../units';
+import { clock01, radians, solarPhase01 } from '../units.testing';
 
 describe('ExperienceDirector', () => {
   it('advances simulation time and respects checkpoint lock', () => {
-    const experience = new ExperienceDirector({ daySeconds: 100, initialDayPhase: 0.2 });
+    const experience = new ExperienceDirector({ daySeconds: 100, initialDayPhase: solarPhase01(0.2) });
     const frame = createFrameContext();
     frame.realDelta = 1;
     frame.simulationDelta = 1;
     expect(experience.update(frame, null).t01).toBeCloseTo(0.21);
-    experience.lockCheckpoint(0.5);
+    experience.lockCheckpoint(clock01(0.5));
     expect(experience.update(frame, null).t01).toBe(0.5);
   });
 
   it('reports a new day exactly on rollover', () => {
     const onNewDay = vi.fn();
-    const experience = new ExperienceDirector({ daySeconds: 10, initialDayPhase: 0.99, onNewDay });
+    const experience = new ExperienceDirector({ daySeconds: 10, initialDayPhase: solarPhase01(0.99), onNewDay });
     const frame = createFrameContext();
     frame.realDelta = 0.2;
     frame.simulationDelta = 0.2;
@@ -31,14 +33,14 @@ describe('ExperienceDirector', () => {
   });
 
   it('locks only the clock while presentation remains externally controllable', () => {
-    const experience = new ExperienceDirector({ daySeconds: 100, initialDayPhase: 0.2 });
+    const experience = new ExperienceDirector({ daySeconds: 100, initialDayPhase: solarPhase01(0.2) });
     const frame = createFrameContext();
     frame.realDelta = 1;
     frame.simulationDelta = 1;
     experience.setClockLocked(true);
-    experience.setTime(0.6);
+    experience.setTime(clock01(0.6));
     expect(experience.update(frame, null).t01).toBeCloseTo(0.6);
-    experience.setTime(0.1);
+    experience.setTime(clock01(0.1));
     expect(experience.update(frame, null).t01).toBeCloseTo(0.1);
   });
 });
@@ -54,10 +56,10 @@ describe('ExperienceDirector', () => {
  * horizon, which is night.
  */
 describe('the opening moment', () => {
-  const deg = (radians: number) => THREE.MathUtils.radToDeg(radians);
+  const deg = (value: Radians) => THREE.MathUtils.radToDeg(value);
   /** Elevation of the sun at the clock the director actually opens on. */
   const openingElevation = (declinationDeg: number) => {
-    const declination = THREE.MathUtils.degToRad(declinationDeg);
+    const declination = THREE.MathUtils.degToRad(declinationDeg) as Radians;
     const experience = new ExperienceDirector({ daySeconds: 100 });
     experience.setPhaseToClock((phase) => clockFromSolarPhase(phase, declination));
     return deg(sunElevationAt(experience.getState().t01, declination));
@@ -73,8 +75,8 @@ describe('the opening moment', () => {
 
   it('gives the boot checkpoint the last word, rather than dragging it back to dawn', () => {
     const experience = new ExperienceDirector({ daySeconds: 100 });
-    experience.lockCheckpoint(0.5);
-    experience.setPhaseToClock((phase) => clockFromSolarPhase(phase, 0));
+    experience.lockCheckpoint(clock01(0.5));
+    experience.setPhaseToClock((phase) => clockFromSolarPhase(phase, radians(0)));
     expect(experience.getState().t01).toBeCloseTo(0.5);
   });
 });

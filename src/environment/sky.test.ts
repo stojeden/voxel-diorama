@@ -22,29 +22,31 @@ import {
   sunElevationAt,
   sunriseHourAngle,
 } from './sky';
+import type { Clock01, Degrees, Radians, SolarPhase01 } from '../units';
+import { clock01, degrees, radians, solarPhase01 } from '../units.testing';
 
-const JUNE = THREE.MathUtils.degToRad(JUNE_DECLINATION_DEG);
-const AUTUMN = THREE.MathUtils.degToRad(AUTUMN_DECLINATION_DEG);
-const deg = (radians: number) => THREE.MathUtils.radToDeg(radians);
+const JUNE = THREE.MathUtils.degToRad(JUNE_DECLINATION_DEG) as Radians;
+const AUTUMN = THREE.MathUtils.degToRad(AUTUMN_DECLINATION_DEG) as Radians;
+const deg = (radians: Radians) => THREE.MathUtils.radToDeg(radians) as Degrees;
 /** Hours the sun spends below `limit` degrees, by direct sampling rather than by formula. */
-const hoursBelow = (declination: number, limit: number) => {
+const hoursBelow = (declination: Radians, limit: number) => {
   let count = 0;
   const samples = 20_000;
   for (let i = 0; i < samples; i++) {
-    if (deg(sunElevationAt(i / samples, declination)) < limit) count++;
+    if (deg(sunElevationAt(clock01(i / samples), declination)) < limit) count++;
   }
   return (count / samples) * 24;
 };
 /** The morning clock time at which the sun stands at `elevationDeg`, found by bisection. */
-const clockAtElevation = (elevationDeg: number, declination: number) => {
+const clockAtElevation = (elevationDeg: Degrees, declination: Radians): Clock01 => {
   let low = 0;
   let high = 0.5;
   for (let i = 0; i < 60; i++) {
-    const mid = (low + high) / 2;
+    const mid = clock01((low + high) / 2);
     if (deg(sunElevationAt(mid, declination)) < elevationDeg) low = mid;
     else high = mid;
   }
-  return (low + high) / 2;
+  return clock01((low + high) / 2);
 };
 
 describe('solar model', () => {
@@ -59,7 +61,7 @@ describe('solar model', () => {
     expect(deg(noonElevation(JUNE))).toBeCloseTo(61.2, 1);
     expect(deg(noonElevation(AUTUMN))).toBeCloseTo(28.3, 1);
 
-    const dayHours = (declination: number) => (sunriseHourAngle(declination) / Math.PI) * 24;
+    const dayHours = (declination: Radians) => (sunriseHourAngle(declination) / Math.PI) * 24;
     expect(dayHours(JUNE)).toBeCloseTo(16.5, 1);
     expect(dayHours(AUTUMN)).toBeCloseTo(10.3, 1);
 
@@ -76,22 +78,24 @@ describe('solar model', () => {
   });
 
   test('sunset is later in June than in autumn, and sunrise earlier', () => {
-    expect(clockFromSolarPhase(0.75, JUNE)).toBeGreaterThan(clockFromSolarPhase(0.75, AUTUMN));
-    expect(clockFromSolarPhase(0.25, JUNE)).toBeLessThan(clockFromSolarPhase(0.25, AUTUMN));
-    expect(clockFromSolarPhase(0.75, JUNE)).toBeCloseTo(20.27 / 24, 2);
-    expect(clockFromSolarPhase(0.25, AUTUMN)).toBeCloseTo(6.83 / 24, 2);
+    const sunset = solarPhase01(0.75);
+    const sunrise = solarPhase01(0.25);
+    expect(clockFromSolarPhase(sunset, JUNE)).toBeGreaterThan(clockFromSolarPhase(sunset, AUTUMN));
+    expect(clockFromSolarPhase(sunrise, JUNE)).toBeLessThan(clockFromSolarPhase(sunrise, AUTUMN));
+    expect(clockFromSolarPhase(sunset, JUNE)).toBeCloseTo(20.27 / 24, 2);
+    expect(clockFromSolarPhase(sunrise, AUTUMN)).toBeCloseTo(6.83 / 24, 2);
   });
 
   test.each([
     ['June', JUNE],
     ['autumn', AUTUMN],
   ])('%s: the horizon is crossed exactly where the phase says it is', (_label, declination) => {
-    expect(sunElevationAt(0.5, declination)).toBeGreaterThan(0.3);
-    expect(Math.abs(sunElevationAt(clockFromSolarPhase(0.25, declination), declination)))
+    expect(sunElevationAt(clock01(0.5), declination)).toBeGreaterThan(0.3);
+    expect(Math.abs(sunElevationAt(clockFromSolarPhase(solarPhase01(0.25), declination), declination)))
       .toBeLessThan(0.01);
-    expect(Math.abs(sunElevationAt(clockFromSolarPhase(0.75, declination), declination)))
+    expect(Math.abs(sunElevationAt(clockFromSolarPhase(solarPhase01(0.75), declination), declination)))
       .toBeLessThan(0.01);
-    expect(sunElevationAt(clockFromSolarPhase(0, declination), declination)).toBeLessThan(-0.1);
+    expect(sunElevationAt(clockFromSolarPhase(solarPhase01(0), declination), declination)).toBeLessThan(-0.1);
   });
 
   test.each([
@@ -99,7 +103,7 @@ describe('solar model', () => {
     ['autumn', AUTUMN],
   ])('%s: clock and solar phase are inverses of each other', (_label, declination) => {
     for (let phase = 0; phase <= 1.0001; phase += 0.02) {
-      const round = solarPhaseAt(clockFromSolarPhase(phase, declination), declination);
+      const round = solarPhaseAt(clockFromSolarPhase(solarPhase01(phase), declination), declination);
       expect(round).toBeCloseTo(Math.min(phase, 1), 5);
     }
   });
@@ -108,22 +112,22 @@ describe('solar model', () => {
     ['June', JUNE],
     ['autumn', AUTUMN],
   ])('%s: sun direction is a unit vector rising in +X and setting in -X', (_label, declination) => {
-    const sunrise = sunDirectionAt(clockFromSolarPhase(0.26, declination), declination);
-    const sunset = sunDirectionAt(clockFromSolarPhase(0.74, declination), declination);
+    const sunrise = sunDirectionAt(clockFromSolarPhase(solarPhase01(0.26), declination), declination);
+    const sunset = sunDirectionAt(clockFromSolarPhase(solarPhase01(0.74), declination), declination);
     expect(sunrise.length()).toBeCloseTo(1, 5);
     expect(sunrise.x).toBeGreaterThan(0.5);
     expect(sunset.x).toBeLessThan(-0.5);
     // Noon stands south, which is +Z, in both seasons.
-    expect(sunDirectionAt(0.5, declination).z).toBeGreaterThan(0.4);
+    expect(sunDirectionAt(clock01(0.5), declination).z).toBeGreaterThan(0.4);
   });
 
   test.each([
     ['June', JUNE],
     ['autumn', AUTUMN],
   ])('%s: night factor is 1 at solar midnight and 0 at noon', (_label, declination) => {
-    expect(nightFactorAt(clockFromSolarPhase(0, declination), declination)).toBeCloseTo(1, 2);
-    expect(nightFactorAt(0.5, declination)).toBeCloseTo(0, 2);
-    const twilight = nightFactorAt(clockFromSolarPhase(0.25, declination), declination);
+    expect(nightFactorAt(clockFromSolarPhase(solarPhase01(0), declination), declination)).toBeCloseTo(1, 2);
+    expect(nightFactorAt(clock01(0.5), declination)).toBeCloseTo(0, 2);
+    const twilight = nightFactorAt(clockFromSolarPhase(solarPhase01(0.25), declination), declination);
     expect(twilight).toBeGreaterThan(0.05);
     expect(twilight).toBeLessThan(0.95);
   });
@@ -132,7 +136,8 @@ describe('solar model', () => {
     ['June', JUNE],
     ['autumn', AUTUMN],
   ])('%s: dawn stays in twilight instead of switching on', (_label, declination) => {
-    const at = (phase: number) => nightFactorAt(clockFromSolarPhase(phase, declination), declination);
+    const at = (phase: number) =>
+      nightFactorAt(clockFromSolarPhase(solarPhase01(phase), declination), declination);
     expect(at(0.25)).toBeGreaterThan(0.5);
 
     let previous = at(0.22);
@@ -149,7 +154,7 @@ describe('solar model', () => {
     ['autumn', AUTUMN],
   ])('%s: direct sunlight fades in after sunrise rather than snapping on', (_label, declination) => {
     const at = (phase: number) =>
-      directSunFactorAt(clockFromSolarPhase(phase, declination), declination);
+      directSunFactorAt(clockFromSolarPhase(solarPhase01(phase), declination), declination);
     expect(at(0.25)).toBeCloseTo(0, 6);
     expect(at(0.252)).toBeLessThan(0.02);
     expect(at(0.32)).toBeGreaterThan(0.05);
@@ -180,8 +185,8 @@ describe('solar model', () => {
     ['June', JUNE],
     ['autumn', AUTUMN],
   ])('%s: a sun above the horizon reads as day, civil twilight still as night', (_label, declination) => {
-    expect(nightFactorAt(clockAtElevation(4.4, declination), declination)).toBeLessThan(0.3);
-    expect(nightFactorAt(clockAtElevation(-6, declination), declination)).toBeGreaterThan(0.8);
+    expect(nightFactorAt(clockAtElevation(degrees(4.4), declination), declination)).toBeLessThan(0.3);
+    expect(nightFactorAt(clockAtElevation(degrees(-6), declination), declination)).toBeGreaterThan(0.8);
   });
 
   /**
@@ -196,8 +201,8 @@ describe('solar model', () => {
    * the difference. The old double cosine returned 0.037 -- an order of magnitude under.
    */
   test('the direct beam at a low sun is Meinel\'s 0.230 of noon, not a twenty-seventh', () => {
-    const noon = directSunFactorAt(0.5, JUNE);
-    const ratio = directSunFactorAt(clockAtElevation(4.4, JUNE), JUNE) / noon;
+    const noon = directSunFactorAt(clock01(0.5), JUNE);
+    const ratio = directSunFactorAt(clockAtElevation(degrees(4.4), JUNE), JUNE) / noon;
     expect(ratio).toBeCloseTo(0.23, 2);
   });
 
@@ -210,7 +215,7 @@ describe('solar model', () => {
    * degrees, 0.941 at 45, 1.0 at the 61.21 this latitude tops out at.
    */
   test('the beam still climbs through midday instead of clamping', () => {
-    const at = (deg: number) => directSunFactorAt(clockAtElevation(deg, JUNE), JUNE);
+    const at = (deg: number) => directSunFactorAt(clockAtElevation(degrees(deg), JUNE), JUNE);
     expect(at(30)).toBeCloseTo(0.836, 2);
     expect(at(45)).toBeCloseTo(0.941, 2);
     expect(at(61.21)).toBeCloseTo(1, 2);
@@ -229,9 +234,9 @@ describe('solar model', () => {
    */
   test('air mass matches the published Kasten-Young values', () => {
     for (const elevation of [30, 45, 60, 90]) {
-      expect(airMassAt(elevation)).toBeCloseTo(1 / Math.sin(THREE.MathUtils.degToRad(elevation)), 1);
+      expect(airMassAt(degrees(elevation))).toBeCloseTo(1 / Math.sin(THREE.MathUtils.degToRad(elevation)), 1);
     }
-    expect(airMassAt(0)).toBeCloseTo(37.92, 1);
+    expect(airMassAt(degrees(0))).toBeCloseTo(37.92, 1);
   });
 
   /**
@@ -255,8 +260,8 @@ describe('solar model', () => {
     ['autumn', AUTUMN],
   ])('%s: the sunset curve mirrors the sunrise curve', (_label, declination) => {
     for (let offset = 0; offset <= 0.2; offset += 0.01) {
-      const morning = clockFromSolarPhase(0.25 + offset, declination);
-      const evening = clockFromSolarPhase(0.75 - offset, declination);
+      const morning = clockFromSolarPhase(solarPhase01(0.25 + offset), declination);
+      const evening = clockFromSolarPhase(solarPhase01(0.75 - offset), declination);
       expect(nightFactorAt(morning, declination)).toBeCloseTo(
         nightFactorAt(evening, declination),
         9
@@ -268,7 +273,8 @@ describe('solar model', () => {
     ['June', JUNE],
     ['autumn', AUTUMN],
   ])('%s: golden hour sits near the horizon, not at noon or midnight', (_label, declination) => {
-    const at = (phase: number) => goldenFactorAt(clockFromSolarPhase(phase, declination), declination);
+    const at = (phase: number) =>
+      goldenFactorAt(clockFromSolarPhase(solarPhase01(phase), declination), declination);
     expect(at(0.28)).toBeGreaterThan(0.5);
     expect(at(0.72)).toBeGreaterThan(0.5);
     expect(at(0.5)).toBeLessThan(0.35);
@@ -284,10 +290,10 @@ describe('solar model', () => {
    * the first test already pins.
    */
   test('neither season lingers longer in the golden band than the other', () => {
-    const goldenHours = (declination: number) => {
+    const goldenHours = (declination: Radians) => {
       let total = 0;
       const samples = 20_000;
-      for (let i = 0; i < samples; i++) total += goldenFactorAt(i / samples, declination);
+      for (let i = 0; i < samples; i++) total += goldenFactorAt(clock01(i / samples), declination);
       return (total / samples) * 24;
     };
     expect(goldenHours(JUNE)).toBeCloseTo(4.4, 1);
@@ -315,7 +321,7 @@ describe('solar model', () => {
 describe('the antisolar point the moon rides', () => {
   /** Bearing from north, clockwise, in the convention `sunDirectionAt` documents: +Z is south. */
   const bearing = (v: THREE.Vector3) =>
-    (deg(Math.atan2(v.x, -v.z)) + 360) % 360;
+    (deg(Math.atan2(v.x, -v.z) as Radians) + 360) % 360;
   /** The bearing at which a direction crosses up through the horizon. */
   const riseBearing = (direction: (t: number) => THREE.Vector3) => {
     const samples = 200_000;
@@ -331,11 +337,11 @@ describe('the antisolar point the moon rides', () => {
   test('is the sun mirrored in declination, so the seasons run the other way', () => {
     // The whole point: the season that lifts the sun pushes its opposite point down, by the
     // same amount. A midsummer full moon crawls along the horizon; an October one rides high.
-    expect(deg(Math.asin(antisolarDirectionAt(0, JUNE).y))).toBeCloseTo(14.33, 2);
-    expect(deg(Math.asin(antisolarDirectionAt(0, AUTUMN).y))).toBeCloseTo(47.27, 2);
-    expect(deg(noonElevation(-JUNE))).toBeCloseTo(14.33, 2);
+    expect(deg(radians(Math.asin(antisolarDirectionAt(clock01(0), JUNE).y)))).toBeCloseTo(14.33, 2);
+    expect(deg(radians(Math.asin(antisolarDirectionAt(clock01(0), AUTUMN).y)))).toBeCloseTo(47.27, 2);
+    expect(deg(noonElevation(radians(-JUNE)))).toBeCloseTo(14.33, 2);
     // ...and it culminates at local midnight, due south, where +Z points.
-    const midnight = antisolarDirectionAt(0, JUNE);
+    const midnight = antisolarDirectionAt(clock01(0), JUNE);
     expect(Math.abs(midnight.x)).toBeLessThan(1e-12);
     expect(midnight.z).toBeGreaterThan(0);
   });
@@ -344,14 +350,14 @@ describe('the antisolar point the moon rides', () => {
     // The elevation alone would pass a half-mirror at the equinox. The bearings are what
     // separate them: a June sun rises 49.50 east-of-north, its opposite point 49.50 east-of-
     // *south*, and 49.50 + 130.50 = 180 is the mirror stated as an identity.
-    const sunRise = riseBearing((t) => sunDirectionAt(t, JUNE, new THREE.Vector3()));
-    const moonRise = riseBearing((t) => antisolarDirectionAt(t, JUNE));
+    const sunRise = riseBearing((t) => sunDirectionAt(clock01(t), JUNE, new THREE.Vector3()));
+    const moonRise = riseBearing((t) => antisolarDirectionAt(clock01(t), JUNE));
     expect(sunRise).toBeCloseTo(49.5, 1);
     expect(moonRise).toBeCloseTo(130.5, 1);
     expect(sunRise + moonRise).toBeCloseTo(180, 1);
     // October swaps which of the two rises north of east, and still sums to the mirror.
-    const autumnSun = riseBearing((t) => sunDirectionAt(t, AUTUMN, new THREE.Vector3()));
-    const autumnMoon = riseBearing((t) => antisolarDirectionAt(t, AUTUMN));
+    const autumnSun = riseBearing((t) => sunDirectionAt(clock01(t), AUTUMN, new THREE.Vector3()));
+    const autumnMoon = riseBearing((t) => antisolarDirectionAt(clock01(t), AUTUMN));
     expect(autumnSun).toBeCloseTo(105.63, 1);
     expect(autumnMoon).toBeCloseTo(74.37, 1);
   });
@@ -363,8 +369,8 @@ describe('the antisolar point the moon rides', () => {
       const declination = THREE.MathUtils.degToRad(declinationDeg);
       for (let i = 0; i < 2000; i++) {
         const t = i / 2000;
-        sunDirectionAt(t, declination, sun).negate();
-        worst = Math.max(worst, antisolarDirectionAt(t, declination).distanceTo(sun));
+        sunDirectionAt(clock01(t), radians(declination), sun).negate();
+        worst = Math.max(worst, antisolarDirectionAt(clock01(t), radians(declination)).distanceTo(sun));
       }
     }
     // Measured 1.2e-15 over a 20 000-step sweep; this coarser one is the same identity.
@@ -376,7 +382,7 @@ describe('sky colours', () => {
   test('returns finite RGB at every sample, in both seasons', () => {
     for (const declination of [JUNE, AUTUMN]) {
       for (let i = 0; i <= 40; i++) {
-        const color = skyColorAt(i / 40, declination);
+        const color = skyColorAt(clock01(i / 40), declination);
         expect(Number.isFinite(color.r)).toBe(true);
         expect(Number.isFinite(color.g)).toBe(true);
         expect(Number.isFinite(color.b)).toBe(true);
@@ -385,8 +391,8 @@ describe('sky colours', () => {
   });
 
   test('clamps inputs outside 0..1 to a safe color rather than NaN', () => {
-    expect(Number.isFinite(skyColorAt(-0.5, JUNE).r)).toBe(true);
-    expect(Number.isFinite(skyColorAt(1.5, JUNE).r)).toBe(true);
+    expect(Number.isFinite(skyColorAt(clock01(-0.5), JUNE).r)).toBe(true);
+    expect(Number.isFinite(skyColorAt(clock01(1.5), JUNE).r)).toBe(true);
   });
 
   /**
@@ -397,23 +403,23 @@ describe('sky colours', () => {
    * keyed on solar phase, sunset is red whenever sunset is.
    */
   test('the sunset colour lands at sunset in both seasons, not at a fixed hour', () => {
-    const juneSunset = skyColorAt(clockFromSolarPhase(0.745, JUNE), JUNE);
-    const autumnSunset = skyColorAt(clockFromSolarPhase(0.745, AUTUMN), AUTUMN);
+    const juneSunset = skyColorAt(clockFromSolarPhase(solarPhase01(0.745), JUNE), JUNE);
+    const autumnSunset = skyColorAt(clockFromSolarPhase(solarPhase01(0.745), AUTUMN), AUTUMN);
     expect(juneSunset.getHex()).toBe(autumnSunset.getHex());
 
     // And the same clock time is a different place on the ramp in each season, which is the
     // proof it is no longer clock-keyed: at t=0.745 June is an hour short of sunset and
     // still warm, while October is already past it and into the purple.
-    const june = skyColorAt(0.745, JUNE);
-    const autumn = skyColorAt(0.745, AUTUMN);
+    const june = skyColorAt(clock01(0.745), JUNE);
+    const autumn = skyColorAt(clock01(0.745), AUTUMN);
     const luma = (c: THREE.Color) => 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
     expect(luma(autumn)).toBeLessThan(luma(june));
   });
 
   test('sun color is black below the horizon, warm near it, whiter at noon', () => {
-    expect(sunColorAt(clockFromSolarPhase(0, JUNE), JUNE).r).toBe(0);
-    const sunrise = sunColorAt(clockFromSolarPhase(0.27, JUNE), JUNE);
-    const noon = sunColorAt(0.5, JUNE);
+    expect(sunColorAt(clockFromSolarPhase(solarPhase01(0), JUNE), JUNE).r).toBe(0);
+    const sunrise = sunColorAt(clockFromSolarPhase(solarPhase01(0.27), JUNE), JUNE);
+    const noon = sunColorAt(clock01(0.5), JUNE);
     expect(sunrise.r / Math.max(sunrise.b, 1e-6)).toBeGreaterThan(
       noon.r / Math.max(noon.b, 1e-6)
     );
@@ -421,7 +427,7 @@ describe('sky colours', () => {
 
   test('reuses the optional out color so callers can avoid allocations', () => {
     const out = new THREE.Color();
-    expect(skyColorAt(0.5, JUNE, out)).toBe(out);
+    expect(skyColorAt(clock01(0.5), JUNE, out)).toBe(out);
   });
 });
 
@@ -435,13 +441,13 @@ describe('render exposure', () => {
    * a midsummer day.
    */
   test('eases exposure only when the sun is genuinely high', () => {
-    const rad = (d: number) => THREE.MathUtils.degToRad(d);
+    const rad = (d: number) => THREE.MathUtils.degToRad(d) as Radians;
     expect(highSunFactor(rad(28.3))).toBe(0);
     expect(highSunFactor(rad(42.7))).toBe(0);
     expect(highSunFactor(rad(61.2))).toBeCloseTo(1, 2);
 
     const noon = sceneExposure(0, 0, 1, 0, highSunFactor(rad(61.2)));
-    const midMorning = sceneExposure(0, 0, 1, 0, highSunFactor(rad(42.7)));
+    const midMorning = sceneExposure(0, 0, 1, 0, highSunFactor(radians(rad(42.7))));
     expect(noon / midMorning).toBeCloseTo(0.85, 2);
     // Nothing is asserted here about golden hour being darker, though it is: a rendered
     // golden-hour frame means 122 against this noon's 143. That is a fact about the *picture*

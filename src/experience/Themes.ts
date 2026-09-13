@@ -1,6 +1,7 @@
 import { AUTUMN_DECLINATION_DEG, JUNE_DECLINATION_DEG } from '../environment/sky';
 import { COLORS } from '../world/WorldLayout';
 import type { TrainLivery } from '../world/Train';
+import type { Degrees } from '../units';
 
 /**
  * Diorama-wide visual themes. A theme is pure data: palette overrides
@@ -37,7 +38,7 @@ export interface DioramaTheme {
    * altitude, the length of the day and the depth of the night together. A theme cannot set
    * a late sunset and a high sun independently any more than October can.
    */
-  sunDeclinationDeg: number;
+  sunDeclinationDeg: Degrees;
 }
 
 const BASE: Omit<DioramaTheme, 'id' | 'label' | 'palette'> = {

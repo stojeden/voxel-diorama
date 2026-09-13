@@ -1,4 +1,5 @@
 import { RAINBOW_SPECTRAL_SAMPLES, type LinearRgb } from './RainbowOptics';
+import type { Degrees, Radians } from '../units';
 
 /**
  * Why sunrise is red and why twilight is blue, computed rather than picked.
@@ -113,9 +114,9 @@ export function ozoneCrossSection(wavelengthNm: number): number {
  * atmosphere is a shell and not a slab. It peaks near 38 at the horizon, which is the number
  * that turns the setting sun red.
  */
-export function airMass(apparentElevationRad: number): number {
-  const elevationDeg = (apparentElevationRad * 180) / Math.PI;
-  const zenithDeg = 90 - elevationDeg;
+export function airMass(apparentElevationRad: Radians): number {
+  const elevationDeg = ((apparentElevationRad * 180) / Math.PI) as Degrees;
+  const zenithDeg = (90 - elevationDeg) as Degrees;
   if (zenithDeg >= 96.07995) return 40;
   const z = (zenithDeg * Math.PI) / 180;
   return 1 / (Math.cos(z) + 0.50572 * Math.pow(96.07995 - zenithDeg, -1.6364));
@@ -128,15 +129,15 @@ export function airMass(apparentElevationRad: number): number {
  * when its lower limb appears to touch: 34 minutes of refraction plus 16 of solar radius is
  * the 0.833 degrees that defines sunrise.
  */
-export function refractionRad(trueElevationRad: number): number {
+export function refractionRad(trueElevationRad: Radians): Radians {
   const h = (trueElevationRad * 180) / Math.PI;
   const arcminutes = 1 / Math.tan(((h + 7.31 / (h + 4.4)) * Math.PI) / 180);
-  return ((Math.max(arcminutes, 0) / 60) * Math.PI) / 180;
+  return (((Math.max(arcminutes, 0) / 60) * Math.PI) / 180) as Radians;
 }
 
 /** Apparent elevation of a body whose true elevation is given: refraction lifts it. */
-export function apparentElevation(trueElevationRad: number): number {
-  return trueElevationRad + refractionRad(trueElevationRad);
+export function apparentElevation(trueElevationRad: Radians): Radians {
+  return (trueElevationRad + refractionRad(trueElevationRad)) as Radians;
 }
 
 /**
@@ -146,7 +147,7 @@ export function apparentElevation(trueElevationRad: number): number {
  * the terminator and its tangent height climbs as the secant of the depression -- the number
  * that decides whether twilight light has been through the ozone layer or over it.
  */
-export function tangentRayHeightKm(elevationRad: number): number {
+export function tangentRayHeightKm(elevationRad: Radians): number {
   if (elevationRad >= 0) return 0;
   return EARTH_RADIUS_KM * (1 / Math.cos(elevationRad) - 1);
 }
@@ -197,7 +198,7 @@ const ozoneDensity = (heightKm: number) => {
  * Below it the sun lights the sky only along a tangent ray, and the path is the chord
  * integral instead.
  */
-export function airSlantFactor(elevationRad: number): number {
+export function airSlantFactor(elevationRad: Radians): number {
   if (elevationRad >= 0) return airMass(apparentElevation(elevationRad));
   return tangentSlant(tangentRayHeightKm(elevationRad), AIR_SLANT_TABLE);
 }
@@ -259,7 +260,7 @@ const OZONE_SLANT_TABLE = buildSlantTable(ozoneDensity);
  * 6 and was above the layer past 15. Every one of those angles was wrong: the peak is at 4.3
  * and 6 degrees is already past the cliff.)
  */
-export function ozoneSlantFactor(elevationRad: number): number {
+export function ozoneSlantFactor(elevationRad: Radians): number {
   if (elevationRad >= 0) {
     const shell = EARTH_RADIUS_KM / (EARTH_RADIUS_KM + OZONE_PEAK_KM);
     const cos = Math.cos(elevationRad);
@@ -343,7 +344,7 @@ const WHITE_RGB: LinearRgb = [
  * used to have.
  */
 export function beamTransmittanceColor(
-  elevationRad: number,
+  elevationRad: Radians,
   options: AtmosphereOptions = {}
 ): LinearRgb {
   const ozoneColumn =
@@ -375,7 +376,7 @@ export function beamTransmittanceColor(
 }
 
 /** Height of the top of Earth's shadow directly above the observer, km. */
-export function shadowHeightKm(solarElevationRad: number): number {
+export function shadowHeightKm(solarElevationRad: Radians): number {
   if (solarElevationRad >= 0) return 0;
   return EARTH_RADIUS_KM * (1 / Math.cos(solarElevationRad) - 1);
 }
@@ -403,15 +404,15 @@ export interface TwilightSky {
  * 0.16 ms measured here; at sixty frames a second, paying it once per 0.25 degrees is about
  * once every sixty frames.
  */
-const CACHE_STEP_RAD = (0.25 * Math.PI) / 180;
+const CACHE_STEP_RAD = ((0.25 * Math.PI) / 180) as Radians;
 const twilightCache = new Map<number, TwilightSky>();
 
 /** The cached form. Use this from a frame loop; the raw integral is for tests and tables. */
-export function twilightSkyColorCached(solarElevationRad: number): TwilightSky {
+export function twilightSkyColorCached(solarElevationRad: Radians): TwilightSky {
   const key = Math.round(solarElevationRad / CACHE_STEP_RAD);
   const hit = twilightCache.get(key);
   if (hit) return hit;
-  const value = twilightSkyColor(key * CACHE_STEP_RAD);
+  const value = twilightSkyColor((key * CACHE_STEP_RAD) as Radians);
   twilightCache.set(key, value);
   return value;
 }
@@ -420,7 +421,7 @@ let horizonReference = 0;
 function horizonReferenceRadiance(): number {
   if (horizonReference === 0) {
     horizonReference = 1; // break the recursion; the raw sum comes back below
-    const raw = twilightSkyColor(0).relativeBrightness;
+    const raw = twilightSkyColor(0 as Radians).relativeBrightness;
     horizonReference = raw;
   }
   return horizonReference;
@@ -472,13 +473,13 @@ function horizonReferenceRadiance(): number {
  * purple light, and any horizontal variation -- this is the zenith, not the whole dome.
  */
 export function twilightSkyColor(
-  solarElevationRad: number,
+  solarElevationRad: Radians,
   options: AtmosphereOptions = {}
 ): TwilightSky {
   const ozoneColumn =
     (options.ozoneDobson ?? DEFAULT_OZONE_DOBSON) * DOBSON_UNIT_MOLECULES_PER_CM2;
   const aerosol = options.aerosolOpticalDepth ?? 0.05;
-  const beta = Math.min(solarElevationRad, 0);
+  const beta = Math.min(solarElevationRad, 0) as Radians;
   const cosBeta = Math.cos(beta);
   const shadow = shadowHeightKm(beta);
 

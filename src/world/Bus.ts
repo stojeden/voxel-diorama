@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type { Clock01 } from '../units';
 import {
   BUS_ROUTE_CURVE,
   BUS_STOPS,
@@ -392,7 +393,7 @@ function buildStopCrowd(scene: THREE.Scene, stop: BusStop, random: RandomSource)
 }
 
 export interface BusHandle {
-  update: (delta: number, nightFactor: number, crossingBlocked: boolean, t01: number) => void;
+  update: (delta: number, nightFactor: number, crossingBlocked: boolean, t01: Clock01) => void;
   getPosition: (target?: THREE.Vector3) => THREE.Vector3;
   getDirection: (target?: THREE.Vector3) => THREE.Vector3;
   getRouteProgress: () => number;
@@ -464,7 +465,7 @@ export function createBus(scene: THREE.Scene, random = fallbackRandom('bus')): B
   let serviceMode: BusServiceMode = 'normal';
   let headlightsEnabled = true;
   let serviceInitialized = false;
-  let previousT01 = 0;
+  let previousT01: Clock01 = 0 as Clock01;
   let previousServiceWindow: BusServiceWindow = 'day';
   let eclipseReaction: EclipseWorldReactionState = {
     attention: 0,
@@ -553,7 +554,7 @@ export function createBus(scene: THREE.Scene, random = fallbackRandom('bus')): B
     if (restorePassengers) setAllPassengersAtStop(true);
   }
 
-  function syncServiceSchedule(t01: number): void {
+  function syncServiceSchedule(t01: Clock01): void {
     const serviceWindow = busServiceWindowAt(t01);
     if (!serviceInitialized) {
       if (serviceWindow === 'off') enterOffService();

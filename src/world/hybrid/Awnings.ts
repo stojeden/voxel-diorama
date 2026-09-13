@@ -4,6 +4,7 @@ import type { BuildingSpec } from './CityModel';
 import { P } from './palette';
 import { STYLE } from './HybridMaterial';
 import { attachAttributes } from './strategies/strategy';
+import type { WallClock01 } from '../../units';
 
 /**
  * Shop awnings that open at ten and close at six.
@@ -64,7 +65,7 @@ const smooth = (t: number) => {
  * and `10 * (1 / 24)` are not the same double -- and which of them lands on the boundary
  * is not something a shop's opening time should depend on.
  */
-export function isOpenAt(clockT: number): boolean {
+export function isOpenAt(clockT: WallClock01): boolean {
   const hour = (((clockT % 1) + 1) % 1) * 24;
   return hour >= OPEN_HOUR - 1e-9 && hour < CLOSE_HOUR - 1e-9;
 }
@@ -195,7 +196,7 @@ export class Awnings {
    * the state after a checkpoint or a time drag is the hour's state, with no travel left
    * over from before the jump.
    */
-  update(clockT: number, dt: number): void {
+  update(clockT: WallClock01, dt: number): void {
     const target = isOpenAt(clockT) ? 1 : 0;
     const jumped = this.lastClockT === null || clockDistance(clockT, this.lastClockT) > CLOCK_JUMP;
     this.lastClockT = clockT;

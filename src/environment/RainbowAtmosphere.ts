@@ -6,6 +6,7 @@ import {
 } from 'postprocessing';
 import type { RandomSource } from '../core/Random';
 import { fallbackRandom } from '../core/Random';
+import type { Radians } from '../units';
 import type { QualityLevel } from '../performance/QualityManager';
 import { RAINBOW_MOISTURE_ZONES, WORLD_HALF_SIZE } from '../world/WorldLayout';
 import {
@@ -33,15 +34,15 @@ export { DormantRainbow };
 
 const SPECTRAL_LUT_WIDTH = 1024;
 const SPECTRAL_LUT_HEIGHT = 2;
-const SPECTRAL_LUT_MIN_ANGLE_RAD = 0;
-const SPECTRAL_LUT_MAX_ANGLE_RAD = Math.PI * 0.5;
+const SPECTRAL_LUT_MIN_ANGLE_RAD = 0 as Radians;
+const SPECTRAL_LUT_MAX_ANGLE_RAD = (Math.PI * 0.5) as Radians;
 const SPECTRAL_LUT_MIN_MU = Math.cos(SPECTRAL_LUT_MAX_ANGLE_RAD);
 const SPECTRAL_LUT_MAX_MU = Math.cos(SPECTRAL_LUT_MIN_ANGLE_RAD);
 const HISTOGRAM_MIN_ANGLE_RAD = SPECTRAL_LUT_MIN_ANGLE_RAD;
 const HISTOGRAM_MAX_ANGLE_RAD = SPECTRAL_LUT_MAX_ANGLE_RAD;
 const HISTOGRAM_BINS = 2048;
 const IMPACT_PARAMETER_SAMPLES = 8192;
-const SOLAR_DISC_RADIUS_RAD = THREE.MathUtils.degToRad(0.2666);
+const SOLAR_DISC_RADIUS_RAD = THREE.MathUtils.degToRad(0.2666) as Radians;
 // Relative phase-function energy is physical; absolute scene radiometry is not.
 // This single shared exposure maps that energy into the existing HDR pipeline.
 const RAINBOW_EXPOSURE_CALIBRATION = 7;
@@ -60,7 +61,7 @@ interface SpectralLut {
 function depositLinear(
   histogram: Float64Array,
   row: number,
-  angleRad: number,
+  angleRad: Radians,
   red: number,
   green: number,
   blue: number
@@ -152,7 +153,7 @@ function blurBySolarDisc(phase: Float64Array): Float64Array {
 function sampleHistogram(
   histogram: Float64Array,
   row: number,
-  angleRad: number,
+  angleRad: Radians,
   channel: number
 ): number {
   const unit = THREE.MathUtils.clamp(
@@ -246,7 +247,7 @@ function bakeSpectralLutData(): Uint16Array {
         SPECTRAL_LUT_MAX_MU,
         unit
       );
-      const angle = Math.acos(mu);
+      const angle = Math.acos(mu) as Radians;
       for (let channel = 0; channel < 3; channel++) {
         const value = sampleHistogram(blurred, row, angle, channel);
         radiance[(row * SPECTRAL_LUT_WIDTH + x) * 3 + channel] = value;

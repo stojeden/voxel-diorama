@@ -1,7 +1,9 @@
+import type { Clock01 } from '../units';
+
 export type IndexedRandomSample = (index: number) => number;
 
-export const ECLIPSE_EARLIEST_T01 = 0.3;
-export const ECLIPSE_LATEST_T01 = 0.72;
+export const ECLIPSE_EARLIEST_T01 = 0.3 as Clock01;
+export const ECLIPSE_LATEST_T01 = 0.72 as Clock01;
 export const FIRST_ECLIPSE_DAY_MIN = 1;
 export const FIRST_ECLIPSE_DAY_MAX = 4;
 export const ECLIPSE_GAP_DAYS_MIN = 2;
@@ -10,7 +12,7 @@ export const ECLIPSE_GAP_DAYS_MAX = 6;
 export interface EclipseScheduleState {
   readonly dayIndex: number;
   readonly scheduledToday: boolean;
-  readonly triggerT01: number | null;
+  readonly triggerT01: Clock01 | null;
   readonly occurredToday: boolean;
   readonly nextAutomaticDay: number;
 }
@@ -22,7 +24,7 @@ export interface EclipseScheduleState {
  */
 export class EclipseSchedule {
   private dayIndex = 0;
-  private triggerT01: number | null = null;
+  private triggerT01: Clock01 | null = null;
   private lastOccurrenceDay = -1;
   private nextAutomaticDay: number;
   private sampleIndex = 0;
@@ -40,8 +42,8 @@ export class EclipseSchedule {
     this.triggerT01 = null;
 
     if (this.dayIndex < this.nextAutomaticDay) return;
-    this.triggerT01 = ECLIPSE_EARLIEST_T01 +
-      this.nextSample() * (ECLIPSE_LATEST_T01 - ECLIPSE_EARLIEST_T01);
+    this.triggerT01 = (ECLIPSE_EARLIEST_T01 +
+      this.nextSample() * (ECLIPSE_LATEST_T01 - ECLIPSE_EARLIEST_T01)) as Clock01;
   }
 
   /** A user-started eclipse replaces, rather than duplicates, today's schedule. */
@@ -56,7 +58,7 @@ export class EclipseSchedule {
   }
 
   /** Returns true once when the clock reaches today's scheduled daylight slot. */
-  consumeIfDue(previousT01: number, currentT01: number, allowed = true): boolean {
+  consumeIfDue(previousT01: Clock01, currentT01: Clock01, allowed = true): boolean {
     const trigger = this.triggerT01;
     if (
       this.lastOccurrenceDay === this.dayIndex ||
