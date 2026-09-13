@@ -110,8 +110,15 @@ const env = bootstrap(quality.getProfile(), { temporalResolve });
 const ui = mountUi();
 ui.setLoadingProgress(4, 'RENDERER GOTOWY');
 
-// Shared uniforms: Weather writes wind strength, tree foliage shader reads it.
-const windUniforms: WindUniforms = { uTime: { value: 0 }, uWind: { value: 0 } };
+// Shared uniforms: Weather writes the world's ONE wind -- strength and direction -- and the
+// tree foliage shader and the chimney plume both read it. `uWindDir` is a unit vector in the
+// ground plane pointing the way the wind blows toward; `src/environment/wind.ts` owns that
+// convention, and `Weather.getWindVector()` is the same fact for TypeScript callers.
+const windUniforms: WindUniforms = {
+  uTime: { value: 0 },
+  uWind: { value: 0 },
+  uWindDir: { value: new THREE.Vector2(1, 0) },
+};
 
 // ─── World ───
 const world = createWorld(
@@ -133,6 +140,8 @@ const hybridFrame: HybridFrame = {
   elapsed: 0,
   shopRobbed: false,
   wind: 0,
+  windDirX: 1,
+  windDirZ: 0,
 };
 ui.setLoadingProgress(10, 'MIASTO I KRAJOBRAZ');
 const train = createTrain(env.scene);
@@ -1086,8 +1095,11 @@ function stepWorld(frame: FrameContext, carrier: WorldFrame): void {
     hybridFrame.elapsed = frame.elapsedSimulation;
     hybridFrame.shopRobbed = lakesideCow.isKioskRobbed();
     // The world's own wind, the one the weather already publishes to the foliage shader.
-    // The plume leans with the trees rather than inventing a private breeze.
+    // The plume leans with the trees rather than inventing a private breeze -- direction
+    // included, which is what it used to make up for itself.
     hybridFrame.wind = windUniforms.uWind.value;
+    hybridFrame.windDirX = windUniforms.uWindDir.value.x;
+    hybridFrame.windDirZ = windUniforms.uWindDir.value.y;
     hybrid.update(hybridFrame);
   }
   world.setEclipseReflection(
@@ -1137,7 +1149,18 @@ function stepWorld(frame: FrameContext, carrier: WorldFrame): void {
     // The round is authored from sunrise to noon, so it reads the phase, not the clock: the
     // literals are 0.28 and 0.5, and 0.25 is sunrise in every season.
     postman.update(actorDelta, frame.elapsedSimulation, solarPhaseAt(t01, carrier.sunDeclination));
-    balloon.update(actorDelta, frame.elapsedSimulation, light.night, weather.getCloudCover(), weather.getWind());
+    // The balloon takes the whole wind, not just its strength: it enters on the upwind edge
+    // and drifts downwind, so a north wind carries it south.
+    const windVector = weather.getWindVector();
+    balloon.update(
+      actorDelta,
+      frame.elapsedSimulation,
+      light.night,
+      weather.getCloudCover(),
+      windVector.strength,
+      windVector.x,
+      windVector.z
+    );
 
     boardingStations.clear();
     if (stationState.kind === 'dwelling') boardingStations.add(stationState.stationLabel);

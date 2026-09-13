@@ -7,7 +7,11 @@ import { BLOCK_CONFIGS, BUS_STOPS, LAMP_SPECS, STATION_STOPS } from './WorldLayo
 describe('world rendering budget', () => {
   test('keeps dynamic lamp lighting cheap enough for laptop GPUs', () => {
     const scene = new THREE.Scene();
-    const windUniforms = { uTime: { value: 0 }, uWind: { value: 0 } };
+    const windUniforms = {
+      uTime: { value: 0 },
+      uWind: { value: 0 },
+      uWindDir: { value: new THREE.Vector2(1, 0) },
+    };
     const world = createWorld(scene, windUniforms);
 
     // Every real fixture is a candidate, but the day/night controller only

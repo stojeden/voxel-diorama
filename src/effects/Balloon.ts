@@ -9,6 +9,15 @@ import { fallbackRandom, type RandomSource } from '../core/Random';
  * the far side. It also flies at dusk — when the burner bursts, the flame
  * lights the envelope from below (point light + emissive), which looks
  * gorgeous against the evening sky.
+ *
+ * It also FLIES WITH THE WIND. It used to enter at `x = -EDGE` and travel `+x` whatever the
+ * weather was doing, so it drifted west to east in a gale from the north; the wind set only
+ * how fast it crossed. Now the world's one wind (`src/environment/wind.ts`) picks the edge it
+ * enters on and the line it takes, so a north wind carries it south.
+ *
+ * The space jet is deliberately exempt. It flies under power, it has a nose, and a craft with
+ * engines does not go where the air goes — it keeps its old west-to-east pass, which
+ * `planBalloonCrossing` reproduces exactly when handed the direction (1, 0).
  */
 
 const CRUISE_Y = 46;
@@ -18,6 +27,63 @@ const EDGE = 115;
 function smoothstep(a: number, b: number, x: number): number {
   const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
   return t * t * (3 - 2 * t);
+}
+
+/** Where a crossing starts, where it ends, and how far that is. All in world units. */
+export interface BalloonCrossing {
+  entryX: number;
+  entryZ: number;
+  exitX: number;
+  exitZ: number;
+  /** Metres from entry to exit. Varies with the bearing — see below. */
+  length: number;
+}
+
+/**
+ * Lay out one crossing of the world square along the wind.
+ *
+ * The craft travels along `(dirX, dirZ)` — the downwind unit vector — through a point
+ * `lateral` metres to the side of the centre, and the entry and exit are where that line
+ * meets the world's ±`EDGE` square. Two things follow that the old `-EDGE → +EDGE` track
+ * could not do. The entry always lands UPWIND of the exit, for every bearing, which is the
+ * whole point. And the crossing distance is no longer a constant: an axis-aligned pass is
+ * 2·EDGE, a diagonal one up to 2·√2·EDGE, so the profile below has to run on PROGRESS along
+ * the crossing rather than on `x`.
+ *
+ * Exported so the geometry can be checked without a renderer; a balloon that enters
+ * downwind is a sign error nobody would catch by eye in a light breeze.
+ */
+export function planBalloonCrossing(
+  dirX: number,
+  dirZ: number,
+  lateral: number,
+  edge: number
+): BalloonCrossing {
+  // A point on the track: `lateral` along the left-hand normal of the direction.
+  const cx = -dirZ * lateral;
+  const cz = dirX * lateral;
+  // Slab intersection, one axis at a time, entry and exit computed SEPARATELY. They are not
+  // symmetric about the track's midpoint once the track is off-centre and off-axis, and
+  // assuming they were put the entry 13 metres inside the map on an oblique bearing — a
+  // balloon popping into existence, which is the defect the climb-in profile exists to
+  // prevent. A direction component of exactly zero never leaves its slab, so that axis
+  // constrains nothing; it gets infinite bounds rather than a division that returns NaN.
+  let enter = -Infinity;
+  let exit = Infinity;
+  for (const [c, d] of [[cx, dirX], [cz, dirZ]] as const) {
+    if (d === 0) continue;
+    const a = (edge - c) / d;
+    const b = (-edge - c) / d;
+    enter = Math.max(enter, Math.min(a, b));
+    exit = Math.min(exit, Math.max(a, b));
+  }
+  return {
+    entryX: cx + dirX * enter,
+    entryZ: cz + dirZ * enter,
+    exitX: cx + dirX * exit,
+    exitZ: cz + dirZ * exit,
+    length: exit - enter,
+  };
 }
 
 export class Balloon {
@@ -36,8 +102,24 @@ export class Balloon {
   private cyber = false;
   private flying = false;
   private cooldown = 18;
-  private z = 0;
+  /** Offset from the centre line, across the track rather than along world z. */
+  private lateral = 0;
   private bobPhase = 0;
+  /**
+   * The crossing, frozen at launch.
+   *
+   * The bearing is sampled ONCE, when the flight starts, and the craft then holds that line.
+   * A balloon that re-read the veering wind every frame would curve, and — worse for the
+   * thing this change is about — its entry point would stop being upwind of its exit halfway
+   * across. A real balloon in a veering wind does curve; a 25-minute veer over a 90-second
+   * crossing is not what a viewer is looking at.
+   */
+  private dirX = 1;
+  private dirZ = 0;
+  private entryX = -EDGE;
+  private entryZ = 0;
+  private crossLength = EDGE * 2;
+  private travelled = 0;
 
   constructor(scene: THREE.Scene, random = fallbackRandom('balloon')) {
     this.scene = scene;
@@ -168,29 +250,71 @@ export class Balloon {
     }
   }
 
-  update(delta: number, elapsed: number, night: number, cloudCover: number, wind: number): void {
+  /**
+   * @param windDirX x of the world's one downwind unit vector (`Weather.getWindVector`)
+   * @param windDirZ z of that same vector
+   * @param wind 0..1 strength — still only sets how fast the balloon crosses
+   */
+  update(
+    delta: number,
+    elapsed: number,
+    night: number,
+    cloudCover: number,
+    wind: number,
+    windDirX: number,
+    windDirZ: number
+  ): void {
     if (!this.flying) {
       this.cooldown -= delta;
       // The jet flies anytime; the balloon flies in fair weather, day & dusk.
       const weatherOk = this.cyber || (night < 0.8 && cloudCover < 0.4);
       if (this.cooldown <= 0 && weatherOk) {
         this.flying = true;
-        this.z = (this.random() - 0.5) * 90;
+        this.lateral = (this.random() - 0.5) * 90;
         this.bobPhase = this.random() * Math.PI * 2;
-        this.group.position.set(-EDGE, this.cyber ? CRUISE_Y - 6 : ENTRY_Y, this.z);
+        // The jet is under power and keeps its old west-to-east pass; handing the planner
+        // (1, 0) reproduces the previous entry and exit exactly rather than special-casing
+        // the geometry twice.
+        this.dirX = this.cyber ? 1 : windDirX;
+        this.dirZ = this.cyber ? 0 : windDirZ;
+        const crossing = planBalloonCrossing(this.dirX, this.dirZ, this.lateral, EDGE);
+        this.entryX = crossing.entryX;
+        this.entryZ = crossing.entryZ;
+        this.crossLength = crossing.length;
+        this.travelled = 0;
+        this.group.position.set(
+          this.entryX,
+          this.cyber ? CRUISE_Y - 6 : ENTRY_Y,
+          this.entryZ
+        );
         this.group.visible = true;
       }
       return;
     }
 
+    // The strength law is untouched, floor included. A balloon really does go at the speed
+    // of the air, but at the calmest weather here (fog, 0.07) that is a crawl, and a craft
+    // that needs ten minutes to cross is a craft nobody sees. The 3 m/s floor keeps the
+    // worst case — a diagonal crossing of 325 m in a dead calm — at about 108 seconds, and
+    // the wind now shows itself in the HEADING rather than only in the pace.
     const speed = this.cyber ? 19 : 3 + wind * 3.5;
-    this.group.position.x += speed * delta;
-    const progress = (this.group.position.x + EDGE) / (2 * EDGE);
+    this.travelled += speed * delta;
+    const progress = this.travelled / this.crossLength;
+    // Progress along the crossing, not `x`: the crossing is 230 m on an axis and up to
+    // 325 m on a diagonal, so `x` stopped being a measure of how far through it is.
+    this.group.position.x = this.entryX + this.dirX * this.travelled;
+    this.group.position.z = this.entryZ + this.dirZ * this.travelled;
+    // The cross-track wobble has to be ACROSS the track, or an oblique flight would wander
+    // along its own heading and the entry/exit line would stop meaning anything.
+    const acrossX = -this.dirZ;
+    const acrossZ = this.dirX;
 
     if (this.cyber) {
       // Fast, flat pass with a slight bank.
       this.group.position.y = CRUISE_Y - 6 + Math.sin(elapsed * 0.9 + this.bobPhase) * 1.2;
-      this.group.position.z = this.z + Math.sin(elapsed * 0.5 + this.bobPhase) * 8;
+      const sway = Math.sin(elapsed * 0.5 + this.bobPhase) * 8;
+      this.group.position.x += acrossX * sway;
+      this.group.position.z += acrossZ * sway;
       this.group.rotation.z = Math.sin(elapsed * 0.5 + this.bobPhase) * 0.12;
       this.engineMaterial.emissiveIntensity = 2 + Math.sin(elapsed * 26) * 0.7;
     } else {
@@ -198,8 +322,15 @@ export class Balloon {
       const lift = smoothstep(0, 0.22, progress) * (1 - smoothstep(0.78, 1, progress));
       this.group.position.y =
         ENTRY_Y + (CRUISE_Y - ENTRY_Y) * lift + Math.sin(elapsed * 0.35 + this.bobPhase) * 2;
-      this.group.position.z = this.z + Math.sin(elapsed * 0.2 + this.bobPhase) * 5;
-      this.group.rotation.y = elapsed * 0.06;
+      const sway = Math.sin(elapsed * 0.2 + this.bobPhase) * 5;
+      this.group.position.x += acrossX * sway;
+      this.group.position.z += acrossZ * sway;
+      // Face the way it travels. A yaw of θ sends local +x to (cos θ, 0, -sin θ), so the
+      // heading that points +x downwind is atan2(-dz, dx). The old `elapsed * 0.06` was a
+      // free spin — a real envelope does turn, so it is kept, but as a ±20° sway ABOUT the
+      // heading instead of a rotation that has the basket facing backwards half the time.
+      this.group.rotation.y =
+        Math.atan2(-this.dirZ, this.dirX) + Math.sin(elapsed * 0.06) * 0.35;
 
       // Burner: periodic roar — at dusk it beautifully lights the envelope.
       const burst = Math.sin(elapsed * 0.7 + this.bobPhase) > 0.45;
@@ -213,7 +344,7 @@ export class Balloon {
       this.arm.rotation.z = -2.4 + Math.sin(elapsed * 5) * 0.35;
     }
 
-    if (this.group.position.x > EDGE) {
+    if (progress >= 1) {
       this.flying = false;
       this.group.visible = false;
       this.cooldown = 50 + this.random() * 100;

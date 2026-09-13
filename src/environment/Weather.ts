@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import type { WindUniforms } from '../world/WorldGenerator';
 import type { QualityProfile } from '../performance/QualityManager';
 import { fallbackRandom, type RandomSource } from '../core/Random';
+import { windBearingAt, windSeedFrom, type WindSeed, type WindVector } from './wind';
+import type { Radians } from '../units';
 
 export type WeatherKind = 'clear' | 'cloudy' | 'rain' | 'snow' | 'fog';
 export type WeatherSetting = WeatherKind | 'auto';
@@ -120,6 +122,22 @@ export class Weather {
   private activeCloudCount = CLOUD_COUNT;
   private cloudUpdateAccumulator = 0;
 
+  /** This session's bearing offsets; drawn once, in the constructor. */
+  private readonly windSeed: WindSeed;
+  /**
+   * The published wind, reused rather than rebuilt.
+   *
+   * `getWindVector()` hands this same object out every frame, so the balloon reading it in
+   * the actor tick costs no allocation. Callers must treat it as a live view of the wind,
+   * not a snapshot: it is the one fact, and it keeps evolving underneath them.
+   */
+  private readonly windVector: WindVector = {
+    x: 1,
+    z: 0,
+    strength: TARGETS.clear.wind,
+    bearing: 0 as Radians,
+  };
+
   constructor(scene: THREE.Scene, windUniforms: WindUniforms, random = fallbackRandom('weather')) {
     this.scene = scene;
     this.windUniforms = windUniforms;
@@ -229,6 +247,29 @@ export class Weather {
       cursor += data.offsets.length;
     }
     scene.add(this.cloudMesh);
+
+    // Drawn LAST on purpose. Every draw above fixes a raindrop, a snowflake or a cloud
+    // puff, and the stream is positional: taking three numbers earlier would have shifted
+    // all of them and changed a world that several checkpoints are pinned to.
+    this.windSeed = windSeedFrom(random);
+    this.publishWind(0);
+  }
+
+  /**
+   * Recompute the one wind and push it everywhere that reads it.
+   *
+   * Both the TypeScript view and the shader uniform are written from the SAME two floats,
+   * in one place, so a plume and the tree beside it cannot disagree.
+   */
+  private publishWind(elapsed: number): void {
+    const bearing = windBearingAt(elapsed, this.values.wind, this.windSeed);
+    const x = Math.cos(bearing);
+    const z = Math.sin(bearing);
+    this.windVector.x = x;
+    this.windVector.z = z;
+    this.windVector.strength = this.values.wind;
+    this.windVector.bearing = bearing;
+    this.windUniforms.uWindDir.value.set(x, z);
   }
 
   setQuality(profile: QualityProfile): void {
@@ -276,9 +317,27 @@ export class Weather {
     return this.values.cloud;
   }
 
-  /** 0..1 current wind strength (smoothed, without gusts). */
+  /**
+   * 0..1 current wind strength (smoothed, without gusts).
+   *
+   * Kept exactly as it was: the rainbow frame, the birds and the HUD want a strength and
+   * nothing else, and direction arriving did not make them wrong.
+   */
   getWind(): number {
     return this.values.wind;
+  }
+
+  /**
+   * The world's one wind, direction included.
+   *
+   * The `(x, z)` pair points the way the wind BLOWS TOWARD — downwind — and is the same
+   * pair the foliage and the plume read out of `uWindDir`. See `src/environment/wind.ts`
+   * for why that sign and not the meteorological one.
+   *
+   * The returned object is REUSED between frames, so do not keep it expecting a snapshot.
+   */
+  getWindVector(): WindVector {
+    return this.windVector;
   }
 
   /** 0..1 current precipitation intensity after weather cross-fading. */
@@ -330,6 +389,10 @@ export class Weather {
     this.snowCover = kind === 'snow' ? 1 : 0;
     this.wetness = kind === 'rain' ? 1 : 0;
     if (kind === 'rain') this.airborneMoisture = 1;
+    // This setter exists so a checkpoint lands on a state without waiting for the crossfade.
+    // The wind vector is part of that state, so it jumps with the rest rather than staying
+    // one frame behind on a paused clock.
+    this.publishWind(this.elapsed);
   }
 
   /**
@@ -398,6 +461,9 @@ export class Weather {
     const wind = this.values.wind * Math.max(0.2, gust);
     this.windUniforms.uWind.value = wind;
     this.windUniforms.uTime.value = this.elapsed;
+    // Direction is published from the same tick as strength, so nothing downstream can read
+    // this frame's gust against last frame's bearing.
+    this.publishWind(this.elapsed);
 
     // ── Rain ──
     const rainAlpha = this.values.rain;

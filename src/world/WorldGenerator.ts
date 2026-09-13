@@ -45,6 +45,15 @@ const VOXEL_SIZE = 1;
 export interface WindUniforms {
   uTime: THREE.IUniform<number>;
   uWind: THREE.IUniform<number>;
+  /**
+   * The world's ONE wind direction, shared with every shader that leans on it.
+   *
+   * `(x, y)` are the WORLD `(x, z)` components of a unit vector pointing the way the wind
+   * BLOWS TOWARD -- downwind. Written by `Weather`, read by the foliage here and by the
+   * chimney plume; `Weather.getWindVector()` hands the same two floats to TypeScript
+   * callers. The convention is stated once, in `src/environment/wind.ts`.
+   */
+  uWindDir: THREE.IUniform<THREE.Vector2>;
 }
 
 export interface VoxelData {
@@ -1157,11 +1166,22 @@ function buildFoliageMesh(
   material.onBeforeCompile = (shader) => {
     shader.uniforms.uTime = windUniforms.uTime;
     shader.uniforms.uWind = windUniforms.uWind;
+    shader.uniforms.uWindDir = windUniforms.uWindDir;
     shader.vertexShader = shader.vertexShader
       .replace(
         '#include <common>',
-        '#include <common>\nuniform float uTime;\nuniform float uWind;'
+        '#include <common>\nuniform float uTime;\nuniform float uWind;\nuniform vec2 uWindDir;'
       )
+      // Two things about the wind block below, written here rather than inside the shader
+      // string because a comment in a template literal is shipped bytes, not stripped ones.
+      //
+      // 1.14127 is length(vec2(1.0, 0.55)), the hard-coded lean this replaced. That pair was
+      // NOT a unit vector, so swapping it for `uWindDir` without the factor would have
+      // quietly shrunk the canopy's motion by 12% -- a retune of tree movement the owner
+      // likes, disguised as a direction fix. Only the WAY changes; the amount does not.
+      //
+      // `windPhase` still comes from the instance's own origin, so the canopy ripples across
+      // the world instead of leaning as one slab. The direction is shared; the phase is not.
       .replace(
         '#include <begin_vertex>',
         /* glsl */ `
@@ -1171,9 +1191,9 @@ function buildFoliageMesh(
           float windPhase = iorigin.x * 0.43 + iorigin.z * 0.31;
           float windHeight = max(iorigin.y - 2.5, 0.0);
           float windGust = sin(uTime * 1.7 + windPhase) + 0.6 * sin(uTime * 2.9 + windPhase * 1.7);
-          float windAmp = uWind * 0.085 * windHeight;
-          transformed.x += windGust * windAmp;
-          transformed.z += windGust * windAmp * 0.55;
+          float windAmp = uWind * 0.085 * windHeight * 1.14127;
+          transformed.x += windGust * windAmp * uWindDir.x;
+          transformed.z += windGust * windAmp * uWindDir.y;
         #endif
         `
       );
