@@ -1,5 +1,8 @@
 import * as THREE from 'three';
 import { RAINBOW_MOISTURE_ZONES } from '../world/WorldLayout';
+// Type-only, and it has to stay that way: `src/units.ts` declares brands and defines nothing,
+// so this import is erased and the eager half of the split stays as cheap as it was.
+import type { Radians } from '../units';
 
 /**
  * The contract the frame loop holds, so that `RainbowAtmosphere` itself can be fetched late.
@@ -12,7 +15,7 @@ import { RAINBOW_MOISTURE_ZONES } from '../world/WorldLayout';
 export interface RainbowFrameInput {
   camera: THREE.PerspectiveCamera;
   sunDirection: THREE.Vector3;
-  sunElevation: number;
+  sunElevation: Radians;
   sunColor: THREE.Color;
   directSun: number;
   cloudCover: number;

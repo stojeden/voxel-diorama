@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { clockFromSolarPhase, sunDirectionAt } from '../environment/sky';
 import { ECLIPSE_VIEW_SOLAR_PHASE } from './AuthoredMoments';
+import type { Clock01, Radians } from '../units';
 
 /**
  * The one place the staged eclipse's authored moment becomes a clock and a camera.
@@ -24,7 +25,7 @@ const scratchSun = new THREE.Vector3();
  * Everything that means "the eclipse hour" -- the experience clock, the shader warm-up, the
  * camera below -- asks this, never {@link ECLIPSE_VIEW_SOLAR_PHASE} directly.
  */
-export function eclipseViewClock(declination: number): number {
+export function eclipseViewClock(declination: Radians): Clock01 {
   return clockFromSolarPhase(ECLIPSE_VIEW_SOLAR_PHASE, declination);
 }
 
@@ -35,7 +36,7 @@ export function eclipseViewClock(declination: number): number {
  * The sun is read at {@link eclipseViewClock}, which is the same hour the clock is locked to.
  */
 export function eclipseViewCameraPosition(
-  declination: number,
+  declination: Radians,
   out: THREE.Vector3 = new THREE.Vector3()
 ): THREE.Vector3 {
   const sun = sunDirectionAt(eclipseViewClock(declination), declination, scratchSun);

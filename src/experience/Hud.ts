@@ -1,5 +1,6 @@
 import type { UiHandle } from '../ui';
 import type { EclipseTimelineState } from './EclipseTimeline';
+import type { WallClock01 } from '../units';
 
 const ECLIPSE_PHASE_LABELS: Record<EclipseTimelineState['phase'], string> = {
   'partial-in': 'FAZA CZĘŚCIOWA · C1 → C2',
@@ -10,7 +11,8 @@ const ECLIPSE_PHASE_LABELS: Record<EclipseTimelineState['phase'], string> = {
   complete: 'C4 · KONIEC ZAĆMIENIA',
 };
 
-export function formatClock(t01: number): string {
+/** An hour, so it takes the **wall** clock: 0.75 here is 18:00 and never "sunset". */
+export function formatClock(t01: WallClock01): string {
   const hours = Math.floor(t01 * 24);
   const minutes = Math.floor((t01 * 24 * 60) % 60);
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;

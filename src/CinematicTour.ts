@@ -1,4 +1,5 @@
 import { ECLIPSE_VIEW_SOLAR_PHASE } from './experience/AuthoredMoments';
+import type { SolarPhase01 } from './units';
 
 export type TourChapterId =
   | 'train'
@@ -21,7 +22,7 @@ export interface TourChapter {
    * clock reading: "GOLDEN HOUR" is a claim about the light, and the hour that satisfies it
    * moves with the season. `ExperienceDirector.setPhaseToClock` resolves it.
    */
-  readonly dayProgress: number;
+  readonly dayProgress: SolarPhase01;
   readonly weather: 'clear';
   readonly theme: 'classic' | 'cyberpunk';
   readonly eclipseProgress: number | null;
@@ -37,13 +38,13 @@ export interface TourFrame {
 }
 
 export const TOUR_CHAPTERS: readonly TourChapter[] = [
-  { id: 'train', label: 'POCIĄG', duration: 5, cameraRig: 'train', dayProgress: 0.42, weather: 'clear', theme: 'classic', eclipseProgress: null, trainProgress: 0.68 },
-  { id: 'bus', label: 'AUTOBUS', duration: 4.5, cameraRig: 'bus', dayProgress: 0.46, weather: 'clear', theme: 'classic', eclipseProgress: null, busProgress: 0.25 },
-  { id: 'lake', label: 'JEZIORO', duration: 5, cameraRig: 'lake', dayProgress: 0.52, weather: 'clear', theme: 'classic', eclipseProgress: null },
-  { id: 'residents', label: 'MIESZKAŃCY', duration: 5, cameraRig: 'residents', dayProgress: 0.48, weather: 'clear', theme: 'classic', eclipseProgress: null },
-  { id: 'golden-hour', label: 'GOLDEN HOUR', duration: 5, cameraRig: 'golden-hour', dayProgress: 0.28, weather: 'clear', theme: 'classic', eclipseProgress: null },
+  { id: 'train', label: 'POCIĄG', duration: 5, cameraRig: 'train', dayProgress: 0.42 as SolarPhase01, weather: 'clear', theme: 'classic', eclipseProgress: null, trainProgress: 0.68 },
+  { id: 'bus', label: 'AUTOBUS', duration: 4.5, cameraRig: 'bus', dayProgress: 0.46 as SolarPhase01, weather: 'clear', theme: 'classic', eclipseProgress: null, busProgress: 0.25 },
+  { id: 'lake', label: 'JEZIORO', duration: 5, cameraRig: 'lake', dayProgress: 0.52 as SolarPhase01, weather: 'clear', theme: 'classic', eclipseProgress: null },
+  { id: 'residents', label: 'MIESZKAŃCY', duration: 5, cameraRig: 'residents', dayProgress: 0.48 as SolarPhase01, weather: 'clear', theme: 'classic', eclipseProgress: null },
+  { id: 'golden-hour', label: 'GOLDEN HOUR', duration: 5, cameraRig: 'golden-hour', dayProgress: 0.28 as SolarPhase01, weather: 'clear', theme: 'classic', eclipseProgress: null },
   { id: 'totality', label: 'TOTALNOŚĆ', duration: 6, cameraRig: 'totality', dayProgress: ECLIPSE_VIEW_SOLAR_PHASE, weather: 'clear', theme: 'classic', eclipseProgress: 0.5 },
-  { id: 'cyberpunk', label: 'CYBERPUNK', duration: 7, cameraRig: 'cyberpunk', dayProgress: 0.86, weather: 'clear', theme: 'cyberpunk', eclipseProgress: null },
+  { id: 'cyberpunk', label: 'CYBERPUNK', duration: 7, cameraRig: 'cyberpunk', dayProgress: 0.86 as SolarPhase01, weather: 'clear', theme: 'cyberpunk', eclipseProgress: null },
 ] as const;
 
 /** Pure, allocation-free chapter sequencer. Camera and scene side effects live elsewhere. */

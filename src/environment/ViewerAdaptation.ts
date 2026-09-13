@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { clamp01, JUNE_DECLINATION_DEG, sunElevationAt } from './sky';
+import type { Clock01, Degrees, Radians } from '../units';
 
 /**
  * The viewer's eye, as a multiplier on the authored exposure curve in `sky.ts`.
@@ -92,10 +93,10 @@ const MAX_ADAPTATION_GAIN = 4;
 
 /** June noon, the elevation the adaptation gain is normalised against. */
 const NOON_ELEVATION_DEG = THREE.MathUtils.radToDeg(
-  sunElevationAt(0.5, THREE.MathUtils.degToRad(JUNE_DECLINATION_DEG))
-);
+  sunElevationAt(0.5 as Clock01, THREE.MathUtils.degToRad(JUNE_DECLINATION_DEG) as Radians)
+) as Degrees;
 
-function illuminanceLux(elevationDeg: number): number {
+function illuminanceLux(elevationDeg: Degrees): number {
   const last = ILLUMINANCE_LUX.length - 1;
   if (elevationDeg >= ILLUMINANCE_LUX[0][0]) return ILLUMINANCE_LUX[0][1];
   for (let i = 0; i < last; i++) {
@@ -127,7 +128,7 @@ function illuminanceLux(elevationDeg: number): number {
  * per cent of the adapting luminance and 0.02 per cent of the gain, which is why it is
  * mentioned here and not modelled.)
  */
-export function adaptingLuminance(elevationDeg: number, night: number, snowCover = 0): number {
+export function adaptingLuminance(elevationDeg: Degrees, night: number, snowCover = 0): number {
   const albedo = BARE_ALBEDO + (SNOW_ALBEDO - BARE_ALBEDO) * clamp01(snowCover);
   return ((illuminanceLux(elevationDeg) + CITY_LUX * clamp01(night)) * albedo) / Math.PI;
 }

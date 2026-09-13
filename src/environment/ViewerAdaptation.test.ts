@@ -9,15 +9,22 @@ import {
   sunElevationAt,
 } from './sky';
 import { adaptingLuminance, NOON_ADAPTING_LUMINANCE, viewerAdaptation } from './ViewerAdaptation';
+import type { Degrees, Radians } from '../units';
+import { clock01, degrees, radians } from '../units.testing';
 
-const JUNE = THREE.MathUtils.degToRad(JUNE_DECLINATION_DEG);
-const AUTUMN = THREE.MathUtils.degToRad(AUTUMN_DECLINATION_DEG);
-const deg = (radians: number) => THREE.MathUtils.radToDeg(radians);
+const JUNE = THREE.MathUtils.degToRad(JUNE_DECLINATION_DEG) as Radians;
+const AUTUMN = THREE.MathUtils.degToRad(AUTUMN_DECLINATION_DEG) as Radians;
+const deg = (radians: Radians) => THREE.MathUtils.radToDeg(radians) as Degrees;
 
 /** The gain the frame loop actually applies at a clock time, theme-neutral. */
-function gainAt(t: number, declination: number, snowCover = 0): number {
+function gainAt(t: number, declination: Radians, snowCover = 0): number {
+  const clock = clock01(t);
   return viewerAdaptation(
-    adaptingLuminance(deg(sunElevationAt(t, declination)), nightFactorAt(t, declination), snowCover)
+    adaptingLuminance(
+      deg(sunElevationAt(clock, declination)),
+      nightFactorAt(clock, declination),
+      snowCover
+    )
   );
 }
 
@@ -37,12 +44,12 @@ describe('adapting luminance', () => {
    * below instead, which is why those exist.
    */
   test('reproduces the published twilight illuminances', () => {
-    const lux = (elevationDeg: number) => (adaptingLuminance(elevationDeg, 0, 0) * Math.PI) / 0.18;
-    expect(lux(0)).toBeCloseTo(400, 0);
-    expect(lux(-6)).toBeCloseTo(3.4, 3);
-    expect(lux(-12)).toBeCloseTo(0.008, 6);
-    expect(lux(-18)).toBeCloseTo(0.0006, 7);
-    expect(lux(90)).toBeCloseTo(110_000, -2);
+    const lux = (elevationDeg: Degrees) => (adaptingLuminance(elevationDeg, 0, 0) * Math.PI) / 0.18;
+    expect(lux(degrees(0))).toBeCloseTo(400, 0);
+    expect(lux(degrees(-6))).toBeCloseTo(3.4, 3);
+    expect(lux(degrees(-12))).toBeCloseTo(0.008, 6);
+    expect(lux(degrees(-18))).toBeCloseTo(0.0006, 7);
+    expect(lux(degrees(90))).toBeCloseTo(110_000, -2);
   });
 
   /**
@@ -68,13 +75,15 @@ describe('adapting luminance', () => {
    * disagreement from 1.16e-6 to **29.0** and fails.
    */
   test('is continuous across the horizon, and steps nowhere else either', () => {
-    const at = adaptingLuminance(0, 0, 0);
-    expect(Math.abs(adaptingLuminance(1e-6, 0, 0) - adaptingLuminance(-1e-6, 0, 0)) / at).toBeLessThan(1e-5);
+    const at = adaptingLuminance(degrees(0), 0, 0);
+    const across =
+      adaptingLuminance(degrees(1e-6), 0, 0) - adaptingLuminance(degrees(-1e-6), 0, 0);
+    expect(Math.abs(across) / at).toBeLessThan(1e-5);
 
     let worstStep = 0;
     for (let e = -20; e < 20; e += 0.01) {
-      const before = viewerAdaptation(adaptingLuminance(e, 1, 0));
-      const after = viewerAdaptation(adaptingLuminance(e + 0.01, 1, 0));
+      const before = viewerAdaptation(adaptingLuminance(degrees(e), 1, 0));
+      const after = viewerAdaptation(adaptingLuminance(degrees(e + 0.01), 1, 0));
       worstStep = Math.max(worstStep, Math.abs(after - before));
     }
     expect(worstStep).toBeCloseTo(0.0028, 3);
@@ -84,7 +93,7 @@ describe('adapting luminance', () => {
   test('falls monotonically as the sun sets, with the city lamps off', () => {
     let previous = Infinity;
     for (let e = 90; e >= -20; e -= 0.25) {
-      const l = adaptingLuminance(e, 0, 0);
+      const l = adaptingLuminance(degrees(e), 0, 0);
       expect(l).toBeLessThanOrEqual(previous + 1e-9);
       previous = l;
     }
@@ -99,10 +108,10 @@ describe('adapting luminance', () => {
    * the small hours come out brighter than noon.
    */
   test('is floored by the city, not by the sky, once the sun is well down', () => {
-    const midnight = adaptingLuminance(-14.33, 1, 0);
+    const midnight = adaptingLuminance(degrees(-14.33), 1, 0);
     expect(midnight).toBeCloseTo(0.86, 2);
     // Two degrees deeper changes nothing: the sky has stopped contributing.
-    expect(adaptingLuminance(-16.33, 1, 0) / midnight).toBeGreaterThan(0.999);
+    expect(adaptingLuminance(degrees(-16.33), 1, 0) / midnight).toBeGreaterThan(0.999);
   });
 
   /**
@@ -114,8 +123,8 @@ describe('adapting luminance', () => {
    * instrument. The term is load-bearing on the one frame it was written for.
    */
   test('reads a snow-covered city as brighter than a bare one', () => {
-    const bare = adaptingLuminance(-14.33, 1, 0);
-    const snow = adaptingLuminance(-14.33, 1, 1);
+    const bare = adaptingLuminance(degrees(-14.33), 1, 0);
+    const snow = adaptingLuminance(degrees(-14.33), 1, 1);
     expect(snow / bare).toBeCloseTo(0.6 / 0.18, 5);
     expect(viewerAdaptation(snow)).toBeLessThan(viewerAdaptation(bare));
   });
@@ -237,8 +246,8 @@ describe('viewer adaptation', () => {
    */
   test('does not let a two-minute totality move the viewer', () => {
     const elevation = 8.82;
-    const ordinary = adaptingLuminance(elevation, nightFactorAt(0.75, JUNE), 0);
-    const eclipsed = adaptingLuminance(elevation, 0.64, 0);
+    const ordinary = adaptingLuminance(degrees(elevation), nightFactorAt(clock01(0.75), JUNE), 0);
+    const eclipsed = adaptingLuminance(degrees(elevation), 0.64, 0);
     expect(Math.abs(eclipsed - ordinary) / ordinary).toBeLessThan(0.002);
     expect(Math.abs(viewerAdaptation(eclipsed) / viewerAdaptation(ordinary) - 1)).toBeLessThan(
       0.0005
@@ -257,8 +266,8 @@ describe('viewer adaptation', () => {
    */
   test('gives a theme with a night floor less adaptation, and keeps its exposure ratio', () => {
     const t = 0.83;
-    const elevation = deg(sunElevationAt(t, JUNE));
-    const classicNight = nightFactorAt(t, JUNE);
+    const elevation = deg(sunElevationAt(clock01(t), JUNE));
+    const classicNight = nightFactorAt(clock01(t), JUNE);
     const neonNight = Math.max(classicNight, 0.62);
     const classicGain = viewerAdaptation(adaptingLuminance(elevation, classicNight, 0));
     const neonGain = viewerAdaptation(adaptingLuminance(elevation, neonNight, 0));
@@ -280,8 +289,8 @@ describe('viewer adaptation', () => {
    * spread at most 1.03 levels.
    */
   test('compresses twelve and a half stops of world into under two of exposure', () => {
-    const noon = adaptingLuminance(deg(sunElevationAt(0.5, JUNE)), 0, 0);
-    const midnight = adaptingLuminance(deg(sunElevationAt(0, JUNE)), 1, 0);
+    const noon = adaptingLuminance(deg(sunElevationAt(clock01(0.5), JUNE)), 0, 0);
+    const midnight = adaptingLuminance(deg(sunElevationAt(clock01(0), JUNE)), 1, 0);
     expect(Math.log2(noon / midnight)).toBeCloseTo(12.53, 1);
     expect(Math.log2(viewerAdaptation(midnight) / viewerAdaptation(noon))).toBeCloseTo(1.88, 1);
     expect(clamp01(1)).toBe(1);

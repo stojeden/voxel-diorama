@@ -6,6 +6,8 @@
  */
 
 export type RainbowOrder = 1 | 2;
+import type { Radians } from '../units';
+
 export type LinearRgb = readonly [red: number, green: number, blue: number];
 
 export interface RefractiveIndexSample {
@@ -16,27 +18,27 @@ export interface RefractiveIndexSample {
 export interface RainbowCaustic {
   readonly order: RainbowOrder;
   /** Angle between the incident ray and the drop-surface normal. */
-  readonly incidenceAngleRad: number;
+  readonly incidenceAngleRad: Radians;
   /** Angle inside the water drop, measured from the surface normal. */
-  readonly refractionAngleRad: number;
+  readonly refractionAngleRad: Radians;
   /** Total ray deviation before folding around the antisolar direction. */
-  readonly deviationAngleRad: number;
+  readonly deviationAngleRad: Radians;
   /** Observable angular radius around the antisolar direction. */
-  readonly angularRadiusRad: number;
+  readonly angularRadiusRad: Radians;
 }
 
 export interface RainbowRay {
   readonly order: RainbowOrder;
-  readonly incidenceAngleRad: number;
-  readonly refractionAngleRad: number;
-  readonly angularRadiusRad: number;
+  readonly incidenceAngleRad: Radians;
+  readonly refractionAngleRad: Radians;
+  readonly angularRadiusRad: Radians;
   readonly throughput: number;
 }
 
 export interface RainbowSpectralSample {
   readonly wavelengthNm: number;
-  readonly primaryAngleRad: number;
-  readonly secondaryAngleRad: number;
+  readonly primaryAngleRad: Radians;
+  readonly secondaryAngleRad: Radians;
   /** Display chromaticity for diagnostics; normalized, not an energy weight. */
   readonly linearRgb: LinearRgb;
   /** D65-weighted CIE response in linear sRGB, retaining relative luminance. */
@@ -134,14 +136,14 @@ export function rainbowCaustic(
   const sineRefractionSquared =
     sineIncidenceSquared / (refractiveIndex * refractiveIndex);
 
-  const incidenceAngleRad = Math.asin(Math.sqrt(clamp(sineIncidenceSquared, 0, 1)));
-  const refractionAngleRad = Math.asin(Math.sqrt(clamp(sineRefractionSquared, 0, 1)));
-  const deviationAngleRad =
-    order * Math.PI +
+  const incidenceAngleRad = Math.asin(Math.sqrt(clamp(sineIncidenceSquared, 0, 1))) as Radians;
+  const refractionAngleRad = Math.asin(Math.sqrt(clamp(sineRefractionSquared, 0, 1))) as Radians;
+  const deviationAngleRad = (order * Math.PI +
     2 * incidenceAngleRad -
-    2 * raySegments * refractionAngleRad;
-  const angularRadiusRad =
-    order === 1 ? Math.PI - deviationAngleRad : deviationAngleRad - Math.PI;
+    2 * raySegments * refractionAngleRad) as Radians;
+  const angularRadiusRad = (order === 1
+    ? Math.PI - deviationAngleRad
+    : deviationAngleRad - Math.PI) as Radians;
 
   if (
     !Number.isFinite(incidenceAngleRad) ||
@@ -183,9 +185,9 @@ export function rainbowCausticAt(
  * The two endpoints are at `antisolarAzimuth ± returnedValue`.
  */
 export function horizonIntersectionDeltaAzimuth(
-  angularRadiusRad: number,
-  sunElevationRad: number
-): number | null {
+  angularRadiusRad: Radians,
+  sunElevationRad: Radians
+): Radians | null {
   if (
     !Number.isFinite(angularRadiusRad) ||
     !Number.isFinite(sunElevationRad) ||
@@ -204,7 +206,7 @@ export function horizonIntersectionDeltaAzimuth(
   if (cosineDelta < -1 - Number.EPSILON || cosineDelta > 1 + Number.EPSILON) {
     return null;
   }
-  return Math.acos(clamp(cosineDelta, -1, 1));
+  return Math.acos(clamp(cosineDelta, -1, 1)) as Radians;
 }
 
 /**
@@ -297,16 +299,14 @@ export function rainbowRayAtImpact(
     return null;
   }
   const refractiveIndex = waterRefractiveIndexAt(wavelengthNm);
-  const incidenceAngleRad = Math.asin(impactParameter);
-  const refractionAngleRad = Math.asin(impactParameter / refractiveIndex);
-  const deviationAngleRad =
-    order * Math.PI +
+  const incidenceAngleRad = Math.asin(impactParameter) as Radians;
+  const refractionAngleRad = Math.asin(impactParameter / refractiveIndex) as Radians;
+  const deviationAngleRad = (order * Math.PI +
     2 * incidenceAngleRad -
-    2 * (order + 1) * refractionAngleRad;
-  const angularRadiusRad =
-    order === 1
-      ? Math.PI - deviationAngleRad
-      : deviationAngleRad - Math.PI;
+    2 * (order + 1) * refractionAngleRad) as Radians;
+  const angularRadiusRad = (order === 1
+    ? Math.PI - deviationAngleRad
+    : deviationAngleRad - Math.PI) as Radians;
   if (
     !Number.isFinite(angularRadiusRad) ||
     angularRadiusRad <= 0 ||
@@ -362,4 +362,4 @@ export const SECONDARY_RAINBOW_MAX_ANGLE_RAD =
   RAINBOW_SPECTRAL_SAMPLES[0].secondaryAngleRad;
 // The non-caustic secondary branch crosses every angle up to 90°. The grazing
 // ray is not its angular supremum, so a horizon gate must use the hemisphere.
-export const SECONDARY_RAINBOW_SUPPORT_MAX_ANGLE_RAD = HALF_PI;
+export const SECONDARY_RAINBOW_SUPPORT_MAX_ANGLE_RAD = HALF_PI as Radians;

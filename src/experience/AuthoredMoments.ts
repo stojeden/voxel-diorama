@@ -1,3 +1,5 @@
+import type { SolarPhase01 } from '../units';
+
 /**
  * Moments this product authors against the sun rather than against a wall clock.
  *
@@ -27,7 +29,7 @@
  * sun already 20.9 degrees up in June and 15.8 degrees *below* the horizon in December:
  * mid-morning glare in one season and night in the other, from one authored number.
  */
-export const OPENING_SOLAR_PHASE = 0.262;
+export const OPENING_SOLAR_PHASE = 0.262 as SolarPhase01;
 
 /**
  * The staged eclipse's moment: a low, late-afternoon sun for the corona to stand clear of.
@@ -42,4 +44,4 @@ export const OPENING_SOLAR_PHASE = 0.262;
  * the 'totality' and 'eclipse-totality-overview' checkpoints. It is one authored moment, so
  * it is one constant, and every reader of it resolves it the same way.
  */
-export const ECLIPSE_VIEW_SOLAR_PHASE = 0.715;
+export const ECLIPSE_VIEW_SOLAR_PHASE = 0.715 as SolarPhase01;

@@ -1,3 +1,5 @@
+import type { WallClock01 } from '../../units';
+
 /**
  * When the neighbourhood grocery has its lights on.
  *
@@ -21,7 +23,7 @@ export const GROCERY_GLOW_NIGHT = 0.95;
 export const GROCERY_GLOW_DAY = 0.16;
 
 /** Is the grocery open at this hour of the day? */
-export function isGroceryOpen(clockT: number): boolean {
+export function isGroceryOpen(clockT: WallClock01): boolean {
   const hour = (((clockT % 1) + 1) % 1) * 24;
   return hour >= GROCERY_OPEN_HOUR - 1e-9 && hour < GROCERY_CLOSE_HOUR - 1e-9;
 }
@@ -34,7 +36,7 @@ export function isGroceryOpen(clockT: number): boolean {
  * a red-and-white barrier planted in front of the door; a dark shop says it without
  * putting a road sign on the pavement.
  */
-export function groceryGlow(clockT: number, night: number, robbed = false): number {
+export function groceryGlow(clockT: WallClock01, night: number, robbed = false): number {
   if (robbed || !isGroceryOpen(clockT)) return 0;
   return GROCERY_GLOW_DAY + (GROCERY_GLOW_NIGHT - GROCERY_GLOW_DAY) * Math.min(1, Math.max(0, night));
 }

@@ -1,6 +1,7 @@
 import SunCalc from 'suncalc';
 import { declinationForDayOfYear } from './sky';
 import type { WeatherKind } from './Weather';
+import type { Clock01, Radians, WallClock01 } from '../units';
 
 /**
  * REAL TIME mode — synchronises the diorama with the viewer's world:
@@ -99,8 +100,12 @@ export class RealTimeSync {
    * The season that goes with this clock is {@link getDeclination}; a caller that takes one
    * without the other gets today's hours under some other month's sun.
    */
-  getCycleT(now: Date = new Date()): number {
-    return this.getDayFraction(now);
+  getCycleT(now: Date = new Date()): Clock01 {
+    // The one deliberate crossing between the two clock axes, and the whole reason the warp
+    // was removed: with a seasonal sun the viewer's own hour IS the lighting clock, so this
+    // re-labels rather than converts. It is an explicit cast so that the day the warp comes
+    // back, the compiler asks for a conversion here rather than accepting the relabel.
+    return this.getDayFraction(now) as number as Clock01;
   }
 
   /**
@@ -110,7 +115,7 @@ export class RealTimeSync {
    * above them in October gets October's sun even under a theme whose own season is June.
    * The theme still supplies its palette, its haze and its grade.
    */
-  getDeclination(now: Date = new Date()): number {
+  getDeclination(now: Date = new Date()): Radians {
     const start = new Date(now.getFullYear(), 0, 0);
     const dayOfYear = Math.floor((now.getTime() - start.getTime()) / 86_400_000);
     return declinationForDayOfYear(dayOfYear);
@@ -125,8 +130,9 @@ export class RealTimeSync {
    * December to nine in June. Anything that means an *hour* -- a shop opening, a shop
    * closing -- has to read this instead, and it is the same hour the HUD prints.
    */
-  getDayFraction(now: Date = new Date()): number {
-    return (now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds()) / 86_400;
+  getDayFraction(now: Date = new Date()): WallClock01 {
+    return ((now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds()) /
+      86_400) as WallClock01;
   }
 
   getMoon(now: Date = new Date()): { phase: number; fraction: number } {

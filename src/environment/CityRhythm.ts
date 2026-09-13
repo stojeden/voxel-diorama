@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type { Clock01 } from '../units';
 
 export const MINUTES_PER_DAY = 24 * 60;
 export const WINDOW_COHORT_COUNT = 5;
@@ -21,11 +22,11 @@ const WINDOW_DAYLIGHT_OFF_MINUTES = [390, 400, 410, 420, 430] as const;
 const WINDOW_EVENING_ON_MINUTES = [1080, 1095, 1110, 1125, 1140] as const;
 const WINDOW_FADE_MINUTES = 8;
 
-export function minuteOfDay(t01: number): number {
+export function minuteOfDay(t01: Clock01): number {
   return (((t01 % 1) + 1) % 1) * MINUTES_PER_DAY;
 }
 
-export function busServiceWindowAt(t01: number): BusServiceWindow {
+export function busServiceWindowAt(t01: Clock01): BusServiceWindow {
   const minute = minuteOfDay(t01);
   const epsilon = 1e-6;
   if (minute + epsilon >= BUS_FINAL_LOOP_MINUTE) return 'final-loop';
@@ -53,7 +54,7 @@ function fadeDown(minute: number, eventMinute: number): number {
  * deliberately describes household behaviour, not daylight; DayNightCycle
  * multiplies it by the current night strength.
  */
-export function residentialWindowActivityAt(t01: number, cohort: number): number {
+export function residentialWindowActivityAt(t01: Clock01, cohort: number): number {
   const index = THREE.MathUtils.clamp(Math.floor(cohort), 0, WINDOW_COHORT_COUNT - 1);
   const minute = minuteOfDay(t01);
 
@@ -81,7 +82,7 @@ export function residentialWindowActivityAt(t01: number, cohort: number): number
   return 0;
 }
 
-export function residentialWindowAverageAt(t01: number): number {
+export function residentialWindowAverageAt(t01: Clock01): number {
   let sum = 0;
   for (let cohort = 0; cohort < WINDOW_COHORT_COUNT; cohort++) {
     sum += residentialWindowActivityAt(t01, cohort);

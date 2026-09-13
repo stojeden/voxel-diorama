@@ -1,6 +1,7 @@
 import type { FrameTimingReading } from './frameTiming';
 import type { QualityMode, QualitySnapshot } from '../performance/QualityManager';
 import type { CheckpointId } from '../experience/Checkpoints';
+import type { Clock01 } from '../units';
 
 export interface DioramaMetrics {
   ready: boolean;
@@ -31,7 +32,11 @@ export interface DioramaMetrics {
 
 export interface DioramaDebugHandle {
   ready: boolean;
-  setTime: (t01: number) => void;
+  /**
+   * Set the **clock**, not a solar phase. A harness that means "golden hour" has to resolve
+   * it against the season first, the way {@link CHECKPOINTS} entries do.
+   */
+  setTime: (t01: Clock01) => void;
   getState: () => Record<string, unknown>;
   getMetrics: () => DioramaMetrics;
   setQuality: (mode: QualityMode) => void;

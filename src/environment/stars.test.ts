@@ -7,6 +7,8 @@ import {
   nightFactorAt,
   sunElevationAt,
 } from './sky';
+import type { Degrees, Radians } from '../units';
+import { clock01, degrees, radians } from '../units.testing';
 
 /**
  * The star field had nothing watching it, and it was wrong for as long as that was true.
@@ -30,36 +32,36 @@ import {
  * and not the thing itself.
  */
 
-const JUNE = THREE.MathUtils.degToRad(JUNE_DECLINATION_DEG);
-const AUTUMN = THREE.MathUtils.degToRad(AUTUMN_DECLINATION_DEG);
+const JUNE = THREE.MathUtils.degToRad(JUNE_DECLINATION_DEG) as Radians;
+const AUTUMN = THREE.MathUtils.degToRad(AUTUMN_DECLINATION_DEG) as Radians;
 /** `DayNightCycle.update` sets `starField.visible = starAlpha > 0.02`. */
 const VISIBLE_ALPHA = 0.02;
 /** One sample per 4.32 simulated seconds: enough that the first-star elevation converges. */
 const SAMPLES = 20000;
 
 /** A clear night with no eclipse: the two terms the sky itself does not supply are zero. */
-const alphaAt = (clock: number, declination: number) =>
-  starAlphaAt(nightFactorAt(clock, declination), 0, 0, 0);
+const alphaAt = (clock: number, declination: Radians) =>
+  starAlphaAt(nightFactorAt(clock01(clock), declination), 0, 0, 0);
 
 /** The highest the sun stands at any instant of the day that already shows a star. */
-const firstStarElevationDeg = (declination: number) => {
+const firstStarElevationDeg = (declination: Radians) => {
   let highest = -90;
   for (let i = 0; i < SAMPLES; i++) {
     const clock = i / SAMPLES;
     if (alphaAt(clock, declination) > 0) {
-      highest = Math.max(highest, THREE.MathUtils.radToDeg(sunElevationAt(clock, declination)));
+      highest = Math.max(highest, THREE.MathUtils.radToDeg(sunElevationAt(clock01(clock), declination)));
     }
   }
   return highest;
 };
 
-const peakAlpha = (declination: number) => {
+const peakAlpha = (declination: Radians) => {
   let peak = 0;
   for (let i = 0; i < SAMPLES; i++) peak = Math.max(peak, alphaAt(i / SAMPLES, declination));
   return peak;
 };
 
-const hoursVisible = (declination: number) => {
+const hoursVisible = (declination: Radians) => {
   let lit = 0;
   for (let i = 0; i < SAMPLES; i++) {
     if (alphaAt(i / SAMPLES, declination) > VISIBLE_ALPHA) lit++;

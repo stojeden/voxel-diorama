@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { QualityProfile } from '../performance/QualityManager';
+import type { Clock01, Radians } from '../units';
 import { fallbackRandom, type RandomSource } from '../core/Random';
 import { EclipseVisual, type EclipseRenderState } from './EclipseVisual';
 import { Sky } from 'three/addons/objects/Sky.js';
@@ -43,7 +44,7 @@ import { eclipseCoverageAtSeparation, type EclipseTimeline } from '../experience
 export interface DayLightState {
   night: number;
   golden: number;
-  sunElevation: number;
+  sunElevation: Radians;
   /** 0..1 direct solar transmission after cloud/theme/eclipse attenuation. */
   directSun: number;
   /** 0..1 — current solar-eclipse strength (0 = no eclipse). */
@@ -182,10 +183,10 @@ const PREETHAM_CUTOFF_RAD = 1.6110731556870734 - Math.PI / 2;
 const PREETHAM_STEEPNESS = 1.5;
 
 /** `vSunE / EE`: Three.js's own `sunIntensity`, as a fraction of its value at the horizon. */
-function preethamSunFraction(elevationRad: number): number {
+function preethamSunFraction(elevationRad: Radians): number {
   return Math.max(0, 1 - Math.exp(-(elevationRad + PREETHAM_CUTOFF_RAD) / PREETHAM_STEEPNESS));
 }
-const PREETHAM_HORIZON_FRACTION = preethamSunFraction(0);
+const PREETHAM_HORIZON_FRACTION = preethamSunFraction(0 as Radians);
 
 /**
  * How much of the dome the twilight model is responsible for: exactly what Preetham lost.
@@ -196,7 +197,7 @@ const PREETHAM_HORIZON_FRACTION = preethamSunFraction(0);
  * `vSunE` reaches zero. Above the horizon it is clamped to zero, so daylight is untouched --
  * bit for bit, since the whole term is multiplied by this.
  */
-export function preethamHandoff(elevationRad: number): number {
+export function preethamHandoff(elevationRad: Radians): number {
   return clamp01(1 - preethamSunFraction(elevationRad) / PREETHAM_HORIZON_FRACTION);
 }
 
@@ -320,7 +321,7 @@ export function withTwilightDome(fragmentShader: string): string {
   ) {
     throw new Error('twilight dome: Sky shader changed, or the ceiling came first');
   }
-  const limb = beamTransmittanceColor(0);
+  const limb = beamTransmittanceColor(0 as Radians);
   const peak = Math.max(...limb);
   return fragmentShader
     .replace(SKY_UNIFORM_MARKER, `${SKY_UNIFORM_MARKER}\nuniform vec3 twilight,twilightHue;`)
@@ -838,7 +839,7 @@ export function umbraTraverse(separation: number): number {
  * {@link UMBRA_SEMI_WIDTH_KM} across the sun's bearing and this along it. The whole azimuthal
  * asymmetry of the ring is this one ratio.
  */
-export function umbraSemiMajorKm(sunElevationRad: number): number {
+export function umbraSemiMajorKm(sunElevationRad: Radians): number {
   return UMBRA_SEMI_WIDTH_KM / Math.max(Math.sin(sunElevationRad), UMBRA_MIN_SIN_ELEVATION);
 }
 
@@ -1486,11 +1487,11 @@ export class DayNightCycle {
   }
 
   update(
-    t: number,
+    t: Clock01,
     dtReal: number,
     cloudCover: number,
     /** Solar declination: the season, in radians. Sets noon altitude and day length together. */
-    declination: number,
+    declination: Radians,
     /**
      * Required, and deliberately not optional.
      *

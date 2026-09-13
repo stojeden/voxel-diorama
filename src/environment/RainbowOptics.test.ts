@@ -10,9 +10,11 @@ import {
   waterRefractiveIndexAt,
   wavelengthToLinearSrgb,
 } from './RainbowOptics';
+import type { Radians } from '../units';
+import { radians } from '../units.testing';
 
-const toDegrees = (radians: number) => (radians * 180) / Math.PI;
-const toRadians = (degrees: number) => (degrees * Math.PI) / 180;
+const toDegrees = (value: Radians) => (value * 180) / Math.PI;
+const toRadians = (value: number) => ((value * Math.PI) / 180) as Radians;
 
 describe('water dispersion', () => {
   test('uses exact table values and linear interpolation', () => {
@@ -147,6 +149,6 @@ describe('horizon intersections', () => {
     expect(horizonIntersectionDeltaAzimuth(alpha, alpha)).toBeCloseTo(0, 12);
     expect(horizonIntersectionDeltaAzimuth(alpha, toRadians(43))).toBeNull();
     expect(horizonIntersectionDeltaAzimuth(alpha, toRadians(-1))).toBeNull();
-    expect(horizonIntersectionDeltaAzimuth(Number.NaN, toRadians(10))).toBeNull();
+    expect(horizonIntersectionDeltaAzimuth(radians(Number.NaN), toRadians(10))).toBeNull();
   });
 });

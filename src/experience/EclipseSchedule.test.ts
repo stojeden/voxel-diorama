@@ -9,6 +9,7 @@ import {
   FIRST_ECLIPSE_DAY_MIN,
   EclipseSchedule,
 } from './EclipseSchedule';
+import { clock01 } from '../units.testing';
 
 function sequence(...values: number[]): (index: number) => number {
   return (index) => values[Math.min(index, values.length - 1)] ?? 0;
@@ -22,7 +23,7 @@ describe('EclipseSchedule', () => {
       scheduledToday: false,
       triggerT01: null,
     });
-    expect(schedule.consumeIfDue(0, 1)).toBe(false);
+    expect(schedule.consumeIfDue(clock01(0), clock01(1))).toBe(false);
   });
 
   it('samples a daylight slot when the selected day begins', () => {
@@ -40,9 +41,9 @@ describe('EclipseSchedule', () => {
     const schedule = new EclipseSchedule(sequence(0, 0.5, 0));
     schedule.beginNextDay();
     const trigger = schedule.getState().triggerT01!;
-    expect(schedule.consumeIfDue(trigger - 0.01, trigger - 0.001)).toBe(false);
-    expect(schedule.consumeIfDue(trigger - 0.001, trigger)).toBe(true);
-    expect(schedule.consumeIfDue(trigger, trigger + 0.01)).toBe(false);
+    expect(schedule.consumeIfDue(clock01(trigger - 0.01), clock01(trigger - 0.001))).toBe(false);
+    expect(schedule.consumeIfDue(clock01(trigger - 0.001), trigger)).toBe(true);
+    expect(schedule.consumeIfDue(trigger, clock01(trigger + 0.01))).toBe(false);
   });
 
   it('never allows eclipses on consecutive days', () => {
@@ -68,20 +69,20 @@ describe('EclipseSchedule', () => {
       triggerT01: null,
       occurredToday: true,
     });
-    expect(schedule.consumeIfDue(0, 1)).toBe(false);
+    expect(schedule.consumeIfDue(clock01(0), clock01(1))).toBe(false);
   });
 
   it('skips a blocked slot instead of surprising the user later that day', () => {
     const schedule = new EclipseSchedule(sequence(0, 0.5, 0));
     schedule.beginNextDay();
     const trigger = schedule.getState().triggerT01!;
-    expect(schedule.consumeIfDue(trigger - 0.01, trigger, false)).toBe(false);
+    expect(schedule.consumeIfDue(clock01(trigger - 0.01), trigger, false)).toBe(false);
     expect(schedule.getState()).toMatchObject({
       scheduledToday: false,
       occurredToday: false,
       nextAutomaticDay: 1 + ECLIPSE_GAP_DAYS_MIN,
     });
-    expect(schedule.consumeIfDue(trigger, trigger + 0.01)).toBe(false);
+    expect(schedule.consumeIfDue(trigger, clock01(trigger + 0.01))).toBe(false);
   });
 
   it('is reproducible for the same world seed', () => {

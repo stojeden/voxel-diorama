@@ -1,8 +1,9 @@
 import * as THREE from 'three';
+import type { Clock01, Degrees, Radians, SolarPhase01 } from '../units';
 import { beamTransmittanceColor, twilightSkyColorCached } from './SunlightSpectrum';
 
 /** Two degrees below the horizon, the physical twilight hue is fully in. */
-const TWILIGHT_BLEND_DEPTH_RAD = THREE.MathUtils.degToRad(2);
+const TWILIGHT_BLEND_DEPTH_RAD = THREE.MathUtils.degToRad(2) as Radians;
 /** Scattered light this faint hands the sky back to the authored night colour. */
 const TWILIGHT_HANDBACK_BRIGHTNESS = 0.002;
 /** How far the blend is allowed to go: the stops keep a say, they were not guesses. */
@@ -34,7 +35,7 @@ const TWILIGHT_MAX_BLEND = 0.8;
  * night; there is no separate dial for any of them, and there should not be, because in the
  * sky there is not one either.
  */
-const LATITUDE = THREE.MathUtils.degToRad(52.23);
+const LATITUDE = THREE.MathUtils.degToRad(52.23) as Radians;
 
 /**
  * Solar declination for a day of the year, the standard cosine approximation.
@@ -44,14 +45,16 @@ const LATITUDE = THREE.MathUtils.degToRad(52.23);
  * and the equation of time (which slides solar noon against the wall clock by up to a
  * quarter of an hour). Neither changes the shape of a day here.
  */
-export function declinationForDayOfYear(dayOfYear: number): number {
-  return THREE.MathUtils.degToRad(-23.44 * Math.cos((2 * Math.PI * (dayOfYear + 10)) / 365));
+export function declinationForDayOfYear(dayOfYear: number): Radians {
+  return THREE.MathUtils.degToRad(
+    -23.44 * Math.cos((2 * Math.PI * (dayOfYear + 10)) / 365)
+  ) as Radians;
 }
 
 /** 21 June. Noon altitude 61.2 degrees, day 16.5 hours, full night under four. */
-export const JUNE_DECLINATION_DEG = 23.44;
+export const JUNE_DECLINATION_DEG = 23.44 as Degrees;
 /** 15 October: leaves down, sun low. Noon altitude 28.3 degrees, day 10.3 hours. */
-export const AUTUMN_DECLINATION_DEG = -9.5;
+export const AUTUMN_DECLINATION_DEG = -9.5 as Degrees;
 
 /**
  * Hour angle at which the sun crosses the geometric horizon: half the day, in radians.
@@ -60,11 +63,11 @@ export const AUTUMN_DECLINATION_DEG = -9.5;
  * the callers below divide by this and by its complement, so both ends are clamped away from
  * zero rather than left to produce infinities in a lighting model.
  */
-export function sunriseHourAngle(declination: number): number {
+export function sunriseHourAngle(declination: Radians): Radians {
   const cosH = -Math.tan(LATITUDE) * Math.tan(declination);
-  if (cosH <= -1) return Math.PI;
-  if (cosH >= 1) return 0;
-  return Math.acos(cosH);
+  if (cosH <= -1) return Math.PI as Radians;
+  if (cosH >= 1) return 0 as Radians;
+  return Math.acos(cosH) as Radians;
 }
 
 /**
@@ -89,8 +92,8 @@ export function sunriseHourAngle(declination: number): number {
  * ramp returns 0.530 there, which is the "dawn stays in twilight" property the tests pin.
  * The old +18 was 2 hours 14 minutes after a June sunrise; +13 is 1 hour 39.
  */
-const FULL_NIGHT_ELEVATION_DEG = -12;
-const FULL_DAY_ELEVATION_DEG = 13;
+const FULL_NIGHT_ELEVATION_DEG = -12 as Degrees;
+const FULL_DAY_ELEVATION_DEG = 13 as Degrees;
 
 /**
  * How far above the horizon the direct beam is held back before it counts at full weight.
@@ -102,11 +105,19 @@ const FULL_DAY_ELEVATION_DEG = 13;
  * degrees is 25 minutes of a June morning and 21 of an October one -- long enough that no
  * single frame is the one the sun switched on in, over before the sun is properly up.
  */
-const DIRECT_SUN_FADE_ELEVATION_DEG = 3;
+const DIRECT_SUN_FADE_ELEVATION_DEG = 3 as Degrees;
 
-export function clamp01(value: number): number {
-  if (value < 0) return 0;
-  if (value > 1) return 1;
+/**
+ * Clamp to 0..1 while keeping whatever unit went in.
+ *
+ * Generic purely so a clamped clock is still a `Clock01` and a clamped phase still a
+ * `SolarPhase01`: with a plain `number` return, every clamp in this file would have laundered
+ * a branded axis back into a bare number and handed the confusion straight back. Erased at
+ * compile time like every other type here -- the emitted function is unchanged.
+ */
+export function clamp01<T extends number>(value: T): T {
+  if (value < 0) return 0 as T;
+  if (value > 1) return 1 as T;
   return value;
 }
 
@@ -116,8 +127,8 @@ function smooth(value: number): number {
 }
 
 /** Hour angle for a clock time: 0 at solar noon, negative before it. */
-function hourAngle(t: number): number {
-  return 2 * Math.PI * (clamp01(t) - 0.5);
+function hourAngle(t: Clock01): Radians {
+  return (2 * Math.PI * (clamp01(t) - 0.5)) as Radians;
 }
 
 /**
@@ -127,18 +138,18 @@ function hourAngle(t: number): number {
  * or a checkpoint written against "just after sunrise" still means that in October, when
  * just after sunrise is two hours later on the clock and the sun climbs half as high.
  */
-export function solarPhaseAt(t: number, declination: number): number {
+export function solarPhaseAt(t: Clock01, declination: Radians): SolarPhase01 {
   const H = hourAngle(t);
   const H0 = sunriseHourAngle(declination);
   const day = Math.min(Math.max(H0, 1e-4), Math.PI - 1e-4);
   const night = Math.PI - day;
-  if (Math.abs(H) <= day) return 0.5 + 0.25 * (H / day);
-  if (H > 0) return 0.75 + 0.25 * ((H - day) / night);
-  return 0.25 * ((H + Math.PI) / night);
+  if (Math.abs(H) <= day) return (0.5 + 0.25 * (H / day)) as SolarPhase01;
+  if (H > 0) return (0.75 + 0.25 * ((H - day) / night)) as SolarPhase01;
+  return (0.25 * ((H + Math.PI) / night)) as SolarPhase01;
 }
 
 /** Solar phase back to clock time. The inverse of {@link solarPhaseAt}. */
-export function clockFromSolarPhase(phase: number, declination: number): number {
+export function clockFromSolarPhase(phase: SolarPhase01, declination: Radians): Clock01 {
   const p = clamp01(phase);
   const H0 = sunriseHourAngle(declination);
   const day = Math.min(Math.max(H0, 1e-4), Math.PI - 1e-4);
@@ -147,7 +158,7 @@ export function clockFromSolarPhase(phase: number, declination: number): number 
   if (p >= 0.25 && p <= 0.75) H = day * ((p - 0.5) / 0.25);
   else if (p > 0.75) H = day + ((p - 0.75) / 0.25) * night;
   else H = -Math.PI + (p / 0.25) * night;
-  return clamp01(0.5 + H / (2 * Math.PI));
+  return clamp01(0.5 + H / (2 * Math.PI)) as Clock01;
 }
 
 /**
@@ -158,12 +169,12 @@ export function clockFromSolarPhase(phase: number, declination: number): number 
  * and never reaches the -18 of astronomical darkness. Poland in June genuinely has no
  * astronomical night, and the diorama should not pretend otherwise.
  */
-export function sunElevationAt(t: number, declination: number): number {
+export function sunElevationAt(t: Clock01, declination: Radians): Radians {
   const H = hourAngle(t);
   const sinAlt =
     Math.sin(LATITUDE) * Math.sin(declination) +
     Math.cos(LATITUDE) * Math.cos(declination) * Math.cos(H);
-  return Math.asin(Math.min(1, Math.max(-1, sinAlt)));
+  return Math.asin(Math.min(1, Math.max(-1, sinAlt))) as Radians;
 }
 
 /**
@@ -175,8 +186,8 @@ export function sunElevationAt(t: number, declination: number): number {
  * east it rises, which is the part that makes an October afternoon read as October.
  */
 export function sunDirectionAt(
-  t: number,
-  declination: number,
+  t: Clock01,
+  declination: Radians,
   out: THREE.Vector3 = new THREE.Vector3()
 ): THREE.Vector3 {
   const H = hourAngle(t);
@@ -216,16 +227,16 @@ export function sunDirectionAt(
  * being made, and because the one caller needs the sun's own vector left intact.
  */
 export function antisolarDirectionAt(
-  t: number,
-  declination: number,
+  t: Clock01,
+  declination: Radians,
   out: THREE.Vector3 = new THREE.Vector3()
 ): THREE.Vector3 {
-  return sunDirectionAt((t + 0.5) % 1, -declination, out);
+  return sunDirectionAt(((t + 0.5) % 1) as Clock01, -declination as Radians, out);
 }
 
 /** 1 deep at night, 0 in full daylight, smooth twilight band in between. */
-export function nightFactorAt(t: number, declination: number): number {
-  const elevationDeg = THREE.MathUtils.radToDeg(sunElevationAt(t, declination));
+export function nightFactorAt(t: Clock01, declination: Radians): number {
+  const elevationDeg = THREE.MathUtils.radToDeg(sunElevationAt(t, declination)) as Degrees;
   return 1 - smooth(
     (elevationDeg - FULL_NIGHT_ELEVATION_DEG) /
       (FULL_DAY_ELEVATION_DEG - FULL_NIGHT_ELEVATION_DEG)
@@ -241,7 +252,7 @@ export function nightFactorAt(t: number, declination: number): number {
  * empirical second term is what keeps it finite down there, where a plain secant diverges.
  * Valid above the geometric horizon only; the one caller returns before reaching it.
  */
-export function airMassAt(elevationDeg: number): number {
+export function airMassAt(elevationDeg: Degrees): number {
   return (
     1 /
     (Math.sin(THREE.MathUtils.degToRad(elevationDeg)) +
@@ -250,7 +261,7 @@ export function airMassAt(elevationDeg: number): number {
 }
 
 /** Meinel's clear-sky beam transmission over that path: 0.7 raised to AM^0.678. */
-function beamStrengthAt(elevationDeg: number): number {
+function beamStrengthAt(elevationDeg: Degrees): number {
   return Math.pow(0.7, Math.pow(airMassAt(elevationDeg), 0.678));
 }
 
@@ -269,7 +280,9 @@ function beamStrengthAt(elevationDeg: number): number {
  * rather than repeating it as a literal.
  */
 const FULL_BEAM = beamStrengthAt(
-  THREE.MathUtils.radToDeg(noonElevation(THREE.MathUtils.degToRad(JUNE_DECLINATION_DEG)))
+  THREE.MathUtils.radToDeg(
+    noonElevation(THREE.MathUtils.degToRad(JUNE_DECLINATION_DEG) as Radians)
+  ) as Degrees
 );
 
 /**
@@ -287,8 +300,8 @@ const FULL_BEAM = beamStrengthAt(
  * reason it was written -- an abrupt first shadowed frame reads as a light switch -- and
  * the early return also keeps the air-mass term away from the elevation where it breaks.
  */
-export function directSunFactorAt(t: number, declination: number): number {
-  const elevationDeg = THREE.MathUtils.radToDeg(sunElevationAt(t, declination));
+export function directSunFactorAt(t: Clock01, declination: Radians): number {
+  const elevationDeg = THREE.MathUtils.radToDeg(sunElevationAt(t, declination)) as Degrees;
   const horizonFade = smooth(elevationDeg / DIRECT_SUN_FADE_ELEVATION_DEG);
   if (horizonFade <= 0) return 0;
   return clamp01(beamStrengthAt(elevationDeg) / FULL_BEAM) * horizonFade;
@@ -298,8 +311,8 @@ export function directSunFactorAt(t: number, declination: number): number {
  * Golden-hour factor: peaks while the sun sits low above the horizon
  * (sunrise & sunset), zero at night and at high noon.
  */
-export function goldenFactorAt(t: number, declination: number): number {
-  const elevationDeg = THREE.MathUtils.radToDeg(sunElevationAt(t, declination));
+export function goldenFactorAt(t: Clock01, declination: Radians): number {
+  const elevationDeg = THREE.MathUtils.radToDeg(sunElevationAt(t, declination)) as Degrees;
   if (elevationDeg < -6) return 0;
   const lowSun = 1 - smooth((elevationDeg - 4) / 22); // fades out above ~26°
   const aboveHorizon = smooth((elevationDeg + 6) / 8); // fades in from -6°
@@ -308,8 +321,8 @@ export function goldenFactorAt(t: number, declination: number): number {
 
 /** Exposure curve with highlight headroom for pale concrete and snow. */
 /** Where the high-sun ease begins and where it is fully in, in degrees of elevation. */
-const HIGH_SUN_START_DEG = 45;
-const HIGH_SUN_FULL_DEG = 60;
+const HIGH_SUN_START_DEG = 45 as Degrees;
+const HIGH_SUN_FULL_DEG = 60 as Degrees;
 /** How far the ease stops the camera down at its deepest. Measured, not chosen -- see below. */
 const HIGH_SUN_EXPOSURE_CUT = 0.15;
 
@@ -319,8 +332,8 @@ const HIGH_SUN_EXPOSURE_CUT = 0.15;
  * Only a Polish June reaches this. October noon sits at 28 degrees and never touches it, and
  * neither does any hour of a June day before about ten in the morning.
  */
-export function highSunFactor(elevationRad: number): number {
-  const deg = THREE.MathUtils.radToDeg(elevationRad);
+export function highSunFactor(elevationRad: Radians): number {
+  const deg = THREE.MathUtils.radToDeg(elevationRad) as Degrees;
   return smooth((deg - HIGH_SUN_START_DEG) / (HIGH_SUN_FULL_DEG - HIGH_SUN_START_DEG));
 }
 
@@ -384,7 +397,8 @@ export function sceneBloomStrength(night: number, golden: number, themeMultiplie
 }
 
 interface ColorStop {
-  time: number;
+  /** On the **solar phase** axis, not the clock -- see {@link FOG_STOPS}. */
+  time: SolarPhase01;
   color: THREE.Color;
 }
 
@@ -398,24 +412,24 @@ interface ColorStop {
  * sunset.
  */
 const FOG_STOPS: ColorStop[] = [
-  { time: 0.0, color: new THREE.Color(0x0d1024) },
-  { time: 0.19, color: new THREE.Color(0x131233) },
-  { time: 0.235, color: new THREE.Color(0x57375a) },
-  { time: 0.27, color: new THREE.Color(0xe07b4a) },
-  { time: 0.32, color: new THREE.Color(0xf2b27a) },
-  { time: 0.4, color: new THREE.Color(0xbcd6ea) },
-  { time: 0.5, color: new THREE.Color(0xa9cce6) },
-  { time: 0.6, color: new THREE.Color(0xbcd6ea) },
-  { time: 0.69, color: new THREE.Color(0xf0a868) },
-  { time: 0.745, color: new THREE.Color(0xd96a45) },
-  { time: 0.785, color: new THREE.Color(0x5e3a63) },
-  { time: 0.83, color: new THREE.Color(0x16143a) },
-  { time: 1.0, color: new THREE.Color(0x0d1024) },
+  { time: 0.0 as SolarPhase01, color: new THREE.Color(0x0d1024) },
+  { time: 0.19 as SolarPhase01, color: new THREE.Color(0x131233) },
+  { time: 0.235 as SolarPhase01, color: new THREE.Color(0x57375a) },
+  { time: 0.27 as SolarPhase01, color: new THREE.Color(0xe07b4a) },
+  { time: 0.32 as SolarPhase01, color: new THREE.Color(0xf2b27a) },
+  { time: 0.4 as SolarPhase01, color: new THREE.Color(0xbcd6ea) },
+  { time: 0.5 as SolarPhase01, color: new THREE.Color(0xa9cce6) },
+  { time: 0.6 as SolarPhase01, color: new THREE.Color(0xbcd6ea) },
+  { time: 0.69 as SolarPhase01, color: new THREE.Color(0xf0a868) },
+  { time: 0.745 as SolarPhase01, color: new THREE.Color(0xd96a45) },
+  { time: 0.785 as SolarPhase01, color: new THREE.Color(0x5e3a63) },
+  { time: 0.83 as SolarPhase01, color: new THREE.Color(0x16143a) },
+  { time: 1.0 as SolarPhase01, color: new THREE.Color(0x0d1024) },
 ];
 
 export function skyColorAt(
-  t: number,
-  declination: number,
+  t: Clock01,
+  declination: Radians,
   out: THREE.Color = new THREE.Color()
 ): THREE.Color {
   const clamped = solarPhaseAt(t, declination);
@@ -469,8 +483,8 @@ export function skyColorAt(
 const BLACK = new THREE.Color(0x000000);
 
 /** The sun's altitude at solar noon: 90 degrees minus the gap between latitude and declination. */
-export function noonElevation(declination: number): number {
-  return Math.PI / 2 - Math.abs(LATITUDE - declination);
+export function noonElevation(declination: Radians): Radians {
+  return (Math.PI / 2 - Math.abs(LATITUDE - declination)) as Radians;
 }
 
 /**
@@ -488,8 +502,8 @@ export function noonElevation(declination: number): number {
  * unnormalised transmittance here would dim the sun twice.
  */
 export function sunColorAt(
-  t: number,
-  declination: number,
+  t: Clock01,
+  declination: Radians,
   out: THREE.Color = new THREE.Color()
 ): THREE.Color {
   const elevation = sunElevationAt(t, declination);
@@ -510,7 +524,7 @@ export interface RealSunTimes {
  * REAL sunrise lands on t=0.25, solar noon on t=0.5 and sunset on t=0.75.
  * Falls back to plain fraction-of-day when times are invalid (polar nights).
  */
-export function realTimeToCycleT(now: Date, times: RealSunTimes): number {
+export function realTimeToCycleT(now: Date, times: RealSunTimes): Clock01 {
   const dayStart = new Date(now);
   dayStart.setHours(0, 0, 0, 0);
   const dayMs = 24 * 3600 * 1000;
@@ -520,7 +534,7 @@ export function realTimeToCycleT(now: Date, times: RealSunTimes): number {
   const noon = times.solarNoon?.getTime?.();
   const ss = times.sunset?.getTime?.();
   if (!sr || !noon || !ss || Number.isNaN(sr) || Number.isNaN(noon) || Number.isNaN(ss)) {
-    return clamp01(frac);
+    return clamp01(frac) as Clock01;
   }
 
   const nowMs = now.getTime();
@@ -530,8 +544,8 @@ export function realTimeToCycleT(now: Date, times: RealSunTimes): number {
   const lerpSeg = (x: number, x0: number, x1: number, y0: number, y1: number) =>
     y0 + ((x - x0) / Math.max(x1 - x0, 1)) * (y1 - y0);
 
-  if (nowMs < sr) return clamp01(lerpSeg(nowMs, startMs, sr, 0, 0.25));
-  if (nowMs < noon) return clamp01(lerpSeg(nowMs, sr, noon, 0.25, 0.5));
-  if (nowMs < ss) return clamp01(lerpSeg(nowMs, noon, ss, 0.5, 0.75));
-  return clamp01(lerpSeg(nowMs, ss, endMs, 0.75, 1));
+  if (nowMs < sr) return clamp01(lerpSeg(nowMs, startMs, sr, 0, 0.25)) as Clock01;
+  if (nowMs < noon) return clamp01(lerpSeg(nowMs, sr, noon, 0.25, 0.5)) as Clock01;
+  if (nowMs < ss) return clamp01(lerpSeg(nowMs, noon, ss, 0.5, 0.75)) as Clock01;
+  return clamp01(lerpSeg(nowMs, ss, endMs, 0.75, 1)) as Clock01;
 }

@@ -11,9 +11,12 @@ import {
   twilightSkyColor,
   twilightSkyColorCached,
 } from './SunlightSpectrum';
+import type { Degrees, Radians } from '../units';
+import { degrees, radians } from '../units.testing';
 
-const deg = (d: number) => (d * Math.PI) / 180;
-const arcmin = (rad: number) => (rad * 180 * 60) / Math.PI;
+/** Degrees in, radians out -- the conversion the module under test is entitled to expect. */
+const deg = (d: number) => ((d * Math.PI) / 180) as Radians;
+const arcmin = (rad: Radians) => (rad * 180 * 60) / Math.PI;
 
 describe('published constants', () => {
   /**
@@ -28,8 +31,8 @@ describe('published constants', () => {
   });
 
   test('refraction at the horizon is about 34 arcminutes', () => {
-    expect(arcmin(refractionRad(0))).toBeGreaterThan(33);
-    expect(arcmin(refractionRad(0))).toBeLessThan(36);
+    expect(arcmin(refractionRad(radians(0)))).toBeGreaterThan(33);
+    expect(arcmin(refractionRad(radians(0)))).toBeLessThan(36);
     // And it collapses fast with altitude: about a minute at 45 degrees.
     expect(arcmin(refractionRad(deg(45)))).toBeCloseTo(1, 0);
   });
@@ -37,8 +40,8 @@ describe('published constants', () => {
   test('air mass is 1 overhead and about 38 at the horizon (Kasten & Young)', () => {
     expect(airMass(deg(90))).toBeCloseTo(1, 3);
     expect(airMass(deg(30))).toBeCloseTo(2, 1);
-    expect(airMass(0)).toBeGreaterThan(37);
-    expect(airMass(0)).toBeLessThan(39);
+    expect(airMass(radians(0))).toBeGreaterThan(37);
+    expect(airMass(radians(0))).toBeLessThan(39);
   });
 
   /**
@@ -105,7 +108,7 @@ describe('the direct beam', () => {
    * not a round number chosen first.
    */
   test('the horizon sun is red by a factor of five, not merely warm', () => {
-    const [r, g, b] = beamTransmittanceColor(0);
+    const [r, g, b] = beamTransmittanceColor(radians(0));
     expect(r / g).toBeGreaterThan(5.2);
     expect(r / g).toBeLessThan(5.5);
     // Blue is gone entirely: the unclipped integral lands at -8e-4 of white, which is a
@@ -174,7 +177,7 @@ describe('twilight', () => {
   });
 
   test('Earth\'s shadow climbs as the square of the depression angle', () => {
-    expect(shadowHeightKm(0)).toBe(0);
+    expect(shadowHeightKm(radians(0))).toBe(0);
     expect(shadowHeightKm(deg(-2))).toBeCloseTo(3.9, 0);
     expect(shadowHeightKm(deg(-6))).toBeCloseTo(35, 0);
     expect(shadowHeightKm(deg(-12))).toBeCloseTo(142, 0);

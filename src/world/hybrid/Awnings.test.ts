@@ -10,6 +10,7 @@ import {
   isOpenAt,
 } from './Awnings';
 import { buildCityModel } from './CityModel';
+import { wallClock01 } from '../../units.testing';
 
 /**
  * The shop is open from ten to six, and the awning says so.
@@ -42,7 +43,7 @@ const run = (awnings: Awnings, fromHour: number, toHour: number, seconds: number
   const frames = Math.max(1, Math.round(seconds * fps));
   for (let i = 1; i <= frames; i++) {
     const hour = fromHour + ((toHour - fromHour) * i) / frames;
-    awnings.update(hour * HOUR, 1 / fps);
+    awnings.update(wallClock01(hour * HOUR), 1 / fps);
   }
 };
 
@@ -68,18 +69,18 @@ const farFace = (part: THREE.Object3D, local: THREE.Vector3) => {
 
 describe('shop opening hours', () => {
   test('ten to six, by the clock and not by the sun', () => {
-    expect(isOpenAt(0)).toBe(false);
-    expect(isOpenAt(6 * HOUR)).toBe(false);
-    expect(isOpenAt(9.99 * HOUR)).toBe(false);
-    expect(isOpenAt(OPEN_HOUR * HOUR)).toBe(true);
-    expect(isOpenAt(12 * HOUR)).toBe(true);
-    expect(isOpenAt(17.99 * HOUR)).toBe(true);
-    expect(isOpenAt(CLOSE_HOUR * HOUR)).toBe(false);
-    expect(isOpenAt(20 * HOUR)).toBe(false);
-    expect(isOpenAt(23.9 * HOUR)).toBe(false);
+    expect(isOpenAt(wallClock01(0))).toBe(false);
+    expect(isOpenAt(wallClock01(6 * HOUR))).toBe(false);
+    expect(isOpenAt(wallClock01(9.99 * HOUR))).toBe(false);
+    expect(isOpenAt(wallClock01(OPEN_HOUR * HOUR))).toBe(true);
+    expect(isOpenAt(wallClock01(12 * HOUR))).toBe(true);
+    expect(isOpenAt(wallClock01(17.99 * HOUR))).toBe(true);
+    expect(isOpenAt(wallClock01(CLOSE_HOUR * HOUR))).toBe(false);
+    expect(isOpenAt(wallClock01(20 * HOUR))).toBe(false);
+    expect(isOpenAt(wallClock01(23.9 * HOUR))).toBe(false);
     // Whole days either side of the same hour are the same hour.
-    expect(isOpenAt(12 * HOUR + 3)).toBe(true);
-    expect(isOpenAt(12 * HOUR - 5)).toBe(true);
+    expect(isOpenAt(wallClock01(12 * HOUR + 3))).toBe(true);
+    expect(isOpenAt(wallClock01(12 * HOUR - 5))).toBe(true);
   });
 
   test('hours are compared across midnight, not linearly', () => {
@@ -103,13 +104,13 @@ describe('shop awnings', () => {
     // Sit closed just before ten, then creep the clock past it -- time passing, not a
     // jump -- and count the real seconds the movement takes.
     let clock = 10 * HOUR - 1e-5;
-    awnings.update(clock, 0);
+    awnings.update(wallClock01(clock), 0);
     expect(awnings.progress).toBe(0);
 
     let elapsed = 0;
     while (awnings.progress < 0.999 && elapsed < 10) {
       clock += 1e-5;
-      awnings.update(clock, FRAME);
+      awnings.update(wallClock01(clock), FRAME);
       elapsed += FRAME;
     }
     expect(elapsed).toBeGreaterThan(TRAVEL_SECONDS * 0.9);
@@ -119,7 +120,7 @@ describe('shop awnings', () => {
 
   test('opening is a short calm move, and every step of it is small', () => {
     const { awnings, shop } = mount();
-    awnings.update(9.9 * HOUR, 0);
+    awnings.update(wallClock01(9.9 * HOUR), 0);
     const reach = () => (shop.children[1] as THREE.Mesh).scale.z;
     const before = reach();
 
@@ -128,7 +129,7 @@ describe('shop awnings', () => {
     let rising = 0;
     // Cross ten o'clock at the default clock: a day in 240 s, so a frame is 6 s of world.
     for (let i = 0; i < 240; i++) {
-      awnings.update((9.9 + i * 0.0025) * HOUR, FRAME);
+      awnings.update(wallClock01((9.9 + i * 0.0025) * HOUR), FRAME);
       const now = reach();
       biggest = Math.max(biggest, Math.abs(now - previous));
       if (now > previous + 1e-6) rising += 1;
@@ -144,66 +145,66 @@ describe('shop awnings', () => {
   test('a jump in the clock lands on the hour, in either direction', () => {
     const { awnings } = mount();
     // Arrive at noon: open, fully out, no travel owed.
-    awnings.update(12 * HOUR, 0);
+    awnings.update(wallClock01(12 * HOUR), 0);
     expect(awnings.progress).toBe(1);
 
     // Dragged back to the small hours, and forward again, one frame each.
-    awnings.update(3 * HOUR, FRAME);
+    awnings.update(wallClock01(3 * HOUR), FRAME);
     expect(awnings.progress, 'skok w tył: markiza od razu zwinięta').toBe(0);
-    awnings.update(14 * HOUR, FRAME);
+    awnings.update(wallClock01(14 * HOUR), FRAME);
     expect(awnings.progress, 'skok w przód: markiza od razu rozwinięta').toBe(1);
-    awnings.update(22 * HOUR, FRAME);
+    awnings.update(wallClock01(22 * HOUR), FRAME);
     expect(awnings.progress).toBe(0);
 
     // A day either way is the same hour, so nothing moves.
-    awnings.update(22 * HOUR + 1, FRAME);
+    awnings.update(wallClock01(22 * HOUR + 1), FRAME);
     expect(awnings.progress).toBe(0);
     awnings.dispose();
   });
 
   test('a change of time mode is a jump, and mid-travel state does not survive it', () => {
     const { awnings } = mount();
-    awnings.update(9.99 * HOUR, 0);
+    awnings.update(wallClock01(9.99 * HOUR), 0);
     // Half a second into the opening move.
     run(awnings, 9.99, 10.01, 0.5);
     expect(awnings.progress).toBeGreaterThan(0);
     expect(awnings.progress).toBeLessThan(1);
 
     // Real-time mode hands over a different hour entirely. Whatever it says, wins.
-    awnings.update(2 * HOUR, FRAME);
+    awnings.update(wallClock01(2 * HOUR), FRAME);
     expect(awnings.progress).toBe(0);
     awnings.dispose();
   });
 
   test('a locked checkpoint has no delta, and shows the hour it was taken at', () => {
     const { awnings } = mount();
-    awnings.update(23 * HOUR, 0);
+    awnings.update(wallClock01(23 * HOUR), 0);
     // A checkpoint zeroes the presentation delta. The awning still has to be right.
-    for (let i = 0; i < 30; i++) awnings.update(13 * HOUR, 0);
+    for (let i = 0; i < 30; i++) awnings.update(wallClock01(13 * HOUR), 0);
     expect(awnings.progress, 'checkpoint w środku dnia: markiza rozwinięta').toBe(1);
-    for (let i = 0; i < 30; i++) awnings.update(5 * HOUR, 0);
+    for (let i = 0; i < 30; i++) awnings.update(wallClock01(5 * HOUR), 0);
     expect(awnings.progress, 'checkpoint nocą: markiza zwinięta').toBe(0);
     awnings.dispose();
   });
 
   test('coming back to the tab finishes the move instead of overshooting', () => {
     const { awnings } = mount();
-    awnings.update(11 * HOUR, 0);
-    awnings.update(3 * HOUR, FRAME);
+    awnings.update(wallClock01(11 * HOUR), 0);
+    awnings.update(wallClock01(3 * HOUR), FRAME);
     expect(awnings.progress).toBe(0);
     // A hidden tab stops the frame loop; the frame that follows carries a huge delta and
     // an hour that barely moved.
-    awnings.update(3 * HOUR + CLOCK_JUMP / 2, 12);
+    awnings.update(wallClock01(3 * HOUR + CLOCK_JUMP / 2), 12);
     expect(awnings.progress).toBe(0);
-    awnings.update(11 * HOUR, 0);
-    awnings.update(11 * HOUR + CLOCK_JUMP / 2, 12);
+    awnings.update(wallClock01(11 * HOUR), 0);
+    awnings.update(wallClock01(11 * HOUR + CLOCK_JUMP / 2), 12);
     expect(awnings.progress).toBe(1);
     awnings.dispose();
   });
 
   test('folded, the whole assembly is put away in its housing', () => {
     const { awnings, shop } = mount();
-    awnings.update(3 * HOUR, 0);
+    awnings.update(wallClock01(3 * HOUR), 0);
     for (const part of shop.children) {
       // The housing is 18 cm deep; nothing may stand out past it when the shop is shut.
       expect(localBox(part).max.z, 'coś wystaje ze zwiniętej markizy').toBeLessThanOrEqual(0.2);
@@ -213,7 +214,7 @@ describe('shop awnings', () => {
 
   test('open, it reaches out, slopes down and stays one piece', () => {
     const { awnings, shop } = mount();
-    awnings.update(12 * HOUR, 0);
+    awnings.update(wallClock01(12 * HOUR), 0);
     const [, fabric, valance, ...arms] = shop.children;
 
     // Out over the pavement, and the far edge lower than the roller it hangs from.
@@ -240,7 +241,7 @@ describe('shop awnings', () => {
     const { awnings, shop } = mount();
     // Every step of the movement, not just its two ends.
     for (let step = 0; step <= 20; step++) {
-      awnings.update(10 * HOUR, 0);
+      awnings.update(wallClock01(10 * HOUR), 0);
       run(awnings, 10, 10.001, (TRAVEL_SECONDS * step) / 20);
       for (const part of shop.children) {
         expect(localBox(part).min.z, `krok ${step}: element wchodzi w elewację`).toBeGreaterThan(-0.02);

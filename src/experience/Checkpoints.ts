@@ -2,6 +2,7 @@ import type { QualityMode } from '../performance/QualityManager';
 import type { TourChapterId } from '../CinematicTour';
 import { FIXED_TOUR_SHOTS, OVERVIEW_SHOT } from './ShotDefinitions';
 import { ECLIPSE_VIEW_SOLAR_PHASE } from './AuthoredMoments';
+import type { SolarPhase01 } from '../units';
 export { WORLD_LAYOUT_SEED } from '../world/WorldLayout';
 
 export const CHECKPOINT_REVISION = 2;
@@ -25,7 +26,7 @@ export interface CheckpointDefinition {
    * satisfies it moves with the season. Resolve it with `clockFromSolarPhase` before handing
    * it to anything that takes a `t01`.
    */
-  readonly timeOfDay: number;
+  readonly timeOfDay: SolarPhase01;
   readonly weather: 'clear' | 'rain' | 'snow';
   readonly theme: 'classic' | 'cyberpunk';
   readonly eclipseProgress: number | null;
@@ -51,36 +52,36 @@ interface CheckpointOptions {
 }
 
 export const CHECKPOINTS: Record<CheckpointId, CheckpointDefinition> = {
-  train: checkpoint('train', 0.42, [52, 18, 23], [30, 4, 2], { trainProgress: 0.68 }),
-  bus: checkpoint('bus', 0.46, [48, 12, -18], [27, 3, -10], { busProgress: 0.25 }),
-  lake: checkpoint('lake', 0.52, FIXED_TOUR_SHOTS.lake.position, FIXED_TOUR_SHOTS.lake.target),
-  residents: checkpoint('residents', 0.48, FIXED_TOUR_SHOTS.residents.position, FIXED_TOUR_SHOTS.residents.target),
-  'golden-hour': checkpoint('golden-hour', 0.28, FIXED_TOUR_SHOTS['golden-hour'].position, FIXED_TOUR_SHOTS['golden-hour'].target),
+  train: checkpoint('train', 0.42 as SolarPhase01, [52, 18, 23], [30, 4, 2], { trainProgress: 0.68 }),
+  bus: checkpoint('bus', 0.46 as SolarPhase01, [48, 12, -18], [27, 3, -10], { busProgress: 0.25 }),
+  lake: checkpoint('lake', 0.52 as SolarPhase01, FIXED_TOUR_SHOTS.lake.position, FIXED_TOUR_SHOTS.lake.target),
+  residents: checkpoint('residents', 0.48 as SolarPhase01, FIXED_TOUR_SHOTS.residents.position, FIXED_TOUR_SHOTS.residents.target),
+  'golden-hour': checkpoint('golden-hour', 0.28 as SolarPhase01, FIXED_TOUR_SHOTS['golden-hour'].position, FIXED_TOUR_SHOTS['golden-hour'].target),
   totality: checkpoint('totality', ECLIPSE_VIEW_SOLAR_PHASE, FIXED_TOUR_SHOTS.totality.position, FIXED_TOUR_SHOTS.totality.target, { eclipseProgress: 0.5 }),
-  cyberpunk: checkpoint('cyberpunk', 0.86, FIXED_TOUR_SHOTS.cyberpunk.position, FIXED_TOUR_SHOTS.cyberpunk.target, { theme: 'cyberpunk' }),
-  'golden-clear-overview': checkpoint('golden-clear-overview', 0.28, OVERVIEW_SHOT.position, OVERVIEW_SHOT.target),
-  'noon-rain-overview': checkpoint('noon-rain-overview', 0.5, OVERVIEW_SHOT.position, OVERVIEW_SHOT.target, { weather: 'rain' }),
+  cyberpunk: checkpoint('cyberpunk', 0.86 as SolarPhase01, FIXED_TOUR_SHOTS.cyberpunk.position, FIXED_TOUR_SHOTS.cyberpunk.target, { theme: 'cyberpunk' }),
+  'golden-clear-overview': checkpoint('golden-clear-overview', 0.28 as SolarPhase01, OVERVIEW_SHOT.position, OVERVIEW_SHOT.target),
+  'noon-rain-overview': checkpoint('noon-rain-overview', 0.5 as SolarPhase01, OVERVIEW_SHOT.position, OVERVIEW_SHOT.target, { weather: 'rain' }),
   'post-rain-clear-lake': checkpoint(
     'post-rain-clear-lake',
-    0.68,
+    0.68 as SolarPhase01,
     [-54, 10, 98.2],
     [-13, 11, 54]
   ),
   'post-rain-rainbow-lake': checkpoint(
     'post-rain-rainbow-lake',
-    0.68,
+    0.68 as SolarPhase01,
     [-54, 10, 98.2],
     [-13, 11, 54],
     { rainbowMoisture: 1, rainbowSource: 0 }
   ),
-  'night-snow-train': checkpoint('night-snow-train', 0.02, OVERVIEW_SHOT.position, OVERVIEW_SHOT.target, { weather: 'snow', trainProgress: 0.68 }),
-  'evening-rain-bus': checkpoint('evening-rain-bus', 0.82, OVERVIEW_SHOT.position, OVERVIEW_SHOT.target, { weather: 'rain', busProgress: 0.25 }),
+  'night-snow-train': checkpoint('night-snow-train', 0.02 as SolarPhase01, OVERVIEW_SHOT.position, OVERVIEW_SHOT.target, { weather: 'snow', trainProgress: 0.68 }),
+  'evening-rain-bus': checkpoint('evening-rain-bus', 0.82 as SolarPhase01, OVERVIEW_SHOT.position, OVERVIEW_SHOT.target, { weather: 'rain', busProgress: 0.25 }),
   'eclipse-totality-overview': checkpoint('eclipse-totality-overview', ECLIPSE_VIEW_SOLAR_PHASE, FIXED_TOUR_SHOTS.totality.position, FIXED_TOUR_SHOTS.totality.target, { eclipseProgress: 0.5 }),
 };
 
 function checkpoint(
   id: CheckpointId,
-  timeOfDay: number,
+  timeOfDay: SolarPhase01,
   position: readonly [number, number, number],
   target: readonly [number, number, number],
   options: CheckpointOptions = {}

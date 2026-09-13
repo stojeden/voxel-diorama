@@ -18,6 +18,8 @@ import { eclipseWorldReactionAt } from '../experience/EclipseWorldReaction';
 import { EclipseTimeline } from '../experience/EclipseTimeline';
 import { eclipseViewClock } from '../experience/EclipseView';
 import { JUNE_DECLINATION_DEG, sunDirectionAt } from '../environment/sky';
+import type { Radians } from '../units';
+import { radians } from '../units.testing';
 
 describe('eclipse passenger pose', () => {
   test('looks upward and keeps glasses attached to the head transform', () => {
@@ -64,7 +66,7 @@ describe('eclipse passenger pose', () => {
 });
 
 /** The staged eclipse's own sun, read the way the frame loop reads it. */
-const STAGED_DECLINATION = THREE.MathUtils.degToRad(JUNE_DECLINATION_DEG);
+const STAGED_DECLINATION = THREE.MathUtils.degToRad(JUNE_DECLINATION_DEG) as Radians;
 const STAGED_SUN = sunGazeFrom(
   sunDirectionAt(eclipseViewClock(STAGED_DECLINATION), STAGED_DECLINATION)
 );

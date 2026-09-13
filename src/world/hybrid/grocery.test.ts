@@ -9,6 +9,7 @@ import {
 } from './shopHours';
 import { KIOSK_MAIN, KIOSK_RAID, KIOSK_SPECS } from '../WorldLayout';
 import { UFO_BEAM } from '../LakesideCow';
+import { wallClock01 } from '../../units.testing';
 
 /**
  * The grocery, its hours, and the night raid that has to keep working around it.
@@ -41,23 +42,23 @@ const inside = (box: ReturnType<typeof shell>, x: number, z: number) =>
 
 describe('the grocery keeps its own hours', () => {
   test('six in the morning to eleven at night, by the clock', () => {
-    expect(isGroceryOpen(5.99 * HOUR)).toBe(false);
-    expect(isGroceryOpen(GROCERY_OPEN_HOUR * HOUR)).toBe(true);
-    expect(isGroceryOpen(12 * HOUR)).toBe(true);
-    expect(isGroceryOpen(22.9 * HOUR)).toBe(true);
-    expect(isGroceryOpen(GROCERY_CLOSE_HOUR * HOUR)).toBe(false);
-    expect(isGroceryOpen(2 * HOUR)).toBe(false);
+    expect(isGroceryOpen(wallClock01(5.99 * HOUR))).toBe(false);
+    expect(isGroceryOpen(wallClock01(GROCERY_OPEN_HOUR * HOUR))).toBe(true);
+    expect(isGroceryOpen(wallClock01(12 * HOUR))).toBe(true);
+    expect(isGroceryOpen(wallClock01(22.9 * HOUR))).toBe(true);
+    expect(isGroceryOpen(wallClock01(GROCERY_CLOSE_HOUR * HOUR))).toBe(false);
+    expect(isGroceryOpen(wallClock01(2 * HOUR))).toBe(false);
     // The tenement shops' ten-to-six is not imposed here: the grocery is open at eight
     // in the morning and at ten at night, when they are shut.
-    expect(isGroceryOpen(8 * HOUR)).toBe(true);
-    expect(isGroceryOpen(22 * HOUR)).toBe(true);
+    expect(isGroceryOpen(wallClock01(8 * HOUR))).toBe(true);
+    expect(isGroceryOpen(wallClock01(22 * HOUR))).toBe(true);
   });
 
   test('the light inside is on while it is open, and brighter after dark', () => {
-    expect(groceryGlow(3 * HOUR, 1)).toBe(0);
-    expect(groceryGlow(23.5 * HOUR, 1)).toBe(0);
-    const day = groceryGlow(12 * HOUR, 0);
-    const night = groceryGlow(22 * HOUR, 1);
+    expect(groceryGlow(wallClock01(3 * HOUR), 1)).toBe(0);
+    expect(groceryGlow(wallClock01(23.5 * HOUR), 1)).toBe(0);
+    const day = groceryGlow(wallClock01(12 * HOUR), 0);
+    const night = groceryGlow(wallClock01(22 * HOUR), 1);
     expect(day).toBeGreaterThan(0);
     expect(night).toBeGreaterThan(day * 2);
   });
@@ -65,17 +66,18 @@ describe('the grocery keeps its own hours', () => {
   test('after a raid it stays dark, whatever the hour says', () => {
     // The alien visit leaves the shop with nothing to sell. That used to be a barrier
     // planted in front of the door; a dark shop says it without the road sign.
-    expect(groceryGlow(12 * HOUR, 0, true)).toBe(0);
-    expect(groceryGlow(20 * HOUR, 1, true)).toBe(0);
+    expect(groceryGlow(wallClock01(12 * HOUR), 0, true)).toBe(0);
+    expect(groceryGlow(wallClock01(20 * HOUR), 1, true)).toBe(0);
     // And the flag does not invent hours of its own: restocked, the hour rules again.
-    expect(groceryGlow(12 * HOUR, 0, false)).toBeGreaterThan(0);
-    expect(groceryGlow(3 * HOUR, 1, false)).toBe(0);
+    expect(groceryGlow(wallClock01(12 * HOUR), 0, false)).toBeGreaterThan(0);
+    expect(groceryGlow(wallClock01(3 * HOUR), 1, false)).toBe(0);
   });
 
   test('the same hour gives the same light however it was reached', () => {
     for (const hour of [1, 6, 12, 22.5]) {
-      expect(groceryGlow(hour * HOUR + 1, 0.5)).toBeCloseTo(groceryGlow(hour * HOUR, 0.5), 10);
-      expect(groceryGlow(hour * HOUR - 4, 0.5)).toBeCloseTo(groceryGlow(hour * HOUR, 0.5), 10);
+      const here = groceryGlow(wallClock01(hour * HOUR), 0.5);
+      expect(groceryGlow(wallClock01(hour * HOUR + 1), 0.5)).toBeCloseTo(here, 10);
+      expect(groceryGlow(wallClock01(hour * HOUR - 4), 0.5)).toBeCloseTo(here, 10);
     }
   });
 });

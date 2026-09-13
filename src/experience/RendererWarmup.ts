@@ -6,6 +6,7 @@ import type { DayNightCycle } from '../environment/DayNightCycle';
 import type { Weather } from '../environment/Weather';
 import type { DioramaTheme } from './Themes';
 import type { EclipseTimelineState } from './EclipseTimeline';
+import type { Clock01, Radians, SolarPhase01 } from '../units';
 
 interface RendererWarmupOptions {
   env: RuntimeEnv;
@@ -13,9 +14,9 @@ interface RendererWarmupOptions {
   dayNight: DayNightCycle;
   weather: Weather;
   focusTarget: THREE.Vector3;
-  eclipseViewTime: number;
+  eclipseViewTime: Clock01;
   getTheme: () => DioramaTheme;
-  getDayProgress: () => number;
+  getDayProgress: () => Clock01;
   getEclipseState: () => EclipseTimelineState;
 }
 
@@ -29,10 +30,10 @@ export async function warmRenderer(options: RendererWarmupOptions): Promise<void
     object.visible = true;
   });
 
-  const themeDeclination = () =>
-    THREE.MathUtils.degToRad(options.getTheme().sunDeclinationDeg);
+  const themeDeclination = (): Radians =>
+    THREE.MathUtils.degToRad(options.getTheme().sunDeclinationDeg) as Radians;
 
-  const compileAt = async (clock: number, loading: number, label: string) => {
+  const compileAt = async (clock: Clock01, loading: number, label: string) => {
     ui.setLoadingProgress(loading, label);
     // A cloudless warm-up on purpose: these passes exist to compile shader permutations,
     // and the sky the world opens on is the last call in the `finally` below.
@@ -55,14 +56,14 @@ export async function warmRenderer(options: RendererWarmupOptions): Promise<void
    * the call that seeds the smoothed lighting, so it has to seed it at the hour the world
    * actually opens.
    */
-  const compileAtPhase = (phase: number, loading: number, label: string) =>
+  const compileAtPhase = (phase: SolarPhase01, loading: number, label: string) =>
     compileAt(clockFromSolarPhase(phase, themeDeclination()), loading, label);
 
   try {
     await compileAt(options.getDayProgress(), 24, 'KOMPILOWANIE PORANKA');
-    await compileAtPhase(0.5, 42, 'KOMPILOWANIE ŚWIATŁA DNIA');
-    await compileAtPhase(0.28, 56, 'KOMPILOWANIE ZŁOTEJ GODZINY');
-    await compileAtPhase(0.86, 70, 'KOMPILOWANIE NOCY');
+    await compileAtPhase(0.5 as SolarPhase01, 42, 'KOMPILOWANIE ŚWIATŁA DNIA');
+    await compileAtPhase(0.28 as SolarPhase01, 56, 'KOMPILOWANIE ZŁOTEJ GODZINY');
+    await compileAtPhase(0.86 as SolarPhase01, 70, 'KOMPILOWANIE NOCY');
     ui.setLoadingProgress(84, 'KOMPILOWANIE ZAĆMIENIA');
     dayNight.setCameraFocusDistance(148);
     dayNight.setEclipseState({

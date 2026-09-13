@@ -3,9 +3,10 @@ import { fallbackRandom } from '../core/Random';
 import { CinematicTour, type TourChapterId, type TourFrame } from '../CinematicTour';
 import { OPENING_SOLAR_PHASE } from './AuthoredMoments';
 import type { FrameContext } from './FrameContext';
+import type { Clock01, SolarPhase01 } from '../units';
 
 export interface ExperienceFrameState {
-  readonly t01: number;
+  readonly t01: Clock01;
   readonly simTime: number;
   readonly renderTime: number;
   readonly moonPhase: number;
@@ -23,7 +24,7 @@ export interface ExperienceDirectorOptions {
    * {@link ExperienceDirector.setPhaseToClock}, so it is its own clock time until somebody
    * supplies a season, and is re-seeded the moment one arrives.
    */
-  initialDayPhase?: number;
+  initialDayPhase?: SolarPhase01;
   random?: RandomSource;
   onNewDay?: () => void;
 }
@@ -41,7 +42,7 @@ export class ExperienceDirector {
   private simTime: number;
   private renderTime: number;
   /** The authored opening moment, kept on the phase axis so a season can still resolve it. */
-  private readonly openingPhase: number;
+  private readonly openingPhase: SolarPhase01;
   /** True while the clock still holds the unresolved opening phase and nothing else. */
   private openingUnresolved = true;
   private moonPhase = 0.35;
@@ -59,7 +60,7 @@ export class ExperienceDirector {
     this.renderTime = this.simTime;
     this.auroraEnabled = this.random() < 0.5;
     this.frameState = {
-      t01: this.renderTime / this.daySeconds,
+      t01: (this.renderTime / this.daySeconds) as Clock01,
       simTime: this.simTime,
       renderTime: this.renderTime,
       moonPhase: this.moonPhase,
@@ -76,8 +77,13 @@ export class ExperienceDirector {
    * and the clock hour that satisfies it moves with the season: golden hour is 04:40 in June
    * and 07:30 in October. The director stays ignorant of latitude and declination and simply
    * asks whoever owns the sun.
+   *
+   * The identity default is the one place a phase legitimately becomes a clock without a
+   * conversion, and it is written as a cast so that it reads as the exception it is: before
+   * anyone owns the sun there is no season to undo, and {@link setPhaseToClock} re-seeds the
+   * opening moment the moment one exists.
    */
-  private phaseToClock: (phase: number) => number = (phase) => phase;
+  private phaseToClock: (phase: SolarPhase01) => Clock01 = (phase) => phase as number as Clock01;
 
   /**
    * Supply the mapping from authored solar phase to clock time.
@@ -87,12 +93,12 @@ export class ExperienceDirector {
    * that unresolved seed: a boot checkpoint or an explicit `setTime` has already spoken about
    * which hour the viewer should be looking at, and must not be walked back to dawn.
    */
-  setPhaseToClock(map: (phase: number) => number): void {
+  setPhaseToClock(map: (phase: SolarPhase01) => Clock01): void {
     this.phaseToClock = map;
     if (this.openingUnresolved) this.setTime(map(this.openingPhase));
   }
 
-  update(frame: FrameContext, realTimeCycle: number | null): ExperienceFrameState {
+  update(frame: FrameContext, realTimeCycle: Clock01 | null): ExperienceFrameState {
     // The clock is running on its own now; re-seeding the opening moment would be a jump.
     this.openingUnresolved = false;
     const tourWasActive = this.tour.isActive();
@@ -158,7 +164,7 @@ export class ExperienceDirector {
   }
 
   /** Set the clock. `t01` is a clock reading; an authored solar phase must be resolved first. */
-  setTime(t01: number): void {
+  setTime(t01: Clock01): void {
     this.openingUnresolved = false;
     this.simTime = t01 * this.daySeconds;
     this.renderTime = this.simTime;
@@ -168,7 +174,7 @@ export class ExperienceDirector {
     this.clockLocked = locked;
   }
 
-  lockCheckpoint(t01: number): void {
+  lockCheckpoint(t01: Clock01): void {
     this.setTime(t01);
     this.checkpointLocked = true;
   }
@@ -191,7 +197,7 @@ export class ExperienceDirector {
 
   private writeFrameState(tour: TourFrame | null): ExperienceFrameState {
     const mutable = this.frameState as {
-      t01: number;
+      t01: Clock01;
       simTime: number;
       renderTime: number;
       moonPhase: number;
@@ -199,7 +205,7 @@ export class ExperienceDirector {
       auroraEnabled: boolean;
       tour: TourFrame | null;
     };
-    mutable.t01 = ((this.renderTime / this.daySeconds) % 1 + 1) % 1;
+    mutable.t01 = ((((this.renderTime / this.daySeconds) % 1) + 1) % 1) as Clock01;
     mutable.simTime = this.simTime;
     mutable.renderTime = this.renderTime;
     mutable.moonPhase = this.moonPhase;
