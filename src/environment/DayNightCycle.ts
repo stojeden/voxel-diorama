@@ -1476,7 +1476,13 @@ export class DayNightCycle {
     this.stationLightBudget = profile.stationLightBudget;
     this.windowLightBudget = profile.windowLightBudget;
     this.syncShadowMapResolution(shadowConfigChanged);
-    this.sunLight.castShadow = profile.shadows && this.smoothedSunStrength > 0.002;
+    // Quality may only ever turn the shadow OFF. `update` owns whether it is on, and it uses a
+    // gate this one does not have -- `sunStrength * irradiance * cloudLight.beam > 0.05`, which
+    // knows about the cloud deck and about an eclipse. Writing `smoothedSunStrength > 0.002`
+    // here could put one frame of hard noon shadow under rain, or through totality, between a
+    // quality change and the next frame. `shadowsEnabled` is set just above, so the loop
+    // reaches the right answer on its own.
+    if (!profile.shadows) this.sunLight.castShadow = false;
   }
 
   update(
@@ -1719,6 +1725,24 @@ export class DayNightCycle {
     this.moonMaterial.uniforms.uOpacity.value = moonOpacity;
     this.moonMesh.visible = moonOpacity > 0.001;
     this.moonLight.position.copy(moonDir).multiplyScalar(120);
+    /**
+     * `cloudCover` here is the SKY's cloud -- the weather's deck plus the theme's own haze --
+     * and that is deliberate, where the daylight beam a few hundred lines up reads the
+     * weather's deck alone.
+     *
+     * The difference is what each number is for. A theme's `turbidityAdd` is not a cloud deck,
+     * so it must not gate a *shadow*: that was a real defect, and feeding it to the overcast
+     * curve made a clear cyberpunk sky brighten its own sun by 19.9 per cent. But haze does
+     * extinguish a moon and does drown stars -- that is what smog over a city physically does
+     * -- so here the hazed number is the right one, and the stars below read it for the same
+     * reason.
+     *
+     * What is NOT derived is the exchange rate. `skyCloud` is `weatherCloud + turbidityAdd *
+     * 0.1`, and Neon Noir's `turbidityAdd: 5` therefore spends 0.5 of a cloud deck on a
+     * cloudless night: the moon loses 40 per cent and half the stars go. That reads well and
+     * it is the look the owner approved, but the 0.1 is authored, not measured. Anyone
+     * retuning the neon night should change it knowing it is a dial, not a constant.
+     */
     this.moonLight.intensity =
       night * (0.06 + this.moonIllumination * 0.5) * (1 - cloudCover * 0.8) * clamp01(moonDir.y * 4);
 
