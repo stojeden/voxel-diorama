@@ -1,9 +1,37 @@
 import { describe, expect, test } from 'vitest';
-import { windBearingAt, windSeedFrom, type WindSeed } from './wind';
-import { createWorldRandom } from '../core/Random';
+import {
+  GUST_SLOW_RATE,
+  WIND_BASE_BEARING,
+  windBearingAt,
+  windSeedFrom,
+  type WindSeed,
+} from './wind';
+import { createWorldRandom, DEFAULT_SIMULATION_SEED } from '../core/Random';
+import { OPENING_SHOT, OVERVIEW_SHOT, type CameraShot } from '../experience/ShotDefinitions';
+import type { Radians } from '../units';
 
 /** A seed whose base sits just short of +π, so an hour of veer walks the bearing across it. */
-const ACROSS_PI: WindSeed = { base: Math.PI - 0.05, veerPhase: 0, swirlPhase: 0 };
+const ACROSS_PI: WindSeed = {
+  base: (Math.PI - 0.05) as Radians,
+  veerPhase: 0 as Radians,
+  swirlPhase: 0 as Radians,
+};
+
+/** The ground bearing a shot looks along, in the wind's own convention (x = cos, z = sin). */
+function viewBearing(shot: CameraShot): number {
+  return Math.atan2(shot.target[2] - shot.position[2], shot.target[0] - shot.position[0]);
+}
+
+/**
+ * How far a wind bearing is from a view LINE, 0 (straight down it) to π/2 (across it).
+ *
+ * A line, not a direction: a balloon flying at the camera and one flying away from it are the
+ * same failure, and both are 0 here.
+ */
+function offViewAxis(bearing: number, view: number): number {
+  const between = Math.abs(Math.atan2(Math.sin(bearing - view), Math.cos(bearing - view)));
+  return Math.min(between, Math.PI - between);
+}
 
 function unitVector(bearing: number): { x: number; z: number } {
   return { x: Math.cos(bearing), z: Math.sin(bearing) };
@@ -73,5 +101,97 @@ describe('the world has one wind, and it veers', () => {
     // never reached PI would pass while proving nothing.
     expect(worstStep).toBeLessThan(0.05);
     expect(crossedPi).toBe(true);
+  });
+});
+
+describe('the opening shot gets a wind that crosses it', () => {
+  const DEG = Math.PI / 180;
+
+  test('the authored base is perpendicular to the cameras the diorama opens on', () => {
+    // The reason the base is authored at all. Drawn from the seed it was 242.6 deg, and the
+    // seed is FIXED in production, so every single load got a wind 10.7 deg off the opening
+    // camera's own view bearing: the balloon entered off-frame and receded down the middle of
+    // the picture to a speck instead of crossing it. Perpendicular is the other extreme, and
+    // it is the one the shot can show.
+    for (const shot of [OPENING_SHOT, OVERVIEW_SHOT]) {
+      expect(offViewAxis(WIND_BASE_BEARING, viewBearing(shot)) / DEG).toBeGreaterThan(87);
+    }
+  });
+
+  // What the PRODUCTION wind is at load is asserted in `Weather.test.ts`, where the draw
+  // order that decides this seed's phases actually lives: the weather stream hands the wind
+  // its phases last, after every raindrop and cloud puff, so a seed's phases cannot be
+  // reproduced by calling `windSeedFrom` on a fresh stream here.
+
+  test('every seed crosses it, because the drawn phases cannot reach the axis', () => {
+    // The phases still swing the load bearing by up to 0.55 + 0.18 = 0.73 rad (42 deg), so
+    // authoring the base buys the guarantee only if that swing cannot cross the remaining
+    // 48 deg. It cannot, and this is the arithmetic that says so rather than a spot check.
+    let worst = Math.PI;
+    for (let seed = 0; seed < 400; seed++) {
+      const drawn = windSeedFrom(createWorldRandom(seed).stream('weather'));
+      worst = Math.min(worst, offViewAxis(windBearingAt(0, 1, drawn), viewBearing(OPENING_SHOT)));
+    }
+    expect(worst / DEG).toBeGreaterThan(45);
+  });
+
+  test('the veer still carries it around the compass afterwards', () => {
+    // The other half of the bargain: authoring the opening must not have authored the whole
+    // flight. Across an hour the wind has to sweep — coming back within 60 deg of the view
+    // axis and out past 80 again — or the balloon would cross the same way for ever.
+    const seed = windSeedFrom(createWorldRandom(DEFAULT_SIMULATION_SEED).stream('weather'));
+    let closest = Math.PI;
+    let furthest = 0;
+    for (let second = 0; second <= 3600; second += 5) {
+      const off = offViewAxis(windBearingAt(second, 0.16, seed), viewBearing(OPENING_SHOT));
+      closest = Math.min(closest, off);
+      furthest = Math.max(furthest, off);
+    }
+    expect(closest / DEG).toBeLessThan(60);
+    expect(furthest / DEG).toBeGreaterThan(80);
+  });
+});
+
+describe('the gust veers as it arrives', () => {
+  /** Strength is the only thing the gust veer reads, so the difference isolates it exactly. */
+  function gustVeer(second: number, seed: WindSeed, strength = 1): number {
+    return windBearingAt(second, strength, seed) - windBearingAt(second, 0, seed);
+  }
+
+  test('the veer rides the strength gust term, not a phase of its own', () => {
+    // It used to ride `seed.veerPhase`, drawn per session: in one session the wind veered as
+    // it strengthened, in the next as it eased, and the relation between the two was whatever
+    // the draw happened to be. A real gust veers as it arrives, so the two must share one
+    // argument. `Weather`'s slowest gust term is 0.25 * sin(elapsed * GUST_SLOW_RATE).
+    const seed = windSeedFrom(createWorldRandom(7).stream('weather'));
+    for (let second = 0; second <= 60; second += 0.25) {
+      const strengthGust = 0.25 * Math.sin(second * GUST_SLOW_RATE);
+      const veer = gustVeer(second, seed);
+      // Same sign at every sample, and zero where the other is zero: one sine, two readers.
+      expect(Math.sign(Number(veer.toFixed(12)))).toBe(Math.sign(Number(strengthGust.toFixed(12))));
+    }
+  });
+
+  test('the bearing is at the far end of its swing exactly when the gust is hardest', () => {
+    const seed = windSeedFrom(createWorldRandom(7).stream('weather'));
+    const gustPeak = Math.PI / 2 / GUST_SLOW_RATE;
+    let bestSecond = 0;
+    let best = -Infinity;
+    for (let second = 0; second <= 7; second += 0.001) {
+      const veer = gustVeer(second, seed);
+      if (veer > best) {
+        best = veer;
+        bestSecond = second;
+      }
+    }
+    expect(bestSecond).toBeCloseTo(gustPeak, 2);
+    // And it is a nudge, not a weathervane: 2 degrees at full strength.
+    expect(best).toBeCloseTo(0.035, 6);
+  });
+
+  test('a dead calm has no gusts to veer, and half a wind veers half as much', () => {
+    const seed = windSeedFrom(createWorldRandom(7).stream('weather'));
+    expect(gustVeer(3, seed, 0)).toBe(0);
+    expect(gustVeer(3, seed, 0.5)).toBeCloseTo(gustVeer(3, seed, 1) / 2, 12);
   });
 });

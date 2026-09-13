@@ -21,10 +21,24 @@ import type { Radians } from '../units';
  *
  * ## Why a sum of sines rather than a random walk
  *
- * The bearing has to be reproducible from a seed and a clock, not from the state of a
- * generator nobody can replay: a checkpoint that pins the clock has to pin the wind with it,
- * and a frame-rate-dependent walk would put a different wind on the same second of the same
- * seed. So the bearing is a pure function of elapsed seconds, like the plume's phases are.
+ * The bearing has to be reproducible from a clock and a seed, not from the state of a
+ * generator nobody can replay: a frame-rate-dependent walk would put a different wind on the
+ * same second of the same seed. So the bearing is a pure function of elapsed seconds, like
+ * the plume's phases are.
+ *
+ * ## WHICH clock, exactly
+ *
+ * `elapsed` is the seconds `Weather` has accumulated on the PRESENTATION clock — the delta a
+ * checkpoint lock freezes to zero, which is not the same thing as wall time since page load.
+ * This header used to claim that a checkpoint pinning the clock pinned the wind with it. It
+ * did not: a checkpoint lock only STOPPED this clock wherever it had already got to, and no
+ * checkpoint path ever set it, so the same checkpoint froze one wind on a fresh load and a
+ * different one after a minute of watching.
+ *
+ * It is true now, and by construction rather than by luck: `Weather.pinClock` puts the clock
+ * on a stated second, and a booting checkpoint calls it with `CHECKPOINT_WIND_CLOCK`. The
+ * storm phase that comes next hangs off this same clock, so seeking it is a `pinClock` call,
+ * not an offset to wall time that nothing can reach.
  *
  * ## Why the bearing is never wrapped
  *
@@ -35,14 +49,19 @@ import type { Radians } from '../units';
  * turns it has accumulated, so there is nothing to wrap for.
  */
 
-/** Per-session bearing offsets, so the wind is not the same one every load. */
+/**
+ * A session's wind: one AUTHORED anchor plus two drawn phases.
+ *
+ * The fields are `Radians`, not `number`. They are angles — their own comments said so while
+ * their type did not, which is the exact shape `src/units.ts` exists to stop.
+ */
 export interface WindSeed {
-  /** Where this session's wind starts, radians. */
-  readonly base: number;
+  /** The anchor the veer swings about. Authored; see {@link WIND_BASE_BEARING}. */
+  readonly base: Radians;
   /** Phase of the slow veer, so two sessions at the same clock are not in step. */
-  readonly veerPhase: number;
+  readonly veerPhase: Radians;
   /** Phase of the faster swirl riding on the veer. */
-  readonly swirlPhase: number;
+  readonly swirlPhase: Radians;
 }
 
 /**
@@ -85,21 +104,71 @@ const SWIRL_SWING = 0.18;
  * gusts to veer.
  */
 const GUST_VEER_SWING = 0.035;
-const GUST_VEER_RATE = 0.9;
 
-/** Draw a session's wind offsets. Call once; the bearing after that is clock plus seed. */
+/**
+ * The rate of the gust's slowest sine — the ONE the strength gust and the bearing share.
+ *
+ * `Weather` builds its strength gust from three sines and this is the slowest of them, phase
+ * zero; the veer below rides the SAME term with the SAME argument. That is the whole point:
+ * the veer used to run on `seed.veerPhase`, drawn per session, so the relation between "the
+ * wind gusts harder" and "the wind veers" was whatever the draw happened to be — veering as
+ * it strengthened in one session and as it eased in the next. A real gust veers as it
+ * arrives, so the bearing now reaches the far end of its swing exactly when the gust is at
+ * its hardest and is back on the mean bearing as the gust passes.
+ *
+ * Exported so `Weather` builds its own slowest term from this constant. Two copies of 0.9 in
+ * two files is the same defect written twice.
+ */
+export const GUST_SLOW_RATE = 0.9;
+
+/**
+ * The bearing the veer swings about — AUTHORED for the opening shot, not drawn.
+ *
+ * This used to be `random() * 2π`, which reads like variety and is not: `DEFAULT_SIMULATION_SEED`
+ * is fixed in production, so every load drew the same angle — 242.6°, which is 10.7° off the
+ * opening camera's own view bearing. A wind that runs down the view axis is the one wind the
+ * shot cannot show: the balloon enters off-frame, recedes down the middle and shrinks to a
+ * speck instead of crossing. It is the feature's whole point failing, every load, at the only
+ * moment every viewer sees.
+ *
+ * So the base is authored, the way the eclipse's staged hour and the themes' declinations
+ * already are. 320° is within 2° of perpendicular to the two cameras the diorama opens on:
+ * the free camera boots at (55, 42, 70) looking at (0, 5, 0), bearing 231.8°, and
+ * `OVERVIEW_SHOT` — what every checkpoint and the golden-hour chapter frame — sits at
+ * (70, 48, 80) looking at (0, 6, 0), bearing 228.8°. 320° crosses both from frame-left to
+ * frame-right (it is within 2° of the free camera's own right-hand vector), so the balloon
+ * enters at one edge of the picture and leaves by the other.
+ *
+ * Nothing here reads a camera at runtime and nothing should: the camera moves, and a wind
+ * that chased it would be a weathervane bolted to the viewport. This is one constant, chosen
+ * once against the shot the diorama opens on, and the ±0.73 rad the drawn phases add still
+ * leave any seed at least 46° off that view axis at load. From there the 25-minute veer
+ * carries the wind around the compass, so a viewer who watches gets every direction — just
+ * not the bad one in the first thirty seconds.
+ */
+export const WIND_BASE_BEARING = ((-40 * Math.PI) / 180) as Radians;
+
+/**
+ * Draw a session's wind phases. Call once; the bearing after that is clock plus seed.
+ *
+ * Two draws, not three: the base is authored above. The two phases therefore move one slot
+ * earlier in the stream, which changes THIS wind for a given seed and nothing else in the
+ * world — `Weather` draws these last, after every raindrop, snowflake and cloud puff, exactly
+ * so that a change here cannot shift the world several checkpoints are pinned to.
+ */
 export function windSeedFrom(random: RandomSource): WindSeed {
   return {
-    base: random() * Math.PI * 2,
-    veerPhase: random() * Math.PI * 2,
-    swirlPhase: random() * Math.PI * 2,
+    base: WIND_BASE_BEARING,
+    veerPhase: (random() * Math.PI * 2) as Radians,
+    swirlPhase: (random() * Math.PI * 2) as Radians,
   };
 }
 
 /**
  * The bearing at a moment: pure in `elapsed`, free-running, continuous everywhere.
  *
- * @param elapsed seconds on the world clock
+ * @param elapsed seconds on `Weather`'s presentation clock — the one a checkpoint pins and
+ *   freezes; see "WHICH clock, exactly" in the header
  * @param strength 0..1 smoothed wind strength — only the gust veer reads it
  * @param seed this session's offsets from {@link windSeedFrom}
  */
@@ -108,5 +177,7 @@ export function windBearingAt(elapsed: number, strength: number, seed: WindSeed)
   return (seed.base
     + VEER_SWING * Math.sin(elapsed * VEER_RATE + seed.veerPhase)
     + SWIRL_SWING * Math.sin(elapsed * SWIRL_RATE + seed.swirlPhase)
-    + gust * Math.sin(elapsed * GUST_VEER_RATE + seed.veerPhase)) as Radians;
+    // No phase term: this IS the strength gust's own slowest sine, argument for argument, so
+    // the veer and the gust it rides cannot drift apart. See GUST_SLOW_RATE.
+    + gust * Math.sin(elapsed * GUST_SLOW_RATE)) as Radians;
 }

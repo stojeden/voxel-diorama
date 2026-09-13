@@ -1156,6 +1156,63 @@ function buildTreeData(): { trunkVoxels: VoxelData[]; foliage: FoliageInstance[]
   return { trunkVoxels, foliage };
 }
 
+/**
+ * Steady downwind lean of the canopy, in the flutter's own units.
+ *
+ * The fix for a canopy that answered to the wind's AXIS but not its SIGN. The flutter is a
+ * sum of two sines -- zero-mean and symmetric -- so `flutter * uWindDir` was an oscillation
+ * ABOUT the undisplaced vertex, and a bearing of theta produced motion identical to theta+pi.
+ * That is a line, not a direction, and a direction is what the owner asked for. A real tree in
+ * a steady wind LEANS downwind and flutters about that lean.
+ */
+export const FOLIAGE_WIND_LEAN = 0.6;
+
+/**
+ * Scale on the flutter, chosen so the PEAK bend is unchanged.
+ *
+ * The flutter's own peak is {@link FOLIAGE_FLUTTER_PEAK} = 1.6, which is exactly the peak the
+ * symmetric version shipped; 0.6 + 0.625 * 1.6 = 1.6 keeps it. So the size of the tree motion
+ * the owner likes does not move -- only its mean does, downwind. The lean-to-flutter ratio at
+ * the peak is 0.6 : 1.0: three eighths of the excursion is steady, five eighths is alive. The
+ * trough lands at -0.4 instead of -1.6, so the canopy springs back through rest without ever
+ * reaching as far upwind as it now sits downwind.
+ */
+export const FOLIAGE_WIND_FLUTTER = 0.625;
+
+/** `|sin| + 0.6 * |sin|` with both terms in phase: what the flutter reaches at its worst. */
+export const FOLIAGE_FLUTTER_PEAK = 1.6;
+
+/**
+ * The foliage's wind displacement, as the shipped GLSL.
+ *
+ * Written out here rather than inside `onBeforeCompile` so the constants above are the only
+ * place the numbers live, and so the shipped string can be read by a test without a GPU.
+ * Comments stay OUT of the template literal: a comment in a shader string is shipped bytes,
+ * not stripped ones.
+ *
+ * 1.14127 is length(vec2(1.0, 0.55)), the hard-coded lean `uWindDir` replaced. That pair was
+ * NOT a unit vector, so dropping its length would have quietly shrunk the canopy's motion by
+ * 12% -- a retune of tree movement disguised as a direction fix.
+ *
+ * `windPhase` comes from the instance's own origin, so the canopy ripples across the world
+ * instead of leaning as one slab: the lean and the direction are shared, the phase is not.
+ * Both terms scale with `uWind`, so a dead calm still stands straight and the lean breathes
+ * with the gust, because `uWind` carries the gust.
+ */
+export const FOLIAGE_WIND_CHUNK = /* glsl */ `
+        #include <begin_vertex>
+        #ifdef USE_INSTANCING
+          vec3 iorigin = vec3(instanceMatrix[3][0], instanceMatrix[3][1], instanceMatrix[3][2]);
+          float windPhase = iorigin.x * 0.43 + iorigin.z * 0.31;
+          float windHeight = max(iorigin.y - 2.5, 0.0);
+          float windFlutter = sin(uTime * 1.7 + windPhase) + 0.6 * sin(uTime * 2.9 + windPhase * 1.7);
+          float windBend = ${FOLIAGE_WIND_LEAN} + ${FOLIAGE_WIND_FLUTTER} * windFlutter;
+          float windAmp = uWind * 0.085 * windHeight * 1.14127;
+          transformed.x += windBend * windAmp * uWindDir.x;
+          transformed.z += windBend * windAmp * uWindDir.y;
+        #endif
+        `;
+
 function buildFoliageMesh(
   foliage: FoliageInstance[],
   geometry: THREE.BoxGeometry,
@@ -1172,31 +1229,7 @@ function buildFoliageMesh(
         '#include <common>',
         '#include <common>\nuniform float uTime;\nuniform float uWind;\nuniform vec2 uWindDir;'
       )
-      // Two things about the wind block below, written here rather than inside the shader
-      // string because a comment in a template literal is shipped bytes, not stripped ones.
-      //
-      // 1.14127 is length(vec2(1.0, 0.55)), the hard-coded lean this replaced. That pair was
-      // NOT a unit vector, so swapping it for `uWindDir` without the factor would have
-      // quietly shrunk the canopy's motion by 12% -- a retune of tree movement the owner
-      // likes, disguised as a direction fix. Only the WAY changes; the amount does not.
-      //
-      // `windPhase` still comes from the instance's own origin, so the canopy ripples across
-      // the world instead of leaning as one slab. The direction is shared; the phase is not.
-      .replace(
-        '#include <begin_vertex>',
-        /* glsl */ `
-        #include <begin_vertex>
-        #ifdef USE_INSTANCING
-          vec3 iorigin = vec3(instanceMatrix[3][0], instanceMatrix[3][1], instanceMatrix[3][2]);
-          float windPhase = iorigin.x * 0.43 + iorigin.z * 0.31;
-          float windHeight = max(iorigin.y - 2.5, 0.0);
-          float windGust = sin(uTime * 1.7 + windPhase) + 0.6 * sin(uTime * 2.9 + windPhase * 1.7);
-          float windAmp = uWind * 0.085 * windHeight * 1.14127;
-          transformed.x += windGust * windAmp * uWindDir.x;
-          transformed.z += windGust * windAmp * uWindDir.y;
-        #endif
-        `
-      );
+      .replace('#include <begin_vertex>', FOLIAGE_WIND_CHUNK);
   };
 
   const mesh = new THREE.InstancedMesh(geometry, material, foliage.length);

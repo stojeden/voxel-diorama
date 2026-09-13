@@ -13,7 +13,8 @@ import { fallbackRandom, type RandomSource } from '../core/Random';
  * It also FLIES WITH THE WIND. It used to enter at `x = -EDGE` and travel `+x` whatever the
  * weather was doing, so it drifted west to east in a gale from the north; the wind set only
  * how fast it crossed. Now the world's one wind (`src/environment/wind.ts`) picks the edge it
- * enters on and the line it takes, so a north wind carries it south.
+ * enters on and the line it takes, so a north wind carries it south. Its TRACK is the wind;
+ * its yaw is not, and deliberately: see the free spin in `update`.
  *
  * The space jet is deliberately exempt. It flies under power, it has a nose, and a craft with
  * engines does not go where the air goes — it keeps its old west-to-east pass, which
@@ -37,7 +38,21 @@ export interface BalloonCrossing {
   exitZ: number;
   /** Metres from entry to exit. Varies with the bearing — see below. */
   length: number;
+  /**
+   * The unit direction the crossing was actually laid out along.
+   *
+   * Normally the direction passed in. It differs when that direction could not describe a
+   * line — both components zero, or either one not finite — and the planner fell back; the
+   * caller must fly along THIS pair, or it would fly a direction the entry and exit do not
+   * belong to. See {@link planBalloonCrossing}.
+   */
+  dirX: number;
+  dirZ: number;
 }
+
+/** The fallback track: the west-to-east pass the balloon flew before it had a wind at all. */
+const FALLBACK_DIR_X = 1;
+const FALLBACK_DIR_Z = 0;
 
 /**
  * Lay out one crossing of the world square along the wind.
@@ -52,6 +67,17 @@ export interface BalloonCrossing {
  *
  * Exported so the geometry can be checked without a renderer; a balloon that enters
  * downwind is a sign error nobody would catch by eye in a light breeze.
+ *
+ * ## The degenerate direction
+ *
+ * ONE zero component is an axis-aligned crossing and is handled by the slab loop below. BOTH
+ * zero is not a direction at all: it is a point, there is no line to intersect, and the loop
+ * used to fall straight through it leaving `enter` at -Infinity and `exit` at +Infinity — so
+ * every returned coordinate was `0 * -Infinity`, which is NaN, and a NaN position removes the
+ * craft from the scene silently. The old comment claimed the degenerate case was handled; it
+ * handled the half of it that has a line. A zero vector is now caught here, and so is a
+ * non-finite one, and the crossing falls back to the historical west-to-east track. The
+ * direction used is returned, because the caller flies along it.
  */
 export function planBalloonCrossing(
   dirX: number,
@@ -59,18 +85,25 @@ export function planBalloonCrossing(
   lateral: number,
   edge: number
 ): BalloonCrossing {
+  const lengthSquared = dirX * dirX + dirZ * dirZ;
+  // `> 0` and not `!== 0`: a NaN component makes this comparison false, so the same guard
+  // catches a direction that is not a direction and one that is not a number.
+  const usable = lengthSquared > 0 && Number.isFinite(lengthSquared);
+  const dx = usable ? dirX : FALLBACK_DIR_X;
+  const dz = usable ? dirZ : FALLBACK_DIR_Z;
   // A point on the track: `lateral` along the left-hand normal of the direction.
-  const cx = -dirZ * lateral;
-  const cz = dirX * lateral;
+  const cx = -dz * lateral;
+  const cz = dx * lateral;
   // Slab intersection, one axis at a time, entry and exit computed SEPARATELY. They are not
   // symmetric about the track's midpoint once the track is off-centre and off-axis, and
   // assuming they were put the entry 13 metres inside the map on an oblique bearing — a
   // balloon popping into existence, which is the defect the climb-in profile exists to
   // prevent. A direction component of exactly zero never leaves its slab, so that axis
-  // constrains nothing; it gets infinite bounds rather than a division that returns NaN.
+  // constrains nothing; it gets infinite bounds rather than a division that returns NaN. The
+  // other axis is guaranteed non-zero by the guard above, so one of the two always bounds it.
   let enter = -Infinity;
   let exit = Infinity;
-  for (const [c, d] of [[cx, dirX], [cz, dirZ]] as const) {
+  for (const [c, d] of [[cx, dx], [cz, dz]] as const) {
     if (d === 0) continue;
     const a = (edge - c) / d;
     const b = (-edge - c) / d;
@@ -78,11 +111,13 @@ export function planBalloonCrossing(
     exit = Math.min(exit, Math.max(a, b));
   }
   return {
-    entryX: cx + dirX * enter,
-    entryZ: cz + dirZ * enter,
-    exitX: cx + dirX * exit,
-    exitZ: cz + dirZ * exit,
+    entryX: cx + dx * enter,
+    entryZ: cz + dz * enter,
+    exitX: cx + dx * exit,
+    exitZ: cz + dz * exit,
     length: exit - enter,
+    dirX: dx,
+    dirZ: dz,
   };
 }
 
@@ -275,9 +310,17 @@ export class Balloon {
         // The jet is under power and keeps its old west-to-east pass; handing the planner
         // (1, 0) reproduces the previous entry and exit exactly rather than special-casing
         // the geometry twice.
-        this.dirX = this.cyber ? 1 : windDirX;
-        this.dirZ = this.cyber ? 0 : windDirZ;
-        const crossing = planBalloonCrossing(this.dirX, this.dirZ, this.lateral, EDGE);
+        const crossing = planBalloonCrossing(
+          this.cyber ? 1 : windDirX,
+          this.cyber ? 0 : windDirZ,
+          this.lateral,
+          EDGE
+        );
+        // Read back rather than kept: if the wind handed over a direction that is not one,
+        // the planner laid the crossing along its fallback and the craft has to fly the line
+        // its own entry and exit sit on.
+        this.dirX = crossing.dirX;
+        this.dirZ = crossing.dirZ;
         this.entryX = crossing.entryX;
         this.entryZ = crossing.entryZ;
         this.crossLength = crossing.length;
@@ -325,12 +368,16 @@ export class Balloon {
       const sway = Math.sin(elapsed * 0.2 + this.bobPhase) * 5;
       this.group.position.x += acrossX * sway;
       this.group.position.z += acrossZ * sway;
-      // Face the way it travels. A yaw of θ sends local +x to (cos θ, 0, -sin θ), so the
-      // heading that points +x downwind is atan2(-dz, dx). The old `elapsed * 0.06` was a
-      // free spin — a real envelope does turn, so it is kept, but as a ±20° sway ABOUT the
-      // heading instead of a rotation that has the basket facing backwards half the time.
-      this.group.rotation.y =
-        Math.atan2(-this.dirZ, this.dirX) + Math.sin(elapsed * 0.06) * 0.35;
+      // FREE SPIN, deliberately — do not "fix" this into a heading lock again.
+      //
+      // A heading lock was tried here and is wrong physics. A free balloon travels WITH the
+      // air, so it has no airspeed and no relative wind to weathervane into; it has no
+      // heading at all. Real envelopes rotate slowly and arbitrarily on whatever torque the
+      // basket and the shear give them, which is what this is. The owner asked for the
+      // balloon to fly with the wind, and it does — that is the track, not the yaw. A
+      // balloon's nose pointing dutifully downwind is the tell of a model that thinks it is
+      // an aircraft. The jet below IS an aircraft and keeps its bank.
+      this.group.rotation.y = elapsed * 0.06;
 
       // Burner: periodic roar — at dusk it beautifully lights the envelope.
       const burst = Math.sin(elapsed * 0.7 + this.bobPhase) > 0.45;
