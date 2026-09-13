@@ -2,7 +2,16 @@ import { describe, expect, test } from 'vitest';
 import * as THREE from 'three';
 import { POSTMAN_STOP_TS, POSTMAN_UNIFORM_COLOR, Postman } from './Postman';
 import { GROUND_SURFACE_Y } from './WorldLayout';
-import { solarPhase01, clock01 } from '../units.testing';
+import { radians, solarPhase01, clock01 } from '../units.testing';
+import {
+  AUTUMN_DECLINATION_DEG,
+  clockFromSolarPhase,
+  JUNE_DECLINATION_DEG,
+  sunElevationAt,
+} from '../environment/sky';
+import { MathUtils } from 'three';
+
+const degToRad = MathUtils.degToRad;
 
 describe('postman and dog interaction', () => {
   test('keeps the complete opaque rider visible while the dog gives chase', () => {
@@ -155,5 +164,43 @@ describe('postman and dog interaction', () => {
     }
     expect(postman.getDebugState().dogMode).toBe('home');
     postman.dispose();
+  });
+});
+
+describe('the round starts at dawn, in every season', () => {
+  /**
+   * `MORNING_START` is 0.28 on the SOLAR PHASE axis, where 0.25 is sunrise by definition.
+   *
+   * It used to be compared against the clock, which made "every day at dawn" mean 06:43 in
+   * every season: in June the postman left two and a half hours after a 04:08 sunrise, and in
+   * December he left in the dark. This pins the consequence rather than the literal — the
+   * clock he leaves at has to MOVE with the season, and move the right way.
+   */
+  const asHours = (t: number) => t * 24;
+
+  test('leaves earlier by the clock in June than in autumn', () => {
+    const june = clockFromSolarPhase(solarPhase01(0.28), radians(degToRad(JUNE_DECLINATION_DEG)));
+    const autumn = clockFromSolarPhase(
+      solarPhase01(0.28),
+      radians(degToRad(AUTUMN_DECLINATION_DEG))
+    );
+
+    // A high summer sun rises early, so the same phase is an earlier hour.
+    expect(asHours(june)).toBeLessThan(asHours(autumn));
+    // ...and the gap is a real one, not a rounding difference: over an hour and a half here.
+    expect(asHours(autumn) - asHours(june)).toBeGreaterThan(1.5);
+    // Both are still mornings. A phase that resolved to the afternoon would mean the axis
+    // conversion had been dropped somewhere between here and the caller.
+    expect(asHours(june)).toBeGreaterThan(3);
+    expect(asHours(autumn)).toBeLessThan(9);
+  });
+
+  test('a phase of 0.25 is sunrise whatever the declination does to the hour', () => {
+    for (const deg of [JUNE_DECLINATION_DEG, 0, AUTUMN_DECLINATION_DEG]) {
+      const declination = radians(degToRad(deg));
+      const sunriseClock = clockFromSolarPhase(solarPhase01(0.25), declination);
+      // The elevation at that clock is the horizon, by construction, in every season.
+      expect(Math.abs(sunElevationAt(sunriseClock, declination))).toBeLessThan(0.6);
+    }
   });
 });
