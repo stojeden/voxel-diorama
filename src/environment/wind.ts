@@ -116,8 +116,12 @@ const GUST_VEER_SWING = 0.035;
  * Exported because it is the number that decides whether {@link WIND_BASE_BEARING} is
  * defensible, and because the test that holds the wedge must measure against a stated
  * constant rather than a literal copied out of a comment.
+ *
+ * `Radians`, like every other angle here. It shipped as a bare `number` in the same file whose
+ * `WindSeed` docblock says angles must not -- which is how a branded boundary ends up one field
+ * short of the place it was written for, twice in the same feature.
  */
-export const WIND_BEARING_SWING = VEER_SWING + SWIRL_SWING + GUST_VEER_SWING;
+export const WIND_BEARING_SWING = (VEER_SWING + SWIRL_SWING + GUST_VEER_SWING) as Radians;
 
 /**
  * The rate of the gust's slowest sine — the ONE the strength gust and the bearing share.

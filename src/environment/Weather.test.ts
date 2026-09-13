@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { createWorldRandom, DEFAULT_SIMULATION_SEED } from '../core/Random';
-import {
+import { NO_EXTERNAL_WIND_FLOOR,
   CHECKPOINT_WIND_CLOCK,
   CLOUD_DOMAIN_RADIUS,
   CLOUD_LAYOUT_HALF_X,
@@ -635,12 +635,12 @@ describe('rain blows a gale', () => {
     for (const from of ['clear', 'cloudy', 'snow', 'fog'] as const) {
       const weather = createWeather();
       weather.debugSetImmediate(from);
-      weather.setExternal('rain');
+      weather.setExternal('rain', NO_EXTERNAL_WIND_FLOOR);
       for (let step = 0; step < 400; step++) {
         weather.update(0.05, 0.05);
         if (weather.getRainIntensity() > 0.4) expect(weather.getCloudCover()).toBeGreaterThan(0.4);
       }
-      weather.setExternal(from);
+      weather.setExternal(from, NO_EXTERNAL_WIND_FLOOR);
       for (let step = 0; step < 400; step++) {
         weather.update(0.05, 0.05);
         if (weather.getRainIntensity() > 0.4) expect(weather.getCloudCover()).toBeGreaterThan(0.4);

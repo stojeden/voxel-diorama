@@ -278,6 +278,15 @@ function pickTransition(from: WeatherKind, random: RandomSource): WeatherKind {
   return options[options.length - 1][0];
 }
 
+/**
+ * What to pass `setExternal` when the caller has no wind of its own to insist on.
+ *
+ * Not "no wind": the override is applied as `max(kind's own wind, externalWind)`, so zero is
+ * the identity and the weather keeps the strength its own kind asks for. Named because
+ * `setExternal(kind, 0)` reads like a request for a dead calm and is the opposite.
+ */
+export const NO_EXTERNAL_WIND_FLOOR = 0;
+
 export class Weather {
   private readonly random: RandomSource;
   private setting: WeatherSetting = 'auto';
@@ -695,8 +704,16 @@ export class Weather {
     return this.kind === 'clear';
   }
 
-  /** Real-world weather override (REAL TIME mode). Pass null to release. */
-  setExternal(kind: WeatherKind | null, windNorm = 0): void {
+  /**
+   * Real-world weather override (REAL TIME mode). Pass null to release.
+   *
+   * `windNorm` is required. It defaulted to 0, and `debugSetImmediate` called this with one
+   * argument -- so every checkpoint and every smoke scenario silently asked for a dead calm
+   * while believing it had asked for nothing. That is the same shape as the storm random this
+   * feature already removed, and the same shape as the default that once fed a night floor
+   * into a declination slot: a slot whose wrong value is plausible, filled in silence.
+   */
+  setExternal(kind: WeatherKind | null, windNorm: number): void {
     this.externalKind = kind;
     this.externalWind = windNorm;
     if (kind !== null) this.kind = kind;
@@ -704,7 +721,7 @@ export class Weather {
 
   /** Deterministic state setter for browser smoke and performance scenarios. */
   debugSetImmediate(kind: WeatherKind): void {
-    this.setExternal(kind);
+    this.setExternal(kind, NO_EXTERNAL_WIND_FLOOR);
     Object.assign(this.values, TARGETS[kind]);
     this.snowCover = kind === 'snow' ? 1 : 0;
     this.wetness = kind === 'rain' ? 1 : 0;

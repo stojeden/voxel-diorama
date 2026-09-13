@@ -12,7 +12,7 @@ import { LakeLife } from './world/LakeLife';
 import { LakesideCow, type UfoEvent } from './world/LakesideCow';
 import { RailSignals } from './world/RailSignals';
 import { DayNightCycle } from './environment/DayNightCycle';
-import { CHECKPOINT_WIND_CLOCK, Weather } from './environment/Weather';
+import { NO_EXTERNAL_WIND_FLOOR, CHECKPOINT_WIND_CLOCK, Weather } from './environment/Weather';
 import {
   DormantRainbow,
   type RainbowFrameInput,
@@ -379,7 +379,7 @@ function endTourOverrides(): void {
   // permanent total eclipse. Rewind so the world — and the status that reports
   // it — return to no eclipse.
   eclipseState = eclipseTimeline.seek(0, false);
-  weather.setExternal(null);
+  weather.setExternal(null, NO_EXTERNAL_WIND_FLOOR);
   ui.setTourActive(false);
   ui.setInfoText('PRZECIĄGNIJ — OBRÓT • PRAWY PRZYCISK — PRZESUŃ • SCROLL — ZOOM');
 }
@@ -389,7 +389,7 @@ function releaseCheckpointState(interruptCamera: boolean): void {
   experience.releaseCheckpoint();
   experience.setClockLocked(false);
   eclipseCheckpointLocked = false;
-  weather.setExternal(null);
+  weather.setExternal(null, NO_EXTERNAL_WIND_FLOOR);
   rainbow.releaseDebugSource();
   if (interruptCamera) cameraDirector.interrupt('explicit');
 }
@@ -570,7 +570,7 @@ ui.onTourButton(() => {
   } else {
     if (realTime?.isActive()) {
       realTime.disable();
-      weather.setExternal(null);
+      weather.setExternal(null, NO_EXTERNAL_WIND_FLOOR);
       ui.setRealTime(false);
     }
     activeCheckpoint = null;
@@ -612,7 +612,7 @@ ui.onRealTimeToggle(() => {
   if (realTimePending) return;
   if (realTime?.isActive()) {
     realTime.disable();
-    weather.setExternal(null);
+    weather.setExternal(null, NO_EXTERNAL_WIND_FLOOR);
     ui.setRealTime(false);
     ui.showToast('TRYB SYMULACJI');
     return;
@@ -687,7 +687,7 @@ function startEclipse(source: EclipseStartSource = 'manual'): void {
   if (manual && experience.isTourActive()) endTourOverrides();
   if (realTime?.isActive()) {
     realTime.disable();
-    weather.setExternal(null);
+    weather.setExternal(null, NO_EXTERNAL_WIND_FLOOR);
     ui.setRealTime(false);
   }
   if (manual) experience.setTime(eclipseViewClock(sunDeclination()));
@@ -1437,7 +1437,7 @@ const debugHandle: DioramaDebugHandle = {
     weather.debugSetImmediate(kind);
     return rainbowReady ?? Promise.resolve();
   },
-  clearWeather: () => weather.setExternal(null),
+  clearWeather: () => weather.setExternal(null, NO_EXTERNAL_WIND_FLOOR),
   setRainbowSource: (index: number, strength = 1) => {
     weather.debugSetAirborneMoisture(
       Number.isFinite(strength) ? THREE.MathUtils.clamp(strength, 0, 1) : 0
@@ -1495,7 +1495,7 @@ const debugHandle: DioramaDebugHandle = {
   placeCowAtMeadow: () => lakesideCow.debugPlaceCowAtMeadow(),
   summonUfo: (event?: UfoEvent) => lakesideCow.debugSummonUfo(event),
   debugWinterFisherman: () => {
-    weather.setExternal('snow');
+    weather.setExternal('snow', NO_EXTERNAL_WIND_FLOOR);
     weather.debugSetSnowCover(1);
     fisherman.debugSetWinterFishing();
   },

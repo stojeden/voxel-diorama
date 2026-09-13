@@ -72,7 +72,15 @@ describe('the foliage leans downwind and flutters about the lean', () => {
     const excursion = Math.max(...values) - Math.min(...values);
     expect(FOLIAGE_WIND_EXCURSION).toBeCloseTo(2 * FOLIAGE_FLUTTER_PEAK, 9);
     expect(excursion).toBeCloseTo(FOLIAGE_WIND_EXCURSION, 1);
-    expect(2 * FOLIAGE_WIND_FLUTTER * FOLIAGE_FLUTTER_PEAK).toBeCloseTo(FOLIAGE_WIND_EXCURSION, 9);
+    // 3.2 as a LITERAL, not as the constant's own definition restated.
+    //
+    // This line was `expect(2 * FOLIAGE_WIND_FLUTTER * FOLIAGE_FLUTTER_PEAK)
+    // .toBeCloseTo(FOLIAGE_WIND_EXCURSION, 9)`, and `FOLIAGE_WIND_EXCURSION` IS
+    // `2 * FOLIAGE_WIND_FLUTTER * FOLIAGE_FLUTTER_PEAK` — the same expression compared with
+    // itself, true for every possible value of both constants. A reviewer found it. The
+    // anchor has to come from outside the module: 3.2 is the swing that shipped before this
+    // feature existed, and the swing is the thing the owner said he liked.
+    expect(FOLIAGE_WIND_EXCURSION).toBeCloseTo(3.2, 9);
   });
 
   test('the lean is a bias on that swing, not a slice taken out of it', () => {
