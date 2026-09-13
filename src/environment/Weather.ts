@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { WindUniforms } from '../world/WorldGenerator';
 import type { QualityProfile } from '../performance/QualityManager';
-import { fallbackRandom, type RandomSource } from '../core/Random';
+import type { RandomSource } from '../core/Random';
 import { GUST_SLOW_RATE, windBearingAt, windSeedFrom, type WindSeed, type WindVector } from './wind';
 import {
   stormCloudBrightness,
@@ -21,13 +21,44 @@ const RAIN_TOP = 42;
 const RAIN_BOTTOM = -2;
 const RAIN_FALL_SPEED = 20;
 
+/**
+ * Horizontal speed a drop takes from a gusted `uWind` of 1: the old `wind * 6`, named.
+ *
+ * Unchanged in value. It was a literal inside the update loop, and it now has to be read
+ * twice — once to move the drop and once to lean the streak it draws — which is exactly the
+ * shape that produces two numbers that drift apart if it stays a literal.
+ */
+const RAIN_DRIFT_SPEED = 6;
+
+/**
+ * How long a drawn streak is, in metres: `|(0.2, -0.9, 0.1)|`, the length the deck shipped.
+ *
+ * The lean of that offset was wrong — hard-coded toward one bearing — but its LENGTH is an
+ * authored look, so it is preserved exactly while the direction becomes the wind's.
+ */
+const RAIN_STREAK_LENGTH = Math.hypot(0.2, 0.9, 0.1);
+
 const SNOW_COUNT = 1500;
 const SNOW_TOP = 40;
 const SNOW_FALL_SPEED = 2.6;
 
+/** Horizontal speed a flake takes from a gusted `uWind` of 1: the old `wind * 2.4`, named. */
+const SNOW_DRIFT_SPEED = 2.4;
+
 const CLOUD_COUNT = 14;
 const CLOUD_MIN_Y = 30;
 const CLOUD_MAX_Y = 44;
+
+/**
+ * Half-extents of the box the deck is LAID OUT in — the density the sky is authored with.
+ *
+ * Exported because that authored density is the reference the steady state has to be held
+ * against: a deck that spreads out until it is thinner than the one the diorama opens with
+ * has lost cloud over the city, and the only way a test can say so is to know this box. They
+ * were `RAIN_AREA - 20` and `RAIN_AREA - 30` inline, which is the same numbers with no name.
+ */
+export const CLOUD_LAYOUT_HALF_X = RAIN_AREA - 20;
+export const CLOUD_LAYOUT_HALF_Z = RAIN_AREA - 30;
 
 /**
  * How far out a cloud may drift before the sky recycles it — a RADIUS, not an edge.
@@ -49,6 +80,48 @@ export const CLOUD_DOMAIN_RADIUS = 180;
 const CLOUD_ENTRY_SPREAD = 0.75;
 
 /**
+ * Bend a uniform cross-wind draw toward the middle, so the deck stays thickest over the city.
+ *
+ * ## Why a uniform draw was wrong, and why the span test could not see it
+ *
+ * A cloud entering at cross-offset `a` travels the whole chord at that offset and is recycled;
+ * the time it spends inside is proportional to that chord, so at steady state the number of
+ * clouds sitting on the chord is proportional to `p(a) * chord(a)` and the AREAL density is
+ * `p(a)` alone. A uniform entry draw is therefore a uniform deck, spread evenly over the
+ * whole 270 m band the disc allows — and the clouds are LAID OUT in a ±130 by ±120 box, area
+ * 62 400 m², not over the 87 104 m² that band covers. So the deck did not pile up anywhere; it
+ * DILUTED, by 28%, everywhere, including over the city, which is the only part of it anyone
+ * is looking at. Measured as the share of drawn puffs within `WORLD_HALF_SIZE` of the origin,
+ * meaned over twelve seeds: 0.326 at load, 0.233 an hour later.
+ *
+ * The branch's own test asserted `spanX > 120 && spanZ > 120`, which a diluted deck satisfies
+ * easily — a bounding span is the one statistic that cannot tell "spread out" from "spread
+ * thin", because both make it larger.
+ *
+ * ## The shaping, and why exactly this one
+ *
+ * `sign(u) * (1 - sqrt(1 - |u|))` turns a uniform `u` on -1..1 into a TRIANGULAR density on
+ * -1..1, peaked in the middle and reaching zero at the rim. It is monotone and fixes -1, 0
+ * and +1, so the boundary and the centre are still the boundary and the centre.
+ *
+ * Since the areal density IS the entry density, a triangle means the deck is thickest along
+ * the line through the city and feathers out toward the edge of the sky — which is what the
+ * authored box looks like from above, restored as a steady state rather than as an opening
+ * arrangement that decays. Over `|a| < 80` against a spread of 0.75 * 180 = 135 m the triangle
+ * carries 1.407x the density a uniform draw does, and 0.233 * 1.407 = 0.328 — the load figure
+ * of 0.326, recovered. That agreement is why the shaping is a triangle rather than something
+ * sharper: a peakier draw would overshoot into a cloud lane down the middle of the sky.
+ *
+ * It also retires the reason {@link CLOUD_ENTRY_SPREAD} was clamped in the first place — an
+ * entry at the very rim has almost no chord to cross — by making such entries vanishingly
+ * rare instead of forbidding them.
+ */
+export function cloudEntryShape(crossFraction: number): number {
+  const clamped = THREE.MathUtils.clamp(crossFraction, -1, 1);
+  return Math.sign(clamped) * (1 - Math.sqrt(1 - Math.abs(clamped)));
+}
+
+/**
  * A hair inside the boundary, so a re-entry cannot be read as an escape.
  *
  * An entry computed ON the circle lands within one ulp of it, and that rounding can fall
@@ -67,10 +140,11 @@ export function cloudHasLeftTheSky(x: number, z: number): boolean {
  * Where a recycled cloud comes back: the UPWIND boundary of the sky, at a fresh cross-wind
  * offset, so it crosses the world instead of reappearing where it left.
  *
- * `crossFraction` is -1..1 across the wind; the caller draws it, so the deck does not re-enter
- * in single file. It is scaled by {@link CLOUD_ENTRY_SPREAD} because an entry at the very edge
- * of the disc has a chord of nearly nothing to cross and would be recycled again within
- * seconds.
+ * `crossFraction` is -1..1 across the wind; the caller draws it UNIFORMLY, so the deck does not
+ * re-enter in single file, and {@link cloudEntryShape} then bends that draw toward the middle
+ * so the deck stays as thick over the city as it is laid out. It is scaled by
+ * {@link CLOUD_ENTRY_SPREAD} because an entry at the very edge of the disc has a chord of
+ * nearly nothing to cross and would be recycled again within seconds.
  *
  * A direction that is not a direction — both components zero, or either one NaN or infinite —
  * falls back to the west-to-east entry the deck had before it had a bearing, rather than
@@ -91,7 +165,7 @@ export function cloudEntryPoint(
     unitZ = windZ * inverse;
   }
   const radius = CLOUD_DOMAIN_RADIUS * CLOUD_ENTRY_INSET;
-  const across = THREE.MathUtils.clamp(crossFraction, -1, 1) * CLOUD_ENTRY_SPREAD * radius;
+  const across = cloudEntryShape(crossFraction) * CLOUD_ENTRY_SPREAD * radius;
   const along = -Math.sqrt(Math.max(0, radius * radius - across * across));
   return {
     x: unitX * along - unitZ * across,
@@ -134,11 +208,14 @@ const TARGETS: Record<WeatherKind, WeatherTargets> = {
    * top of one — 32% harder than 0.62 everywhere:
    *
    *  - the canopy's peak displacement rises with it, and the PEAK gusted `uWind` stays under
-   *    1.0, which is the ceiling the foliage's lean/flutter split was measured against;
+   *    1.0 (0.82 * 1.18 = 0.968), which is the ceiling the foliage's bend was measured
+   *    against;
    *  - the plume's full-age drift goes 3.6 m -> 4.3 m on the mean against a 13 m rise, so the
    *    column leans distinctly without lying flat;
    *  - the rain's own horizontal drift goes 2.4 m/s -> 3.2 m/s against a 20 m/s fall, tilting
-   *    a streak's track from 6.9 deg off vertical to 9.1 (16.2 at the top of a gust);
+   *    a streak's track from 6.9 deg off vertical to 9.1 (16.2 at the top of a gust) — and
+   *    the drawn streak is that track now, along the wind, rather than a fixed 14 deg toward
+   *    a hard-coded bearing of 26.6;
    *  - the balloon is unaffected: it is grounded in rain by cover, not by wind.
    *
    * Not 1.0: `setExternal` takes a live wind normalised to 1 and publishes
@@ -275,11 +352,23 @@ export class Weather {
     bearing: 0 as Radians,
   };
 
+  /**
+   * Both random sources are REQUIRED. They used to default to `fallbackRandom(scope)`, which
+   * is `createWorldRandom()` — `DEFAULT_SIMULATION_SEED`. A caller that omitted one therefore
+   * got the default seed's weather or the default seed's storm however different a world it
+   * had asked for, and said nothing about it; the branch's own tests were doing exactly that
+   * with the storm. This repository has paid for the shape before: a default on a declination
+   * slot let three warm-up calls feed the night floor into it in silence, and the symptom
+   * that surfaced weeks later ("the seasonal sun broke rendering") named the wrong module.
+   *
+   * A required parameter turns every one of those into a compile error at the call site,
+   * which is the only place that knows which world it means.
+   */
   constructor(
     scene: THREE.Scene,
     windUniforms: WindUniforms,
-    random = fallbackRandom('weather'),
-    stormRandom = fallbackRandom('storm')
+    random: RandomSource,
+    stormRandom: RandomSource
   ) {
     this.scene = scene;
     this.windUniforms = windUniforms;
@@ -295,9 +384,12 @@ export class Weather {
       this.rainPositions[idx] = x;
       this.rainPositions[idx + 1] = y;
       this.rainPositions[idx + 2] = z;
-      this.rainPositions[idx + 3] = x + 0.2;
-      this.rainPositions[idx + 4] = y - 0.9;
-      this.rainPositions[idx + 5] = z + 0.1;
+      // Straight down, at the shipped length. The lean belongs to the wind, and the wind is
+      // not published until the end of this constructor; the first tick of visible rain
+      // rewrites every tail from the bearing, and the mesh is invisible until then.
+      this.rainPositions[idx + 3] = x;
+      this.rainPositions[idx + 4] = y - RAIN_STREAK_LENGTH;
+      this.rainPositions[idx + 5] = z;
     }
     this.rainGeometry = new THREE.BufferGeometry();
     this.rainGeometry.setAttribute('position', new THREE.BufferAttribute(this.rainPositions, 3));
@@ -400,9 +492,9 @@ export class Weather {
     for (let c = 0; c < CLOUD_COUNT; c++) {
       const data = cloudData[c];
       this.clouds.push({
-        x: (random() - 0.5) * 2 * (RAIN_AREA - 20),
+        x: (random() - 0.5) * 2 * CLOUD_LAYOUT_HALF_X,
         y: CLOUD_MIN_Y + random() * (CLOUD_MAX_Y - CLOUD_MIN_Y),
-        z: (random() - 0.5) * 2 * (RAIN_AREA - 30),
+        z: (random() - 0.5) * 2 * CLOUD_LAYOUT_HALF_Z,
         speed: 0.8 + random() * 0.7,
         first: cursor,
         count: data.offsets.length,
@@ -736,24 +828,38 @@ export class Weather {
     this.rainMesh.visible = rainAlpha > 0.02;
     this.rainMaterial.opacity = 0.45 * rainAlpha;
     if (this.rainMesh.visible) {
+      // The fifth consumer of the world's one wind. `positions[idx] += slant` drifted every
+      // drop toward +x in every weather, so at the 0.82 gale the rain blew due east while the
+      // canopy beside it leaned 58 degrees away from it.
       const dy = RAIN_FALL_SPEED * presentationDelta;
-      const slant = wind * 6 * presentationDelta;
+      const drift = wind * RAIN_DRIFT_SPEED;
+      const slantX = this.windVector.x * drift * presentationDelta;
+      const slantZ = this.windVector.z * drift * presentationDelta;
+      // A streak is not a sprite that happens to be tilted: it IS the drop's motion over the
+      // exposure, so the segment has to be PARALLEL to the drop's velocity. The shipped tail
+      // was a fixed (0.2, -0.9, 0.1) — 14 degrees off vertical toward a hard-coded bearing of
+      // 26.6 — while the track it was meant to draw is `atan(drift / fall)` along the wind,
+      // 9.1 degrees at the gale's mean gust. Two tilts, neither reading the other, and only
+      // one of them turns when the wind does. Recomputed once a frame and shared by every
+      // drop, so a veering wind re-leans the whole shower instead of waiting for respawns.
+      const trackSpeed = Math.hypot(drift, RAIN_FALL_SPEED);
+      const tailScale = RAIN_STREAK_LENGTH / trackSpeed;
+      const tailX = this.windVector.x * drift * tailScale;
+      const tailY = -RAIN_FALL_SPEED * tailScale;
+      const tailZ = this.windVector.z * drift * tailScale;
       for (let i = 0; i < this.activeRainCount; i++) {
         const idx = i * 6;
+        this.rainPositions[idx] += slantX;
         this.rainPositions[idx + 1] -= dy;
-        this.rainPositions[idx + 4] -= dy;
-        this.rainPositions[idx] += slant;
-        this.rainPositions[idx + 3] += slant;
+        this.rainPositions[idx + 2] += slantZ;
         if (this.rainPositions[idx + 1] < RAIN_BOTTOM) {
-          const x = (this.random() - 0.5) * RAIN_AREA * 2;
-          const z = (this.random() - 0.5) * RAIN_AREA * 2;
-          this.rainPositions[idx] = x;
+          this.rainPositions[idx] = (this.random() - 0.5) * RAIN_AREA * 2;
           this.rainPositions[idx + 1] = RAIN_TOP;
-          this.rainPositions[idx + 2] = z;
-          this.rainPositions[idx + 3] = x + 0.2;
-          this.rainPositions[idx + 4] = RAIN_TOP - 0.9;
-          this.rainPositions[idx + 5] = z + 0.1;
+          this.rainPositions[idx + 2] = (this.random() - 0.5) * RAIN_AREA * 2;
         }
+        this.rainPositions[idx + 3] = this.rainPositions[idx] + tailX;
+        this.rainPositions[idx + 4] = this.rainPositions[idx + 1] + tailY;
+        this.rainPositions[idx + 5] = this.rainPositions[idx + 2] + tailZ;
       }
       (this.rainGeometry.attributes.position as THREE.BufferAttribute).needsUpdate = true;
     }
@@ -763,13 +869,22 @@ export class Weather {
     this.snowMesh.visible = snowAlpha > 0.02;
     this.snowMaterial.opacity = 0.9 * snowAlpha;
     if (this.snowMesh.visible) {
+      // The sixth consumer. Snow is slower than rain and wanders more, and the wander is the
+      // part that makes it read as snow -- so it is untouched, per flake, on both axes. Only
+      // the DRIFT, which used to be `+ wind * 2.4` bolted onto the x wander, now has a
+      // direction: the same unit vector the trees, the plume, the balloon, the deck and the
+      // rain read. A flake's path is its own wander plus the world's one wind.
       const dy = SNOW_FALL_SPEED * presentationDelta;
+      const drift = wind * SNOW_DRIFT_SPEED;
+      const driftX = this.windVector.x * drift * presentationDelta;
+      const driftZ = this.windVector.z * drift * presentationDelta;
       for (let i = 0; i < this.activeSnowCount; i++) {
         const idx = i * 3;
         this.snowPositions[idx + 1] -= dy * (0.7 + 0.3 * Math.sin(this.snowPhases[i]));
         this.snowPositions[idx] +=
-          (Math.sin(this.elapsed * 0.8 + this.snowPhases[i]) * 0.5 + wind * 2.4) * presentationDelta;
-        this.snowPositions[idx + 2] += Math.cos(this.elapsed * 0.6 + this.snowPhases[i]) * 0.4 * presentationDelta;
+          Math.sin(this.elapsed * 0.8 + this.snowPhases[i]) * 0.5 * presentationDelta + driftX;
+        this.snowPositions[idx + 2] +=
+          Math.cos(this.elapsed * 0.6 + this.snowPhases[i]) * 0.4 * presentationDelta + driftZ;
         if (this.snowPositions[idx + 1] < -1) {
           this.snowPositions[idx] = (this.random() - 0.5) * RAIN_AREA * 2;
           this.snowPositions[idx + 1] = SNOW_TOP;

@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 import {
   GUST_SLOW_RATE,
   WIND_BASE_BEARING,
+  WIND_BEARING_SWING,
   windBearingAt,
   windSeedFrom,
   type WindSeed,
@@ -135,20 +136,68 @@ describe('the opening shot gets a wind that crosses it', () => {
     expect(worst / DEG).toBeGreaterThan(45);
   });
 
-  test('the veer still carries it around the compass afterwards', () => {
-    // The other half of the bargain: authoring the opening must not have authored the whole
-    // flight. Across an hour the wind has to sweep — coming back within 60 deg of the view
-    // axis and out past 80 again — or the balloon would cross the same way for ever.
-    const seed = windSeedFrom(createWorldRandom(DEFAULT_SIMULATION_SEED).stream('weather'));
-    let closest = Math.PI;
-    let furthest = 0;
-    for (let second = 0; second <= 3600; second += 5) {
-      const off = offViewAxis(windBearingAt(second, 0.16, seed), viewBearing(OPENING_SHOT));
-      closest = Math.min(closest, off);
-      furthest = Math.max(furthest, off);
+  test('the bearing lives in one wedge for ever, and this is its width', () => {
+    // The claim the module header used to make — "the 25-minute veer carries the wind around
+    // the compass, so a viewer who watches gets every direction" — was false, and it was the
+    // sentence that bought WIND_BASE_BEARING its licence. `windBearingAt` is base plus three
+    // BOUNDED sines, so the reachable set is base ± (0.55 + 0.18 + 0.035) and nothing else,
+    // for every seed and every clock. A day of sampling, both strength extremes, sixty seeds.
+    //
+    // The test the branch shipped measured `offViewAxis`, which FOLDS the compass onto 0..90:
+    // it could not have told a wind that swept 360 degrees from one that never left an
+    // 88-degree wedge, and it passed on both.
+    let low = Infinity;
+    let high = -Infinity;
+    for (let index = 0; index < 60; index++) {
+      const seed = windSeedFrom(
+        createWorldRandom(index === 0 ? DEFAULT_SIMULATION_SEED : index).stream('weather')
+      );
+      for (let second = 0; second <= 24 * 3600; second += 0.5) {
+        for (const strength of [0, 1]) {
+          const bearing = windBearingAt(second, strength, seed);
+          low = Math.min(low, bearing);
+          high = Math.max(high, bearing);
+        }
+      }
     }
-    expect(closest / DEG).toBeLessThan(60);
-    expect(furthest / DEG).toBeGreaterThan(80);
+    // The arithmetic, and then the measurement that confirms it is reached.
+    expect((high - low) / DEG).toBeLessThanOrEqual(2 * (WIND_BEARING_SWING / DEG) + 1e-9);
+    expect((high - low) / DEG).toBeGreaterThan(87);
+    expect((high - low) / DEG).toBeLessThan(88);
+    expect(low / DEG).toBeCloseTo(WIND_BASE_BEARING / DEG - WIND_BEARING_SWING / DEG, 1);
+    expect(high / DEG).toBeCloseTo(WIND_BASE_BEARING / DEG + WIND_BEARING_SWING / DEG, 1);
+  });
+
+  test('the whole wedge crosses both opening cameras, which is what the constant buys', () => {
+    // The honest justification for authoring the base, now that the compass claim is gone.
+    // WIND_BASE_BEARING is not the opening bearing: it is the CENTRE of the only wedge the
+    // wind will ever occupy, so it is the whole session that is authored, not the first
+    // thirty seconds. Every bearing in the wedge has to cross both authored cameras — a wind
+    // running down the view axis is the one wind the shot cannot show, and it is what the
+    // drawn base gave every load before this constant existed.
+    for (const shot of [OPENING_SHOT, OVERVIEW_SHOT]) {
+      const view = viewBearing(shot);
+      let worst = Math.PI;
+      for (let step = -1000; step <= 1000; step++) {
+        const bearing = WIND_BASE_BEARING + (step / 1000) * WIND_BEARING_SWING;
+        worst = Math.min(worst, offViewAxis(bearing, view));
+      }
+      expect(worst / DEG).toBeGreaterThan(44);
+    }
+  });
+
+  test('it still sweeps the wedge, so a balloon does not cross the same way for ever', () => {
+    // The other half of the bargain: a wedge the wind sits still in would be a constant
+    // wearing a veer's clothes. Across an hour it has to visit most of the 87.7 degrees.
+    const seed = windSeedFrom(createWorldRandom(DEFAULT_SIMULATION_SEED).stream('weather'));
+    let low = Infinity;
+    let high = -Infinity;
+    for (let second = 0; second <= 3600; second += 5) {
+      const bearing = windBearingAt(second, 0.16, seed);
+      low = Math.min(low, bearing);
+      high = Math.max(high, bearing);
+    }
+    expect((high - low) / DEG).toBeGreaterThan(50);
   });
 });
 

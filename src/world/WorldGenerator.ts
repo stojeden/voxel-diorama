@@ -1164,23 +1164,75 @@ function buildTreeData(): { trunkVoxels: VoxelData[]; foliage: FoliageInstance[]
  * ABOUT the undisplaced vertex, and a bearing of theta produced motion identical to theta+pi.
  * That is a line, not a direction, and a direction is what the owner asked for. A real tree in
  * a steady wind LEANS downwind and flutters about that lean.
+ *
+ * ## How big this actually is on the screen, measured rather than asserted
+ *
+ * Projected through a 50-degree camera at `OPENING_SHOT` onto a 1920x1080 presented frame,
+ * over the 31 of the world's 46 trees that are in that frame, at the canopy top (y = 7, so
+ * `windHeight` = 4.5):
+ *
+ * | uWind                  | lean, nearest tree | lean, median tree | swing, nearest tree |
+ * |------------------------|--------------------|-------------------|---------------------|
+ * | clear, mean gust 0.104 | 0.69 px            | 0.30 px           | 3.69 px             |
+ * | clear, peak gust 0.189 | 1.26 px            | 0.54 px           | 6.70 px             |
+ * | rain,  mean gust 0.533 | 3.55 px            | 1.52 px           | 18.9 px             |
+ * | rain,  peak gust 0.968 | 6.44 px            | 2.76 px           | 34.3 px             |
+ *
+ * So the lean is genuinely SUB-PIXEL in a calm and plainly visible in the gale, which is the
+ * correct behaviour rather than a defect to tune away: a 0.16 breeze should not bend a tree
+ * you can see bending. Getting the lean to a pixel on a median tree in clear weather would
+ * take a lean of about 2.0 -- a permanent bend larger than the flutter's own peak of 1.6,
+ * i.e. a tree held over harder by the calm than the gust ever pushes it. That is the trade,
+ * and the swing wins it: the swing is the part the owner named, and it is held exactly.
  */
 export const FOLIAGE_WIND_LEAN = 0.6;
 
 /**
- * Scale on the flutter, chosen so the PEAK bend is unchanged.
+ * Scale on the flutter: exactly 1, because the SWING is what the owner asked not to change.
  *
- * The flutter's own peak is {@link FOLIAGE_FLUTTER_PEAK} = 1.6, which is exactly the peak the
- * symmetric version shipped; 0.6 + 0.625 * 1.6 = 1.6 keeps it. So the size of the tree motion
- * the owner likes does not move -- only its mean does, downwind. The lean-to-flutter ratio at
- * the peak is 0.6 : 1.0: three eighths of the excursion is steady, five eighths is alive. The
- * trough lands at -0.4 instead of -1.6, so the canopy springs back through rest without ever
- * reaching as far upwind as it now sits downwind.
+ * This was 0.625, chosen to hold the peak bend at 1.6 -- and holding the peak is not holding
+ * the motion. What a viewer reads as "how much the trees move" is the peak-to-trough
+ * EXCURSION of the canopy, because the undisplaced vertex is not drawn anywhere and a
+ * distance measured from it is not on the screen. Scaling the flutter to 0.625 took the swing
+ * from -1.6..+1.6 (span 3.2) to -0.4..+1.6 (span 2.0): a 37.5% cut to the tree motion,
+ * reported at the time as no change, because the quantity measured was the peak.
+ *
+ * At 1.0 the swing is {@link FOLIAGE_WIND_EXCURSION} = 3.2 again, exactly what shipped before
+ * the direction fix, AND the canopy still sits {@link FOLIAGE_WIND_LEAN} downwind of rest --
+ * the two are not in tension, because the lean is a BIAS on the swing and the swing's size
+ * does not depend on where its centre is. The only quantity that moves is the peak, 1.6 ->
+ * 2.2, which is a leaning tree's top reaching further downwind at the worst of a gust. That
+ * is the quantity that MUST be allowed to move if the swing is to be held.
+ *
+ * Kept as a named constant rather than dropped from the expression: it is the knob that was
+ * turned, and the test that holds the excursion reads it.
  */
-export const FOLIAGE_WIND_FLUTTER = 0.625;
+export const FOLIAGE_WIND_FLUTTER = 1.0;
 
 /** `|sin| + 0.6 * |sin|` with both terms in phase: what the flutter reaches at its worst. */
 export const FOLIAGE_FLUTTER_PEAK = 1.6;
+
+/**
+ * Peak-to-trough of the canopy's bend: the quantity a viewer perceives as tree motion.
+ *
+ * Derived, and named because naming it is the whole lesson of this change. The steady lean
+ * cancels out of a difference between two extremes, so the excursion is `2 * flutter scale *
+ * flutter peak` and nothing else -- which is why a lean can be added for free and why the
+ * peak is the wrong thing to hold fixed.
+ */
+export const FOLIAGE_WIND_EXCURSION = 2 * FOLIAGE_WIND_FLUTTER * FOLIAGE_FLUTTER_PEAK;
+
+/**
+ * Format a TypeScript number as a GLSL float literal.
+ *
+ * `${1}` is the string "1", and `1 * windFlutter` is an int times a float, which GLSL ES
+ * refuses to compile. {@link FOLIAGE_WIND_FLUTTER} became exactly 1 in this change, so the
+ * template literal below would have shipped a shader that no unit test and no GPU-less CI
+ * machine ever compiles -- the failure would have arrived as a blank canopy in a browser.
+ */
+export function glslFloat(value: number): string {
+  return Number.isInteger(value) ? `${value}.0` : `${value}`;
+}
 
 /**
  * The foliage's wind displacement, as the shipped GLSL.
@@ -1206,7 +1258,7 @@ export const FOLIAGE_WIND_CHUNK = /* glsl */ `
           float windPhase = iorigin.x * 0.43 + iorigin.z * 0.31;
           float windHeight = max(iorigin.y - 2.5, 0.0);
           float windFlutter = sin(uTime * 1.7 + windPhase) + 0.6 * sin(uTime * 2.9 + windPhase * 1.7);
-          float windBend = ${FOLIAGE_WIND_LEAN} + ${FOLIAGE_WIND_FLUTTER} * windFlutter;
+          float windBend = ${glslFloat(FOLIAGE_WIND_LEAN)} + ${glslFloat(FOLIAGE_WIND_FLUTTER)} * windFlutter;
           float windAmp = uWind * 0.085 * windHeight * 1.14127;
           transformed.x += windBend * windAmp * uWindDir.x;
           transformed.z += windBend * windAmp * uWindDir.y;

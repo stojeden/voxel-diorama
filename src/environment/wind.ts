@@ -106,6 +106,20 @@ const SWIRL_SWING = 0.18;
 const GUST_VEER_SWING = 0.035;
 
 /**
+ * Half the width of the ONLY wedge this wind ever occupies: 0.765 rad, 43.8 degrees.
+ *
+ * `windBearingAt` is an authored base plus three BOUNDED sines, so the reachable set of
+ * bearings is `base ± (VEER_SWING + SWIRL_SWING + GUST_VEER_SWING)` — 87.7 degrees wide — for
+ * every seed, every strength and every clock. Sampling a day of every one of sixty seeds at
+ * both strength extremes reaches -83.8° to +3.8°, which is that arithmetic within 0.05°.
+ *
+ * Exported because it is the number that decides whether {@link WIND_BASE_BEARING} is
+ * defensible, and because the test that holds the wedge must measure against a stated
+ * constant rather than a literal copied out of a comment.
+ */
+export const WIND_BEARING_SWING = VEER_SWING + SWIRL_SWING + GUST_VEER_SWING;
+
+/**
  * The rate of the gust's slowest sine — the ONE the strength gust and the bearing share.
  *
  * `Weather` builds its strength gust from three sines and this is the slowest of them, phase
@@ -122,7 +136,7 @@ const GUST_VEER_SWING = 0.035;
 export const GUST_SLOW_RATE = 0.9;
 
 /**
- * The bearing the veer swings about — AUTHORED for the opening shot, not drawn.
+ * The CENTRE of the only wedge this wind ever occupies — AUTHORED, not drawn.
  *
  * This used to be `random() * 2π`, which reads like variety and is not: `DEFAULT_SIMULATION_SEED`
  * is fixed in production, so every load drew the same angle — 242.6°, which is 10.7° off the
@@ -139,12 +153,33 @@ export const GUST_SLOW_RATE = 0.9;
  * frame-right (it is within 2° of the free camera's own right-hand vector), so the balloon
  * enters at one edge of the picture and leaves by the other.
  *
+ * ## What this constant actually buys, stated honestly
+ *
+ * It does NOT buy a good opening and then hand the wind over to a veer that explores the
+ * compass. This header claimed exactly that — "the 25-minute veer carries the wind around the
+ * compass, so a viewer who watches gets every direction" — and it was false. Every term in
+ * `windBearingAt` is a bounded sine, so the bearing is confined to `base ±
+ * {@link WIND_BEARING_SWING}` for ever: an 87.7° wedge from -83.8° to +3.8°, measured over a
+ * day of every one of sixty seeds at both strength extremes, identical to within 0.05° for
+ * all of them. There is no term that could carry it further, and there was none when the
+ * sentence was written.
+ *
+ * So the constant authors the WHOLE SESSION, not the first thirty seconds, and that is a
+ * larger claim needing a larger reason. It is this: every bearing in the wedge is at least
+ * 44.3° off the view line of both authored cameras, so the failure that started this — a
+ * balloon receding down the middle of the picture — is arithmetically unreachable rather
+ * than merely unlikely at load. The price is honest and worth naming: the wind will never
+ * blow from the other side of the diorama. A showpiece watched from two authored cameras
+ * would rather have 87.7° of variety that can all be seen than 360° a quarter of which
+ * cannot.
+ *
+ * Widening the model was the alternative and was rejected deliberately: the only way to
+ * reach the whole compass while keeping a pure function of the clock is a slow term of
+ * swing ≥ π, and any such term walks the wind through the view axis on a schedule — putting
+ * the original blocker back, later, where nobody is watching for it.
+ *
  * Nothing here reads a camera at runtime and nothing should: the camera moves, and a wind
- * that chased it would be a weathervane bolted to the viewport. This is one constant, chosen
- * once against the shot the diorama opens on, and the ±0.73 rad the drawn phases add still
- * leave any seed at least 46° off that view axis at load. From there the 25-minute veer
- * carries the wind around the compass, so a viewer who watches gets every direction — just
- * not the bad one in the first thirty seconds.
+ * that chased it would be a weathervane bolted to the viewport.
  */
 export const WIND_BASE_BEARING = ((-40 * Math.PI) / 180) as Radians;
 
