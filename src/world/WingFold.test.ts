@@ -117,9 +117,14 @@ describe('a folded wing is materially shorter', () => {
 
     // Well under half its lateral reach out of the shoulder…
     expect(moved.clone().sub(folded.position).x / tip.x).toBeLessThan(0.45);
-    // …and level with the back of the bird, the way a gull's primaries cross its tail --
+    // …and AT OR BEHIND the back of the bird, the way a gull's primaries cross its tail --
     // not a model unit out behind it, which is a tail, not a folded wing.
-    expect(moved.z).toBeGreaterThan(TAIL_Z - 0.2);
+    //
+    // The lower bound is `TAIL_Z`, not `TAIL_Z - 0.2`. With the slack a wing carrying NO SWEEP
+    // AT ALL passed: its tip lands at z = 0.2559, inside [0.1672, 0.5672], so only the upper
+    // bound was doing any work and the half of this test that names the tuck asserted nothing.
+    // A reviewer found that by re-posing the wing with the sweep forced to zero.
+    expect(moved.z).toBeGreaterThan(TAIL_Z);
     expect(moved.z).toBeLessThan(TAIL_Z + 0.2);
   });
 

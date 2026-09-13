@@ -7,9 +7,11 @@ import type { Degrees, Radians } from '../units';
  * A gull at rest draws each wing in against its flank: swept back along the body, tucked
  * a little below the horizontal, and -- because the primaries slide under one another --
  * roughly half as long as it was. At the sizes this diorama draws a gull (tens of pixels
- * across the wings, see `docs`), the span is the only one of the three a viewer can
- * actually resolve; the sweep is what stops the shorter wing reading as a *smaller bird*
- * rather than a tucked one.
+ * across the wings), the span is the only one of the three a viewer can actually resolve.
+ * The sweep is NOT what carries the fold -- it is sized by where the tip has to land, which
+ * is just behind the tail; see the note on each constant below. An earlier draft of this
+ * paragraph said the sweep stopped the shorter wing reading as a smaller bird, and the
+ * retune that followed a corrected measurement contradicted it sixty lines further down.
  *
  * The wing is a single rigid merged mesh, so there is no joint to bend. The fold is
  * therefore three terms on the wing group, and which axis carries which is a fact about

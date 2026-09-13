@@ -115,7 +115,16 @@ function applyRoostWingPose(gull: Gull): void {
 }
 
 /**
- * Leaves a roost: the one take-off, and the only way out of one.
+ * Leaves a roost for open flight: the one take-off, and the only way into `takeOff`.
+ *
+ * NOT the only way off a perch, and the difference is worth knowing. A gull that is already
+ * roosting can also be sent straight to `toRoost` -- when an eclipse begins while it sleeps,
+ * and when night falls on one that roosted for the eclipse. Those are transfers from one roof
+ * to another, not take-offs, and they leave the perch with the wings still mostly shut
+ * (measured: 0.82 folded on the first frame). That is fine rather than a defect, because
+ * `openness` scales thrust and climb: a bird 82 per cent folded pushes off at 18 per cent and
+ * is airborne properly by the time it has opened. What it is not is a take-off, and an earlier
+ * draft of this comment claimed it could not happen.
  *
  * Both exits used to be written out longhand, except that the dawn one was not written at all
  * -- it set `lifeMode = 'fly'` and let the flight branch have the bird at full cruise speed on
