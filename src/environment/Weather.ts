@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { WindUniforms } from '../world/WorldGenerator';
 import type { QualityProfile } from '../performance/QualityManager';
 import { fallbackRandom, type RandomSource } from '../core/Random';
-import { windBearingAt, windSeedFrom, type WindSeed, type WindVector } from './wind';
+import { GUST_SLOW_RATE, windBearingAt, windSeedFrom, type WindSeed, type WindVector } from './wind';
 import type { Radians } from '../units';
 
 export type WeatherKind = 'clear' | 'cloudy' | 'rain' | 'snow' | 'fog';
@@ -37,6 +37,17 @@ const TARGETS: Record<WeatherKind, WeatherTargets> = {
   snow: { cloud: 0.85, rain: 0, snow: 1, fogDensity: 0.0068, wind: 0.3 },
   fog: { cloud: 0.55, rain: 0, snow: 0, fogDensity: 0.03, wind: 0.07 },
 };
+
+/**
+ * The second on the weather clock that every checkpoint is photographed at.
+ *
+ * A checkpoint claims to be one reproducible frame, so the clock its wind, its gust and its
+ * foliage phase are functions of has to be STATED, not inherited from however many frames ran
+ * before the lock landed. Zero, because a checkpoint is the world as it opens: the wind is
+ * then the authored opening bearing (`WIND_BASE_BEARING` plus this seed's phases) and the
+ * gust is at the start of its own slowest sine.
+ */
+export const CHECKPOINT_WIND_CLOCK = 0;
 
 /** Weighted random transitions for the automatic weather machine. */
 const TRANSITIONS: Record<WeatherKind, Array<[WeatherKind, number]>> = {
@@ -396,11 +407,34 @@ export class Weather {
   }
 
   /**
-   * @param simDelta seconds of simulated time (scaled by clock speed)
-   * @param realDelta seconds of wall-clock time (particles animate on this)
+   * Put the weather clock on a stated second.
+   *
+   * The wind bearing, the gust and the foliage's `uTime` are all pure functions of this
+   * clock, so this is the handle that makes them reproducible. It exists because the claim
+   * "a checkpoint that pins the clock pins the wind" was not true when it was written: this
+   * clock is an accumulator, a checkpoint lock merely stopped it wherever it had got to, and
+   * no checkpoint path ever set it. Loading a checkpoint at boot happened to freeze it near
+   * zero; loading one after a minute of watching would have frozen a different wind under the
+   * same name. `applyBootCheckpoint` now calls this with {@link CHECKPOINT_WIND_CLOCK}, so a
+   * checkpoint states its second instead of inheriting one.
+   *
+   * The storm phase hangs off this same clock: seeking it is a call here, not an offset to
+   * wall time that nothing can reach.
    */
-  update(simDelta: number, realDelta: number): void {
-    this.elapsed += realDelta;
+  pinClock(seconds: number): void {
+    this.elapsed = seconds;
+    this.windUniforms.uTime.value = seconds;
+    this.publishWind(this.elapsed);
+  }
+
+  /**
+   * @param simDelta seconds of simulated time (scaled by clock speed)
+   * @param presentationDelta seconds of the presentation clock — wall time, EXCEPT that a
+   *   checkpoint lock freezes it to zero. Particles, the gust and the wind bearing animate on
+   *   it, which is precisely why a checkpoint holds the wind still.
+   */
+  update(simDelta: number, presentationDelta: number): void {
+    this.elapsed += presentationDelta;
 
     // ── State machine ──
     if (this.externalKind !== null) {
@@ -416,7 +450,7 @@ export class Weather {
     // ── Crossfade toward targets ──
     const target = TARGETS[this.kind];
     const windTarget = this.externalKind !== null ? Math.max(target.wind, this.externalWind) : target.wind;
-    const fade = 1 - Math.exp(-0.35 * Math.max(realDelta, 0.0001));
+    const fade = 1 - Math.exp(-0.35 * Math.max(presentationDelta, 0.0001));
     this.values.cloud += (target.cloud - this.values.cloud) * fade;
     this.values.rain += (target.rain - this.values.rain) * fade;
     this.values.snow += (target.snow - this.values.snow) * fade;
@@ -427,21 +461,21 @@ export class Weather {
     const snowing = this.values.snow > 0.45;
     this.snowCover = Math.min(
       1,
-      Math.max(0, this.snowCover + (snowing ? realDelta * 0.045 : -realDelta * 0.012))
+      Math.max(0, this.snowCover + (snowing ? presentationDelta * 0.045 : -presentationDelta * 0.012))
     );
 
     // ── Road wetness: soaks fast in rain, dries slowly afterwards ──
     const raining = this.values.rain > 0.4;
     this.wetness = Math.min(
       1,
-      Math.max(0, this.wetness + (raining ? realDelta * 0.09 : -realDelta * 0.016))
+      Math.max(0, this.wetness + (raining ? presentationDelta * 0.09 : -presentationDelta * 0.016))
     );
 
     // A local curtain can outlive the foreground shower over the lake or park.
     // Wind moves/clears it faster, but never introduces randomness here.
     const moistureDelta = raining
-      ? realDelta * (0.055 + this.values.rain * 0.08)
-      : -realDelta * (0.012 + this.values.wind * 0.012);
+      ? presentationDelta * (0.055 + this.values.rain * 0.08)
+      : -presentationDelta * (0.012 + this.values.wind * 0.012);
     this.airborneMoisture = THREE.MathUtils.clamp(
       this.airborneMoisture + moistureDelta,
       0,
@@ -453,9 +487,12 @@ export class Weather {
     if (fog) fog.density = this.values.fogDensity;
 
     // ── Gusty wind uniform for trees / particles ──
+    // The slowest term's rate comes from `wind.ts` because the bearing's gust veer rides that
+    // same sine, argument for argument. Written twice, the two would drift apart and the wind
+    // would veer on one schedule while it strengthened on another.
     const gust =
       0.65 +
-      0.25 * Math.sin(this.elapsed * 0.9) +
+      0.25 * Math.sin(this.elapsed * GUST_SLOW_RATE) +
       0.18 * Math.sin(this.elapsed * 2.3 + 1.7) +
       0.1 * Math.sin(this.elapsed * 5.1 + 0.4);
     const wind = this.values.wind * Math.max(0.2, gust);
@@ -470,8 +507,8 @@ export class Weather {
     this.rainMesh.visible = rainAlpha > 0.02;
     this.rainMaterial.opacity = 0.45 * rainAlpha;
     if (this.rainMesh.visible) {
-      const dy = RAIN_FALL_SPEED * realDelta;
-      const slant = wind * 6 * realDelta;
+      const dy = RAIN_FALL_SPEED * presentationDelta;
+      const slant = wind * 6 * presentationDelta;
       for (let i = 0; i < this.activeRainCount; i++) {
         const idx = i * 6;
         this.rainPositions[idx + 1] -= dy;
@@ -497,13 +534,13 @@ export class Weather {
     this.snowMesh.visible = snowAlpha > 0.02;
     this.snowMaterial.opacity = 0.9 * snowAlpha;
     if (this.snowMesh.visible) {
-      const dy = SNOW_FALL_SPEED * realDelta;
+      const dy = SNOW_FALL_SPEED * presentationDelta;
       for (let i = 0; i < this.activeSnowCount; i++) {
         const idx = i * 3;
         this.snowPositions[idx + 1] -= dy * (0.7 + 0.3 * Math.sin(this.snowPhases[i]));
         this.snowPositions[idx] +=
-          (Math.sin(this.elapsed * 0.8 + this.snowPhases[i]) * 0.5 + wind * 2.4) * realDelta;
-        this.snowPositions[idx + 2] += Math.cos(this.elapsed * 0.6 + this.snowPhases[i]) * 0.4 * realDelta;
+          (Math.sin(this.elapsed * 0.8 + this.snowPhases[i]) * 0.5 + wind * 2.4) * presentationDelta;
+        this.snowPositions[idx + 2] += Math.cos(this.elapsed * 0.6 + this.snowPhases[i]) * 0.4 * presentationDelta;
         if (this.snowPositions[idx + 1] < -1) {
           this.snowPositions[idx] = (this.random() - 0.5) * RAIN_AREA * 2;
           this.snowPositions[idx + 1] = SNOW_TOP;
@@ -517,7 +554,7 @@ export class Weather {
     // Their slow, distant motion does not benefit from 60 matrix uploads per
     // second. Updating at 24 Hz saves CPU and GPU traffic while rain, snow,
     // actors and the train remain full-rate.
-    this.cloudUpdateAccumulator += realDelta;
+    this.cloudUpdateAccumulator += presentationDelta;
     if (this.cloudUpdateAccumulator >= 1 / 24) {
       const cloudDelta = Math.min(this.cloudUpdateAccumulator, 0.15);
       this.cloudUpdateAccumulator = 0;

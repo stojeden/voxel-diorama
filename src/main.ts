@@ -12,7 +12,7 @@ import { LakeLife } from './world/LakeLife';
 import { LakesideCow, type UfoEvent } from './world/LakesideCow';
 import { RailSignals } from './world/RailSignals';
 import { DayNightCycle } from './environment/DayNightCycle';
-import { Weather } from './environment/Weather';
+import { CHECKPOINT_WIND_CLOCK, Weather } from './environment/Weather';
 import {
   DormantRainbow,
   type RainbowFrameInput,
@@ -792,6 +792,11 @@ function applyBootCheckpoint(checkpoint: CheckpointDefinition): void {
   activeCheckpoint = checkpoint;
   experience.lockCheckpoint(clockFromSolarPhase(checkpoint.timeOfDay, sunDeclination()));
   weather.debugSetImmediate(checkpoint.weather);
+  // A checkpoint states the second its weather clock is on rather than inheriting whatever
+  // had accumulated before the lock froze the delta to zero. That clock is what the wind
+  // bearing, the gust and the foliage's phase are functions of, so this is what makes a
+  // checkpoint's canopy and its balloon the same in the next run as in this one.
+  weather.pinClock(CHECKPOINT_WIND_CLOCK);
   weather.debugSetAirborneMoisture(checkpoint.rainbowMoisture ?? 0);
   if (checkpoint.rainbowSource !== undefined) {
     rainbow.debugSetSource(checkpoint.rainbowSource);

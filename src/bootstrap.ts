@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import CameraControls from 'camera-controls';
 import { GROUND_SURFACE_Y } from './world/WorldLayout';
+import { OPENING_SHOT } from './experience/ShotDefinitions';
 import { CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js';
 import {
   DepthOfFieldEffect,
@@ -128,7 +129,7 @@ export function bootstrap(
 
   const size = viewport();
   const camera = new THREE.PerspectiveCamera(50, size.width / size.height, 0.1, 3000);
-  camera.position.set(55, 42, 70);
+  camera.position.set(...OPENING_SHOT.position);
 
   const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance', alpha });
   // A transparent clear is not the default even with `alpha`: three still clears to opaque
@@ -160,7 +161,7 @@ export function bootstrap(
   controls.maxPolarAngle = Math.PI / 2.02;
   controls.dollyToCursor = true;
   controls.infinityDolly = false;
-  controls.setTarget(0, 5, 0);
+  controls.setTarget(...OPENING_SHOT.target);
   /**
    * The camera stops at the ground. It does not go under the diorama.
    *

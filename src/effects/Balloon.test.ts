@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
-import { planBalloonCrossing } from './Balloon';
+import * as THREE from 'three';
+import { Balloon, planBalloonCrossing } from './Balloon';
 
 const EDGE = 115;
 
@@ -67,11 +68,87 @@ describe('the balloon crosses the world along the wind', () => {
     }
   });
 
+  test('the crossing reports the direction it was actually laid out along', () => {
+    for (const bearing of BEARINGS) {
+      const crossing = planBalloonCrossing(bearing.x, bearing.z, 12, EDGE);
+      expect(crossing.dirX).toBe(bearing.x);
+      expect(crossing.dirZ).toBe(bearing.z);
+    }
+  });
+
+  test('a direction that is not a direction falls back instead of returning NaN', () => {
+    // Both components zero is not an axis-aligned crossing, it is a point. Both axes hit the
+    // `d === 0` skip, `enter` stayed -Infinity and `exit` +Infinity, and every returned
+    // coordinate was `0 * -Infinity` — NaN, which puts the craft nowhere and removes it from
+    // the picture in silence. The old comment claimed this case was handled; it handled the
+    // half of it that still has a line.
+    for (const lateral of [-45, 0, 33]) {
+      const crossing = planBalloonCrossing(0, 0, lateral, EDGE);
+      for (const value of Object.values(crossing)) expect(Number.isFinite(value)).toBe(true);
+      // The fallback is the west-to-east pass the balloon flew before it had a wind, and the
+      // caller is told about it, because it has to fly the line its own entry sits on.
+      expect(crossing.dirX).toBe(1);
+      expect(crossing.dirZ).toBe(0);
+      expect(crossing.entryX).toBe(-EDGE);
+      expect(crossing.exitX).toBe(EDGE);
+      expect(crossing.length).toBe(EDGE * 2);
+    }
+  });
+
+  test('a non-finite direction is caught by the same guard', () => {
+    // `lengthSquared > 0` is false for NaN, so one guard covers both shapes of nonsense.
+    for (const [dx, dz] of [[NaN, 0], [0, NaN], [Infinity, 1], [NaN, NaN]]) {
+      const crossing = planBalloonCrossing(dx, dz, 20, EDGE);
+      for (const value of Object.values(crossing)) expect(Number.isFinite(value)).toBe(true);
+      expect(crossing.dirX).toBe(1);
+      expect(crossing.dirZ).toBe(0);
+    }
+  });
+
   test('a still-air crossing is still a crossing a viewer sees the end of', () => {
     // The speed law (3 + wind * 3.5) is untouched, and its 3 m/s floor is the reason. The
     // worst case is the longest crossing at the weakest wind; if this ever passes two
     // minutes, the balloon has become something nobody watches.
     const longest = planBalloonCrossing(Math.SQRT1_2, Math.SQRT1_2, 0, EDGE).length;
     expect(longest / (3 + 0 * 3.5)).toBeLessThan(120);
+  });
+});
+
+describe('the balloon travels with the air and does not point into it', () => {
+  /** Launch a flight and hand back the group `Balloon` added to the scene. */
+  function launch(windDirX: number, windDirZ: number): { craft: THREE.Object3D; balloon: Balloon } {
+    const scene = new THREE.Scene();
+    const balloon = new Balloon(scene, () => 0.5);
+    // Fair weather, day, and enough delta to run the cooldown out: the flight starts.
+    balloon.update(20, 0, 0, 0, 0.5, windDirX, windDirZ);
+    return { craft: scene.children[0], balloon };
+  }
+
+  test('the yaw is a free spin, not a heading lock', () => {
+    // A heading lock was tried here and is wrong physics, so this test exists to stop the
+    // next reader "fixing" it back. A free balloon travels WITH the air: no airspeed, no
+    // relative wind, nothing to weathervane into, and so no heading at all. Real envelopes
+    // turn slowly and arbitrarily. What flies with the wind is the TRACK, not the nose.
+    const north = launch(0, 1);
+    const east = launch(1, 0);
+    for (const elapsed of [3, 17, 41]) {
+      north.balloon.update(0.016, elapsed, 0, 0, 0.5, 0, 1);
+      east.balloon.update(0.016, elapsed, 0, 0, 0.5, 1, 0);
+      // Two balloons in winds ninety degrees apart hold the same yaw: it is not a heading.
+      expect(north.craft.rotation.y).toBe(east.craft.rotation.y);
+      expect(north.craft.rotation.y).toBeCloseTo(elapsed * 0.06, 9);
+    }
+    north.balloon.dispose();
+    east.balloon.dispose();
+  });
+
+  test('but the TRACK is the wind, which is what the owner asked for', () => {
+    const { craft, balloon } = launch(0, 1);
+    const entryZ = craft.position.z;
+    balloon.update(4, 1, 0, 0, 0.5, 0, 1);
+    // Air arriving from the north travels toward +z, and so does the balloon.
+    expect(entryZ).toBeLessThan(0);
+    expect(craft.position.z).toBeGreaterThan(entryZ);
+    balloon.dispose();
   });
 });
