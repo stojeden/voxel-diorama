@@ -9,7 +9,7 @@ import {
   eclipseRoostRequested,
   nearestEclipseRoost,
 } from './Birds';
-import { FOLDED_SPAN_SCALE, UNFOLD_SECONDS } from './WingFold';
+import { FOLDED_SPAN_SCALE, FOLDED_SWEEP_DEG, UNFOLD_SECONDS } from './WingFold';
 
 describe('eclipse gull roost hysteresis', () => {
   test('commits only during the incoming phase at 85% coverage', () => {
@@ -117,6 +117,126 @@ function wingsOf(gull: THREE.Object3D): { left: THREE.Object3D; right: THREE.Obj
   return { left, right };
 }
 
+/**
+ * A gull is spread if its wings are exactly as flight wrote them. `scale.x` is the fold's
+ * own term and flight never touches it, so `=== 1` is the whole test: not "nearly 1".
+ */
+function isSpread(gull: THREE.Object3D): boolean {
+  const { left, right } = wingsOf(gull);
+  return left.scale.x === 1 && right.scale.x === 1;
+}
+
+describe('a gull flies its final approach with its wings out', () => {
+  /**
+   * The assertion whose absence let the fold ship.
+   *
+   * The first cut folded on a 6 m horizontal gate, rate-limited by 0.45 s -- but the last
+   * 6 m are not 0.45 s long. The rig's own landing law,
+   * `min(speed, max(0.7, distance * 0.65))`, decays exponentially and then floors at
+   * 0.7 m/s, so the last 6 m take about 4.2 s at every speed in the rig. Before the fix this
+   * test counted 244 frames of the first gull beating folded stumps on its way down, and the
+   * worst eclipse gull was folded 10.2 m above its roof and 5.9 m short of it. On the eclipse
+   * path it is worse than on the night one, because the gate is
+   * horizontal and the roof is chosen by horizontal distance, so a gull opens the gate with
+   * most of its altitude still to lose.
+   *
+   * So this simulates the landing the rig actually flies, frame by frame, and asks on every
+   * frame of every gull: does this bird still have anywhere to go? Then it may not be folded.
+   */
+  test('no gull folds while it still has distance or altitude between it and its roof', () => {
+    const random = vi.spyOn(Math, 'random').mockReturnValue(0.5);
+    const scene = new THREE.Scene();
+    const birds = new Birds(scene);
+    const delta = 1 / 60;
+
+    try {
+      birds.update(0, 0, 0, 0);
+      const roosts = scene.children.map((gull, index) => nearestEclipseRoost(gull.position, index));
+      birds.setEclipseState(ECLIPSE_ROOST_COVERAGE, 'increasing');
+
+      // The worst violation, kept rather than the first, so the failure says how bad it is.
+      let worst: {
+        frame: number;
+        gull: number;
+        metresAboveRoof: number;
+        metresFromRoof: number;
+        spanScale: number;
+      } | null = null;
+
+      for (let frame = 1; frame <= 60 * 45; frame++) {
+        birds.update(delta, frame * delta, 0, 0);
+        for (let index = 0; index < scene.children.length; index++) {
+          const gull = scene.children[index];
+          const roost = roosts[index];
+          const metresFromRoof = Math.hypot(gull.position.x - roost.x, gull.position.z - roost.z);
+          const metresAboveRoof = gull.position.y - roost.y;
+          // 0.05 is the roosting breathing amplitude (0.02) with room to spare: below it the
+          // gull is sitting on the roof, and sitting is when it is allowed to fold.
+          const airborne = metresFromRoof > 0.05 || metresAboveRoof > 0.05;
+          if (!airborne || isSpread(gull)) continue;
+          if (worst === null || metresAboveRoof > worst.metresAboveRoof) {
+            worst = {
+              frame,
+              gull: index,
+              metresAboveRoof,
+              metresFromRoof,
+              spanScale: wingsOf(gull).right.scale.x,
+            };
+          }
+        }
+      }
+
+      expect(worst).toBeNull();
+      // …and the fold does still happen, once they are down.
+      for (const gull of scene.children) {
+        expect(wingsOf(gull).right.scale.x).toBe(FOLDED_SPAN_SCALE);
+      }
+    } finally {
+      birds.dispose();
+      random.mockRestore();
+    }
+  });
+
+  /** The same question on the night path, where the roost is wherever the gull settled. */
+  test('the night landing is flown spread too, right down to the roof', () => {
+    const random = vi.spyOn(Math, 'random').mockReturnValue(0.5);
+    const scene = new THREE.Scene();
+    const birds = new Birds(scene);
+    const delta = 1 / 60;
+
+    try {
+      const track: { position: THREE.Vector3; spread: boolean }[][] = scene.children.map(() => []);
+      for (let frame = 1; frame <= 60 * 90; frame++) {
+        birds.update(delta, frame * delta, 0, 1);
+        for (let index = 0; index < scene.children.length; index++) {
+          track[index].push({
+            position: scene.children[index].position.clone(),
+            spread: isSpread(scene.children[index]),
+          });
+        }
+      }
+
+      for (let index = 0; index < scene.children.length; index++) {
+        const roost = scene.children[index].position;
+        expect(wingsOf(scene.children[index]).right.scale.x).toBe(FOLDED_SPAN_SCALE);
+        const foldedAirborne = track[index].filter(
+          (sample) =>
+            !sample.spread &&
+            (Math.hypot(sample.position.x - roost.x, sample.position.z - roost.z) > 0.05 ||
+              sample.position.y - roost.y > 0.05)
+        );
+        expect({ gull: index, framesFoldedInFlight: foldedAirborne.length }).toEqual({
+          gull: index,
+          framesFoldedInFlight: 0,
+        });
+      }
+    } finally {
+      birds.dispose();
+      random.mockRestore();
+    }
+  });
+});
+
 describe('gulls fold their wings to roost and spread them to fly', () => {
   test('a flying gull is exactly spread, a settled one is folded and swept', () => {
     const random = vi.spyOn(Math, 'random').mockReturnValue(0.5);
@@ -142,8 +262,11 @@ describe('gulls fold their wings to roost and spread them to fly', () => {
         const { left, right } = wingsOf(gull);
         expect(left.scale.x).toBe(FOLDED_SPAN_SCALE);
         expect(right.scale.x).toBe(FOLDED_SPAN_SCALE);
-        // Swept back: mirrored about the bird's own centre line, tips toward the tail (+z).
-        expect(left.rotation.y).toBeGreaterThan(0.9);
+        // Swept back: mirrored about the bird's own centre line, tips toward the tail (+z),
+        // by the authored angle and no more -- the sweep is what carries the tip behind the
+        // bird, so the rig holding more of it than art direction wrote is a defect.
+        expect(left.rotation.y).toBeCloseTo(THREE.MathUtils.degToRad(FOLDED_SWEEP_DEG), 12);
+        expect(left.rotation.y).toBeGreaterThan(0);
         expect(right.rotation.y).toBe(-left.rotation.y);
         // Tucked below the settled dihedral rather than held in the roosting V.
         expect(right.rotation.z).toBeLessThan(ROOST_DIHEDRAL);
@@ -196,6 +319,60 @@ describe('gulls fold their wings to roost and spread them to fly', () => {
       const totalClimb = gull.position.y - restingHeight;
       expect(climbed).toBeGreaterThan(0);
       expect(climbed / totalClimb).toBeLessThan(0.15);
+    } finally {
+      birds.dispose();
+      random.mockRestore();
+    }
+  });
+
+  /**
+   * The commonest exit, and the one that had no take-off at all.
+   *
+   * Dawn used to go `roost` -> `fly` directly, so on the very next frame the gull was under
+   * full cruise speed and full climb rate with its wings still shut -- the unfold was over
+   * by the time anyone could connect it to the launch. The owner's sentence is "rozwijają je
+   * do lotu, jak startują": the unfold *is* the take-off, and on this path it never was one.
+   */
+  test('the dawn wake-up is a take-off: the wings open before the gull leaves the roof', () => {
+    const random = vi.spyOn(Math, 'random').mockReturnValue(0.5);
+    const scene = new THREE.Scene();
+    const birds = new Birds(scene);
+    const delta = 1 / 60;
+
+    try {
+      for (let frame = 1; frame <= 60 * 90; frame++) birds.update(delta, frame * delta, 0, 1);
+
+      const gull = scene.children[0];
+      const { right } = wingsOf(gull);
+      expect(right.scale.x).toBe(FOLDED_SPAN_SCALE);
+      const perch = gull.position.clone();
+      // What a cruising gull covers in one frame, from the rig's own speed law with
+      // `Math.random` pinned at 0.5: 4.2 + 0.5 * 2.4 m/s.
+      const cruiseStep = (4.2 + 0.5 * 2.4) * delta;
+
+      birds.update(delta, 90 + delta, 0, 0);
+      const firstStep = Math.hypot(gull.position.x - perch.x, gull.position.z - perch.z);
+      // A bird with its wings shut is not doing 5.4 m/s. It has barely pushed off.
+      expect(firstStep).toBeLessThan(cruiseStep * 0.15);
+
+      let spreadFrame = -1;
+      let spreadHeight = perch.y;
+      for (let frame = 2; frame <= 60 * 6; frame++) {
+        birds.update(delta, 90 + frame * delta, 0, 0);
+        if (spreadFrame < 0 && right.scale.x === 1) {
+          spreadFrame = frame;
+          spreadHeight = gull.position.y;
+        }
+      }
+
+      // Open within the unfold's own quarter second, and by then hardly off the roof: the
+      // same lead the eclipse exit has, because it is now the same code.
+      expect(spreadFrame).toBeGreaterThan(0);
+      expect(spreadFrame * delta).toBeCloseTo(UNFOLD_SECONDS, 1);
+      expect(spreadHeight - perch.y).toBeGreaterThan(0);
+      expect((spreadHeight - perch.y) / (gull.position.y - perch.y)).toBeLessThan(0.15);
+      // And it does leave: a take-off that never climbs away is not a take-off either.
+      expect(gull.position.y).toBeGreaterThan(perch.y + 5);
     } finally {
       birds.dispose();
       random.mockRestore();
