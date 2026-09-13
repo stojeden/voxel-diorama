@@ -11,6 +11,47 @@ a wersjonowanie projektu docelowo stosuje [Semantic Versioning](https://semver.o
 
 ### Added
 
+- **Dwie osie czasu i dwie jednostki kąta są teraz typami, których pilnuje kompilator.**
+  `t01` to zegar, którego wschód słońca wędruje z porą roku; faza słoneczna jest kanoniczna
+  (0,25 wschód, 0,5 południe, 0,75 zachód). Oba były gołymi `number` w tym samym zakresie 0..1,
+  więc zamiana kompilowała się bez szemrania i dawała słońce przesunięte o dwie godziny —
+  **sześć razy**, za każdym razem kosztem dnia pracy. Pięć marek: `Clock01`, `WallClock01`,
+  `SolarPhase01`, `Radians`, `Degrees`; 612 miejsc w 49 plikach; piętnaście asercji
+  `@ts-expect-error`, które wywracają typecheck, jeżeli nazwana przez nie zamiana znów zacznie
+  się kompilować.
+  **Refaktor jest darmowy co do bajta i to jest sprawdzone, nie zadeklarowane:** chunk wejściowy
+  przed i po ma identyczny hash `4057351671d45627` (233 563 B), co potwierdzili niezależnie dwaj
+  recenzenci i orkiestrator, budując oba commity osobno. Typy się wymazują, konstruktor by się
+  nie wymazał — więc wartości wchodzą w markę przez `as` na granicy, gdzie jednostka jest po raz
+  pierwszy znana, a konstruktory dla testów mieszkają w osobnym module, którego nieobecność
+  w bundlu pilnuje test grafu importów.
+  Siódma instancja siedziała nierozbrojona w `HybridFrame`: `sunT` i `clockT`, dwie sąsiednie
+  gołe liczby, których komentarz musiał tłumaczyć, że są różne. Recenzent potwierdził, że zamiana
+  jest teraz odrzucana w obie strony.
+
+### Fixed
+
+- **Listonosz wyjeżdżał o 6:43 niezależnie od pory roku — ósma instancja, pierwsza znaleziona
+  przez typy, a nie przez człowieka.** `MORNING_START = 0,28` pod nagłówkiem modułu „codziennie
+  o świcie", porównywane z zegarem. 0,28 to ten sam autorski literał, którego rozdział trasy
+  „golden hour" używa jako **fazy**. Czytane jako zegar: w czerwcu wyjazd trzy godziny po
+  wschodzie o 3:44, w październiku po ciemku przed wschodem o 6:50. Teraz trasa czyta fazę:
+  czerwiec 4:43, jesień 7:27.
+- **Cztery marki były przybite pod wołającego, a nie pod znaczenie, i jedna odrzucała poprawny
+  kod.** `CityRhythm` planuje **godzinę** — jego stałe to minuty zegara ściennego, 390 do 430 to
+  6:30–7:10 — a brał `Clock01`, przez co `residentialWindowActivityAt(clockT, cohort)`, czyli
+  wywołanie prawidłowe, było błędem typu. Marka, która kieruje czytelnika w stronę błędu, jest
+  gorsza niż jej brak. Trzy przejścia między osiami są teraz jawne i do wygrepowania, zapisane
+  idiomem `as number as`, którego `RealTimeSync.getCycleT` już używał.
+- **Cień słońca miał dwóch właścicieli.** `setQuality` pisał `castShadow` bramką, która nie wie
+  o chmurach ani o zaćmieniu, a pętla klatki bramką, która wie — więc między zmianą jakości
+  a następną klatką dało się dostać twardy cień południa w deszczu albo w totalności. Jakość
+  może teraz cień tylko zgasić.
+- **Dwa komentarze obiecywały strażników, których nikt nie napisał.** `units.testing.ts`
+  twierdził, że jego nieobecność w bundlu pilnuje hash chunku wejściowego — a żaden hash
+  odniesienia nie jest nigdzie w repozytorium przechowywany. Pilnują tego teraz trzy prawdziwe
+  testy, każdy dowiedziony przez wstawienie defektu z powrotem.
+
 - **Zaćmienie, którego naprawdę widać.** Cztery rzeczy zmierzone na zbudowanym produkcie
   z przyszpiloną pogodą, kamerą `focusEclipseView`, bezstratnym PNG.
   - **Niebo traci światło, zamiast być domalowane na ciemno.** Kopuła była przenikaniem
