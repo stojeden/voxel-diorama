@@ -17,8 +17,17 @@ import { degrees, radians } from '../units.testing';
 
 /**
  * The fold is pure geometry, so all of it is measurable without a renderer: a wing group is
- * an `Object3D` over a merged mesh, and `Box3.setFromObject` reads its actual vertices. Every
- * span number in the report comes from here, on the real rig, not from an author's arithmetic.
+ * an `Object3D` over a merged mesh, and `Box3.setFromObject(object, true)` reads its actual
+ * vertices. Every span number in the report comes from here, on the real rig, not from an
+ * author's arithmetic.
+ *
+ * **The second argument is the whole measurement.** Without it `setFromObject` expands the
+ * box by each child's *bounding box* transformed by the world matrix -- the AABB of an AABB --
+ * which for a wing rotated about Y reports the corners of a box that contains no geometry.
+ * The first cut of this file omitted it and published a folded span of 0.4985 of spread; the
+ * rig's real figure was 0.4068, and the headline number of the change was an artefact of the
+ * instrument. Every `setFromObject` here passes `true`, and one test below measures the two
+ * against each other so the argument cannot quietly go away again.
  */
 
 /** One wing, posed as a roosting gull's right wing, shoulder offset included. */
@@ -35,7 +44,7 @@ function poseRightWing(foldedness: number, dihedral = ROOST_DIHEDRAL): THREE.Gro
 
 /** The widest lateral point of the wing group: what a silhouette is actually as wide as. */
 function silhouetteHalfSpan(foldedness: number): number {
-  return new THREE.Box3().setFromObject(poseRightWing(foldedness)).max.x;
+  return new THREE.Box3().setFromObject(poseRightWing(foldedness), true).max.x;
 }
 
 /** The wing-local position of the outermost vertex of a spread wing. */
@@ -53,30 +62,68 @@ function spreadTip(): THREE.Vector3 {
   return tip;
 }
 
+/**
+ * The rearmost point of the gull's body -- what "past the tail" is measured against.
+ *
+ * The model has no separate tail mesh; the body sphere, scaled 1.08 in z, is the back of the
+ * bird, and `Birds.createGullMesh` builds it with exactly these numbers.
+ */
+const TAIL_Z = 0.3672;
+
 describe('a folded wing is materially shorter', () => {
   test('roosting halves the silhouette of the wing', () => {
     const spread = silhouetteHalfSpan(0);
     const folded = silhouetteHalfSpan(1);
 
-    // Sanity: a spread wing reaches about 1.72 units out from the gull's centre line.
+    // Sanity: a spread wing reaches about 1.73 units out from the gull's centre line.
     expect(spread).toBeGreaterThan(1.7);
     // Roughly half, which is the signal that survives at a few tens of pixels.
-    expect(folded / spread).toBeGreaterThan(0.44);
-    expect(folded / spread).toBeLessThan(0.56);
+    expect(folded / spread).toBeGreaterThan(0.47);
+    expect(folded / spread).toBeLessThan(0.53);
   });
 
-  test('the tip is drawn in and carried behind the shoulder, not merely shrunk', () => {
+  /**
+   * The measurement bug, pinned from the other side.
+   *
+   * `setFromObject` without `precise` unions each child's *bounding box* after the world
+   * matrix -- for a wing swept about Y that box has corners where the wing has none. It is
+   * an over-estimate that grows with the sweep, so it flatters exactly the pose being
+   * measured, which is how 0.4068 got published as 0.4985.
+   */
+  test('the loose box over-reports a swept wing, and the reported number is the precise one', () => {
+    const folded = poseRightWing(1);
+    const loose = new THREE.Box3().setFromObject(folded).max.x;
+    const precise = new THREE.Box3().setFromObject(folded, true).max.x;
+
+    expect(loose).toBeGreaterThan(precise);
+
+    // Any rotation at all inflates it, which is why the *spread* figure was wrong too: the
+    // published 3.47 units across is the loose box of a wing holding 0.05 of dihedral. Only
+    // with the whole rotation gone -- a pure translation -- do the two agree, exactly.
+    const level = poseRightWing(0, radians(0));
+    expect(new THREE.Box3().setFromObject(level).max.x).toBe(
+      new THREE.Box3().setFromObject(level, true).max.x
+    );
+    const spread = poseRightWing(0);
+    expect(new THREE.Box3().setFromObject(spread).max.x).toBeGreaterThan(
+      new THREE.Box3().setFromObject(spread, true).max.x
+    );
+  });
+
+  test('the tip is drawn in and laid along the flank, not carried out behind the tail', () => {
     const tip = spreadTip();
     const folded = poseRightWing(1);
-    const moved = tip.clone().applyMatrix4(folded.matrix).sub(folded.position);
+    const moved = tip.clone().applyMatrix4(folded.matrix);
 
-    // A third of its lateral reach left, and a full model unit behind the shoulder: past
-    // the tail, which is where a roosting gull's primaries lie.
-    expect(moved.x / tip.x).toBeLessThan(0.35);
-    expect(moved.z).toBeGreaterThan(0.9);
+    // Well under half its lateral reach out of the shoulder…
+    expect(moved.clone().sub(folded.position).x / tip.x).toBeLessThan(0.45);
+    // …and level with the back of the bird, the way a gull's primaries cross its tail --
+    // not a model unit out behind it, which is a tail, not a folded wing.
+    expect(moved.z).toBeGreaterThan(TAIL_Z - 0.2);
+    expect(moved.z).toBeLessThan(TAIL_Z + 0.2);
   });
 
-  test('the closed-form span fraction is the one the rig actually produces', () => {
+  test('the closed-form span fraction is the one the rig actually produces, exactly', () => {
     const pose = wingFoldPose(1);
     const tip = spreadTip();
     // Measured with the dihedral held at zero on both sides, which is the fold's own
@@ -87,20 +134,30 @@ describe('a folded wing is materially shorter', () => {
       tip.clone().applyMatrix4(folded.matrix).sub(folded.position).x /
       tip.clone().applyMatrix4(spread.matrix).sub(spread.position).x;
 
+    // Not "close to about 0.003", which is what an omitted term looks like from far enough
+    // away: the droop rotates the tip's own y into x, and dropping that cost 0.007 of span.
     expect(foldedSpanFraction(pose.sweep, pose.droop, pose.spanScale, tip)).toBeCloseTo(
       measured,
-      2
+      12
     );
   });
 });
 
 describe('foldedness is a continuous term with exact ends', () => {
-  test('the targets are exactly 0 and exactly 1', () => {
-    expect(foldednessTarget('roost', false)).toBe(1);
-    expect(foldednessTarget('toRoost', true)).toBe(1);
-    expect(foldednessTarget('toRoost', false)).toBe(0);
-    expect(foldednessTarget('fly', true)).toBe(0);
-    expect(foldednessTarget('takeOff', true)).toBe(0);
+  /**
+   * `toRoost` is the one that matters, and it used to be the defect.
+   *
+   * A distance gate used to open the fold over the last 6 m of the approach. The last 6 m
+   * are not a moment -- the rig's own landing law floors at 0.7 m/s, so they take about
+   * 4.2 s -- and on the eclipse path the gate is horizontal, so a gull could be 9 m above
+   * its roof and still "arriving". A gull on final approach is flying. Only a gull that is
+   * down is not.
+   */
+  test('the targets are exactly 0 and exactly 1, and only a landed gull folds', () => {
+    expect(foldednessTarget('roost')).toBe(1);
+    expect(foldednessTarget('toRoost')).toBe(0);
+    expect(foldednessTarget('fly')).toBe(0);
+    expect(foldednessTarget('takeOff')).toBe(0);
   });
 
   test('folding arrives at exactly 1 and does not overshoot', () => {
@@ -130,7 +187,7 @@ describe('foldedness is a continuous term with exact ends', () => {
     let folded = 1;
     const samples = [folded];
     for (let frame = 0; frame < 60; frame++) {
-      folded = advanceFoldedness(folded, foldednessTarget('takeOff', false), delta);
+      folded = advanceFoldedness(folded, foldednessTarget('takeOff'), delta);
       samples.push(folded);
     }
     for (let index = 1; index < samples.length; index++) {
@@ -249,15 +306,15 @@ describe('a spread wing is left exactly as flight wrote it', () => {
 
 describe('the fold angles are branded', () => {
   test('a bare number is not an angle, and degrees are not radians', () => {
-    const tip = { x: 1.55, z: 0.29 };
+    const tip = { x: 1.5491, y: 0.0267, z: 0.2859 };
     // @ts-expect-error a bare number does not say which unit the sweep is in
-    foldedSpanFraction(0.96, radians(0.31), 0.7, tip);
+    foldedSpanFraction(0.28, radians(0.42), 0.5, tip);
     // @ts-expect-error the art-direction degrees cannot be handed to the trigonometry
-    foldedSpanFraction(FOLDED_SWEEP_DEG, radians(0.31), 0.7, tip);
-    // @ts-expect-error nor can the droop, whose 18 is an equally plausible radian count
-    foldedSpanFraction(radians(0.96), FOLDED_DROOP_DEG, 0.7, tip);
+    foldedSpanFraction(FOLDED_SWEEP_DEG, radians(0.42), 0.5, tip);
+    // @ts-expect-error nor can the droop, whose 24 is an equally plausible radian count
+    foldedSpanFraction(radians(0.28), FOLDED_DROOP_DEG, 0.5, tip);
     // @ts-expect-error and degrees stay degrees however they are built
-    foldedSpanFraction(radians(0.96), degrees(18), 0.7, tip);
+    foldedSpanFraction(radians(0.28), degrees(24), 0.5, tip);
     // @ts-expect-error the pose carries radians, so its own terms cannot be read as degrees
     const _swept: typeof FOLDED_SWEEP_DEG = wingFoldPose(1).sweep;
 

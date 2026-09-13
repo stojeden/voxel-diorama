@@ -28,11 +28,18 @@ export const ECLIPSE_ROOST_COVERAGE = 0.85;
 export const ECLIPSE_TAKE_OFF_COVERAGE = 0.65;
 
 /**
- * How close to its roost a gull has to be before it stops flying and starts landing: it
- * drops to the roof's own height rather than the local ceiling, and it begins drawing its
- * wings in. One number, because these are one event.
+ * How close to its roost a gull has to be before it lets go of the local ceiling and comes
+ * down to the roof's own height.
+ *
+ * It is *not* when the wings start to fold, though it used to be, on the grounds that these
+ * were one event. They are not: the last 6 m are flown, and the rig's own landing law floors
+ * at 0.7 m/s, so they take about 4.2 s. A gull with 6 m to go is on final approach, wings
+ * out. See `WingFold.foldednessTarget`.
  */
-const LANDING_FLARE_DISTANCE = 6;
+const LANDING_APPROACH_DISTANCE = 6;
+
+/** How far above its roof a gull climbs before it stops taking off and starts flying. */
+const TAKE_OFF_CLEARANCE = 5.5;
 
 /** The dihedral a settled gull holds -- a hint of a V -- as the right wing's `rotation.z`. */
 export const ROOST_DIHEDRAL = 0.05 as Radians;
@@ -105,6 +112,29 @@ function applyRoostWingPose(gull: Gull): void {
   gull.leftWing.rotation.z = -ROOST_DIHEDRAL;
   gull.rightWing.rotation.z = ROOST_DIHEDRAL;
   applyWingFold(gull.leftWing, gull.rightWing, wingFoldPose(gull.foldedness));
+}
+
+/**
+ * Leaves a roost: the one take-off, and the only way out of one.
+ *
+ * Both exits used to be written out longhand, except that the dawn one was not written at all
+ * -- it set `lifeMode = 'fly'` and let the flight branch have the bird at full cruise speed on
+ * the very next frame with its wings still shut. Dawn is the commonest exit by far, so the
+ * half of the request that is "rozwijają je do lotu, jak startują" -- they open them for
+ * flight, as they take off -- was the half that almost never happened. One function now, so
+ * the take-off cannot be missing from a path again: climb to clearance, on a heading straight
+ * ahead, and (see `update`) push off only as hard as the wings are open.
+ */
+function beginTakeOff(gull: Gull): void {
+  gull.roostReason = null;
+  gull.lifeMode = 'takeOff';
+  gull.takeOffClearanceY = Math.max(MIN_ALTITUDE, gull.activeRoost.y + TAKE_OFF_CLEARANCE);
+  gull.altitudeTarget = gull.takeOffClearanceY;
+  gull.target.set(
+    gull.position.x + Math.sin(gull.heading) * 8,
+    0,
+    gull.position.z + Math.cos(gull.heading) * 8
+  );
 }
 
 function maxBuildingHeightNear(x: number, z: number, radius: number): number {
@@ -344,15 +374,7 @@ export class Birds {
           gull.lifeMode = 'toRoost';
           gull.target.set(gull.activeRoost.x, 0, gull.activeRoost.z);
         } else {
-          gull.roostReason = null;
-          gull.lifeMode = 'takeOff';
-          gull.takeOffClearanceY = Math.max(MIN_ALTITUDE, gull.activeRoost.y + 5.5);
-          gull.altitudeTarget = gull.takeOffClearanceY;
-          gull.target.set(
-            gull.position.x + Math.sin(gull.heading) * 8,
-            0,
-            gull.position.z + Math.cos(gull.heading) * 8
-          );
+          beginTakeOff(gull);
         }
       } else if (!this.eclipseRoostActive && night > 0.62 && gull.roostReason !== 'night') {
         gull.activeRoost.copy(gull.nightRoost);
@@ -360,24 +382,19 @@ export class Birds {
         gull.lifeMode = 'toRoost';
         gull.target.set(gull.activeRoost.x, 0, gull.activeRoost.z);
       } else if (night < 0.45 && gull.roostReason === 'night') {
-        gull.roostReason = null;
-        gull.lifeMode = 'fly';
-        pickTarget(gull.target, this.random);
-        gull.altitudeTarget = MIN_ALTITUDE + this.random() * (MAX_ALTITUDE - MIN_ALTITUDE);
+        // Dawn is a take-off, exactly like the end of an eclipse. It used to go straight to
+        // `fly`, which is how the unfold came to be the half of the request that never ran.
+        beginTakeOff(gull);
       }
 
       // ── Wings: one continuous term, driven by the life mode ──
-      // A gull crossing the city toward its roof is still flying; it draws its wings in over
-      // the last few metres, and it opens them the moment it means to leave.
-      const roostApproach = Math.hypot(
-        gull.activeRoost.x - gull.position.x,
-        gull.activeRoost.z - gull.position.z
-      );
-      gull.foldedness = advanceFoldedness(
-        gull.foldedness,
-        foldednessTarget(gull.lifeMode, roostApproach < LANDING_FLARE_DISTANCE),
-        delta
-      );
+      // Out for everything but sitting on the roof: a gull on final approach is flying, and
+      // it opens them again the moment it means to leave.
+      gull.foldedness = advanceFoldedness(gull.foldedness, foldednessTarget(gull.lifeMode), delta);
+      // How much of a wing there is to fly on, 0 shut to 1 spread. A gull whose wings are
+      // still closed has no thrust and no lift, which is what makes the unfold *be* the
+      // take-off rather than something that happens while the bird is already leaving.
+      const openness = 1 - gull.foldedness;
 
       if (gull.lifeMode === 'roost') {
         // Asleep: sit still, wings folded, gentle breathing.
@@ -428,13 +445,16 @@ export class Birds {
           ? Math.hypot(gull.activeRoost.x - gull.position.x, gull.activeRoost.z - gull.position.z)
           : Number.POSITIVE_INFINITY;
       const avoidanceFloor =
-        landingDistance < LANDING_FLARE_DISTANCE ? gull.activeRoost.y : localCeiling;
+        landingDistance < LANDING_APPROACH_DISTANCE ? gull.activeRoost.y : localCeiling;
       const wantY = Math.max(gull.altitudeTarget, avoidanceFloor);
-      const dy = THREE.MathUtils.clamp(wantY - gull.position.y, -CLIMB_RATE * delta, CLIMB_RATE * delta);
+      const climbRate = CLIMB_RATE * openness;
+      const dy = THREE.MathUtils.clamp(wantY - gull.position.y, -climbRate * delta, climbRate * delta);
       gull.position.y += dy;
 
       // ── Move forward; wind pushes everyone gently downwind (+x) ──
-      const speed = gull.speed * (1 + wind * 0.15);
+      // Both scaled by `openness`, so a gull that is still opening up is still on its roof.
+      // In level flight it is exactly 1 and these are the same numbers as before, bit for bit.
+      const speed = gull.speed * (1 + wind * 0.15) * openness;
       if (gull.lifeMode === 'toRoost') {
         const distance = Math.max(distToTarget, 1e-6);
         const landingSpeed = Math.min(speed, Math.max(0.7, distToTarget * 0.65));
@@ -442,7 +462,7 @@ export class Birds {
         gull.position.x += (toTargetX / distance) * step;
         gull.position.z += (toTargetZ / distance) * step;
       } else {
-        gull.position.x += Math.sin(gull.heading) * speed * delta + wind * 1.6 * delta;
+        gull.position.x += Math.sin(gull.heading) * speed * delta + wind * 1.6 * openness * delta;
         gull.position.z += Math.cos(gull.heading) * speed * delta;
       }
 
