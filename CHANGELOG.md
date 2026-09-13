@@ -46,6 +46,81 @@ a wersjonowanie projektu docelowo stosuje [Semantic Versioning](https://semver.o
 
 ### Fixed
 
+- **Deszcz i śnieg były piątym i szóstym konsumentem „jednego wiatru świata" bez kierunku.**
+  `rainPositions[idx] += slant` i `snowPositions[idx] += (… + wind * 2,4)` ruszały wyłącznie
+  w `+x` — dokładnie ta wada, którą ta gałąź naprawiła chmurom — więc przy wichurze podniesionej
+  do 0,82 deszcz wiał na wschód, podczas gdy drzewa obok pochylały się 58 stopni gdzie indziej.
+  Oba dryfy idą teraz po wspólnym wektorze. **Smuga deszczu to nie sprite, który bywa
+  przechylony: to ślad kropli w czasie ekspozycji**, więc geometria odcinka też musiała się
+  położyć — i okazało się, że wysyłany odcinek miał na stałe wpisane `(0,2, −0,9, 0,1)`, czyli
+  14 stopni od pionu w kierunku 26,6 stopnia, podczas gdy blok dokumentacyjny tej samej gałęzi
+  twierdził, że tor ma 9,1 stopnia wzdłuż wiatru. Dwa różne przechyły, żaden nie czytał
+  drugiego, i tylko jeden z nich w ogóle się obracał. Odcinek jest teraz równoległy do
+  prędkości kropli (iloczyn skalarny z torem 0,99995 zamiast 0,9942; w poziomie 1,000 zamiast
+  0,089), a jego **długość została zachowana co do bajta**: 0,927 m, to co wysyłano. Śnieg
+  zachowuje własne błądzenie na obu osiach — jest wolniejszy i bardziej błądzi, i to jest to,
+  co czyta się jako śnieg — dostał wyłącznie kierunek.
+
+- **Ruch drzew został ścięty o 37,5%, a pochylenie, które za to kupiono, jest podpikselowe.**
+  Szczyt wychylenia rzeczywiście się nie zmienił (0,6 + 0,625 · 1,6 = 1,6), ale **szczyt nie
+  jest miarą ruchu**: nieprzemieszczony wierzchołek nie jest nigdzie narysowany, więc odległość
+  mierzona od niego nie znajduje się na ekranie. To, co widz czyta jako „jak bardzo ruszają się
+  drzewa", to **rozpiętość** od dołu do góry wahnięcia — a ta spadła z 3,2 na 2,0. Skala
+  fluttera wraca do 1,0: rozpiętość znów wynosi 3,2, dokładnie tyle, ile wysyłano przed
+  poprawką kierunku, **i** korona nadal siedzi 0,6 z wiatrem od spoczynku. Te dwie rzeczy nie
+  są w konflikcie — pochylenie jest przesunięciem wahnięcia, a rozmiar wahnięcia nie zależy od
+  tego, gdzie jest jego środek. Jedyne, co się rusza, to szczyt: 1,6 → 2,2, czyli wierzchołek
+  pochylonego drzewa sięgający dalej z wiatrem na szczycie porywu.
+  **Zmierzone, nie zadeklarowane** (kamera 50°, klatka 1920×1080, `OPENING_SHOT`, 31 z 46 drzew
+  w kadrze, szczyt korony): przy bezchmurnym niebie pochylenie to 0,30 px na medianowym drzewie
+  i 0,69 px na najbliższym, przy deszczowej wichurze 1,52 px i 3,55 px (2,76 / 6,44 px na
+  szczycie porywu). Pochylenie jest więc naprawdę podpikselowe w ciszy i wyraźne w wichurze —
+  i tak ma być: bryza 0,16 nie powinna zginać drzewa w sposób, który widać. Doprowadzenie
+  pochylenia do jednego piksela w ciszy wymagałoby wartości około 2,0, czyli **trwałego zgięcia
+  większego niż własny szczyt fluttera (1,6)** — drzewa trzymanego mocniej przez ciszę niż
+  kiedykolwiek przez poryw. Wybrano wahnięcie: to je właściciel wymienił z nazwy.
+
+- **Domyślny argument na gnieździe determinizmu.** `stormRandom = fallbackRandom('storm')`
+  w konstruktorze `Weather` — a `fallbackRandom` to `createWorldRandom()` z
+  `DEFAULT_SIMULATION_SEED`, więc **każdy wołający, który pominął czwarty argument, dostawał
+  burzę z ziarna domyślnego, niezależnie od tego, o jaki świat prosił**. Działo się to już
+  w testach samej gałęzi. Oba źródła losowe są teraz wymagane; ta sama wada raz pozwoliła
+  trzem wywołaniom rozgrzewki po cichu wpisać nocną podłogę w gniazdo deklinacji, a objaw
+  wypłynął tygodnie później pod cudzą nazwą.
+
+- **Blok dokumentacyjny obiecywał coś, czego model nie potrafi, a test, który to „dowodził",
+  mierzył co innego.** Zdanie „25-minutowy zwrot obnosi wiatr po całej róży, więc widz, który
+  patrzy, dostaje każdy kierunek" było fałszywe — i to ono kupowało autorskiej stałej licencję.
+  `windBearingAt` to baza plus trzy **ograniczone** sinusy, więc namiar jest zamknięty w klinie
+  `baza ± 0,765 rad`: **87,7 stopnia, od −83,8° do +3,8°**, zmierzone przez dobę próbkowania
+  sześćdziesięciu ziaren przy obu skrajnościach siły, identycznie dla wszystkich z dokładnością
+  do 0,05°. Test, który miał to trzymać, mierzył `offViewAxis` — wielkość **składającą** różę
+  na zakres 0..90 — i nie odróżniłby wiatru omiatającego 360 stopni od takiego, który nigdy nie
+  wychodzi z 88-stopniowego klina; przechodził na obu. Twierdzenie zostało sprowadzone do
+  prawdy, a stała dostała uczciwe uzasadnienie: **nie jest namiarem otwarcia, tylko środkiem
+  jedynego klina, jaki ten wiatr kiedykolwiek zajmie**, więc autoruje całą sesję, nie pierwsze
+  trzydzieści sekund — a każdy namiar w tym klinie leży co najmniej 44,3° od osi widzenia obu
+  autorskich kamer, przez co balon cofający się środkiem obrazu jest arytmetycznie nieosiągalny,
+  a nie tylko mało prawdopodobny. Cena jest nazwana wprost: wiatr nigdy nie powieje z drugiej
+  strony dioramy. Poszerzenie modelu rozważono i odrzucono świadomie — jedyny sposób na całą
+  różę przy czystej funkcji zegara to powolny człon o wahnięciu ≥ π, a taki człon przeprowadza
+  wiatr przez oś widzenia według rozkładu jazdy, czyli wstawia pierwotny blokujący defekt
+  z powrotem, tyle że później.
+
+- **Talia chmur rzedła nad miastem, a własny test gałęzi nie mógł tego zobaczyć.** Powrót na
+  dysk losował przesunięcie w poprzek wiatru **jednostajnie** po ±0,75 R — a jednostajny profil
+  wejścia to jednostajna gęstość powierzchniowa w stanie ustalonym, więc talia rozlewała się
+  z pudełka, w którym jest rozkładana (260 × 240 m, 62 400 m²), na cały omiatany pas dysku
+  (87 104 m²) i **rozcieńczała się przy tym o 28%**. Test asertował `spanX > 120 && spanZ > 120`,
+  czyli jedyną statystykę, która nie odróżnia „rozłożone szerzej" od „rozłożone rzadziej":
+  jedno i drugie ją powiększa. Losowanie jest teraz zaginane do rozkładu **trójkątnego** —
+  `sign(u)·(1 − √(1 − |u|))`, monotoniczne, z punktami stałymi w −1, 0 i +1 — więc talia jest
+  najgęstsza wzdłuż linii przez miasto i przerzedza się ku krawędzi nieba, czyli wygląda jak
+  autorskie pudełko, tyle że jako stan ustalony, a nie jako układ początkowy, który się
+  rozpada. Zmierzony udział rysowanych kłębów nad miastem, godzina na ziarno, dwanaście ziaren:
+  **0,233 przed (0,72 gęstości autorskiej), 0,320 po (0,99)**. Jedno losowanie na recykling,
+  tak jak było — strumień pogody jest pozycyjny.
+
 - **Listonosz wyjeżdżał o 6:43 niezależnie od pory roku — ósma instancja, pierwsza znaleziona
   przez typy, a nie przez człowieka.** `MORNING_START = 0,28` pod nagłówkiem modułu „codziennie
   o świcie", porównywane z zegarem. 0,28 to ten sam autorski literał, którego rozdział trasy

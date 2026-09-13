@@ -2,8 +2,10 @@ import { describe, expect, test } from 'vitest';
 import {
   FOLIAGE_FLUTTER_PEAK,
   FOLIAGE_WIND_CHUNK,
+  FOLIAGE_WIND_EXCURSION,
   FOLIAGE_WIND_FLUTTER,
   FOLIAGE_WIND_LEAN,
+  glslFloat,
 } from './WorldGenerator';
 
 /**
@@ -33,7 +35,7 @@ function sample(phase: number): number[] {
 describe('the foliage leans downwind and flutters about the lean', () => {
   test('the shipped GLSL is built from the constants these tests reason about', () => {
     expect(FOLIAGE_WIND_CHUNK).toContain(
-      `float windBend = ${FOLIAGE_WIND_LEAN} + ${FOLIAGE_WIND_FLUTTER} * windFlutter;`
+      `float windBend = ${glslFloat(FOLIAGE_WIND_LEAN)} + ${glslFloat(FOLIAGE_WIND_FLUTTER)} * windFlutter;`
     );
     expect(FOLIAGE_WIND_CHUNK).toContain('transformed.x += windBend * windAmp * uWindDir.x;');
     expect(FOLIAGE_WIND_CHUNK).toContain('transformed.z += windBend * windAmp * uWindDir.y;');
@@ -57,27 +59,48 @@ describe('the foliage leans downwind and flutters about the lean', () => {
     expect(mean).toBeGreaterThan(0.5);
   });
 
-  test('the peak displacement is the one that ships today', () => {
-    // The owner likes the size of the current tree motion and asked for its direction to
-    // change, not its amount. 0.6 + 0.625 * 1.6 = 1.6, which is the old peak exactly.
-    const peak = Math.max(...sample(0.37).map(Math.abs));
-    expect(FOLIAGE_WIND_LEAN + FOLIAGE_WIND_FLUTTER * FOLIAGE_FLUTTER_PEAK)
-      .toBeCloseTo(FOLIAGE_FLUTTER_PEAK, 9);
-    expect(peak).toBeLessThanOrEqual(FOLIAGE_FLUTTER_PEAK + 1e-9);
-    expect(peak).toBeGreaterThan(FOLIAGE_FLUTTER_PEAK * 0.97);
+  test('the EXCURSION is the one that ships today, which is what a viewer sees as motion', () => {
+    // The quantity the owner named. What reads as "how much the trees move" is the distance
+    // between the extremes of the swing, not the distance from the origin to one of them --
+    // and the origin is not on the screen anywhere, so a peak measured from it is not a
+    // measurement of motion at all.
+    //
+    // The branch measured the peak, found it unchanged at 1.6, and claimed the motion was
+    // unchanged. It was not: scaling the flutter by 0.625 to hold the peak took the swing
+    // from -1.6..+1.6 (span 3.2) to -0.4..+1.6 (span 2.0). A 37.5% cut, reported as no change.
+    const values = sample(0.37);
+    const excursion = Math.max(...values) - Math.min(...values);
+    expect(FOLIAGE_WIND_EXCURSION).toBeCloseTo(2 * FOLIAGE_FLUTTER_PEAK, 9);
+    expect(excursion).toBeCloseTo(FOLIAGE_WIND_EXCURSION, 1);
+    expect(2 * FOLIAGE_WIND_FLUTTER * FOLIAGE_FLUTTER_PEAK).toBeCloseTo(FOLIAGE_WIND_EXCURSION, 9);
   });
 
-  test('the lean-to-flutter ratio leaves it downwind most of the time', () => {
-    // 0.6 : 1.0 at the peak. The trough is -0.4, a quarter of the peak, so the canopy springs
-    // back through rest the way a loaded branch does without ever swinging as far upwind as
-    // it sits downwind.
+  test('the lean is a bias on that swing, not a slice taken out of it', () => {
+    // Both halves at once, which is the whole point: the swing is the size it always was AND
+    // the canopy sits downwind of rest. The only thing that moves is the peak -- 1.6 -> 2.2 --
+    // which is a leaning tree's top reaching further downwind at the worst of a gust, and is
+    // exactly the quantity that must NOT be held fixed if the swing is to be.
     const values = sample(0.37);
-    expect(FOLIAGE_WIND_LEAN / (FOLIAGE_WIND_FLUTTER * FOLIAGE_FLUTTER_PEAK)).toBeCloseTo(0.6, 6);
+    const top = Math.max(...values);
     const trough = Math.min(...values);
-    expect(trough).toBeCloseTo(FOLIAGE_WIND_LEAN - FOLIAGE_WIND_FLUTTER * FOLIAGE_FLUTTER_PEAK, 1);
-    expect(Math.abs(trough)).toBeLessThan(Math.max(...values) / 2);
+    expect(top).toBeCloseTo(FOLIAGE_WIND_LEAN + FOLIAGE_FLUTTER_PEAK, 1);
+    expect(trough).toBeCloseTo(FOLIAGE_WIND_LEAN - FOLIAGE_FLUTTER_PEAK, 1);
+    // Downwind of rest on the mean, and it still springs back through rest rather than
+    // hanging there: a branch under load, not a flag on a pole.
+    expect(trough).toBeLessThan(0);
+    expect(FOLIAGE_WIND_LEAN).toBeGreaterThan(0);
     const downwind = values.filter((value) => value > 0).length / values.length;
-    expect(downwind).toBeGreaterThan(0.75);
+    expect(downwind).toBeGreaterThan(0.6);
+  });
+
+  test('every number the GLSL is built from is written as a float', () => {
+    // `${1}` is "1", and `1 * windFlutter` is an int times a float -- which GLSL ES refuses to
+    // compile, on a code path no unit test and no CI machine with no GPU ever executes. The
+    // flutter scale became exactly 1.0 in this change, so this is not hypothetical.
+    for (const literal of [FOLIAGE_WIND_LEAN, FOLIAGE_WIND_FLUTTER]) {
+      expect(glslFloat(literal)).toMatch(/^-?\d+\.\d+$/);
+    }
+    expect(FOLIAGE_WIND_CHUNK).not.toMatch(/[^.\d]\d+ \* windFlutter/);
   });
 
   test('the canopy still ripples rather than moving as one slab', () => {
