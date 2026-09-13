@@ -1172,6 +1172,16 @@ function buildFoliageMesh(
         '#include <common>',
         '#include <common>\nuniform float uTime;\nuniform float uWind;\nuniform vec2 uWindDir;'
       )
+      // Two things about the wind block below, written here rather than inside the shader
+      // string because a comment in a template literal is shipped bytes, not stripped ones.
+      //
+      // 1.14127 is length(vec2(1.0, 0.55)), the hard-coded lean this replaced. That pair was
+      // NOT a unit vector, so swapping it for `uWindDir` without the factor would have
+      // quietly shrunk the canopy's motion by 12% -- a retune of tree movement the owner
+      // likes, disguised as a direction fix. Only the WAY changes; the amount does not.
+      //
+      // `windPhase` still comes from the instance's own origin, so the canopy ripples across
+      // the world instead of leaning as one slab. The direction is shared; the phase is not.
       .replace(
         '#include <begin_vertex>',
         /* glsl */ `
@@ -1181,13 +1191,7 @@ function buildFoliageMesh(
           float windPhase = iorigin.x * 0.43 + iorigin.z * 0.31;
           float windHeight = max(iorigin.y - 2.5, 0.0);
           float windGust = sin(uTime * 1.7 + windPhase) + 0.6 * sin(uTime * 2.9 + windPhase * 1.7);
-          // 1.14127 = length(vec2(1.0, 0.55)), the hard-coded lean this replaced. That pair
-          // was NOT a unit vector, so swapping it for one would have quietly shrunk the
-          // canopy's motion by 12% -- a retune of tree movement the owner likes, disguised
-          // as a direction fix. The factor keeps the amplitude and changes only the way.
           float windAmp = uWind * 0.085 * windHeight * 1.14127;
-          // windPhase still comes from the instance's own origin, so the canopy ripples
-          // across the world instead of moving as one slab; only the direction is shared.
           transformed.x += windGust * windAmp * uWindDir.x;
           transformed.z += windGust * windAmp * uWindDir.y;
         #endif
