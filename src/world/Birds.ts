@@ -8,6 +8,8 @@ import {
 } from './WorldLayout';
 import { mergeStaticMeshes } from '../performance/mergeStaticMeshes';
 import { fallbackRandom, type RandomSource } from '../core/Random';
+import { advanceFoldedness, applyWingFold, foldednessTarget, wingFoldPose } from './WingFold';
+import type { Radians } from '../units';
 
 /**
  * Seagulls with believable flight: they steer smoothly toward wandering
@@ -24,6 +26,16 @@ const MAX_TURN_RATE = 0.65; // rad/s
 const CLIMB_RATE = 2.2; // m/s
 export const ECLIPSE_ROOST_COVERAGE = 0.85;
 export const ECLIPSE_TAKE_OFF_COVERAGE = 0.65;
+
+/**
+ * How close to its roost a gull has to be before it stops flying and starts landing: it
+ * drops to the roof's own height rather than the local ceiling, and it begins drawing its
+ * wings in. One number, because these are one event.
+ */
+const LANDING_FLARE_DISTANCE = 6;
+
+/** The dihedral a settled gull holds -- a hint of a V -- as the right wing's `rotation.z`. */
+export const ROOST_DIHEDRAL = 0.05 as Radians;
 
 type WingMode = 'flap' | 'glide';
 type LifeMode = 'fly' | 'toRoost' | 'roost' | 'takeOff';
@@ -77,6 +89,22 @@ interface Gull {
   nightRoost: THREE.Vector3;
   activeRoost: THREE.Vector3;
   takeOffClearanceY: number;
+  /** 0 spread, 1 folded against the flank. Continuous: see `WingFold.ts`. */
+  foldedness: number;
+}
+
+/**
+ * The pose of a settled gull, and the only place it is written.
+ *
+ * There used to be two copies of this, identical literals in two branches -- and the second
+ * was already dead, because the frame that landed a gull went on to overwrite it with the
+ * flight pose four lines later. One term now, called from both places, and the caller that
+ * used to be clobbered no longer is.
+ */
+function applyRoostWingPose(gull: Gull): void {
+  gull.leftWing.rotation.z = -ROOST_DIHEDRAL;
+  gull.rightWing.rotation.z = ROOST_DIHEDRAL;
+  applyWingFold(gull.leftWing, gull.rightWing, wingFoldPose(gull.foldedness));
 }
 
 function maxBuildingHeightNear(x: number, z: number, radius: number): number {
@@ -93,7 +121,7 @@ function maxBuildingHeightNear(x: number, z: number, radius: number): number {
   return maxH;
 }
 
-function createWing(side: -1 | 1): THREE.Group {
+export function createWing(side: -1 | 1): THREE.Group {
   const wing = new THREE.Group();
   for (let i = 0; i < 3; i++) {
     const segment = new THREE.Mesh(GULL_GEOMETRIES.wing, GULL_MATERIALS.wing);
@@ -294,6 +322,7 @@ export class Birds {
         nightRoost,
         activeRoost: nightRoost.clone(),
         takeOffClearanceY: MIN_ALTITUDE,
+        foldedness: 0,
       });
     }
   }
@@ -337,6 +366,19 @@ export class Birds {
         gull.altitudeTarget = MIN_ALTITUDE + this.random() * (MAX_ALTITUDE - MIN_ALTITUDE);
       }
 
+      // ── Wings: one continuous term, driven by the life mode ──
+      // A gull crossing the city toward its roof is still flying; it draws its wings in over
+      // the last few metres, and it opens them the moment it means to leave.
+      const roostApproach = Math.hypot(
+        gull.activeRoost.x - gull.position.x,
+        gull.activeRoost.z - gull.position.z
+      );
+      gull.foldedness = advanceFoldedness(
+        gull.foldedness,
+        foldednessTarget(gull.lifeMode, roostApproach < LANDING_FLARE_DISTANCE),
+        delta
+      );
+
       if (gull.lifeMode === 'roost') {
         // Asleep: sit still, wings folded, gentle breathing.
         gull.group.position.set(
@@ -345,8 +387,7 @@ export class Birds {
           gull.activeRoost.z
         );
         gull.group.rotation.set(0, gull.heading + Math.PI, 0);
-        gull.leftWing.rotation.z = -0.05;
-        gull.rightWing.rotation.z = 0.05;
+        applyRoostWingPose(gull);
         continue;
       }
 
@@ -386,7 +427,8 @@ export class Birds {
         gull.lifeMode === 'toRoost'
           ? Math.hypot(gull.activeRoost.x - gull.position.x, gull.activeRoost.z - gull.position.z)
           : Number.POSITIVE_INFINITY;
-      const avoidanceFloor = landingDistance < 6 ? gull.activeRoost.y : localCeiling;
+      const avoidanceFloor =
+        landingDistance < LANDING_FLARE_DISTANCE ? gull.activeRoost.y : localCeiling;
       const wantY = Math.max(gull.altitudeTarget, avoidanceFloor);
       const dy = THREE.MathUtils.clamp(wantY - gull.position.y, -CLIMB_RATE * delta, CLIMB_RATE * delta);
       gull.position.y += dy;
@@ -409,8 +451,7 @@ export class Birds {
         gull.position.distanceToSquared(gull.activeRoost) < 1e-8
       ) {
         gull.lifeMode = 'roost';
-        gull.leftWing.rotation.z = -0.05;
-        gull.rightWing.rotation.z = 0.05;
+        applyRoostWingPose(gull);
       }
 
       // Soft world bounds — steer back inside.
@@ -431,15 +472,21 @@ export class Birds {
         }
       }
 
-      let wingAngle: number;
-      if (gull.wingMode === 'flap') {
-        wingAngle = Math.sin(elapsed * 9 + gull.phase) * 0.55;
-      } else {
-        // Glide: wings held in a shallow V with a tiny tremble.
-        wingAngle = -0.12 + Math.sin(elapsed * 1.4 + gull.phase) * 0.04;
+      // A gull that landed on this very frame already holds the roost pose; the flight pose
+      // used to overwrite it here, which is what made the second copy of it dead code.
+      if (gull.lifeMode !== 'roost') {
+        let wingAngle: number;
+        if (gull.wingMode === 'flap') {
+          wingAngle = Math.sin(elapsed * 9 + gull.phase) * 0.55;
+        } else {
+          // Glide: wings held in a shallow V with a tiny tremble.
+          wingAngle = -0.12 + Math.sin(elapsed * 1.4 + gull.phase) * 0.04;
+        }
+        gull.leftWing.rotation.z = -0.18 + wingAngle;
+        gull.rightWing.rotation.z = 0.18 - wingAngle;
+        // Spread (foldedness 0) leaves those two writes bit-identical; see `applyWingFold`.
+        applyWingFold(gull.leftWing, gull.rightWing, wingFoldPose(gull.foldedness));
       }
-      gull.leftWing.rotation.z = -0.18 + wingAngle;
-      gull.rightWing.rotation.z = 0.18 - wingAngle;
 
       // ── Bank into the turn ──
       const targetBank = -THREE.MathUtils.clamp(headingError, -1, 1) * 0.45;

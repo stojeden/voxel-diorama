@@ -21,7 +21,8 @@ import { clock01, degrees, radians, solarPhase01, wallClock01 } from './units.te
 /**
  * The brands, asserted the only way a type can be: by the compiler refusing the wrong call.
  *
- * **`@ts-expect-error` is a real assertion here and nowhere else in this repository.** It
+ * **`@ts-expect-error` is a real assertion here, and in `world/WingFold.test.ts`, and nowhere
+ * else in this repository.** It
  * fails the typecheck if the line it sits on *compiles* -- so every one of these is a test
  * that the swap it describes is now impossible, and deleting a brand turns this file red
  * rather than green. That is the inversion that makes it worth writing: the usual rule
