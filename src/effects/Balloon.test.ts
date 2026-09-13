@@ -142,6 +142,23 @@ describe('the balloon travels with the air and does not point into it', () => {
     east.balloon.dispose();
   });
 
+  test('it stays on the ground in rain, which the owner asked for and already had', () => {
+    // "Kiedy pada deszcz, to żeby nie było balonu latającego." Verified, not implemented:
+    // the gate is `cloudCover < 0.4` and rain's cover is 0.92, so a balloon has never flown
+    // in a shower. This test exists so that the next person to retune rain's cloud cover --
+    // the gale above moved its WIND, and cover is the next number anyone reaches for -- finds
+    // out here rather than from the owner.
+    const scene = new THREE.Scene();
+    const balloon = new Balloon(scene, () => 0.5);
+    for (let minute = 0; minute < 30; minute++) balloon.update(60, minute * 60, 0, 0.92, 0.82, 1, 0);
+    expect(scene.children[0].visible).toBe(false);
+
+    // And it is the cover doing it, not the wind: the same gale in fair weather flies.
+    balloon.update(60, 1800, 0, 0.12, 0.82, 1, 0);
+    expect(scene.children[0].visible).toBe(true);
+    balloon.dispose();
+  });
+
   test('but the TRACK is the wind, which is what the owner asked for', () => {
     const { craft, balloon } = launch(0, 1);
     const entryZ = craft.position.z;

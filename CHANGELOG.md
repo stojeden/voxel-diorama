@@ -11,6 +11,21 @@ a wersjonowanie projektu docelowo stosuje [Semantic Versioning](https://semver.o
 
 ### Added
 
+- **Burza: chmury błyskają od środka, kiedy pada deszcz.** Nie pioruny — większość wyładowań
+  w burzy jest *wewnątrzchmurowych*, więc widz nie widzi rysunku błyskawicy, tylko komórkę,
+  która zapala się od środka i gaśnie. Błysk żyje 0,15 s i powtarza się dwa do czterech razy
+  co 0,11 s (to migotanie jest tym, co czyta się jako błyskawica, a nie jako rozjaśnienie),
+  a burza daje **5,5 błysku na minutę**, nie jeden na sekundę. Rozbłyskuje cała talia trochę,
+  a komórka z kanałem najmocniej; niebo i miasto dostają mały dodatek do światła
+  wypełniającego, bo burza oświetla też ulicę.
+  **Zero nowych draw calli i zero nowych geometrii:** chmury są jedną `InstancedMesh`,
+  a `instanceColor` daje jasność na chmurę za darmo. **Determinizm:** harmonogram jest czystą
+  funkcją zegara prezentacji i ziarna (`floor(t / 11 s)` wybiera zdarzenie), więc `pinClock`
+  potrafi go przeszukać w obie strony, a sekunda, na której fotografowany jest każdy
+  checkpoint, leży w gwarantowanej ciszy na początku szczeliny. Poza deszczem burza jest
+  **dokładnie** wyłączona — zero, nie „prawie zero" — więc żaden pomiar zaćmienia ani
+  bezchmurnego południa się nie rusza.
+
 - **Dwie osie czasu i dwie jednostki kąta są teraz typami, których pilnuje kompilator.**
   `t01` to zegar, którego wschód słońca wędruje z porą roku; faza słoneczna jest kanoniczna
   (0,25 wschód, 0,5 południe, 0,75 zachód). Oba były gołymi `number` w tym samym zakresie 0..1,
@@ -187,6 +202,18 @@ a wersjonowanie projektu docelowo stosuje [Semantic Versioning](https://semver.o
 
 ### Changed
 
+- **Chmury odpowiadają wiatrowi, a w deszczu wieje wichura.** Talia była czwartym
+  konsumentem bez kierunku: `cloud.x += ...` znosiło każdą chmurę ku +x, w każdej pogodzie,
+  na zawsze — więc przy wietrze z północy drzewa, dym i balon szły na południe, a niebo
+  dalej przecinało kadr z zachodu na wschód. Teraz talia jedzie po tym samym wektorze,
+  z zachowaniem własnej prędkości każdej chmury, a zawracanie jest **niezależne od
+  kierunku**: świat chmur to koło o promieniu 180 m, a chmura wraca na jego nawietrzną
+  krawędź ze świeżym przesunięciem w poprzek wiatru. Stare zawijanie było napisane dla
+  osi +x i na każdym innym kursie zsypałoby talię w róg.
+  Wiatr w deszczu: **0,62 → 0,82** (pozostałe cztery pogody bez zmian). To 32 % mocniej
+  wszędzie: liście, smuga z komina i znoszenie strug deszczu (ślad kropli 6,9° → 9,1° od
+  pionu, 16,2° w szczycie porywu). Balon i tak nie lata w deszczu — bramkuje go zachmurzenie
+  0,92 przy progu 0,4 — i teraz pilnuje tego test, zamiast zbiegu okoliczności.
 - **Plac zabaw nad jeziorem zamiast placeholdera.** Stało tam pięć na pięć wokseli w
   kolorze `accent`, jeden niebieski słupek i cztery różowe kostki po przekątnej, które
   miały być zjeżdżalnią; płyta siedziała na całym wokselu, więc jej wierzch był 0,5 m nad

@@ -197,9 +197,11 @@ describe('playground swings', () => {
     };
     expect(lean(1)).toBeCloseTo(PLAYGROUND_DIMENSIONS.maxSwayDegrees, 1);
     expect(lean(0.5)).toBeCloseTo(PLAYGROUND_DIMENSIONS.maxSwayDegrees / 2, 1);
-    // A rainy day in this world: visible, and nothing like a child on the seat.
-    expect(lean(0.62)).toBeGreaterThan(3);
-    expect(lean(0.62)).toBeLessThan(4.5);
+    // A rainy day in this world: visible, and nothing like a child on the seat. 0.82 since
+    // rain became a gale (`TARGETS.rain.wind`, 0.62 before); the seats answer the same 0..1
+    // wind the trees do, so raising it moved them with everything else.
+    expect(lean(0.82)).toBeGreaterThan(4);
+    expect(lean(0.82)).toBeLessThan(6);
     handle.dispose();
   });
 

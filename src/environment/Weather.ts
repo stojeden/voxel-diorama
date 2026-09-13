@@ -3,6 +3,13 @@ import type { WindUniforms } from '../world/WorldGenerator';
 import type { QualityProfile } from '../performance/QualityManager';
 import { fallbackRandom, type RandomSource } from '../core/Random';
 import { GUST_SLOW_RATE, windBearingAt, windSeedFrom, type WindSeed, type WindVector } from './wind';
+import {
+  stormCloudBrightness,
+  stormFlashAt,
+  stormFocusAt,
+  stormSeedFrom,
+  type StormSeed,
+} from './storm';
 import type { Radians } from '../units';
 
 export type WeatherKind = 'clear' | 'cloudy' | 'rain' | 'snow' | 'fog';
@@ -22,6 +29,92 @@ const CLOUD_COUNT = 14;
 const CLOUD_MIN_Y = 30;
 const CLOUD_MAX_Y = 44;
 
+/**
+ * How far out a cloud may drift before the sky recycles it — a RADIUS, not an edge.
+ *
+ * The deck used to be wrapped on one axis (`if (cloud.x > RAIN_AREA) cloud.x = -RAIN_AREA`),
+ * which is correct for exactly one bearing. Now that the clouds travel along the world's wind
+ * the domain has to be the same shape from every direction, or a south-west wind piles the
+ * whole deck into a corner and the sky empties behind it. A disc is that shape: it has no
+ * corner, and the re-entry point is the boundary crossing of a straight line, whatever the
+ * bearing.
+ *
+ * 180 m rather than `RAIN_AREA`'s 150, because the clouds are LAID OUT in a ±130 by ±120 box
+ * whose far corner is 177 m out. A radius inside that would have recycled three clouds on the
+ * first tick of the first load — a jump, at boot, in the shot everyone sees.
+ */
+export const CLOUD_DOMAIN_RADIUS = 180;
+
+/** How much of the entry boundary the cross-wind draw may use; see {@link cloudEntryPoint}. */
+const CLOUD_ENTRY_SPREAD = 0.75;
+
+/**
+ * A hair inside the boundary, so a re-entry cannot be read as an escape.
+ *
+ * An entry computed ON the circle lands within one ulp of it, and that rounding can fall
+ * either side: `x² + z²` then exceeds `R²` by an epsilon, the escape test fires again on the
+ * very next tick, and the cloud is recycled for ever without moving. 1e-9 of the radius is
+ * 0.18 µm — invisible, and seven orders of magnitude above the rounding it is protecting from.
+ */
+const CLOUD_ENTRY_INSET = 1 - 1e-9;
+
+/** Has this cloud left the sky the diorama keeps? Bearing-agnostic by construction. */
+export function cloudHasLeftTheSky(x: number, z: number): boolean {
+  return x * x + z * z > CLOUD_DOMAIN_RADIUS * CLOUD_DOMAIN_RADIUS;
+}
+
+/**
+ * Where a recycled cloud comes back: the UPWIND boundary of the sky, at a fresh cross-wind
+ * offset, so it crosses the world instead of reappearing where it left.
+ *
+ * `crossFraction` is -1..1 across the wind; the caller draws it, so the deck does not re-enter
+ * in single file. It is scaled by {@link CLOUD_ENTRY_SPREAD} because an entry at the very edge
+ * of the disc has a chord of nearly nothing to cross and would be recycled again within
+ * seconds.
+ *
+ * A direction that is not a direction — both components zero, or either one NaN or infinite —
+ * falls back to the west-to-east entry the deck had before it had a bearing, rather than
+ * returning NaN and deleting a cloud in silence. The balloon's planner learned the same lesson
+ * the expensive way; see `planBalloonCrossing`.
+ */
+export function cloudEntryPoint(
+  windX: number,
+  windZ: number,
+  crossFraction: number
+): { x: number; z: number } {
+  const lengthSquared = windX * windX + windZ * windZ;
+  let unitX = 1;
+  let unitZ = 0;
+  if (lengthSquared > 0 && Number.isFinite(lengthSquared)) {
+    const inverse = 1 / Math.sqrt(lengthSquared);
+    unitX = windX * inverse;
+    unitZ = windZ * inverse;
+  }
+  const radius = CLOUD_DOMAIN_RADIUS * CLOUD_ENTRY_INSET;
+  const across = THREE.MathUtils.clamp(crossFraction, -1, 1) * CLOUD_ENTRY_SPREAD * radius;
+  const along = -Math.sqrt(Math.max(0, radius * radius - across * across));
+  return {
+    x: unitX * along - unitZ * across,
+    z: unitZ * along + unitX * across,
+  };
+}
+
+/**
+ * Rain intensity below which the storm is EXACTLY off, and the intensity at which it is
+ * fully on.
+ *
+ * The floor is the same 0.4 that decides whether the roads are wetting, so "it is raining
+ * hard enough to soak the asphalt" and "it is raining hard enough to thunder" are one
+ * threshold rather than two that can drift apart. `THREE.MathUtils.smoothstep` returns
+ * literal zero at or below its lower bound, which is what makes every dry frame — an eclipse,
+ * a clear noon, every luminance number already measured — arithmetically untouched.
+ */
+const STORM_RAIN_FLOOR = 0.4;
+const STORM_RAIN_FULL = 0.75;
+
+/** Reused for the instance-colour write, which happens only while a flash is alight. */
+const CLOUD_FLASH_COLOR = new THREE.Color();
+
 interface WeatherTargets {
   cloud: number;
   rain: number;
@@ -33,7 +126,26 @@ interface WeatherTargets {
 const TARGETS: Record<WeatherKind, WeatherTargets> = {
   clear: { cloud: 0.12, rain: 0, snow: 0, fogDensity: 0.003, wind: 0.16 },
   cloudy: { cloud: 0.78, rain: 0, snow: 0, fogDensity: 0.0048, wind: 0.38 },
-  rain: { cloud: 0.92, rain: 1, snow: 0, fogDensity: 0.0085, wind: 0.62 },
+  /**
+   * Rain blows a gale: 0.62 -> 0.82, the owner's "większa wichura".
+   *
+   * The strength is a multiplier on every consumer at once, so the choice is one number and
+   * four consequences. At 0.82 the gusted `uWind` runs 0.53 on the mean gust and 0.97 at the
+   * top of one — 32% harder than 0.62 everywhere:
+   *
+   *  - the canopy's peak displacement rises with it, and the PEAK gusted `uWind` stays under
+   *    1.0, which is the ceiling the foliage's lean/flutter split was measured against;
+   *  - the plume's full-age drift goes 3.6 m -> 4.3 m on the mean against a 13 m rise, so the
+   *    column leans distinctly without lying flat;
+   *  - the rain's own horizontal drift goes 2.4 m/s -> 3.2 m/s against a 20 m/s fall, tilting
+   *    a streak's track from 6.9 deg off vertical to 9.1 (16.2 at the top of a gust);
+   *  - the balloon is unaffected: it is grounded in rain by cover, not by wind.
+   *
+   * Not 1.0: `setExternal` takes a live wind normalised to 1 and publishes
+   * `max(target, live)`, so an authored weather at the ceiling would leave a real gale with
+   * nothing to say. Only rain moved; the other four are the numbers they have always been.
+   */
+  rain: { cloud: 0.92, rain: 1, snow: 0, fogDensity: 0.0085, wind: 0.82 },
   snow: { cloud: 0.85, rain: 0, snow: 1, fogDensity: 0.0068, wind: 0.3 },
   fog: { cloud: 0.55, rain: 0, snow: 0, fogDensity: 0.03, wind: 0.07 },
 };
@@ -135,6 +247,20 @@ export class Weather {
 
   /** This session's bearing offsets; drawn once, in the constructor. */
   private readonly windSeed: WindSeed;
+  /** This session's storm; drawn from a stream of its own. See {@link stormSeedFrom}. */
+  private readonly stormSeed: StormSeed;
+  /** 0..1 this frame's flash; exactly 0 whenever it is not raining hard enough to thunder. */
+  private stormFlash = 0;
+  /** Which cloud carries the current channel — an index into {@link Weather.clouds}. */
+  private stormFocus = 0;
+  /**
+   * Whether the instance colours are currently anything but white.
+   *
+   * The deck is repainted only while a flash is alight AND for the one frame that puts it
+   * out. A dry world never writes an instance colour at all, which is what "exactly off"
+   * has to mean for a buffer.
+   */
+  private cloudsLit = false;
   /**
    * The published wind, reused rather than rebuilt.
    *
@@ -149,7 +275,12 @@ export class Weather {
     bearing: 0 as Radians,
   };
 
-  constructor(scene: THREE.Scene, windUniforms: WindUniforms, random = fallbackRandom('weather')) {
+  constructor(
+    scene: THREE.Scene,
+    windUniforms: WindUniforms,
+    random = fallbackRandom('weather'),
+    stormRandom = fallbackRandom('storm')
+  ) {
     this.scene = scene;
     this.windUniforms = windUniforms;
     this.random = random;
@@ -236,6 +367,30 @@ export class Weather {
 
     this.cloudMesh = new THREE.InstancedMesh(this.cloudGeometry, this.cloudMaterial, totalInstances);
     this.cloudMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    /**
+     * Allocate the per-instance colour ONCE, all white, at construction.
+     *
+     * This is what buys the storm zero new draw calls and zero new geometries: the deck is
+     * already one `InstancedMesh`, and `instanceColor` gives every cloud in it a brightness of
+     * its own for the price of a 3-float attribute (360 instances, 4.3 kB) and no second pass.
+     *
+     * Allocated here rather than at the first flash for two reasons. It keeps the program
+     * stable — three compiles `USE_INSTANCING_COLOR` into the material the first time the
+     * attribute exists, and doing that mid-flight would be a shader compile in the frame a
+     * storm starts. And white is arithmetically nothing: `setColorAt(0, white)` fills the whole
+     * attribute with 1.0 (`InstancedMesh.setColorAt` allocates `new Float32Array(n * 3).fill(1)`),
+     * the vertex chunk multiplies `vColor` by it and the fragment multiplies `diffuseColor` by
+     * that, and a multiply by exactly 1.0 is exact in IEEE 754. A dry frame renders the pixels
+     * it rendered before.
+     *
+     * That the material respects it at all was checked in the pinned three build rather than
+     * assumed: `color_fragment` guards on `USE_COLOR`, which the FRAGMENT prefix defines as
+     * `parameters.vertexColors || parameters.instancingColor` (three r185,
+     * `build/three.module.js`), and `instancingColor` is `object.instanceColor !== null`. So a
+     * `MeshStandardMaterial` with `vertexColors` left false does take the instance colour, and
+     * no material flag has to change here.
+     */
+    this.cloudMesh.setColorAt(0, CLOUD_FLASH_COLOR.setScalar(1));
     // Broad cloud shadows are both visually unstable and disproportionately
     // expensive. Cloud cover already attenuates the directional sun light.
     this.cloudMesh.castShadow = false;
@@ -263,6 +418,8 @@ export class Weather {
     // puff, and the stream is positional: taking three numbers earlier would have shifted
     // all of them and changed a world that several checkpoints are pinned to.
     this.windSeed = windSeedFrom(random);
+    // A stream of its own, so a storm cannot move a raindrop. See `stormSeedFrom`.
+    this.stormSeed = stormSeedFrom(stormRandom);
     this.publishWind(0);
   }
 
@@ -356,6 +513,66 @@ export class Weather {
     return this.values.rain;
   }
 
+  /**
+   * 0..1 how hard the storm is flashing THIS frame — exactly 0 unless it is raining.
+   *
+   * The clouds are lit from inside by `Weather` itself, through the deck's instance colour.
+   * This is the share of the flash that leaves the deck: `DayNightCycle` adds it to the
+   * world's ambient and hemisphere fill so a flash lights the city a little, which is what a
+   * storm does and what a cloud-only flash would look wrong without.
+   */
+  getStormFlash(): number {
+    return this.stormFlash;
+  }
+
+  /**
+   * Recompute the flash and, if anything is alight, repaint the deck.
+   *
+   * Called from `update`, from `pinClock` and from `debugSetImmediate` — every path that
+   * moves this clock or this weather — so the storm is never a frame behind the state it is
+   * a function of.
+   */
+  private updateStorm(): void {
+    const gate = THREE.MathUtils.smoothstep(this.values.rain, STORM_RAIN_FLOOR, STORM_RAIN_FULL);
+    // Literal zero below the floor, and therefore no write, no upload and no change to a
+    // frame that has nothing to do with rain.
+    this.stormFlash = gate > 0 ? gate * stormFlashAt(this.elapsed, this.stormSeed) : 0;
+    if (this.stormFlash > 0) {
+      this.stormFocus = Math.min(
+        this.activeCloudCount - 1,
+        Math.floor(stormFocusAt(this.elapsed, this.stormSeed) * this.activeCloudCount)
+      );
+    }
+    if (this.stormFlash > 0 || this.cloudsLit) this.paintStorm();
+  }
+
+  /**
+   * Write the per-cloud brightness into the deck's instance colour.
+   *
+   * Every puff of a cloud takes that cloud's own brightness, so a cell lights as one body
+   * rather than dissolving into speckle. The whole deck lifts a little and the cell carrying
+   * the channel lifts most — see {@link stormCloudBrightness}, which returns exactly 1 when
+   * the flash is 0, so the frame that puts the storm out writes white and stops.
+   */
+  private paintStorm(): void {
+    const focus = this.clouds[Math.min(this.stormFocus, this.activeCloudCount - 1)];
+    // EVERY cloud, not just the active ones. A quality drop mid-flash shrinks the drawn count,
+    // and a cloud left bright in the buffer would come back bright when the count grows again.
+    for (let c = 0; c < this.clouds.length; c++) {
+      const cloud = this.clouds[c];
+      const brightness = stormCloudBrightness(
+        this.stormFlash,
+        Math.hypot(cloud.x - focus.x, cloud.z - focus.z)
+      );
+      CLOUD_FLASH_COLOR.setScalar(brightness);
+      for (let p = 0; p < cloud.count; p++) {
+        this.cloudMesh.setColorAt(cloud.first + p, CLOUD_FLASH_COLOR);
+      }
+    }
+    if (this.cloudMesh.instanceColor) this.cloudMesh.instanceColor.needsUpdate = true;
+    this.cloudsLit = this.stormFlash > 0;
+  }
+
   /** 0..1 drops remaining in a local curtain after the foreground shower. */
   getAirborneMoisture(): number {
     return this.airborneMoisture;
@@ -402,8 +619,10 @@ export class Weather {
     if (kind === 'rain') this.airborneMoisture = 1;
     // This setter exists so a checkpoint lands on a state without waiting for the crossfade.
     // The wind vector is part of that state, so it jumps with the rest rather than staying
-    // one frame behind on a paused clock.
+    // one frame behind on a paused clock. So is the storm: jumping OUT of rain has to put the
+    // deck back to white on the same tick, not on the next one that happens to run.
     this.publishWind(this.elapsed);
+    this.updateStorm();
   }
 
   /**
@@ -425,6 +644,10 @@ export class Weather {
     this.elapsed = seconds;
     this.windUniforms.uTime.value = seconds;
     this.publishWind(this.elapsed);
+    // The storm is a pure function of this clock, which is the whole reason it was built that
+    // way: seeking the clock seeks the storm, and `CHECKPOINT_WIND_CLOCK` is inside the quiet
+    // lead of a slot, so a checkpoint is dark by construction rather than by luck of the seed.
+    this.updateStorm();
   }
 
   /**
@@ -502,6 +725,12 @@ export class Weather {
     // this frame's gust against last frame's bearing.
     this.publishWind(this.elapsed);
 
+    // ── The storm ──
+    // Evaluated at full frame rate, not on the clouds' own 24 Hz budget: a stroke lives 0.15 s
+    // and re-strikes 0.11 s apart, so sampling the flicker four times a flash would turn the
+    // thing that makes it read as lightning into a square wave.
+    this.updateStorm();
+
     // ── Rain ──
     const rainAlpha = this.values.rain;
     this.rainMesh.visible = rainAlpha > 0.02;
@@ -559,14 +788,26 @@ export class Weather {
       const cloudDelta = Math.min(this.cloudUpdateAccumulator, 0.15);
       this.cloudUpdateAccumulator = 0;
       const visibleClouds = Math.round(this.values.cloud * this.activeCloudCount);
+      // The deck answers the world's one wind, like the trees, the plume and the balloon. It
+      // was the fourth consumer with no direction: `cloud.x += ...` drifted every cloud toward
+      // +x in every weather for ever, so in a wind blowing south the sky still crossed the
+      // picture west to east. The per-cloud `speed` stays — it is what keeps the deck from
+      // travelling as one slab — and only its AXIS is now shared.
+      const driftX = this.windVector.x;
+      const driftZ = this.windVector.z;
       for (let c = 0; c < this.activeCloudCount; c++) {
         const cloud = this.clouds[c];
         const wantVisible = c < visibleClouds ? 1 : 0;
         cloud.visibility += (wantVisible - cloud.visibility) * Math.min(1, cloudDelta * 0.5);
-        cloud.x += (cloud.speed + wind * 5) * cloudDelta;
-        if (cloud.x > RAIN_AREA) {
-          cloud.x = -RAIN_AREA;
-          cloud.z = (this.random() - 0.5) * 2 * (RAIN_AREA - 30);
+        const travelled = (cloud.speed + wind * 5) * cloudDelta;
+        cloud.x += driftX * travelled;
+        cloud.z += driftZ * travelled;
+        if (cloudHasLeftTheSky(cloud.x, cloud.z)) {
+          // One draw per recycle, exactly as before -- the old wrap drew a fresh `z` here. The
+          // stream's consumption is unchanged, so no raindrop moves because a cloud wrapped.
+          const entry = cloudEntryPoint(driftX, driftZ, this.random() * 2 - 1);
+          cloud.x = entry.x;
+          cloud.z = entry.z;
         }
 
         const s = cloud.visibility;

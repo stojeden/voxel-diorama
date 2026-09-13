@@ -21,6 +21,7 @@ import {
   sunElevationAt,
 } from './sky';
 import { beamTransmittanceColor, twilightSkyColorCached } from './SunlightSpectrum';
+import { STORM_FILL_AMBIENT, STORM_FILL_HEMISPHERE } from './storm';
 // Geometry only, and a pure function: the umbra's traverse has to be normalised against the
 // separation at which the moon's disc first contains the sun's, and reading that back off the
 // timeline's own coverage law is what keeps this file out of `EclipseTimeline.ts`.
@@ -1122,6 +1123,8 @@ export class DayNightCycle {
   private readonly auroraMaterials: THREE.ShaderMaterial[] = [];
   private auroraTarget = 0;
   private auroraStrength = 0;
+  /** 0..1 storm flash; see {@link DayNightCycle.setStormFlash}. Not smoothed: a flash is fast. */
+  private stormFlash = 0;
 
   private readonly shootingStars: ShootingStar[] = [];
   private elapsed = 0;
@@ -1387,6 +1390,19 @@ export class DayNightCycle {
   /** 0..1 — typically (clear-sky && deep-night && "aurora night") gate. */
   setAuroraStrength(strength: number): void {
     this.auroraTarget = clamp01(strength);
+  }
+
+  /**
+   * 0..1 — a storm flash, from `Weather.getStormFlash()`. Zero unless it is raining.
+   *
+   * A flash that lit only the cloud carrying it would look like a lamp inside a box: lightning
+   * lights the city under it too. This is the share that leaves the deck, and it is ADDED to
+   * the two fills rather than multiplied into them, so that a flash of zero — every frame that
+   * is not a rainstorm, including every eclipse and every checkpoint — is `x + 0`, which is
+   * exactly `x`. Nothing already measured moves.
+   */
+  setStormFlash(flash: number): void {
+    this.stormFlash = clamp01(flash);
   }
 
   /** Compatibility helper for diagnostics that directly set eclipse coverage. */
@@ -1770,11 +1786,16 @@ export class DayNightCycle {
      * covering the sun. {@link eclipseDiffuseFraction} replaces both with one term that falls
      * with the beam and floors on the umbra's own skyglow.
      */
+    // The storm's share of the fill rides OUTSIDE the eclipse fraction: a discharge inside a
+    // cloud is its own light source and does not care how much of the sun is covered. It is
+    // exactly zero in every weather but rain, so no frame that has never seen a storm moves.
     this.ambientLight.intensity =
-      (0.16 + day * 0.5 * cloudLight.fill + golden * 0.1) * eclipseDiffuse;
+      (0.16 + day * 0.5 * cloudLight.fill + golden * 0.1) * eclipseDiffuse
+      + this.stormFlash * STORM_FILL_AMBIENT;
     skyColorAt(t, declination, this.tmpColor);
     this.ambientLight.color.copy(this.tmpColor).lerp(this.tmpWhite, 0.35);
-    this.hemisphereLight.intensity = (0.22 + day * 0.5 * cloudLight.fill) * eclipseDiffuse;
+    this.hemisphereLight.intensity = (0.22 + day * 0.5 * cloudLight.fill) * eclipseDiffuse
+      + this.stormFlash * STORM_FILL_HEMISPHERE;
     this.hemisphereLight.color.copy(this.tmpColor);
 
     // ── Fog colour tracks the horizon (density owned by Weather) ──

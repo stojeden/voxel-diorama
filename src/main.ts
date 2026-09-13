@@ -156,7 +156,15 @@ const eclipseCrowdProps = new EclipseCrowdProps(env.scene);
 const balloon = new Balloon(env.scene, worldRandom.stream('balloon'));
 const railSignals = new RailSignals(env.scene);
 ui.setLoadingProgress(16, 'POJAZDY I MIESZKAŃCY');
-const weather = new Weather(env.scene, windUniforms, worldRandom.stream('weather'));
+// Two streams, not one: the weather stream is positional -- every raindrop, snowflake and
+// cloud puff is a draw from it in order -- so the storm takes its own rather than shifting a
+// world several checkpoints are pinned to.
+const weather = new Weather(
+  env.scene,
+  windUniforms,
+  worldRandom.stream('weather'),
+  worldRandom.stream('storm')
+);
 const dayNight = new DayNightCycle(env.scene, env.renderer, {
   streetLights: world.streetLights,
   streetGlowMesh: world.streetGlowMesh,
@@ -1027,6 +1035,8 @@ function stepWorld(frame: FrameContext, carrier: WorldFrame): void {
       themeMix(previousTheme.turbidityAdd, currentTheme.turbidityAdd, themeBlend) * 0.1
   );
   dayNight.setCameraMode(cameraMode);
+  // A storm lights the city, not only the cloud it is inside. Exactly zero in dry weather.
+  dayNight.setStormFlash(weather.getStormFlash());
   const light = dayNight.update(
     t01,
     presentationDelta,
@@ -1367,6 +1377,8 @@ const debugHandle: DioramaDebugHandle = {
     cloud: weather.getCloudCover(),
     wind: weather.getWind(),
     rain: weather.getRainIntensity(),
+    /** 0..1 this frame's storm flash, so a harness can read the schedule without a camera. */
+    storm: weather.getStormFlash(),
     airborneMoisture: weather.getAirborneMoisture(),
     rainbow: rainbow.getDebugState(),
     trainProgress: train.getRouteProgress(),

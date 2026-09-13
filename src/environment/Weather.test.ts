@@ -1,7 +1,13 @@
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { createWorldRandom, DEFAULT_SIMULATION_SEED } from '../core/Random';
-import { CHECKPOINT_WIND_CLOCK, Weather } from './Weather';
+import {
+  CHECKPOINT_WIND_CLOCK,
+  CLOUD_DOMAIN_RADIUS,
+  cloudEntryPoint,
+  cloudHasLeftTheSky,
+  Weather,
+} from './Weather';
 import { OPENING_SHOT, OVERVIEW_SHOT, type CameraShot } from '../experience/ShotDefinitions';
 import type { WindUniforms } from '../world/WorldGenerator';
 
@@ -32,6 +38,47 @@ function createWeather(uniforms: WindUniforms = createUniforms()): Weather {
 
 function createSeededWeather(seed: number, uniforms: WindUniforms): Weather {
   return new Weather(new THREE.Scene(), uniforms, createWorldRandom(seed).stream('weather'));
+}
+
+/**
+ * A weather whose scene is kept, so a test can read the clouds as the RENDERER sees them.
+ *
+ * The deck is one `InstancedMesh` and its matrices are the only public record of where a
+ * cloud is; a test that read a private field could pass while the picture stayed still.
+ */
+function createDeck(seed: number): {
+  weather: Weather;
+  clouds: THREE.InstancedMesh;
+} {
+  const scene = new THREE.Scene();
+  const world = createWorldRandom(seed);
+  const weather = new Weather(
+    scene,
+    createUniforms(),
+    world.stream('weather'),
+    world.stream('storm')
+  );
+  const clouds = scene.children.find(
+    (child): child is THREE.InstancedMesh => (child as THREE.InstancedMesh).isInstancedMesh === true
+  );
+  if (!clouds) throw new Error('the cloud deck is not in the scene');
+  return { weather, clouds };
+}
+
+/** Where the renderer will draw one cloud puff: the translation of its instance matrix. */
+function puffAt(clouds: THREE.InstancedMesh, index: number): { x: number; z: number } {
+  const matrix = new THREE.Matrix4();
+  clouds.getMatrixAt(index, matrix);
+  return { x: matrix.elements[12], z: matrix.elements[14] };
+}
+
+/** Every drawn puff, so a test can ask about the deck rather than about one cloud. */
+function allPuffs(clouds: THREE.InstancedMesh): Array<{ x: number; z: number }> {
+  return Array.from({ length: clouds.count }, (_, index) => puffAt(clouds, index));
+}
+
+function run(weather: Weather, steps: number, delta: number): void {
+  for (let step = 0; step < steps; step++) weather.update(delta, delta);
 }
 
 describe('Weather post-rain moisture', () => {
@@ -201,5 +248,225 @@ describe('a checkpoint pins the weather clock', () => {
     for (let frame = 0; frame < 60; frame++) weather.update(0, 0);
     expect(weather.getWindVector().bearing).toBe(pinned);
     weather.dispose();
+  });
+});
+
+describe('the clouds answer the wind', () => {
+  it('drifts the deck along the published vector, not toward +x for ever', () => {
+    // The defect: `cloud.x += (cloud.speed + wind * 5) * cloudDelta`. The trees, the plume
+    // and the balloon read a bearing; the sky did not, so in a wind blowing south the clouds
+    // still crossed the picture west to east.
+    const { weather, clouds } = createDeck(DEFAULT_SIMULATION_SEED);
+    weather.debugSetImmediate('cloudy');
+    // One tick first: the deck's matrices are written by `update`, so a reading taken before
+    // the first one is the identity, not a cloud.
+    run(weather, 1, 0.1);
+    const before = puffAt(clouds, 0);
+    run(weather, 120, 0.1);
+    const after = puffAt(clouds, 0);
+
+    const wind = weather.getWindVector();
+    const dx = after.x - before.x;
+    const dz = after.z - before.z;
+    const travelled = Math.hypot(dx, dz);
+    expect(travelled).toBeGreaterThan(5);
+    // The drift is ALONG the wind: the unit of the displacement is the unit of the wind.
+    expect((dx * wind.x + dz * wind.z) / travelled).toBeCloseTo(1, 3);
+    // And the test is worth running: this wind is not the +x the old code assumed.
+    expect(Math.abs(wind.z)).toBeGreaterThan(0.2);
+    weather.dispose();
+  });
+
+  it('keeps every cloud its own speed, so the deck is not one slab', () => {
+    const { weather, clouds } = createDeck(DEFAULT_SIMULATION_SEED);
+    weather.debugSetImmediate('cloudy');
+    run(weather, 1, 0.1);
+    const before = allPuffs(clouds);
+    run(weather, 120, 0.1);
+    const after = allPuffs(clouds);
+
+    const distances = after.map((puff, index) =>
+      Math.hypot(puff.x - before[index].x, puff.z - before[index].z)
+    );
+    expect(Math.max(...distances)).toBeGreaterThan(Math.min(...distances) * 1.1);
+    weather.dispose();
+  });
+
+  it('recycles a cloud that leaves the sky, at whatever bearing it left on', () => {
+    // The wrap was written for +x: `if (cloud.x > RAIN_AREA) cloud.x = -RAIN_AREA`. On any
+    // other bearing the clouds walk off one corner and the sky empties behind them.
+    const { weather, clouds } = createDeck(DEFAULT_SIMULATION_SEED);
+    weather.debugSetImmediate('rain');
+    run(weather, 6000, 0.1);
+
+    const puffs = allPuffs(clouds);
+    for (const puff of puffs) {
+      expect(Math.hypot(puff.x, puff.z)).toBeLessThan(CLOUD_DOMAIN_RADIUS + 25);
+    }
+    // The sky has not emptied into a corner: the deck still spans the world both ways.
+    const spanX = Math.max(...puffs.map((p) => p.x)) - Math.min(...puffs.map((p) => p.x));
+    const spanZ = Math.max(...puffs.map((p) => p.z)) - Math.min(...puffs.map((p) => p.z));
+    expect(spanX).toBeGreaterThan(120);
+    expect(spanZ).toBeGreaterThan(120);
+    weather.dispose();
+  });
+
+  it('re-enters upwind, on the sky boundary, at every bearing', () => {
+    for (let step = 0; step < 24; step++) {
+      const bearing = (step * Math.PI) / 12;
+      const windX = Math.cos(bearing);
+      const windZ = Math.sin(bearing);
+      for (const cross of [-1, -0.5, 0, 0.37, 1]) {
+        const entry = cloudEntryPoint(windX, windZ, cross);
+        expect(Math.hypot(entry.x, entry.z)).toBeCloseTo(CLOUD_DOMAIN_RADIUS, 6);
+        // Upwind: behind the world along the wind, so the cloud crosses rather than leaves.
+        expect(entry.x * windX + entry.z * windZ).toBeLessThan(0);
+        expect(cloudHasLeftTheSky(entry.x, entry.z)).toBe(false);
+      }
+    }
+  });
+
+  it('falls back to the old west-to-east entry when handed a direction that is not one', () => {
+    for (const [x, z] of [[0, 0], [NaN, 1], [0, Infinity]]) {
+      const entry = cloudEntryPoint(x, z, 0);
+      expect(Number.isFinite(entry.x)).toBe(true);
+      expect(Number.isFinite(entry.z)).toBe(true);
+      expect(entry.x).toBeCloseTo(-CLOUD_DOMAIN_RADIUS, 6);
+    }
+  });
+});
+
+describe('rain blows a gale', () => {
+  it('raises the wind in rain and leaves the other four weathers alone', () => {
+    const weather = createWeather();
+    const measured: Record<string, number> = {};
+    for (const kind of ['clear', 'cloudy', 'rain', 'snow', 'fog'] as const) {
+      weather.debugSetImmediate(kind);
+      measured[kind] = weather.getWind();
+    }
+    expect(measured.rain).toBe(0.82);
+    expect(measured.clear).toBe(0.16);
+    expect(measured.cloudy).toBe(0.38);
+    expect(measured.snow).toBe(0.3);
+    expect(measured.fog).toBe(0.07);
+    // The gale is the strongest weather by a clear margin, and still leaves headroom for a
+    // live wind from REAL TIME mode, which is normalised to 1.
+    expect(measured.rain).toBeGreaterThan(measured.cloudy * 2);
+    expect(measured.rain).toBeLessThan(1);
+    weather.dispose();
+  });
+
+  it('keeps the balloon on the ground for the whole shower, by cover alone', () => {
+    // The owner's third sentence -- no balloon while it rains -- is already true, and this
+    // pins it: `Balloon.update` gates on `cloudCover < 0.4`, and rain's cover is 0.92. The
+    // crossfade is the part worth testing: every path INTO and OUT OF rain has to hold the
+    // cover above that gate for as long as the rain is above the threshold that wets the
+    // roads, or a balloon appears in a downpour for a few seconds.
+    for (const from of ['clear', 'cloudy', 'snow', 'fog'] as const) {
+      const weather = createWeather();
+      weather.debugSetImmediate(from);
+      weather.setExternal('rain');
+      for (let step = 0; step < 400; step++) {
+        weather.update(0.05, 0.05);
+        if (weather.getRainIntensity() > 0.4) expect(weather.getCloudCover()).toBeGreaterThan(0.4);
+      }
+      weather.setExternal(from);
+      for (let step = 0; step < 400; step++) {
+        weather.update(0.05, 0.05);
+        if (weather.getRainIntensity() > 0.4) expect(weather.getCloudCover()).toBeGreaterThan(0.4);
+      }
+      weather.dispose();
+    }
+  });
+});
+
+describe('the storm', () => {
+  /** The flash trace of a weather stepped at 60 Hz. */
+  function flashes(weather: Weather, steps: number): number[] {
+    const trace: number[] = [];
+    for (let step = 0; step < steps; step++) {
+      weather.update(1 / 60, 1 / 60);
+      trace.push(weather.getStormFlash());
+    }
+    return trace;
+  }
+
+  it('lights the clouds while it rains', () => {
+    const { weather, clouds } = createDeck(DEFAULT_SIMULATION_SEED);
+    weather.debugSetImmediate('rain');
+    const trace = flashes(weather, 60 * 60);
+    expect(Math.max(...trace)).toBeGreaterThan(0.3);
+    expect(trace.filter((value) => value > 0).length).toBeGreaterThan(10);
+    // The flash reaches the deck through the instance colour the mesh already carries.
+    expect(clouds.instanceColor).not.toBe(null);
+    weather.dispose();
+  });
+
+  it('is exactly off, and the deck exactly white, in every dry weather', () => {
+    // `toBe(0)`, not "close to": an eclipse frame, a clear noon and every luminance number
+    // this project has measured must be untouched by a feature that did not exist for them.
+    for (const kind of ['clear', 'cloudy', 'snow', 'fog'] as const) {
+      const { weather, clouds } = createDeck(DEFAULT_SIMULATION_SEED);
+      weather.debugSetImmediate(kind);
+      for (const value of flashes(weather, 60 * 120)) expect(value).toBe(0);
+      for (const channel of clouds.instanceColor?.array ?? [1]) expect(channel).toBe(1);
+      weather.dispose();
+    }
+  });
+
+  it('leaves the deck exactly white again when the rain stops', () => {
+    const { weather, clouds } = createDeck(DEFAULT_SIMULATION_SEED);
+    weather.debugSetImmediate('rain');
+    flashes(weather, 60 * 60);
+    weather.debugSetImmediate('clear');
+    flashes(weather, 60);
+    for (const channel of clouds.instanceColor?.array ?? [1]) expect(channel).toBe(1);
+    expect(weather.getStormFlash()).toBe(0);
+    weather.dispose();
+  });
+
+  it('never darkens a cloud below the colour it was', () => {
+    const { weather, clouds } = createDeck(DEFAULT_SIMULATION_SEED);
+    weather.debugSetImmediate('rain');
+    for (let step = 0; step < 60 * 90; step++) {
+      weather.update(1 / 60, 1 / 60);
+      if (weather.getStormFlash() > 0) {
+        for (const channel of clouds.instanceColor?.array ?? [1]) {
+          expect(channel).toBeGreaterThanOrEqual(1);
+        }
+      }
+    }
+    weather.dispose();
+  });
+
+  it('is dark at the second every checkpoint is photographed at', () => {
+    const { weather } = createDeck(DEFAULT_SIMULATION_SEED);
+    weather.debugSetImmediate('rain');
+    flashes(weather, 60 * 30);
+    weather.pinClock(CHECKPOINT_WIND_CLOCK);
+    expect(weather.getStormFlash()).toBe(0);
+    for (let frame = 0; frame < 120; frame++) {
+      weather.update(0, 0);
+      expect(weather.getStormFlash()).toBe(0);
+    }
+    weather.dispose();
+  });
+
+  it('gives the same seed and the same clock the same storm, twice', () => {
+    const first = createDeck(4242);
+    const second = createDeck(4242);
+    first.weather.debugSetImmediate('rain');
+    second.weather.debugSetImmediate('rain');
+    const a = flashes(first.weather, 60 * 90);
+    const b = flashes(second.weather, 60 * 90);
+    expect(b).toEqual(a);
+    expect(Math.max(...a)).toBeGreaterThan(0);
+
+    const other = createDeck(99);
+    other.weather.debugSetImmediate('rain');
+    expect(flashes(other.weather, 60 * 90)).not.toEqual(a);
+    first.weather.dispose();
+    second.weather.dispose();
+    other.weather.dispose();
   });
 });
