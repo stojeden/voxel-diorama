@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { buildCityModel, type DominantSpec } from '../CityModel';
 import { isReplacedByCyber, planBuilding, planCyberCity, planDominant } from './CyberCity';
-import { SMOKE_LIFE_SECONDS, SMOKE_PARCELS, smokeWindDirection } from '../ChimneySmoke';
+import { SMOKE_LIFE_SECONDS, SMOKE_PARCELS } from '../ChimneySmoke';
 
 const model = buildCityModel();
 
@@ -117,28 +117,8 @@ describe('the plume stays a bounded, reproducible wisp', () => {
     expect(SMOKE_LIFE_SECONDS).toBeGreaterThan(0);
   });
 
-  test('the wind direction is a unit vector at every moment', () => {
-    for (let second = 0; second < 600; second += 3) {
-      const { x, z } = smokeWindDirection(second);
-      expect(Math.hypot(x, z)).toBeCloseTo(1, 6);
-    }
-  });
-
-  test('the wind turns smoothly instead of snapping', () => {
-    // The brief asked for changes of direction and strength that flow. A jump here is what
-    // a viewer reads as the plume being yanked, so the per-second turn is bounded.
-    let worst = 0;
-    for (let second = 0; second < 1200; second++) {
-      const a = smokeWindDirection(second);
-      const b = smokeWindDirection(second + 1);
-      worst = Math.max(worst, Math.acos(Math.min(1, a.x * b.x + a.z * b.z)));
-    }
-    expect(worst).toBeLessThan(0.05); // radians per second: under three degrees
-  });
-
-  test('the same second of the same clock gives the same plume', () => {
-    for (const second of [0, 12.5, 91, 1234.75]) {
-      expect(smokeWindDirection(second)).toEqual(smokeWindDirection(second));
-    }
-  });
+  // The plume's three direction tests used to live here, because the plume derived its own
+  // bearing. It does not any more: it reads the world's one wind, so the unit length, the
+  // bounded per-second turn and the reproducibility from a clock are asserted where that
+  // wind is made -- `environment/wind.test.ts` and `environment/Weather.test.ts`.
 });

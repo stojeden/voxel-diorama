@@ -14,6 +14,10 @@ import * as THREE from 'three';
  * Nothing here draws from a global random source, at build time or after -- the phases come
  * from an integer hash of the index, and `Random.test.ts` guards the rest.
  *
+ * Direction is not invented here. Both `uWind` and `uWindDir` come from the world's one
+ * wind, so a plume and the tree beside it lean the same way; see `src/environment/wind.ts`
+ * for the sign convention (the vector points the way the wind BLOWS TOWARD).
+ *
  * What it is not: a simulation. The column rises, then leans downwind, spreads and fades.
  * Pressure, temperature and inversion layers are not modelled and are not pretended at.
  */
@@ -23,29 +27,22 @@ export const SMOKE_PARCELS = { high: 26, low: 9 } as const;
 /** Seconds a parcel lives before its phase wraps. Long enough to lean, short enough to stay near. */
 export const SMOKE_LIFE_SECONDS = 9;
 
-/**
- * Which way the plume leans, as a smooth function of the world clock.
- *
- * The shared wind uniform carries strength only, so the direction is derived here -- with
- * the same shape the weather's own gust uses: a couple of slow sines. Two consequences
- * matter. It never jumps, so the plume bends instead of snapping; and it is a pure
- * function of elapsed seconds, so it is reproducible from a seed and a clock rather than
- * from the state of a generator nobody can replay.
- *
- * Exported because a plume that lurches is the failure mode worth a test of its own.
- */
-export function smokeWindDirection(elapsed: number): { x: number; z: number } {
-  const angle = 0.9 + 0.55 * Math.sin(elapsed * 0.021) + 0.22 * Math.sin(elapsed * 0.053 + 1.3);
-  return { x: Math.cos(angle), z: Math.sin(angle) };
-}
-
 export interface ChimneySmokeHandle {
   readonly object: THREE.Mesh;
   /** Move the source: the ordinary chimney and the Cyberpunk stack vent at different heights. */
   setOutlet(x: number, y: number, z: number): void;
   setLow(low: boolean): void;
-  /** `wind` is the shared world wind strength; `night` dims the plume with the sky. */
-  update(elapsed: number, wind: number, night: number): void;
+  /**
+   * `wind` is the shared world wind strength and `windDirX`/`windDirZ` the shared world
+   * wind DIRECTION -- the unit vector `Weather` publishes, pointing the way the wind blows
+   * toward. The plume used to derive its own bearing, which is why it could lean one way
+   * while the tree beside it leaned another. `night` dims the plume with the sky.
+   *
+   * The two direction components are separate required numbers rather than one optional
+   * vector: a default here is how three warm-up calls once fed a slot the wrong value in
+   * silence.
+   */
+  update(elapsed: number, wind: number, windDirX: number, windDirZ: number, night: number): void;
   dispose(): void;
 }
 
@@ -159,11 +156,10 @@ export function createChimneySmoke(): ChimneySmokeHandle {
     setLow(low) {
       geometry.instanceCount = low ? SMOKE_PARCELS.low : SMOKE_PARCELS.high;
     },
-    update(elapsed, wind, night) {
+    update(elapsed, wind, windDirX, windDirZ, night) {
       material.uniforms.uTime.value = elapsed;
       material.uniforms.uWind.value = THREE.MathUtils.clamp(wind, 0, 3);
-      const direction = smokeWindDirection(elapsed);
-      material.uniforms.uWindDir.value.set(direction.x, direction.z);
+      material.uniforms.uWindDir.value.set(windDirX, windDirZ);
       // Thinner after dark: at night the plume would otherwise read as a grey lid over
       // the lit city, which is the one thing it must not become.
       material.uniforms.uOpacity.value = 0.17 - 0.07 * THREE.MathUtils.clamp(night, 0, 1);

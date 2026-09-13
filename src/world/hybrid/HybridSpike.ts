@@ -86,6 +86,13 @@ export interface HybridFrame {
   shopRobbed: boolean;
   /** The world's own wind strength, shared with the weather rather than invented here. */
   wind: number;
+  /**
+   * The world's own wind DIRECTION, as the `x` and `z` of a unit vector pointing the way
+   * the wind blows toward. Shared for the same reason the strength is: the plume used to
+   * derive a private bearing and could lean against the trees.
+   */
+  windDirX: number;
+  windDirZ: number;
 }
 
 /** One window cohort: how many openings are in it, and what the frame is driving it with. */
@@ -376,7 +383,10 @@ export function attachHybridSpike(options: HybridSpikeOptions): HybridHandle {
   const awnings = new Awnings(options.scene, model.buildings, materials.opaque);
 
   return {
-    update({ camera, viewportHeightPx, sunT, clockT, night, dt, elapsed, shopRobbed, wind }) {
+    update({
+      camera, viewportHeightPx, sunT, clockT, night, dt, elapsed, shopRobbed,
+      wind, windDirX, windDirZ,
+    }) {
       const t01 = sunT;
       uniforms.uNight.value = night;
       // Real seconds, not fractions of the day: a warning light keeps its own rate
@@ -390,8 +400,8 @@ export function attachHybridSpike(options: HybridSpikeOptions): HybridHandle {
       // One call for every awning in the city, on the hour and the frame's own delta.
       awnings.update(clockT, dt);
       // One plume, one clock, one wind: the same elapsed seconds the beacons use and the
-      // same wind strength the weather publishes.
-      smoke.update(elapsed, wind, night);
+      // same wind strength AND bearing the weather publishes to the foliage shader.
+      smoke.update(elapsed, wind, windDirX, windDirZ, night);
       for (let cohort = 0; cohort < WINDOW_COHORT_COUNT; cohort++) {
         // `clockT`, not `t01`: these are household windows going on and off at an HOUR, the
         // same kind of thing `groceryGlow` reads the wall clock for six lines up. It was the
