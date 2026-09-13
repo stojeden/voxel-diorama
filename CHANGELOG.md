@@ -11,6 +11,62 @@ a wersjonowanie projektu docelowo stosuje [Semantic Versioning](https://semver.o
 
 ### Added
 
+- **Jeden wiatr, który ma kierunek — i sześciu konsumentów, którzy mu odpowiadają.** Świat miał
+  trzy wiatry, które wiatrem nie były: drzewa gięły się w zaszytym `(1, 0.55)` na zawsze, dym
+  wyprowadzał sobie własny azymut i pisał o tym w komentarzu, a balon czytał z wiatru **tylko
+  prędkość** i przelatywał z zachodu na wschód nawet przy wichurze z północy. Nic nie mogło się
+  nie zgadzać, bo nic nie miało wspólnego faktu. `src/environment/wind.ts` jest teraz tym faktem:
+  azymut skręcający przez 25 minut, czysta funkcja zegara, **swobodnie narastający i nigdzie
+  niezawijany**, żeby nic w dole nie odziedziczyło skoku przy π. Wektor wskazuje kierunek, w
+  którym powietrze **płynie**, zapisany przy wszystkich pięciu granicach, bo to jest dokładnie ten
+  znak, który przeżywa recenzję.
+  Odpowiadają mu: drzewa (stałe pochylenie z wiatrem plus dotychczasowe drżenie wokół niego),
+  dym, balon (wchodzi krawędzią pod wiatr i dryfuje z nim), chmury, **smugi deszczu i śnieg**.
+- **Burza.** Nie pioruny — wyładowania wewnątrzchmurowe, czyli to, co naprawdę oznacza „chmura
+  świeci od środka": 0,15 s na wyładowanie, dwa do czterech powtórzeń co 0,11 s (to migotanie
+  czyta się jak błyskawica, a nie jak przygaszanie), około pięciu na minutę, cała powała unosi
+  się trochę, a najbliższa komórka najmocniej. **Zero nowych draw calli i zero geometrii**, bo
+  powała jest już jednym `InstancedMesh` i wystarczy jej kolor instancji — zmierzone po obu
+  stronach na rasteryzatorze programowym: 1234 wywołania, 619 457 trójkątów, bez zmian.
+  Zmierzone na żywo: **5,1 błysku na minutę**, kolor instancji chmury 1,000 → 1,917 w szczycie,
+  średnia kadru +10 %, a prześwietlenie sceny **0 %** z błyskiem i bez — błysk jest widoczny,
+  a niczego nie przepala. Deterministyczny z ziarna i zegara, więc checkpoint go odtwarza.
+- **Mewy śpią ze złożonymi skrzydłami.** Gałąź odpoczynku miała komentarz „*Asleep: sit still,
+  wings folded*", a kod pod nim ustawiał skrzydła 0,13 rad od pozy szybowania — ptak spał w
+  pozycji lotu. Skrzydło jest jedną zlepioną bryłą, więc złożenie to skos 16°, opad 24° i
+  skrócenie rozpiętości do połowy; koniuszek ląduje 0,079 za ogonem, jak lotki prawdziwej mewy.
+  Zmierzone na produkcie: 7 z 11 mew ma `scale.x = 0.500` w nocy, pozostałe cztery jeszcze lecą.
+
+### Fixed
+
+- **Wiatr wiał prosto wzdłuż osi patrzenia kamery, przy każdym ładowaniu.** Ziarno świata jest
+  stałe, więc wylosowany azymut 242,6° wypadał 10,7° od osi widzenia kamery otwierającej —
+  balon nie przecinał kadru, tylko się w nim oddalał i malał. Azymut bazowy jest teraz **autorską
+  stałą** (320°, dwa stopnie od prostopadłej do obu kamer otwierających), a komentarz mówi wprost,
+  że jest autorska, przeciw którym kamerom i dlaczego nic nie wolno czytać z kamery w czasie
+  działania. Po zmianie: 69,9° od osi przy starcie, 68,4° po 90 s, a najbliżej **44,3°** dla
+  dowolnego azymutu w klinie — czyli blokada jest arytmetycznie nieosiągalna, a nie tylko mało
+  prawdopodobna.
+- **Drzewa dostały oś wiatru, a nie jego zwrot.** `windGust` jest sumą sinusów o średniej zero,
+  więc korony kołysały się symetrycznie i azymut θ dawał ruch identyczny jak θ+π. Teraz jest stałe
+  pochylenie z wiatrem plus drżenie wokół niego. Pierwsza próba naprawy **ścięła zamach o 37,5 %**
+  (mierzono szczyt, a człowiek widzi rozpiętość skrajni) — zamach wrócił dokładnie do 3,2, czyli
+  tego, co było przed całą funkcją.
+- **Deszcz i śnieg były piątym i szóstym konsumentem bez kierunku**, w gałęzi, której cała teza
+  brzmi „świat ma jeden wiatr". Rysowana smuga była gorsza niż przesunięcie: jej ogon to zaszyte
+  `(0.2, -0.9, 0.1)` — 14° od pionu ku azymutowi 26,6° — podczas gdy komentarz obok twierdził, że
+  tor jest 9,1° od pionu wzdłuż wiatru. Dwa różne pochyły, żaden nie czytał drugiego.
+- **Domyślny parametr na gnieździe determinizmu**: `stormRandom = fallbackRandom('storm')` cicho
+  przypinał burzę do domyślnego ziarna niezależnie od tego, o jaki świat prosił wołający — i już
+  się to działo w testach tej samej gałęzi. Podobnie `setExternal(kind, windNorm = 0)`, wołane
+  jednym argumentem przez `debugSetImmediate`, przez co każdy checkpoint prosił po cichu o ciszę.
+- **Trzy komentarze obiecywały więcej, niż kod robi.** Najważniejszy twierdził, że 25-minutowy
+  skręt „obnosi wiatr po całej róży" — azymut mieszka w klinie **87,66°**, identycznym dla każdego
+  ziarna. Zamiast usunąć zdanie, stała dostała uczciwe uzasadnienie: autoryzuje całą sesję, nie
+  pierwsze trzydzieści sekund. Rozszerzenie modelu odrzucono **na piśmie, z powodem**.
+- **Deszcz wieje mocniej**: 0,62 → 0,82, i tylko deszcz. Balon i tak nie lata w ulewie — jego
+  brama to `cloudCover < 0.4` przy zachmurzeniu 0,92 — co potwierdzono testem, zamiast zmieniać.
+
 - **Burza: chmury błyskają od środka, kiedy pada deszcz.** Nie pioruny — większość wyładowań
   w burzy jest *wewnątrzchmurowych*, więc widz nie widzi rysunku błyskawicy, tylko komórkę,
   która zapala się od środka i gaśnie. Błysk żyje 0,15 s i powtarza się dwa do czterech razy
