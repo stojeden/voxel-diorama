@@ -1,10 +1,6 @@
 import * as THREE from 'three';
 import type { QualityLevel } from '../performance/QualityManager';
 import { EclipseGroundEffects } from './EclipseGroundEffects';
-// The endpoint of the moon's traverse, imported rather than copied: the moon layer has to
-// fade the disc out exactly where the timeline parks it, and two 1.45s in two files is the
-// same defect written twice. Same direction `DayNightCycle` already reads the coverage law in.
-import { MOON_APPROACH_SEPARATION } from '../experience/EclipseTimeline';
 
 export interface EclipseRenderState {
   active: boolean;
@@ -618,7 +614,7 @@ ${MOON_CENTER_CHUNK}
 `;
 
 /**
- * How far out the moon has faded to nothing, and why the disc is drawn against the sky at all.
+ * WHY THE MOON IS DRAWN AGAINST THE SKY AT ALL, and how much of it the sun has to reveal.
  *
  * PHYSICALLY THE MOON IS INVISIBLE HERE, and that is worth saying before the reasons. At new
  * moon the earthward face carries only earthshine, and the airlight in the column in FRONT of
@@ -632,58 +628,52 @@ ${MOON_CENTER_CHUNK}
  * 2.5 degrees of the sun presents at 254 of 255 at the staged hour, and the drawn photosphere
  * is additive on top of it, so the sun and the sky beside it differ by ONE code -- measured,
  * and recorded at {@link SUN_DISC_RADIUS}. There is therefore no bright disc on screen for a
- * dark disc to cross. What the viewer saw instead, with the moon masked to the sun's own
- * circle, was the intersection of two circles: a vesica standing on end, born in the middle
- * of a white glare at coverage 0.14 and swelling. The owner's word for it was an egg.
+ * dark disc to cross. With the moon masked to the sun's own circle, what the viewer saw
+ * instead was the intersection of two circles: a vesica standing on end, born in the middle of
+ * a white glare at coverage 0.14 and swelling. The owner's word for it was an egg.
  *
- * Making the sun legible instead was considered and is out of reach from this file: the sky
- * is at the ACES clip point, so the only levers are the sky's radiance or the exposure, and
- * both of them are the daylight look of the whole diorama, which is not what was asked for.
+ * -- But the whole disc must not simply be there --
  *
- * The fade runs from first contact (|separation| = 1) out to {@link MOON_APPROACH_SEPARATION},
- * where it is gone. So the moon condenses out of the glare as it arrives, is a solid disc for
- * the whole of the eclipse proper, and dissolves back into the glare on the way out -- rather
- * than switching on at a threshold, which is the one thing that would trade an egg for a pop.
+ * The first fix drew the silhouette at full strength from the moment the moon was on screen
+ * and paired it with a traverse that began well clear of the sun. That put a complete black
+ * ball in an empty sky for nine seconds before anything happened to the sun, which is a
+ * different wrong picture: a planet drifting in, not a moon being caught. What was asked for
+ * instead is the thing an eclipse actually does -- the moon covers the sun FIRST, and only
+ * then does its own outline appear -- so the silhouette's opacity hangs on COVERAGE and on
+ * nothing else. At coverage 0 there is no moon to see anywhere, whatever the geometry says.
+ * Where the moon lies over the photosphere it is always fully opaque, because there it is not
+ * a silhouette at all: it is the thing removing the light.
+ *
+ * {@link MOON_REVEAL_COVERAGE} is where the reveal finishes, and it is authored from what the
+ * tone curve can show rather than from taste. The sky is still near the ACES clip through the
+ * early partial phase, so a disc transmitting a tenth of it is about 19 levels down and one
+ * transmitting a fiftieth is about 130 down: below roughly a third of coverage there is no
+ * room to show a gradual anything, and above it the disc has to be black or the bite goes
+ * grey. The traverse reaches coverage 0.35 at progress 0.14, 12.6 s into the ninety.
  */
-export const MOON_OPAQUE_SEPARATION = 1;
+export const MOON_REVEAL_COVERAGE = 0.35;
 
 /**
- * HOW MUCH SKY THE DISC STILL LETS THROUGH AT FIRST CONTACT -- and why the fade is a power
- * law and not a ramp.
+ * How much sky the silhouette still transmits when the reveal is finished -- and why the ramp
+ * is a power law rather than a ramp.
  *
- * The first attempt faded the alpha linearly (a `smoothstep` across the approach) and it was
- * a pop, measured on the built product at the moon's own centre pixel:
+ * The same lesson as everywhere else in this file: ACES maps a sky of 25 to code 254 and HALF
+ * that sky to code 252. Two codes for half the light. A reveal that is linear in opacity is
+ * therefore invisible until it is nearly complete and then arrives all at once -- measured, on
+ * the version of this that faded on approach distance instead of coverage: 253, 253, 250, 84,
+ * 7 at five separations, which is a pop with a ramp's name on it.
  *
- *     separation   -1.183  -1.134  -1.084  -1.033  -1.008  -0.982
- *     centre luma     253     253     250      84       7       8
- *
- * Nothing for two thirds of the approach, then 253 to 7 in 1.3 seconds. The cause is the tone
- * curve, not the ramp: under normal blending the disc presents `(1 - alpha) * sky`, and ACES
- * maps a sky of 25 to code 254 and HALF that sky to code 252. Two codes for half the light.
- * The presented picture only starts to move once `1 - alpha` is down around a hundredth, so a
- * ramp that is linear in alpha spends 98 per cent of its travel invisible.
- *
- * So the fade is authored in the quantity that survives the curve. `1 - alpha` falls
- * geometrically -- `pow(0.001, u)`, where u is 0 at the start of the approach and 1 at first
- * contact -- which puts the presented disc at 254, 241, 179, 62, 17 across the four
- * quarters of the approach. That is a ramp a viewer can see the whole of.
- *
- * 0.001 is set by the far end rather than the near one: the moon has to be BLACK by the time
- * any of it lies over the photosphere, or the bite is grey. A thousandth of a sky of 25 is
- * code 17 of 255 at first contact, and u keeps growing past 1 as the moon closes -- the
- * expression is deliberately not clamped there -- so it is at 7.5 by separation 0.93, which
- * is coverage 0.05 and the first moment the bite is a shape rather than a line, and on the
- * MOON_MINIMUM_RADIANCE floor of 3.07 from separation 0.7 inward. The whole ramp, run
- * through the same ACES fit and sRGB encode the final pass uses:
- *
- *   |separation|  1.45   1.35   1.30   1.25   1.20   1.15   1.10   1.05   1.00   0.93
- *   presented    254.4  245.1  230.9  201.6  153.4   99.6   57.9   31.9   17.3    7.5
+ * So the quantity that falls geometrically is the SURVIVING SKY: `pow(0.001, coverage / 0.35)`.
+ * The exponent is deliberately not clamped at 1, so past {@link MOON_REVEAL_COVERAGE} it keeps
+ * closing -- at totality it is 1e-5 of the sky, which is exactly opaque in float32 -- and no
+ * second expression has to be joined onto the first.
  */
-export const MOON_ARRIVAL_SKY_FRACTION = 0.001;
+export const MOON_REVEAL_SKY_FRACTION = 0.001;
 
 const MOON_FRAGMENT_SHADER = /* glsl */ `
   varying vec2 vUv;
   uniform float uSeparation;
+  uniform float uCoverage;
   uniform float uTotality;
   uniform float uTransmittance;
 
@@ -704,17 +694,21 @@ ${MOON_CENTER_CHUNK}
     // layer emits the photosphere uncut and this alpha takes it away, once.
     float moonEdge = max(fwidth(d) * 0.5, 1e-5);
     float moonMask = 1.0 - smoothstep(MOON_RADIUS - moonEdge, MOON_RADIUS + moonEdge, d);
-    // The disc is opaque everywhere from first contact inward. It used to be opaque only
-    // where it lay over the sun's own circle, which is why the moon had no outline of its
-    // own and the only shape on screen was the intersection of the two.
-    //
-    // closing is 0 where the traverse starts and 1 at first contact, and is deliberately
-    // NOT clamped above: past first contact it keeps growing, which drives the last thousandth
-    // of sky out of the disc without a second expression to join onto. See the constants.
-    float closing = max(0.0, (${glslFloat(MOON_APPROACH_SEPARATION)} - abs(uSeparation))
-      / ${glslFloat(MOON_APPROACH_SEPARATION - MOON_OPAQUE_SEPARATION)});
-    float arrival = 1.0 - pow(${glslFloat(MOON_ARRIVAL_SKY_FRACTION)}, closing);
-    float mask = moonMask * arrival;
+
+    // Over the photosphere the moon is never anything but opaque: there it is not a
+    // silhouette, it is the thing taking the light away, and the solar layer emits the disc
+    // uncut precisely so that this alpha can do it once.
+    float sunDistance = length(p);
+    float sunEdge = max(fwidth(sunDistance) * 0.5, 1e-5);
+    float sunMask = 1.0 - smoothstep(SUN_RADIUS - sunEdge, SUN_RADIUS + sunEdge, sunDistance);
+
+    // Everywhere else the disc is only as visible as the sun has made it. See the constants:
+    // the exponent is not clamped, so it keeps closing past the reveal and is exactly opaque
+    // in float32 well before totality.
+    float reveal = 1.0 - pow(
+      ${glslFloat(MOON_REVEAL_SKY_FRACTION)},
+      uCoverage / ${glslFloat(MOON_REVEAL_COVERAGE)});
+    float mask = moonMask * max(sunMask, reveal);
     if (mask < 0.002) discard;
 
     float rim = smoothstep(MOON_RADIUS * 0.62, MOON_RADIUS, d);
@@ -780,8 +774,8 @@ export class EclipseVisual {
     this.solarMaterial = new THREE.ShaderMaterial({
       uniforms: {
         uTime: { value: 0 },
-        // Parked off the sun, where the timeline leaves it between eclipses.
-        uSeparation: { value: MOON_APPROACH_SEPARATION },
+        // Parked at fourth contact, where the timeline leaves it between eclipses.
+        uSeparation: { value: 1 },
         uCorona: { value: 0 },
         uBeads: { value: 0 },
         uTotality: { value: 0 },
@@ -812,7 +806,8 @@ export class EclipseVisual {
     });
     this.moonMaterial = new THREE.ShaderMaterial({
       uniforms: {
-        uSeparation: { value: MOON_APPROACH_SEPARATION },
+        uSeparation: { value: 1 },
+        uCoverage: { value: 0 },
         uTotality: { value: 0 },
         uTransmittance: { value: 1 },
       },
@@ -874,9 +869,10 @@ export class EclipseVisual {
     this.solarMaterial.uniforms.uProminences.value = phenomena.prominences;
     this.solarMaterial.uniforms.uProminenceDetail.value = phenomena.prominenceDetail;
     this.moonMaterial.uniforms.uSeparation.value = state.separation;
-    // No uCoverage any more: it only ever fed `smoothstep(0.0, 0.055, uCoverage)`, an alpha
-    // ramp that made the moon invisible whenever it was not already over the sun -- which is
-    // exactly the approach and the departure this rework exists to show.
+    // uCoverage is back, and doing a different job. It used to feed
+    // `smoothstep(0.0, 0.055, uCoverage)`, an alpha ramp complete by five per cent of coverage
+    // that therefore said nothing about anything; it now carries the whole reveal.
+    this.moonMaterial.uniforms.uCoverage.value = state.coverage;
     this.moonMaterial.uniforms.uTotality.value = state.totality;
     const transmittance = THREE.MathUtils.clamp(1 - cloudCover * 0.82, 0.08, 1);
     this.solarMaterial.uniforms.uTransmittance.value = transmittance;

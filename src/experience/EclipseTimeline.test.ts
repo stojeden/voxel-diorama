@@ -2,7 +2,6 @@ import { describe, expect, test } from 'vitest';
 import {
   DEFAULT_ECLIPSE_DURATION_SECONDS,
   EclipseTimeline,
-  MOON_APPROACH_SEPARATION,
   eclipseCoverageAtSeparation,
   eclipseSeparationForCoverage,
   type EclipseTimelineState,
@@ -13,11 +12,11 @@ const expectSignalsInRange = (state: EclipseTimelineState): void => {
   expect(state.progress).toBeLessThanOrEqual(1);
   expect(state.phaseProgress).toBeGreaterThanOrEqual(0);
   expect(state.phaseProgress).toBeLessThanOrEqual(1);
-  // Not [-1, 1] any more. 1 is FIRST CONTACT -- the moment the two discs touch -- and the
-  // moon now starts and ends its crossing clear of the sun, so the traverse runs out to
-  // MOON_APPROACH_SEPARATION on both sides. See that constant for why it is where it is.
-  expect(state.separation).toBeGreaterThanOrEqual(-MOON_APPROACH_SEPARATION);
-  expect(state.separation).toBeLessThanOrEqual(MOON_APPROACH_SEPARATION);
+  // Contact to contact. 1 is first contact -- the moment the two discs touch -- and the
+  // traverse has no reason to go beyond it: past it there is no eclipse to describe, and the
+  // silhouette is gated on coverage, so nothing would be drawn there anyway.
+  expect(state.separation).toBeGreaterThanOrEqual(-1);
+  expect(state.separation).toBeLessThanOrEqual(1);
 
   for (const signal of [
     state.coverage,
@@ -51,7 +50,7 @@ describe('EclipseTimeline', () => {
       phase: 'partial-in',
       progress: 0,
       coverage: 0,
-      separation: -MOON_APPROACH_SEPARATION,
+      separation: -1,
       irradiance: 1,
       running: true,
     });
@@ -157,7 +156,7 @@ describe('EclipseTimeline', () => {
       progress: 1,
       phaseProgress: 1,
       coverage: 0,
-      separation: MOON_APPROACH_SEPARATION,
+      separation: 1,
       irradiance: 1,
       corona: 0,
       beads: 0,
@@ -206,28 +205,32 @@ describe('the moon crosses the sun instead of being born on it', () => {
   const timeline = new EclipseTimeline();
   const separationAt = (progress: number): number => timeline.seek(progress).separation;
 
-  test('starts and ends clear of the sun, on both sides', () => {
-    expect(separationAt(0)).toBeCloseTo(-MOON_APPROACH_SEPARATION, 12);
-    expect(separationAt(1)).toBeCloseTo(MOON_APPROACH_SEPARATION, 12);
-    // Clear means clear: no overlap at all, so there is nothing to see but a moon arriving.
+  test('starts and ends at first contact, so every second of it is eclipse', () => {
+    expect(separationAt(0)).toBeCloseTo(-1, 12);
+    expect(separationAt(1)).toBeCloseTo(1, 12);
     expect(timeline.seek(0).coverage).toBe(0);
     expect(timeline.seek(1).coverage).toBe(0);
-    expect(MOON_APPROACH_SEPARATION).toBeGreaterThan(1);
+    // An approach was tried -- the traverse ran from -1.45 so the moon had somewhere to come
+    // from -- and was taken back out when the silhouette was hung on coverage instead. It is
+    // time in which nothing can be drawn by construction, so it is time taken from the reveal.
+    for (const progress of [0.002, 0.01, 0.05, 0.2, 0.8, 0.95, 0.998]) {
+      expect(timeline.seek(progress).coverage).toBeGreaterThan(0);
+    }
   });
 
-  test('moves through a real approach before the discs ever touch', () => {
-    // The failure this replaces: at separation -1 the moon is already tangent to the sun, so
-    // the first thing the viewer could see was the two circles' intersection -- a vesica,
-    // pointed at both ends, swelling out of a white glare.
-    const firstContact = (() => {
-      for (let p = 0; p <= 1; p += 0.0005) if (Math.abs(separationAt(p)) <= 1) return p;
+  test('the bite grows from the very first frame rather than easing out of rest', () => {
+    // The old traverse eased every segment with smootherStep, which is stationary at both
+    // ends, so the first tenth of the eclipse bought a tenth of nothing. One second in at the
+    // shipped ninety -- progress 0.0111 -- the sun is already measurably bitten.
+    expect(timeline.seek(1 / 90).coverage).toBeGreaterThan(0.005);
+    expect(timeline.seek(5 / 90).coverage).toBeGreaterThan(0.07);
+    // ...and the reveal's own landmark, coverage 0.35, lands inside the first fifth.
+    const revealDone = (() => {
+      for (let p = 0; p <= 1; p += 0.0005) if (timeline.seek(p).coverage >= 0.35) return p;
       return Number.NaN;
     })();
-    expect(firstContact).toBeGreaterThan(0.05);
-    expect(firstContact).toBeLessThan(0.2);
-    // ...and the moon is genuinely travelling through all of it, not waiting.
-    expect(Math.abs(separationAt(firstContact / 2))).toBeLessThan(MOON_APPROACH_SEPARATION);
-    expect(Math.abs(separationAt(firstContact / 2))).toBeGreaterThan(1);
+    expect(revealDone).toBeGreaterThan(0.1);
+    expect(revealDone).toBeLessThan(0.2);
   });
 
   test('never stops, never backs up, and never leaves the traverse', () => {
@@ -242,13 +245,13 @@ describe('the moon crosses the sun instead of being born on it', () => {
       expect(delta).toBeGreaterThanOrEqual(0);
       if (delta < smallestStep) smallestStep = delta;
       if (delta > largestStep) largestStep = delta;
-      expect(Math.abs(value)).toBeLessThanOrEqual(MOON_APPROACH_SEPARATION + 1e-12);
+      expect(Math.abs(value)).toBeLessThanOrEqual(1 + 1e-12);
       previous = value;
     }
     // THE NUMBER THAT SEPARATES THE TWO TRAVERSES, at this sample count and no other:
     //
     //   old (five smootherSteps)   smallest step 5.6e-9,  largest 0.002541
-    //   new (one monotone curve)   smallest step 4.5e-5,  largest 0.002575
+    //   new (one monotone curve)   smallest step 4.5e-5,  largest 0.001743
     //
     // smootherStep has zero derivative at BOTH ends of every segment, so the old traverse
     // came to a halt at each join and the step across one only survives as the cubic's own
@@ -301,7 +304,8 @@ describe('the coverage law can be inverted, and the diagnostic path uses the inv
     // a silhouette it draws an opaque disc clear of a sun the world says is eclipsed.
     expect(eclipseCoverageAtSeparation(1.25 * (1 - 0.2))).toBe(0);
     expect(eclipseCoverageAtSeparation(eclipseSeparationForCoverage(0.2))).toBeCloseTo(0.2, 6);
-    // The endpoint is not on the line either: the line gives the moon 1.25 at zero coverage.
-    expect(MOON_APPROACH_SEPARATION).not.toBeCloseTo(1.25, 2);
+    // The endpoint is not on the line either: the line gives the moon 1.25 at zero coverage,
+    // where the traverse and the coverage law both say first contact is exactly 1.
+    expect(eclipseCoverageAtSeparation(1)).toBe(0);
   });
 });

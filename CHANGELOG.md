@@ -50,15 +50,25 @@ a wersjonowanie projektu docelowo stosuje [Semantic Versioning](https://semver.o
   koło tej samej wielkości przez całe przejście.
   Trzy zmiany, jeden efekt: (1) Księżyc rysuje się jako sylwetka na niebie, a nie tylko tam, gdzie
   zachodzi na Słońce — to **świadome odstępstwo od fizyki**, zapisane jako odstępstwo, bo powietrze
-  przed Księżycem świeci tym samym rozproszonym światłem co niebo obok; (2) przejazd zaczyna się i
-  kończy **poza Słońcem** (separacja 1,45, autorska, ograniczona krawędzią quada — najdalszy brzeg
-  tarczy wypada na 0,947 z 1,0), a Księżyc **wyłania się z poświaty** zamiast pojawiać się nagle;
-  (3) przejazd jest **jedną monotoniczną krzywą C1** przez te same pięć autorskich kontaktów.
-  Wygaszanie jest **prawem potęgowym, nie rampą**: ACES odwzorowuje niebo 25 na kod 254, a połowę
-  tego nieba na 252 — dwa kody za połowę światła — więc liniowa rampa alfy jest niewidoczna aż do
+  przed Księżycem świeci tym samym rozproszonym światłem co niebo obok; (2) **odsłania go samo
+  Słońce**: przezroczystość sylwetki wisi na **zakryciu**, więc przy zakryciu 0 nie ma czego
+  zobaczyć nigdzie, a tam, gdzie tarcza leży na fotosferze, jest zawsze w pełni krystaliczna, bo
+  tam nie jest sylwetką, tylko rzeczą, która zabiera światło; (3) przejazd jest **jedną
+  monotoniczną krzywą C1** przez te same sześć autorskich momentów.
+  Pierwsza wersja punktu (2) była inna i została wycofana **na prośbę właściciela**: rysowała
+  sylwetkę w pełnej sile od chwili wejścia w kadr i dokładała przejazd zaczynający się 0,45
+  odległości kontaktowej od Słońca. Razem stawiało to kompletną czarną kulę na pustym niebie na
+  dziewięć sekund, zanim cokolwiek stało się ze Słońcem — inny zły obraz: planeta, która nadlatuje,
+  a nie Księżyc, który zostaje złapany. Po zmianie podejście przestało cokolwiek dawać (przez ten
+  czas i tak nic nie widać), więc przejazd wrócił do „kontakt–kontakt" i faza częściowa ma znów
+  pełne 32 sekundy zamiast 24.
+  Odsłanianie jest **prawem potęgowym, nie rampą**: ACES odwzorowuje niebo 25 na kod 254, a połowę
+  tego nieba na 252 — dwa kody za połowę światła — więc liniowa rampa krycia jest niewidoczna aż do
   samego końca. Zmierzone przy pierwszej próbie: 253, 253, 250, 84, 7 na pięciu separacjach, czyli
-  przeskok. Teraz krok jest **poniżej sześciu poziomów na dziesiątą sekundy**, a cała rampa
-  przechodzi 254 → 241 → 179 → 62 → 17 przez cztery ćwiartki podejścia.
+  przeskok. Teraz spada geometrycznie **przeżywający ułamek nieba** (`pow(0.001, zakrycie / 0.35)`),
+  wykładnik nie jest przycinany u góry, a krok jest **poniżej ośmiu poziomów na dziesiątą sekundy**.
+  Tarcza jest czytelna jako koło już przy zakryciu 0,1 — 5,7 s z dziewięćdziesięciu — i czarna, nim
+  wygryzienie mogłoby wyjść szare.
   Pięć niezależnych `smootherStep` zastąpiła jedna krzywa, bo `smootherStep` ma **zerową pochodną
   na obu końcach**: Księżyc zatrzymywał się na amen przy każdym złączeniu, cztery razy w ciągu
   dziewięćdziesięciu sekund i raz na samym starcie. Na dwóch tysiącach próbek najmniejszy krok

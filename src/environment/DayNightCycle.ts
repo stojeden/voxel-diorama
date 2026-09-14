@@ -30,7 +30,6 @@ import { STORM_FILL_AMBIENT, STORM_FILL_HEMISPHERE } from './storm';
 // named ECLIPSE_SKY_LEVEL, a symbol that never existed anywhere in this repository, survived in
 // this file for as long as it did.
 import {
-  MOON_APPROACH_SEPARATION,
   eclipseCoverageAtSeparation,
   eclipseSeparationForCoverage,
   type EclipseTimeline,
@@ -1139,8 +1138,9 @@ export class DayNightCycle {
   private eclipseState: EclipseRenderState = {
     active: false,
     coverage: 0,
-    // Parked where the traverse parks it, not at a literal that used to be the old bound.
-    separation: MOON_APPROACH_SEPARATION,
+    // First contact, which is what separation 1 MEANS: the distance between the two centres
+    // over the contact distance. The traverse runs from -1 to +1 and cannot leave it.
+    separation: 1,
     irradiance: 1,
     corona: 0,
     beads: 0,
@@ -1425,8 +1425,7 @@ export class DayNightCycle {
       // The real inverse of the coverage law, not a straight line through it. A line reached
       // first contact at a fifth of the coverage it claimed, which now means an opaque moon
       // drawn clear of the sun while the world says it is a fifth eclipsed.
-      separation:
-        coverage > 0 ? eclipseSeparationForCoverage(coverage) : MOON_APPROACH_SEPARATION,
+      separation: coverage > 0 ? eclipseSeparationForCoverage(coverage) : 1,
       irradiance: 1 - coverage * 0.985,
       corona: Math.pow(coverage, 4),
       beads: Math.pow(coverage, 10),
@@ -1439,14 +1438,10 @@ export class DayNightCycle {
     this.eclipseState = {
       active: state.active,
       coverage: clamp01(state.coverage),
-      // The timeline's own traverse endpoint, not a literal: the moon now starts and ends
-      // its crossing off the sun, and a clamp tighter than the traverse would cut the
-      // approach short without anything failing.
-      separation: THREE.MathUtils.clamp(
-        state.separation,
-        -MOON_APPROACH_SEPARATION,
-        MOON_APPROACH_SEPARATION
-      ),
+      // Contact to contact, which is the whole range `separation` has: it is the distance
+      // between the two centres over the contact distance, so 1 is the moment they touch and
+      // there is nothing beyond it to describe.
+      separation: THREE.MathUtils.clamp(state.separation, -1, 1),
       irradiance: clamp01(state.irradiance),
       corona: clamp01(state.corona),
       beads: clamp01(state.beads),

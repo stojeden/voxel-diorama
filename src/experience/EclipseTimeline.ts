@@ -141,42 +141,30 @@ export function eclipseSeparationForCoverage(targetCoverage: number): number {
 const DIAMOND_RING_SEPARATION = eclipseSeparationForCoverage(PARTIAL_CONTACT_COVERAGE);
 
 /**
- * Where the moon's traverse begins and ends, in the same units as `separation`.
+ * WHERE THE TRAVERSE BEGINS AND ENDS: at first contact, on both sides.
  *
- * `separation` is the distance between the two centres divided by the contact distance, so 1
- * is first contact -- the moment the discs touch -- and 0 is dead centre. It used to be the
- * START of the traverse as well, and that is the defect this constant exists to fix: at
- * separation 1 the moon is already tangent to the sun, so the moon had nowhere to come from.
- * It could only be born on the sun's limb and grow.
+ * This was 1.45 for one release -- 0.45 contact distances of clear sky before the discs
+ * touch -- so the moon had somewhere to come from. It has been taken back out, and the reason
+ * is worth keeping because it is the second half of the same brief.
  *
- * What the viewer actually saw is worth writing down, because it is not what the geometry
- * suggests. The moon was drawn ONLY where it overlapped the sun (`EclipseVisual`'s moon layer
- * masked itself with `sunMask`), and the sun itself is invisible during the early partial
- * phases -- the sky beside a sun 8.8 degrees up presents at 254 of 255 and an additive disc
- * cannot beat it, which is measured and recorded on SUN_DISC_RADIUS in EclipseVisual.ts
- * (not linkable from here: this file imports nothing). So the only
- * thing on screen was the INTERSECTION of two circles: a vesica, pointed at both ends,
- * appearing out of a white glare and swelling. Captured at 300 px around the sun it reads as
- * an egg that grows, which is exactly the phrase the owner used, and it is what the pixels
- * show at coverage 0.14 and 0.38.
+ * The first complaint was that the moon "hatched": with the silhouette clipped to the sun's
+ * own circle, the only shape on screen was the intersection of two discs, a vesica in a white
+ * glare. The approach was half the answer to that -- the moon arrived instead of appearing.
+ * The other half was drawing the silhouette against the sky at all, and TOGETHER they put a
+ * complete black ball in an empty sky for nine seconds before anything happened to the sun.
+ * That is what the owner asked to remove: the moon should be revealed BY the sun, covering it
+ * first and only then showing its full outline.
  *
- * 1.45 is authored from what it buys and bounded by where the billboard ends:
+ * Once the disc's visibility hangs on coverage (see `MOON_REVEAL_COVERAGE` in
+ * `EclipseVisual.ts`), the approach is time in which nothing can be seen by construction, so
+ * it is time taken away from the reveal. First contact is progress 0 again, which gives the
+ * partial phase its full 32 seconds instead of 24.
  *
- *  - It buys 0.45 contact distances of clear sky before first contact. One contact distance
- *    is SUN_RADIUS + MOON_RADIUS = 2.01875 sun radii, so that is 0.91 sun radii -- 18.7 px on
- *    the 1280x720 eclipse framing these measurements were taken on, where the drawn moon is
- *    42 px across (85.9 px per billboard unit), at the same 1.8-2.4 px/s the moon crosses the
- *    sun at. First contact falls at progress 0.0966, so the approach is 8.7 seconds of a
- *    ninety second eclipse -- and it replaces 8.7 seconds in which nothing whatsoever
- *    happened: the old easing put coverage at 0.057 by progress 0.10 and nothing was visible
- *    on screen until 0.13.
- *  - It is bounded by the quad. The moon's far edge sits at `|separation| * (SUN + MOON) +
- *    MOON` in billboard units and the billboard runs out at 1, so the whole disc fits only
- *    while `|separation| <= (1 - MOON) / (SUN + MOON)` = 1.559. Past that the moon is cut by
- *    a straight edge, which is worse than not drawing it at all. `EclipseVisual.test.ts`
- *    holds that bound against the disc radii so a retune of either cannot quietly break it.
+ * The monotone traverse below is unaffected and stays: it is what stopped the moon halting at
+ * every phase join, and it is what makes the bite grow at a readable rate from the first
+ * frame rather than easing out of rest.
  */
-export const MOON_APPROACH_SEPARATION = 1.45;
+const FIRST_CONTACT_SEPARATION = 1;
 
 /**
  * The traverse, as six authored moments and one monotone curve through them.
@@ -188,12 +176,12 @@ export const MOON_APPROACH_SEPARATION = 1.45;
  * of five times as `lerp` calls.
  */
 const TRAVERSE: readonly (readonly [number, number])[] = [
-  [0, -MOON_APPROACH_SEPARATION],
+  [0, -FIRST_CONTACT_SEPARATION],
   [0.36, -DIAMOND_RING_SEPARATION],
   [0.42, -TOTALITY_SEPARATION],
   [0.58, TOTALITY_SEPARATION],
   [0.64, DIAMOND_RING_SEPARATION],
-  [1, MOON_APPROACH_SEPARATION],
+  [1, FIRST_CONTACT_SEPARATION],
 ];
 
 /**
@@ -314,11 +302,9 @@ function stateAt(progress: number, running: boolean): EclipseTimelineState {
       progress: 1,
       phaseProgress: 1,
       coverage: 0,
-      // Parked where it started, on the far side: `complete` is the state the world sits in
-      // between eclipses, and 1 is first contact, which would leave the moon touching the sun
-      // for ever. Now that the disc is drawn against the sky it has to be off the sun, and
-      // `MOON_APPROACH_SEPARATION` is where the fade has it at zero opacity anyway.
-      separation: MOON_APPROACH_SEPARATION,
+      // Fourth contact, where the traverse leaves it. Coverage is 0 there, and the moon's
+      // silhouette is gated on coverage, so nothing is drawn between eclipses.
+      separation: FIRST_CONTACT_SEPARATION,
       irradiance: 1,
       corona: 0,
       beads: 0,

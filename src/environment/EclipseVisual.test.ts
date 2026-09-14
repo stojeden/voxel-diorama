@@ -4,10 +4,10 @@ import {
   CORONA_K_F_CROSSOVER_RADII,
   EclipseVisual,
   MAX_SOLAR_RADIANCE,
-  MOON_ARRIVAL_SKY_FRACTION,
   MOON_BILLBOARD_LIMIT,
   MOON_CENTER_CHUNK,
-  MOON_OPAQUE_SEPARATION,
+  MOON_REVEAL_COVERAGE,
+  MOON_REVEAL_SKY_FRACTION,
   SOLAR_RADIANCE,
   coronaRadialProfile,
   glslFloat,
@@ -15,11 +15,7 @@ import {
   SUN_DISC_RADIUS,
   solarLimbIntensity,
 } from './EclipseVisual';
-import {
-  EclipseTimeline,
-  MOON_APPROACH_SEPARATION,
-  eclipseCoverageAtSeparation,
-} from '../experience/EclipseTimeline';
+import { EclipseTimeline, eclipseCoverageAtSeparation } from '../experience/EclipseTimeline';
 
 /**
  * THE ACCEPTANCE METRIC, REDEFINED SO THAT IT CAN FAIL.
@@ -591,20 +587,15 @@ describe('uniforms across a swept progress', () => {
       // Separation runs approach to approach now, not contact to contact: the moon enters
       // and leaves the picture instead of being born on the sun's limb. The bound that
       // matters is the billboard's, and it is asserted against the disc radii below.
-      expect(Math.abs(solar.uniforms.uSeparation.value as number)).toBeLessThanOrEqual(
-        MOON_APPROACH_SEPARATION
-      );
+      expect(Math.abs(solar.uniforms.uSeparation.value as number)).toBeLessThanOrEqual(1);
       // Cloud never blacks the sun out entirely; 0.08 is the floor the update clamps to.
       const transmittance = solar.uniforms.uTransmittance.value as number;
       expect(transmittance).toBeGreaterThanOrEqual(0.08);
       expect(transmittance).toBeLessThanOrEqual(1);
 
       // The one that matters for the silhouette: earthshine is gated on uTotality, and it
-      // may never be non-zero while a crescent is still exposed. `state.coverage` is read
-      // straight off the timeline because the moon layer no longer carries a uCoverage
-      // uniform -- it fed only an alpha ramp that hid the moon whenever it was not already
-      // over the sun, which is the whole of the approach and the whole of the departure.
-      expect(moon.uniforms.uCoverage).toBeUndefined();
+      // may never be non-zero while a crescent is still exposed.
+      expect(moon.uniforms.uCoverage.value).toBeCloseTo(state.coverage, 12);
       if (state.coverage < 0.985) expect(moon.uniforms.uTotality.value).toBe(0);
     }
 
@@ -681,27 +672,31 @@ describe('the moon is drawn as a disc, and it travels', () => {
     // Past MOON_BILLBOARD_LIMIT the quad runs out and the moon is cut by a straight edge,
     // which is worse than not drawing it. The two constants live in different files, so this
     // is the only place the traverse is checked against the geometry it is drawn on.
-    expect(MOON_APPROACH_SEPARATION).toBeLessThan(MOON_BILLBOARD_LIMIT);
+    expect(1).toBeLessThan(MOON_BILLBOARD_LIMIT);
     // ...and the same thing again from the SHADER's own geometry rather than from the
     // constant's definition. Restating `(1 - MOON) / (SUN + MOON)` here would compare
     // MOON_BILLBOARD_LIMIT with itself and pass for every possible value of all three, which
     // is a mistake this repository has already made once. What actually has to hold is that
     // the moon's far edge -- where MOON_CENTER_CHUNK puts its centre, plus its radius -- stays
     // inside the quad, whose half-width is 1 in these units.
-    const farEdge =
-      MOON_APPROACH_SEPARATION * (SUN_DISC_RADIUS + MOON_DISC_RADIUS) + MOON_DISC_RADIUS;
+    const farEdge = 1 * (SUN_DISC_RADIUS + MOON_DISC_RADIUS) + MOON_DISC_RADIUS;
     expect(farEdge).toBeLessThan(1);
-    // 0.947 of the way out: a real margin, not a rounding one.
-    expect(farEdge).toBeCloseTo(0.947, 3);
+    // 0.729 of the way out at first contact, which is as far as the moon ever gets.
+    expect(farEdge).toBeCloseTo(0.729, 3);
   });
 
-  test('the moon layer no longer cuts itself to the sun it is covering', () => {
+  test('the sun makes the moon opaque, it does not clip it', () => {
     const shader = moonShaderOf();
-    expect(shader).not.toContain('sunMask');
-    expect(shader).toContain('float mask = moonMask * arrival;');
-    // uCoverage is gone with it: it fed `smoothstep(0.0, 0.055, uCoverage)`, an alpha ramp
-    // that hid the moon whenever it was not already over the sun.
-    expect(shader).not.toContain('uCoverage');
+    // The defect this replaces was `moonMask * max(sunMask, uTotality)`: uTotality is 0 below
+    // coverage 0.985, so through both partial phases the moon was CLIPPED to the sun's circle
+    // and the only shape on screen was the intersection of the two. `max` with a reveal that
+    // rises with coverage keeps the one true part of that -- full opacity over the photosphere
+    // -- and lets the rest of the disc appear as the sun is covered.
+    expect(shader).toContain('float mask = moonMask * max(sunMask, reveal);');
+    expect(shader).not.toContain('uTotality)');
+    // ...and the reveal is driven by coverage, not by where the moon happens to be.
+    expect(shader).toContain('uCoverage / ');
+    expect(shader).not.toContain('abs(uSeparation)');
   });
 
   test('both layers get the moon POSITION from one definition, and only one draws its edge', () => {
@@ -731,89 +726,100 @@ describe('the moon is drawn as a disc, and it travels', () => {
   });
 });
 
-describe('the approach fades in where the tone curve can show it', () => {
-  /** The shader's own arrival, restated: 1 - pow(f, closing), closing unclamped above. */
-  const arrivalAt = (separation: number): number => {
-    const closing = Math.max(
-      0,
-      (MOON_APPROACH_SEPARATION - Math.abs(separation)) /
-        (MOON_APPROACH_SEPARATION - MOON_OPAQUE_SEPARATION)
+describe('the sun reveals the moon, and it does so where the tone curve can show it', () => {
+  /** The shader's own reveal, restated. Pinned against the shipped GLSL by the test below. */
+  const revealAt = (coverage: number): number =>
+    1 - MOON_REVEAL_SKY_FRACTION ** (coverage / MOON_REVEAL_COVERAGE);
+
+  /** What the silhouette presents as against the sky beside it, under normal blending. */
+  const discCode = (coverage: number, irradiance: number): number => {
+    const reveal = revealAt(coverage);
+    return presentedCode(
+      (1 - reveal) * skyBesideDisc(irradiance) + reveal * SOLAR_RADIANCE.moonFloor
     );
-    return 1 - MOON_ARRIVAL_SKY_FRACTION ** closing;
   };
 
-  /** What the disc presents as, against the sky at the staged hour, under normal blending. */
-  const discCode = (separation: number): number => {
-    const arrival = arrivalAt(separation);
-    return presentedCode((1 - arrival) * SOLAR_RADIANCE.sky + arrival * SOLAR_RADIANCE.moonFloor);
-  };
-
-  test('the SHIPPED GLSL is the expression these two tests reason about', () => {
-    // Everything below this runs against `arrivalAt`, a TypeScript restatement of the shader.
-    // That is the right instrument -- it is the only way to get at presented levels -- but on
-    // its own it pins nothing about the product: the shader could be edited to anything and
-    // both tests would still pass. So the shader text is built from the SAME four constants
-    // and checked here, exactly as the radiance ladder above is.
+  test('the SHIPPED GLSL is the expression these tests reason about', () => {
+    // Everything below runs against `revealAt`, a TypeScript restatement of the shader. That
+    // is the right instrument -- it is the only way to get at presented levels -- but on its
+    // own it pins nothing about the product: the shader could be edited to anything and the
+    // tests would still pass. So the shader text is built from the SAME two constants and
+    // checked here, exactly as the radiance ladder above is.
     const shader = moonShaderOf();
-    expect(shader).toContain(
-      `float arrival = 1.0 - pow(${glslFloat(MOON_ARRIVAL_SKY_FRACTION)}, closing);`
-    );
-    expect(shader).toContain(`(${glslFloat(MOON_APPROACH_SEPARATION)} - abs(uSeparation))`);
-    expect(shader).toContain(
-      `/ ${glslFloat(MOON_APPROACH_SEPARATION - MOON_OPAQUE_SEPARATION)})`
-    );
-    // max(0.0, ...) and no upper clamp: `closing` must keep growing past first contact, which
-    // is what drives the last thousandth of sky out of the disc.
-    expect(shader).toContain('float closing = max(0.0,');
-    expect(shader).not.toMatch(/clamp\([^)]*closing/);
+    expect(shader).toContain(`float reveal = 1.0 - pow(`);
+    expect(shader).toContain(`      ${glslFloat(MOON_REVEAL_SKY_FRACTION)},`);
+    expect(shader).toContain(`      uCoverage / ${glslFloat(MOON_REVEAL_COVERAGE)});`);
+    // Not clamped: past the reveal the exponent keeps growing, which is what takes the last
+    // thousandth of sky out of the disc without a second expression joined onto the first.
+    expect(shader).not.toMatch(/clamp\([^)]*uCoverage/);
+    expect(shader).not.toMatch(/min\(1\.0, *uCoverage/);
   });
 
-  test('is invisible where the traverse starts and opaque by first contact', () => {
-    expect(arrivalAt(MOON_APPROACH_SEPARATION)).toBe(0);
-    expect(discCode(MOON_APPROACH_SEPARATION)).toBeCloseTo(presentedCode(SOLAR_RADIANCE.sky), 6);
-    // Dark before any of it lies over the photosphere, or the bite would be grey. 17 of 255
-    // AT first contact, where the overlap is a two-pixel sliver; 7.5 by |separation| 0.93,
-    // which is coverage 0.05 and the first moment the bite is a shape rather than a line;
-    // and on the MOON_MINIMUM_RADIANCE floor of 3.07 from |separation| 0.7 inward.
-    expect(discCode(MOON_OPAQUE_SEPARATION)).toBeLessThan(20);
-    expect(discCode(0.93)).toBeLessThan(10);
-    expect(discCode(0.7)).toBeCloseTo(presentedCode(SOLAR_RADIANCE.moonFloor), 0);
-    // ...and it keeps closing past first contact rather than stopping at 0.999 opaque.
-    expect(discCode(0.9)).toBeLessThan(discCode(1));
-    // Exactly opaque by mid-totality, in the precision the shader actually runs in: the
-    // residual is 2.15e-10, which is under a float32 epsilon, so GLSL stores 1.0.
-    expect(Math.fround(arrivalAt(0))).toBe(1);
+  test('there is no moon at all until the sun is being covered', () => {
+    // THE COMPLAINT THIS PINS. The first version of the silhouette faded on the moon's
+    // distance from the sun, so a complete black ball crossed an empty sky for nine seconds
+    // before anything happened to the sun. At coverage 0 the disc must be exactly the sky.
+    expect(revealAt(0)).toBe(0);
+    expect(discCode(0, 1)).toBeCloseTo(presentedCode(skyBesideDisc(1)), 12);
   });
 
-  test('ramps in PRESENTED levels, which is the thing a linear alpha ramp cannot do', () => {
-    // THE DEFECT THIS PINS. The first fix here faded the alpha with a smoothstep, and it was
-    // a pop: measured at the moon's own centre pixel on the built product,
+  test('reveals itself gradually, and is opaque before the bite could look grey', () => {
+    const timeline = new EclipseTimeline();
+    // Presented levels against the sky beside the disc at the same moment, so the sky's own
+    // darkening is in the comparison rather than pretended away.
+    const rows = [0.02, 0.05, 0.1, 0.2, 0.3, MOON_REVEAL_COVERAGE, 0.5, 0.75, 0.9].map(
+      (coverage) => {
+        const state = stateAtCoverage(timeline, coverage);
+        return {
+          coverage,
+          disc: discCode(state.coverage, state.irradiance),
+          sky: presentedCode(skyBesideDisc(state.irradiance)),
+        };
+      }
+    );
+    // Monotone, and separated from the sky the whole way down.
+    for (let i = 1; i < rows.length; i += 1) {
+      expect(rows[i].disc).toBeLessThan(rows[i - 1].disc);
+    }
+    // Legible as a disc by a tenth of coverage -- 5.7 s into the ninety -- which is what stops
+    // the early partial phase reading as a lens with nothing around it.
+    const at10 = rows.find((r) => r.coverage === 0.1)!;
+    expect(at10.sky - at10.disc).toBeGreaterThan(15);
+    // Black by the time the reveal is done, or the bite would be grey against the photosphere.
+    const done = rows.find((r) => r.coverage === MOON_REVEAL_COVERAGE)!;
+    expect(done.disc).toBeLessThan(20);
+    // ...and on the MOON_MINIMUM_RADIANCE floor well before totality.
+    expect(rows[rows.length - 1].disc).toBeCloseTo(
+      presentedCode(SOLAR_RADIANCE.moonFloor),
+      0
+    );
+  });
+
+  test('ramps in PRESENTED levels, which is the thing a linear opacity ramp cannot do', () => {
+    // THE DEFECT THIS PINS. The first fade here was linear in alpha, and it was a pop:
+    // measured at the moon's own centre pixel on the built product,
     //
     //     separation   -1.183  -1.134  -1.084  -1.033  -1.008  -0.982
     //     centre luma     253     253     250      84       7       8
     //
-    // Nothing for two thirds of the approach and then 253 to 7 in 1.3 seconds. ACES maps a
-    // sky of 25 to code 254 and HALF that sky to code 252 -- two codes for half the light --
-    // so a ramp that is linear in alpha spends almost all of its travel invisible.
+    // Nothing for two thirds of the travel and then 253 to 7 in 1.3 seconds. ACES maps a sky
+    // of 25 to code 254 and HALF that sky to code 252 -- two codes for half the light -- so a
+    // ramp that is linear in opacity spends almost all of its travel invisible.
     const timeline = new EclipseTimeline();
-    let previous = discCode(timeline.seek(0).separation);
+    let previous = discCode(0, 1);
     let largestStep = 0;
-    for (let step = 1; step <= 500; step += 1) {
-      const separation = timeline.seek(step / 1000).separation;
-      if (Math.abs(separation) < MOON_OPAQUE_SEPARATION) break;
-      const code = discCode(separation);
+    for (let step = 1; step <= 400; step += 1) {
+      const state = timeline.seek(step / 1000);
+      const code = discCode(state.coverage, state.irradiance);
       expect(code).toBeLessThanOrEqual(previous + 1e-9);
       largestStep = Math.max(largestStep, previous - code);
       previous = code;
     }
     // A thousandth of the timeline is a tenth of a second at the shipped 90 s. Run through
-    // this same instrument, the rejected linear-in-alpha ramp steps about 25 levels in ONE of
-    // those and 169 across the twenty of them the table above spans; this one steps under six
-    // (measured: 5.37). The table's own samples are ten thousandths apart, not one, which is
-    // why the 169 cannot be read as a per-thousandth figure.
-    expect(largestStep).toBeLessThan(6);
-    // And it really does travel the whole way down, rather than stopping short: the last
-    // sample before first contact is already under 20 of 255.
-    expect(previous).toBeLessThan(20);
+    // this same instrument a linear-in-opacity reveal steps about 25 levels in ONE of those;
+    // this one steps under eight.
+    expect(largestStep).toBeLessThan(8);
+    // And it really does travel the whole way down inside those first forty seconds.
+    expect(previous).toBeLessThan(12);
   });
 });
