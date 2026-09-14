@@ -1,6 +1,12 @@
 import * as THREE from 'three';
 import type { QualityLevel } from '../performance/QualityManager';
 import { EclipseGroundEffects } from './EclipseGroundEffects';
+// Which way the moon travels across the sun is a fact about the sky, not a taste: see
+// `celestialEastAt`, and `MOON_PATH_UNIFORM` below for how it reaches the billboard.
+import { celestialEastAt } from './sky';
+
+/** World up, and the same vector `Object3D.lookAt` uses by default. */
+const WORLD_UP = new THREE.Vector3(0, 1, 0);
 
 export interface EclipseRenderState {
   active: boolean;
@@ -446,36 +452,41 @@ export const MOON_BILLBOARD_LIMIT =
   (1 - MOON_DISC_RADIUS) / (SUN_DISC_RADIUS + MOON_DISC_RADIUS);
 
 /**
- * The chord the moon crosses on: rise over run, so 0.025 is 1.43 degrees off horizontal.
+ * THE CHORD THE MOON CROSSES ON -- derived from the sky, not authored, and it points the other
+ * way from what shipped.
  *
- * It replaces `0.018 * sin(uSeparation * 2.4)`, which was not a chord but a sine of the
- * separation -- a path that turned back on itself at |separation| = 0.654 and, once the
- * traverse was extended to 1.45 for the approach, would have had the moon rise, fall and
- * rise again on its way in. A moon crosses a sun on a straight line; the only thing an
- * author gets to choose is the angle.
+ * `uMoonPath` is the unit direction of CELESTIAL EAST at the sun, projected onto the
+ * billboard's own two axes. The moon laps the sun eastward, so that IS the direction it
+ * travels across the sun's face, and its sign decides which limb the bite starts on.
  *
- * 0.025 is chosen to put the moon at the same height at first contact as the sine did there:
- * 0.018 * sin(2.4) = 0.012159 against 0.4845 * 0.025 = 0.012113, four ten-thousandths of a
- * billboard unit apart, which is a twentieth of a pixel at the framing this was measured on.
- * The totality frames are therefore untouched -- both forms are exactly 0 at separation 0,
- * and across the whole of totality (|separation| <= 0.0093) they differ by at most 0.0003
- * billboard units, 0.025 px. Captured before and after, the totality frame is the same
- * picture: the same corona, the same chromosphere rim, the same sky.
+ * Two errors this replaces, both in one expression. It was
+ * `vec2(moonOffset, moonOffset * 0.025)`:
+ *
+ *  - **Backwards.** Billboard +X is the camera's right vector -- the plane does
+ *    `lookAt(camera.position)`, whose basis is `x = up x z` with `z` pointing back at the
+ *    camera, which works out to exactly `sunDirection x worldUp`. With separation running -1
+ *    to +1 the moon therefore crossed from screen left to screen right and bit the sun's LEFT
+ *    limb first. Celestial east at the staged hour has a screen-right component of -0.805, so
+ *    it crosses the other way and the first bite belongs on the RIGHT limb. The textbook case
+ *    agrees and is in the test: at a northern-hemisphere noon the moon moves left, which is
+ *    the eclipse everyone has seen a photograph of.
+ *  - **Nearly flat.** 0.025 is 1.43 degrees off horizontal. Celestial east at a sun 8.8
+ *    degrees up on a bearing of 297 is 144 degrees round from screen right -- up and to the
+ *    left, about 36 degrees off horizontal. A low sun's eclipse is emphatically diagonal, and
+ *    the old comment's claim that "the only thing an author gets to choose is the angle" was
+ *    the wrong way round: the sky chooses the angle, and the author chooses nothing.
+ *
+ * It is computed per frame from `sunDirection` rather than baked, so it follows the theme: the
+ * autumn declination puts the staged sun on a bearing of 246 instead of 297 and the path tilts
+ * with it (145.5 degrees instead of 143.6). Nothing here reads the camera -- the billboard's
+ * basis depends only on the sun's direction and world up, which is why the answer is the same
+ * from anywhere the viewer stands.
  */
-const MOON_PATH_TILT = 0.025;
+export const MOON_PATH_UNIFORM = 'uMoonPath';
 
-/**
- * Where the moon's centre is, in billboard units -- ONE definition, interpolated into both
- * shaders, because both of them need it and they need to agree to the bit.
- *
- * They used to carry two copies of the same two lines. The moon layer draws its silhouette
- * around this centre and the solar layer puts the beads on the moon's own limb around it, so
- * a drift of one character between the copies is a ring of beads that is not on the moon,
- * and nothing in this repository would have caught it.
- */
 export const MOON_CENTER_CHUNK = /* glsl */ `
     float moonOffset = uSeparation * (SUN_RADIUS + MOON_RADIUS);
-    vec2 moonCenter = vec2(moonOffset, moonOffset * ${glslFloat(MOON_PATH_TILT)});
+    vec2 moonCenter = moonOffset * uMoonPath;
 `;
 
 const SOLAR_FRAGMENT_SHADER = /* glsl */ `
@@ -489,6 +500,7 @@ const SOLAR_FRAGMENT_SHADER = /* glsl */ `
   uniform float uProminences;
   uniform float uProminenceDetail;
   uniform float uTransmittance;
+  uniform vec2 uMoonPath;
 
   const float SUN_RADIUS = ${glslFloat(SUN_DISC_RADIUS)};
   const float MOON_RADIUS = ${glslFloat(MOON_DISC_RADIUS)};
@@ -592,7 +604,9 @@ ${MOON_CENTER_CHUNK}
     color += vec3(1.0, 0.73, 0.34) * beads * ${glslFloat(BEAD_RADIANCE)};
 
     float contactSide = uSeparation >= 0.0 ? -1.0 : 1.0;
-    vec2 diamondCenter = vec2(contactSide * SUN_RADIUS, 0.0);
+    // On the chord, not on the x axis: the last bead is on the limb the moon has yet to
+    // cover, and that limb is opposite the moon along the direction it is travelling.
+    vec2 diamondCenter = contactSide * SUN_RADIUS * uMoonPath;
     vec2 diamondDelta = p - diamondCenter;
     float diamondCore = exp(-dot(diamondDelta, diamondDelta) * 190.0);
     float diamondHorizontal = exp(-abs(diamondDelta.y) * 82.0 - abs(diamondDelta.x) * 11.0);
@@ -676,6 +690,7 @@ const MOON_FRAGMENT_SHADER = /* glsl */ `
   uniform float uCoverage;
   uniform float uTotality;
   uniform float uTransmittance;
+  uniform vec2 uMoonPath;
 
   const float SUN_RADIUS = ${glslFloat(SUN_DISC_RADIUS)};
   const float MOON_RADIUS = ${glslFloat(MOON_DISC_RADIUS)};
@@ -754,6 +769,9 @@ export class EclipseVisual {
   private readonly anchor = new THREE.Group();
   private readonly groundEffects: EclipseGroundEffects;
   private readonly tmpPosition = new THREE.Vector3();
+  private readonly tmpEast = new THREE.Vector3();
+  private readonly tmpRight = new THREE.Vector3();
+  private readonly tmpUp = new THREE.Vector3();
   private elapsed = 0;
 
   constructor(scene: THREE.Scene) {
@@ -783,6 +801,7 @@ export class EclipseVisual {
         uProminences: { value: 0 },
         uProminenceDetail: { value: 1 },
         uTransmittance: { value: 1 },
+        uMoonPath: { value: new THREE.Vector2(1, 0) },
       },
       vertexShader: VERTEX_SHADER,
       fragmentShader: SOLAR_FRAGMENT_SHADER,
@@ -810,6 +829,7 @@ export class EclipseVisual {
         uCoverage: { value: 0 },
         uTotality: { value: 0 },
         uTransmittance: { value: 1 },
+        uMoonPath: { value: new THREE.Vector2(1, 0) },
       },
       vertexShader: VERTEX_SHADER,
       fragmentShader: MOON_FRAGMENT_SHADER,
@@ -860,6 +880,7 @@ export class EclipseVisual {
     this.tmpPosition.copy(sunDirection).multiplyScalar(680).add(camera.position);
     this.anchor.position.copy(this.tmpPosition);
     this.anchor.lookAt(camera.position);
+    this.updateMoonPath(sunDirection);
 
     this.solarMaterial.uniforms.uTime.value = this.elapsed;
     this.solarMaterial.uniforms.uSeparation.value = state.separation;
@@ -877,6 +898,35 @@ export class EclipseVisual {
     const transmittance = THREE.MathUtils.clamp(1 - cloudCover * 0.82, 0.08, 1);
     this.solarMaterial.uniforms.uTransmittance.value = transmittance;
     this.moonMaterial.uniforms.uTransmittance.value = transmittance;
+  }
+
+  /**
+   * The billboard's own two axes, and celestial east written in them.
+   *
+   * `lookAt` builds its basis as `z = eye - target`, `x = up x z`, `y = z x x`. The anchor
+   * looks AT the camera from `sunDirection * 680 + camera.position`, so `z` is minus the sun's
+   * direction and the basis works out to `x = sunDirection x worldUp`, `y = x x sunDirection`
+   * -- the camera's right and up, and a function of the SUN alone. Nothing here reads where
+   * the camera stands or which way it points, which is why the moon crosses the same way from
+   * every viewpoint.
+   *
+   * Recomputed per frame because the sun moves: the theme's declination changes its bearing
+   * over the 2.2 seconds of a theme morph, and a baked chord would lag it.
+   */
+  private updateMoonPath(sunDirection: THREE.Vector3): void {
+    const right = this.tmpRight.crossVectors(sunDirection, WORLD_UP);
+    if (right.lengthSq() < 1e-12) return; // sun at the zenith; unreachable at this latitude
+    right.normalize();
+    const up = this.tmpUp.crossVectors(right, sunDirection).normalize();
+    const east = celestialEastAt(sunDirection, this.tmpEast);
+    const x = east.dot(right);
+    const y = east.dot(up);
+    const length = Math.hypot(x, y);
+    // The sun is never within a degree of the pole here, so east always has a component in
+    // the billboard plane; the guard is for the degenerate case rather than for this world.
+    const path = length < 1e-6 ? [1, 0] : [x / length, y / length];
+    (this.solarMaterial.uniforms.uMoonPath.value as THREE.Vector2).set(path[0], path[1]);
+    (this.moonMaterial.uniforms.uMoonPath.value as THREE.Vector2).set(path[0], path[1]);
   }
 
   getBloomObjects(): THREE.Object3D[] {

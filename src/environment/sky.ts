@@ -205,6 +205,49 @@ export function sunDirectionAt(
 }
 
 /**
+ * The north celestial pole in world coordinates: altitude = latitude, due north.
+ *
+ * +X is east, +Y up and +Z south (see {@link sunDirectionAt}), so due north is -Z. Everything
+ * in the sky turns about this axis once a sidereal day, which is the only fact
+ * {@link celestialEastAt} needs.
+ */
+const CELESTIAL_POLE = new THREE.Vector3(0, Math.sin(LATITUDE), -Math.cos(LATITUDE));
+
+/**
+ * Which way is celestial EAST at a given point of the sky -- the direction the moon travels
+ * relative to the sun during an eclipse.
+ *
+ * The moon laps the sun eastward by about half a degree an hour, so its apparent path across
+ * the sun IS this direction, and its sign is what decides which limb the bite starts on. It is
+ * the direction of DECREASING hour angle at fixed declination -- H = LST - RA, so more right
+ * ascension is less hour angle -- which is `-d(sunDirectionAt)/dH`, and differentiating that
+ * model gives exactly `pole x direction`. Checked against the model rather than asserted: at
+ * the equinox noon the derivative is (-1, 0, 0), due west, and `pole x s` is (1, 0, 0), due
+ * east.
+ *
+ * It is NOT the compass east, and near the horizon the two are nowhere near each other. At the
+ * staged eclipse hour the sun stands 8.8 degrees up on a bearing of 297 degrees, and celestial
+ * east there points up and to the LEFT of a viewer facing it -- 144 degrees round from screen
+ * right. Which is why the moon has to cross from the lower right to the upper left, and why
+ * the first bite lands on the sun's right-hand limb.
+ *
+ * The model has no ecliptic, only declination and an hour angle, so this is east along the
+ * parallel of declination rather than along the moon's orbit. The two coincide at a solstice,
+ * which is where the default theme's +23.44 declination puts the sun; away from one they
+ * differ by up to the obliquity, and representing that would mean giving this sky an ecliptic
+ * it does not have.
+ */
+export function celestialEastAt(
+  sunDirection: THREE.Vector3,
+  out: THREE.Vector3 = new THREE.Vector3()
+): THREE.Vector3 {
+  out.crossVectors(CELESTIAL_POLE, sunDirection);
+  // Degenerate only if the sun stands exactly on the pole, which at this latitude it cannot:
+  // the pole is 52.23 degrees up and the sun's declination never exceeds 23.44.
+  return out.lengthSq() < 1e-12 ? out.set(1, 0, 0) : out.normalize();
+}
+
+/**
  * Unit direction toward the **antisolar point** — where a full moon stands.
  *
  * Half a turn of hour angle is only half the mirror. The point opposite the sun is also at

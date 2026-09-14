@@ -39,6 +39,34 @@ a wersjonowanie projektu docelowo stosuje [Semantic Versioning](https://semver.o
 
 ### Fixed
 
+- **Księżyc szedł przez Słońce w złą stronę — i prawie poziomo, gdy niebo każe pod 36°.** Kierunek
+  ruchu Księżyca względem Słońca to **wschód niebieski** w miejscu, gdzie Słońce stoi: Księżyc
+  okrąża Ziemię i wyprzedza Słońce o jakieś pół stopnia na godzinę. Wschód niebieski to kierunek
+  **malejącego kąta godzinnego** przy stałej deklinacji — `H = LST − RA`, więc więcej rektascensji
+  to mniej kąta godzinnego — czyli `−d(sunDirectionAt)/dH`, a zróżniczkowanie modelu z `sky.ts`
+  daje dokładnie `biegun × kierunek`. To jest teraz `celestialEastAt`, sprawdzone dwoma
+  przypadkami kontrolnymi: patrząc na północ wschód jest po prawej, a w południe na półkuli
+  północnej Księżyc idzie **w lewo** — czyli zaćmienie z każdej fotografii.
+  Rysowane było `vec2(moonOffset, moonOffset * 0.025)` wzdłuż lokalnego +X billboardu, a lokalne
+  +X billboardu **jest wektorem „w prawo" kamery** (`lookAt` daje `x = up × z`, a `z` patrzy w
+  stronę kamery, co wychodzi na `sunDirection × worldUp`). Przy separacji biegnącej −1 → +1
+  Księżyc przechodził więc z lewej na prawą i wgryzał się w **lewą** krawędź Słońca. Wschód
+  niebieski przy inscenizowanej godzinie ma składową „w prawo" równą **−0,805** — czyli dokładnie
+  na odwrót — i składową „w górę" +0,594, czyli **144° od prawej strony ekranu**, a nie 1,43°.
+  Po zmianie Księżyc wchodzi z **prawego dołu** i wychodzi w **lewą górę**. Zmierzone na produkcie
+  przez dopasowanie prostej do środka tarczy na dziesięciu klatkach: **142,7°** wobec 143,6°, które
+  daje niebo. Pierścień diamentowy jeździ po tej samej cięciwie, więc zapala się teraz w lewej
+  górze przy C2 i w prawym dole przy C3. Cięciwa liczy się **co klatkę z pozycji Słońca**, więc idzie
+  za motywem (klasyczny 143,6°, jesienny 145,5°) i nie czyta niczego z kamery — bo baza billboardu
+  zależy tylko od Słońca i pionu świata, dlatego odpowiedź jest ta sama z każdego miejsca.
+  Model nie ma ekliptyki, tylko deklinację i kąt godzinny, więc to jest wschód **wzdłuż równoleżnika
+  deklinacji**, a nie wzdłuż orbity Księżyca. Pokrywają się w przesileniu, czyli tam, gdzie
+  deklinacja +23,44 domyślnego motywu stawia Słońce; dalej od przesilenia różnią się co najwyżej
+  o nachylenie ekliptyki, a oddanie tego znaczyłoby dodanie temu niebu ekliptyki, której nie ma.
+  **Nie ruszone, świadomie**: półksiężyce rzucane przez liście na ziemię biorą stronę wygryzienia
+  ze znaku separacji w przestrzeni kafla, która nie ma zdefiniowanego związku z osiami ekranu —
+  a obraz przez otworek jest w dodatku odwrócony. Przy 13 px to jest osobny temat, nie ten.
+
 - **Księżyc nie przechodził przez Słońce — wykluwał się na nim.** Warstwa Księżyca maskowała się
   tarczą **Słońca** (`moonMask * max(sunMask, uTotality)`), więc przez obie fazy częściowe na
   ekranie było rysowane wyłącznie **przecięcie dwóch okręgów** — soczewka zaostrzona na obu

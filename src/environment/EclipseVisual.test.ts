@@ -16,6 +16,14 @@ import {
   solarLimbIntensity,
 } from './EclipseVisual';
 import { EclipseTimeline, eclipseCoverageAtSeparation } from '../experience/EclipseTimeline';
+import {
+  AUTUMN_DECLINATION_DEG,
+  JUNE_DECLINATION_DEG,
+  clockFromSolarPhase,
+  sunDirectionAt,
+} from './sky';
+import { ECLIPSE_VIEW_SOLAR_PHASE } from '../experience/AuthoredMoments';
+import type { Radians, SolarPhase01 } from '../units';
 
 /**
  * THE ACCEPTANCE METRIC, REDEFINED SO THAT IT CAN FAIL.
@@ -717,12 +725,81 @@ describe('the moon is drawn as a disc, and it travels', () => {
     expect(solarShaderOf()).not.toContain('fwidth');
   });
 
-  test('the moon crosses on a straight chord', () => {
-    // It was `0.018 * sin(uSeparation * 2.4)`, which is not a chord: it turns back on itself
-    // at |separation| = 0.654, so extending the traverse to the approach would have had the
-    // moon rise, fall and rise again on its way in.
-    expect(MOON_CENTER_CHUNK).toContain('vec2(moonOffset, moonOffset * 0.025)');
+  test('the moon crosses on a straight chord, along a direction the SKY chooses', () => {
+    // It was `0.018 * sin(uSeparation * 2.4)`, which is not a chord at all: it turns back on
+    // itself at |separation| = 0.654. Then it was `vec2(moonOffset, moonOffset * 0.025)`, a
+    // straight chord 1.43 degrees off horizontal -- and pointing the wrong way.
+    expect(MOON_CENTER_CHUNK).toContain('vec2 moonCenter = moonOffset * uMoonPath;');
     expect(MOON_CENTER_CHUNK).not.toContain('sin(');
+    expect(MOON_CENTER_CHUNK).not.toMatch(/0\.0\d+/);
+    // The diamond ring sits on the limb the moon has yet to cover, so it rides the same chord.
+    expect(solarShaderOf()).toContain('contactSide * SUN_RADIUS * uMoonPath');
+  });
+
+  /** Drive one update at a stated sun direction and read the chord the shaders were given. */
+  const moonPathFor = (sun: THREE.Vector3): THREE.Vector2 => {
+    const scene = new THREE.Scene();
+    const visual = new EclipseVisual(scene);
+    const material = (scene.getObjectByName('eclipse-moon-layer') as THREE.Mesh)
+      .material as THREE.ShaderMaterial;
+    visual.update(
+      new THREE.PerspectiveCamera(),
+      sun.clone().normalize(),
+      { ...new EclipseTimeline().seek(0.2), active: true },
+      1 / 60,
+      0
+    );
+    const path = (material.uniforms.uMoonPath.value as THREE.Vector2).clone();
+    visual.dispose();
+    return path;
+  };
+
+  test('at a northern noon the moon moves LEFT, which is the eclipse in every photograph', () => {
+    // The case with an answer everybody already knows, and the one that catches a sign. A
+    // noon sun stands due south; the moon laps it eastward; facing south, east is on the left.
+    // So the bite starts on the sun's RIGHT limb and the shadow walks left. Billboard +X is
+    // the camera's right vector, so a correct chord has a NEGATIVE x here.
+    const noon = sunDirectionAt(
+      clockFromSolarPhase(0.5 as SolarPhase01, THREE.MathUtils.degToRad(JUNE_DECLINATION_DEG) as Radians),
+      THREE.MathUtils.degToRad(JUNE_DECLINATION_DEG) as Radians
+    );
+    const path = moonPathFor(noon);
+    expect(path.x).toBeLessThan(0);
+    expect(path.x).toBeCloseTo(-1, 3);
+    // Due south at noon the sun rides its own parallel, so the chord is horizontal.
+    expect(Math.abs(path.y)).toBeLessThan(0.01);
+  });
+
+  test('at the staged eclipse hour it crosses from the lower right to the upper left', () => {
+    // 8.8 degrees up on a bearing of 297: celestial east there is 144 degrees round from
+    // screen right, so the moon comes in low on the right and leaves high on the left. The
+    // shipped chord had it at 1.4 degrees the OTHER way, which is the defect this pins.
+    const declination = THREE.MathUtils.degToRad(JUNE_DECLINATION_DEG) as Radians;
+    const sun = sunDirectionAt(
+      clockFromSolarPhase(ECLIPSE_VIEW_SOLAR_PHASE, declination),
+      declination
+    );
+    const path = moonPathFor(sun);
+    expect(path.x).toBeLessThan(0);
+    expect(path.y).toBeGreaterThan(0);
+    expect((Math.atan2(path.y, path.x) * 180) / Math.PI).toBeCloseTo(143.6, 0);
+    expect(path.length()).toBeCloseTo(1, 6);
+  });
+
+  test('the chord follows the sun rather than being baked, so it follows the theme', () => {
+    const june = THREE.MathUtils.degToRad(JUNE_DECLINATION_DEG) as Radians;
+    const autumn = THREE.MathUtils.degToRad(AUTUMN_DECLINATION_DEG) as Radians;
+    const angle = (declination: Radians): number => {
+      const path = moonPathFor(
+        sunDirectionAt(clockFromSolarPhase(ECLIPSE_VIEW_SOLAR_PHASE, declination), declination)
+      );
+      return (Math.atan2(path.y, path.x) * 180) / Math.PI;
+    };
+    // The same staged hour, two declinations, two bearings, two chords -- and both of them
+    // up and to the left, which is the half of this that must never depend on the season.
+    expect(angle(june)).toBeCloseTo(143.6, 0);
+    expect(angle(autumn)).toBeCloseTo(145.5, 0);
+    expect(angle(june)).not.toBeCloseTo(angle(autumn), 1);
   });
 });
 
