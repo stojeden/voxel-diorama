@@ -108,6 +108,21 @@ export class EclipseCrowdProps {
       }
     }
 
+    /**
+     * The pinhole card a figure holds up, with the crescent projected on it.
+     *
+     * `uSeparation` offsets the little moon along the CARD's own u axis, which has no relation
+     * to the chord the moon crosses the sky on: the card is a quad held at whatever angle its
+     * instance matrix gives it, and a pinhole image is inverted into the bargain. Aligning the
+     * two would mean modelling the card's orientation, for a prop a few pixels across on a
+     * figure thirteen pixels tall. Left alone deliberately, and named here rather than left to
+     * be discovered -- the ground crescents in `EclipseGroundEffects` take their side the same
+     * way, for the same reason.
+     *
+     * In a docblock rather than in the shader string because a comment inside a template
+     * literal is SHIPPED: the first draft of this note cost 575 bytes of the entry chunk,
+     * against a budget with 2.9 kB of headroom left.
+     */
     this.cardMaterial = new THREE.ShaderMaterial({
       uniforms: {
         uSeparation: { value: 1 },

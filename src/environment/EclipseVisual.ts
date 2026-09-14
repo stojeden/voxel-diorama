@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { QualityLevel } from '../performance/QualityManager';
 import { EclipseGroundEffects } from './EclipseGroundEffects';
 // Which way the moon travels across the sun is a fact about the sky, not a taste: see
-// `celestialEastAt`, and `MOON_PATH_UNIFORM` below for how it reaches the billboard.
+// `celestialEastAt`, and `MOON_CENTER_CHUNK` below for how it reaches the billboard.
 import { celestialEastAt } from './sky';
 
 /** World up, and the same vector `Object3D.lookAt` uses by default. */
@@ -482,8 +482,6 @@ export const MOON_BILLBOARD_LIMIT =
  * basis depends only on the sun's direction and world up, which is why the answer is the same
  * from anywhere the viewer stands.
  */
-export const MOON_PATH_UNIFORM = 'uMoonPath';
-
 export const MOON_CENTER_CHUNK = /* glsl */ `
     float moonOffset = uSeparation * (SUN_RADIUS + MOON_RADIUS);
     vec2 moonCenter = moonOffset * uMoonPath;
