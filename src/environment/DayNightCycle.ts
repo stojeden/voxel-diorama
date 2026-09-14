@@ -29,7 +29,12 @@ import { STORM_FILL_AMBIENT, STORM_FILL_HEMISPHERE } from './storm';
 // doc links naming it below resolve instead of dangling, which is how a link to a constant
 // named ECLIPSE_SKY_LEVEL, a symbol that never existed anywhere in this repository, survived in
 // this file for as long as it did.
-import { eclipseCoverageAtSeparation, type EclipseTimeline } from '../experience/EclipseTimeline';
+import {
+  MOON_APPROACH_SEPARATION,
+  eclipseCoverageAtSeparation,
+  eclipseSeparationForCoverage,
+  type EclipseTimeline,
+} from '../experience/EclipseTimeline';
 
 /**
  * Full day/night lighting rig:
@@ -1134,7 +1139,8 @@ export class DayNightCycle {
   private eclipseState: EclipseRenderState = {
     active: false,
     coverage: 0,
-    separation: 1.25,
+    // Parked where the traverse parks it, not at a literal that used to be the old bound.
+    separation: MOON_APPROACH_SEPARATION,
     irradiance: 1,
     corona: 0,
     beads: 0,
@@ -1416,7 +1422,11 @@ export class DayNightCycle {
     this.setEclipseState({
       active: coverage > 0.001,
       coverage,
-      separation: 1.25 * (1 - coverage),
+      // The real inverse of the coverage law, not a straight line through it. A line reached
+      // first contact at a fifth of the coverage it claimed, which now means an opaque moon
+      // drawn clear of the sun while the world says it is a fifth eclipsed.
+      separation:
+        coverage > 0 ? eclipseSeparationForCoverage(coverage) : MOON_APPROACH_SEPARATION,
       irradiance: 1 - coverage * 0.985,
       corona: Math.pow(coverage, 4),
       beads: Math.pow(coverage, 10),
@@ -1429,7 +1439,14 @@ export class DayNightCycle {
     this.eclipseState = {
       active: state.active,
       coverage: clamp01(state.coverage),
-      separation: THREE.MathUtils.clamp(state.separation, -1.35, 1.35),
+      // The timeline's own traverse endpoint, not a literal: the moon now starts and ends
+      // its crossing off the sun, and a clamp tighter than the traverse would cut the
+      // approach short without anything failing.
+      separation: THREE.MathUtils.clamp(
+        state.separation,
+        -MOON_APPROACH_SEPARATION,
+        MOON_APPROACH_SEPARATION
+      ),
       irradiance: clamp01(state.irradiance),
       corona: clamp01(state.corona),
       beads: clamp01(state.beads),

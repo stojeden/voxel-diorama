@@ -85,8 +85,30 @@ import { Pass } from 'postprocessing';
  *   Catmull-Rom   -45.6%,           -4.4%      <- kept
  *
  * Catmull-Rom keeps twice the sharpness for three points of stability, which is why it is
- * the standard remedy. An anti-ringing clamp on top of it bought -47.5% for -5.1% and nine
- * more taps, and was not kept.
+ * the standard remedy. A two-sided anti-ringing clamp on top of it bought -47.5% for -5.1%
+ * and nine more taps, and was not kept.
+ *
+ * ── The dark half of that clamp WAS kept, later, and here is why ──
+ *
+ * Catmull-Rom's negative lobes undershoot in proportion to the contrast they cross, and this
+ * buffer is scene-linear HDR. Nothing in the city crosses enough contrast for it to matter;
+ * the eclipse does. With the moon drawn as a silhouette against the sky the disc lets through
+ * a thousandth of the sky behind it by first contact and a hundredth well before that, so its
+ * limb is a hundred-to-one step in LINEAR radiance across one pixel -- and the undershoot put
+ * a dark arc a hundred and fifty levels below the disc it outlined, on the one object the
+ * viewer is being asked to watch.
+ *
+ * Clamping the UNDERSHOOT alone to the taps costs a third of what clamping both sides costs,
+ * because the overshoot is most of what makes this kernel look sharp, and removes the same
+ * artefact -- a bright halo against a bright sky is invisible where a dark one is a drawn
+ * line. Re-measured together, same hour, each self-paired against its own no-TAA run:
+ *
+ *   no clamp        -49.5% stability, -2.6% sharpness
+ *   clamp low only  -51.6%,           -3.4%      <- kept
+ *   clamp low+high  -52.1%,           -5.0%
+ *
+ * It is not free: eight tenths of a point of sharpness, across the whole picture, bought for
+ * an artefact that only the eclipse makes visible. See sampleHistory for the pixel readings.
  */
 
 /**
@@ -240,16 +262,71 @@ const RESOLVE_SHADER = {
       vec3 acc = vec3(0.0);
       float wsum = 0.0;
       float w;
+      vec3 t;
+      // The darkest of the taps. Nothing a Catmull-Rom kernel is interpolating BETWEEN can
+      // legitimately come out below it; see the clamp at the bottom.
+      vec3 lo = vec3(1e30);
 
-      w = w12.x * w0.y;  acc += texture2D(historyBuffer, vec2(tp12.x, tp0.y)).rgb * w;  wsum += w;
-      w = w0.x  * w12.y; acc += texture2D(historyBuffer, vec2(tp0.x,  tp12.y)).rgb * w; wsum += w;
-      w = w12.x * w12.y; acc += texture2D(historyBuffer, vec2(tp12.x, tp12.y)).rgb * w; wsum += w;
-      w = w3.x  * w12.y; acc += texture2D(historyBuffer, vec2(tp3.x,  tp12.y)).rgb * w; wsum += w;
-      w = w12.x * w3.y;  acc += texture2D(historyBuffer, vec2(tp12.x, tp3.y)).rgb * w;  wsum += w;
+      w = w12.x * w0.y;  t = texture2D(historyBuffer, vec2(tp12.x, tp0.y)).rgb;
+      acc += t * w; wsum += w; lo = min(lo, t);
+      w = w0.x  * w12.y; t = texture2D(historyBuffer, vec2(tp0.x,  tp12.y)).rgb;
+      acc += t * w; wsum += w; lo = min(lo, t);
+      w = w12.x * w12.y; t = texture2D(historyBuffer, vec2(tp12.x, tp12.y)).rgb;
+      acc += t * w; wsum += w; lo = min(lo, t);
+      w = w3.x  * w12.y; t = texture2D(historyBuffer, vec2(tp3.x,  tp12.y)).rgb;
+      acc += t * w; wsum += w; lo = min(lo, t);
+      w = w12.x * w3.y;  t = texture2D(historyBuffer, vec2(tp12.x, tp3.y)).rgb;
+      acc += t * w; wsum += w; lo = min(lo, t);
 
-      // Negative lobes can push a channel below zero on a hard edge; a half-float history
-      // keeps the negative and it grows.
-      return max(acc / max(wsum, 1e-4), vec3(0.0));
+      /**
+       * THE UNDERSHOOT, CLAMPED TO THE TAPS -- not merely to zero, and not on both sides.
+       *
+       * This was max(acc / wsum, vec3(0.0)), and the comment above it was half the story: the
+       * negative lobes do push a channel below zero on a hard edge, but zero is not where the
+       * damage is. Catmull-Rom undershoots in proportion to the contrast it crosses, and this
+       * buffer is scene-linear HDR, where the moon's limb is a hundred-to-one step: the disc
+       * transmits a hundredth of the sky behind it through most of the approach and a
+       * thousandth by first contact. That puts the undershoot far below the dark side of the
+       * step without ever reaching zero, so the old guard never
+       * fired; and it survived the neighbourhood clip too, because at such an edge the 3x3
+       * sigma is enormous and uClipGamma * sigma is a box wide enough to hold it.
+       *
+       * Measured on the built product with the moon crossing the sun, comparing the moon's
+       * median body luma against the darkest pixel on its own rim, at six separations:
+       *
+       *     separation   -1.28  -1.24  -1.19  -1.14  -1.09  -1.04
+       *     body          250.2  245.4  233.5  207.7  164.4  109.8
+       *     rim, before   203.3  160.3  104.7   58.0   26.7   12.7
+       *     rim, after    249.2  242.6  228.1  198.2  151.6   97.3
+       *
+       * A dark arc a hundred and fifty levels under the disc it outlines, on the one object
+       * the viewer is being asked to watch. Loading with taa=0 removed it completely, which is
+       * what named this pass; widening the disc's own edge to two pixels did not move it at
+       * all, which is what ruled out the disc's geometry. What is left afterwards -- nine to
+       * twelve levels -- is the disc's own one-pixel antialiased edge, and it is what the
+       * taa=0 control reads as well.
+       *
+       * ONLY THE DARK SIDE IS CLAMPED, and that is a measured choice, not a symmetry error.
+       * The header's kernel table is updated for it. All three variants, same hour, each
+       * self-paired against its own no-TAA run on the shaded facade:
+       *
+       *     no clamp (what shipped)   stability -49.5%   sharpness -2.6%
+       *     clamp low only            stability -51.6%   sharpness -3.4%   <- kept
+       *     clamp low and high        stability -52.1%   sharpness -5.0%
+       *
+       * Clamping the overshoot as well removes the bright half of the ringing, and the bright
+       * half of the ringing is most of what makes Catmull-Rom look sharp -- three times the
+       * sharpness cost for half a point more stability. It also is not what anybody can
+       * see: a bright halo against a bright sky is invisible where a dark one is a drawn line.
+       * Both forms take the moon's rim to the same place (worst gap 12.0 against 12.1), so the
+       * dark side is the whole of the win.
+       *
+       * The five taps are the ones already fetched, so this costs no bandwidth. It is a
+       * slightly tighter bound than the textbook 3x3 min -- two of the five are bilinear
+       * blends -- and the earlier nine-tap form was measured in this repository before and
+       * rejected at -47.5% for -5.1%, which is the two-sided trade again.
+       */
+      return max(acc / max(wsum, 1e-4), max(lo, vec3(0.0)));
     }
 
     void main() {

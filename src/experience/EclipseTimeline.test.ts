@@ -2,7 +2,9 @@ import { describe, expect, test } from 'vitest';
 import {
   DEFAULT_ECLIPSE_DURATION_SECONDS,
   EclipseTimeline,
+  MOON_APPROACH_SEPARATION,
   eclipseCoverageAtSeparation,
+  eclipseSeparationForCoverage,
   type EclipseTimelineState,
 } from './EclipseTimeline';
 
@@ -11,8 +13,11 @@ const expectSignalsInRange = (state: EclipseTimelineState): void => {
   expect(state.progress).toBeLessThanOrEqual(1);
   expect(state.phaseProgress).toBeGreaterThanOrEqual(0);
   expect(state.phaseProgress).toBeLessThanOrEqual(1);
-  expect(state.separation).toBeGreaterThanOrEqual(-1);
-  expect(state.separation).toBeLessThanOrEqual(1);
+  // Not [-1, 1] any more. 1 is FIRST CONTACT -- the moment the two discs touch -- and the
+  // moon now starts and ends its crossing clear of the sun, so the traverse runs out to
+  // MOON_APPROACH_SEPARATION on both sides. See that constant for why it is where it is.
+  expect(state.separation).toBeGreaterThanOrEqual(-MOON_APPROACH_SEPARATION);
+  expect(state.separation).toBeLessThanOrEqual(MOON_APPROACH_SEPARATION);
 
   for (const signal of [
     state.coverage,
@@ -46,7 +51,7 @@ describe('EclipseTimeline', () => {
       phase: 'partial-in',
       progress: 0,
       coverage: 0,
-      separation: -1,
+      separation: -MOON_APPROACH_SEPARATION,
       irradiance: 1,
       running: true,
     });
@@ -152,7 +157,7 @@ describe('EclipseTimeline', () => {
       progress: 1,
       phaseProgress: 1,
       coverage: 0,
-      separation: 1,
+      separation: MOON_APPROACH_SEPARATION,
       irradiance: 1,
       corona: 0,
       beads: 0,
@@ -185,5 +190,118 @@ describe('EclipseTimeline', () => {
     timeline.start();
     expect(() => timeline.update(-0.001)).toThrow(RangeError);
     expect(() => timeline.update(Number.NaN)).toThrow(RangeError);
+  });
+});
+
+/**
+ * THE TRAVERSE, which is what the owner was looking at when he said the moon was an egg.
+ *
+ * Nothing here pins a value the old timeline would also have satisfied. The old one started
+ * the moon AT first contact, so it had nowhere to come from, and moved it with five
+ * independent smootherSteps, each of which has zero derivative at both ends -- so the moon
+ * came to a dead stop at every join, and spent the first tenth of the eclipse covering a
+ * tenth of nothing at all.
+ */
+describe('the moon crosses the sun instead of being born on it', () => {
+  const timeline = new EclipseTimeline();
+  const separationAt = (progress: number): number => timeline.seek(progress).separation;
+
+  test('starts and ends clear of the sun, on both sides', () => {
+    expect(separationAt(0)).toBeCloseTo(-MOON_APPROACH_SEPARATION, 12);
+    expect(separationAt(1)).toBeCloseTo(MOON_APPROACH_SEPARATION, 12);
+    // Clear means clear: no overlap at all, so there is nothing to see but a moon arriving.
+    expect(timeline.seek(0).coverage).toBe(0);
+    expect(timeline.seek(1).coverage).toBe(0);
+    expect(MOON_APPROACH_SEPARATION).toBeGreaterThan(1);
+  });
+
+  test('moves through a real approach before the discs ever touch', () => {
+    // The failure this replaces: at separation -1 the moon is already tangent to the sun, so
+    // the first thing the viewer could see was the two circles' intersection -- a vesica,
+    // pointed at both ends, swelling out of a white glare.
+    const firstContact = (() => {
+      for (let p = 0; p <= 1; p += 0.0005) if (Math.abs(separationAt(p)) <= 1) return p;
+      return Number.NaN;
+    })();
+    expect(firstContact).toBeGreaterThan(0.05);
+    expect(firstContact).toBeLessThan(0.2);
+    // ...and the moon is genuinely travelling through all of it, not waiting.
+    expect(Math.abs(separationAt(firstContact / 2))).toBeLessThan(MOON_APPROACH_SEPARATION);
+    expect(Math.abs(separationAt(firstContact / 2))).toBeGreaterThan(1);
+  });
+
+  test('never stops, never backs up, and never leaves the traverse', () => {
+    let previous = separationAt(0);
+    let smallestStep = Infinity;
+    let largestStep = 0;
+    for (let step = 1; step <= 2000; step += 1) {
+      const value = separationAt(step / 2000);
+      const delta = value - previous;
+      // Monotone: a Catmull-Rom through these knots WOULD overshoot and reverse, which is
+      // why the tangents are the monotone (Fritsch-Butland) ones.
+      expect(delta).toBeGreaterThanOrEqual(0);
+      if (delta < smallestStep) smallestStep = delta;
+      if (delta > largestStep) largestStep = delta;
+      expect(Math.abs(value)).toBeLessThanOrEqual(MOON_APPROACH_SEPARATION + 1e-12);
+      previous = value;
+    }
+    // THE NUMBER THAT SEPARATES THE TWO TRAVERSES, at this sample count and no other:
+    //
+    //   old (five smootherSteps)   smallest step 5.6e-9,  largest 0.002541
+    //   new (one monotone curve)   smallest step 4.5e-5,  largest 0.002575
+    //
+    // smootherStep has zero derivative at BOTH ends of every segment, so the old traverse
+    // came to a halt at each join and the step across one only survives as the cubic's own
+    // third-order term. Four orders of magnitude, and a bound in the middle of them.
+    expect(smallestStep).toBeGreaterThan(1e-6);
+    // The slowest the moon ever moves is in the middle of totality, where it is crossing the
+    // sun's centre and is meant to be nearly still; even there it is moving.
+    expect(smallestStep).toBeLessThan(largestStep / 10);
+    expect(largestStep).toBeLessThan(0.01);
+  });
+
+  test('lands on every authored contact exactly, so the rest of the schedule is untouched', () => {
+    // coronaAt and beadsAt switch on these same four numbers. If the traverse drifted off
+    // them the diamond rings would fire while the discs were somewhere else.
+    const c2 = timeline.seek(0.42);
+    const c3 = timeline.seek(0.58);
+    expect(c2.coverage).toBe(1);
+    expect(c3.coverage).toBe(1);
+    expect(timeline.seek(0.36).coverage).toBeCloseTo(0.985, 6);
+    expect(timeline.seek(0.64).coverage).toBeCloseTo(0.985, 6);
+    // Totality is the whole of [0.42, 0.58] and not a moment more.
+    expect(timeline.seek(0.4199).coverage).toBeLessThan(1);
+    expect(timeline.seek(0.5801).coverage).toBeLessThan(1);
+    for (let p = 0.42; p <= 0.58; p += 0.004) expect(timeline.seek(p).coverage).toBe(1);
+  });
+
+  test('is symmetric about mid-totality', () => {
+    for (let p = 0; p <= 0.5; p += 0.01) {
+      expect(separationAt(p)).toBeCloseTo(-separationAt(1 - p), 12);
+    }
+  });
+});
+
+describe('the coverage law can be inverted, and the diagnostic path uses the inverse', () => {
+  test('round-trips coverage through separation and back', () => {
+    for (const coverage of [0.02, 0.1, 0.25, 0.5, 0.75, 0.9, 0.985, 0.999]) {
+      const separation = eclipseSeparationForCoverage(coverage);
+      expect(separation).toBeGreaterThan(0);
+      expect(separation).toBeLessThanOrEqual(1);
+      expect(eclipseCoverageAtSeparation(separation)).toBeCloseTo(coverage, 6);
+    }
+  });
+
+  test('the straight line it replaces put the moon where the coverage said it was not', () => {
+    // `DayNightCycle.setEclipse` drove the whole eclipse from one 0..1 strength and mapped it
+    // to a separation with `1.25 * (1 - coverage)`. That line crosses first contact -- where
+    // the discs touch and coverage is exactly 0 -- at coverage 0.2, so for the whole bottom
+    // fifth of the range it asked for a covered sun and drew two discs that were not
+    // touching. Harmless while the moon was only drawn inside the sun; now that the moon has
+    // a silhouette it draws an opaque disc clear of a sun the world says is eclipsed.
+    expect(eclipseCoverageAtSeparation(1.25 * (1 - 0.2))).toBe(0);
+    expect(eclipseCoverageAtSeparation(eclipseSeparationForCoverage(0.2))).toBeCloseTo(0.2, 6);
+    // The endpoint is not on the line either: the line gives the moon 1.25 at zero coverage.
+    expect(MOON_APPROACH_SEPARATION).not.toBeCloseTo(1.25, 2);
   });
 });

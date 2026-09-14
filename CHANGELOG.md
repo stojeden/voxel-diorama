@@ -39,6 +39,53 @@ a wersjonowanie projektu docelowo stosuje [Semantic Versioning](https://semver.o
 
 ### Fixed
 
+- **Księżyc nie przechodził przez Słońce — wykluwał się na nim.** Warstwa Księżyca maskowała się
+  tarczą **Słońca** (`moonMask * max(sunMask, uTotality)`), więc przez obie fazy częściowe na
+  ekranie było rysowane wyłącznie **przecięcie dwóch okręgów** — soczewka zaostrzona na obu
+  końcach. Samego Słońca przy tej ekspozycji nie widać (niebo obok niego prezentuje się jako
+  254/255, a tarcza dodaje się do niego), więc nie było jasnego krążka, z którego ten kształt
+  byłby wygryzieniem: rodził się w środku białej poświaty i puchł. Właściciel nazwał to jajem.
+  Zmierzone na produkcie: prostokąt otaczający ciemny kształt szedł od 10×70 do 82×252 px,
+  proporcja 0,14–0,33. Teraz jest **43×43 px, proporcja 0,98–1,00 w każdej fazie częściowej** —
+  koło tej samej wielkości przez całe przejście.
+  Trzy zmiany, jeden efekt: (1) Księżyc rysuje się jako sylwetka na niebie, a nie tylko tam, gdzie
+  zachodzi na Słońce — to **świadome odstępstwo od fizyki**, zapisane jako odstępstwo, bo powietrze
+  przed Księżycem świeci tym samym rozproszonym światłem co niebo obok; (2) przejazd zaczyna się i
+  kończy **poza Słońcem** (separacja 1,45, autorska, ograniczona krawędzią quada — najdalszy brzeg
+  tarczy wypada na 0,947 z 1,0), a Księżyc **wyłania się z poświaty** zamiast pojawiać się nagle;
+  (3) przejazd jest **jedną monotoniczną krzywą C1** przez te same pięć autorskich kontaktów.
+  Wygaszanie jest **prawem potęgowym, nie rampą**: ACES odwzorowuje niebo 25 na kod 254, a połowę
+  tego nieba na 252 — dwa kody za połowę światła — więc liniowa rampa alfy jest niewidoczna aż do
+  samego końca. Zmierzone przy pierwszej próbie: 253, 253, 250, 84, 7 na pięciu separacjach, czyli
+  przeskok. Teraz krok jest **poniżej sześciu poziomów na dziesiątą sekundy**, a cała rampa
+  przechodzi 254 → 241 → 179 → 62 → 17 przez cztery ćwiartki podejścia.
+  Pięć niezależnych `smootherStep` zastąpiła jedna krzywa, bo `smootherStep` ma **zerową pochodną
+  na obu końcach**: Księżyc zatrzymywał się na amen przy każdym złączeniu, cztery razy w ciągu
+  dziewięćdziesięciu sekund i raz na samym starcie. Na dwóch tysiącach próbek najmniejszy krok
+  wynosił 5,6e-9 przy średniej 1,0e-3; teraz 4,5e-5 przy średniej 1,45e-3. **Węzły nie drgnęły** —
+  drugi kontakt nadal wypada na 0,42, a totalność nadal zajmuje dokładnie [0,42; 0,58].
+  **Światło jest nietknięte**, i to jest sedno: totalność to nadal 0,0956 tej samej godziny bez
+  zaćmienia (miasto 0,234, niebo 0,087), totalność jest nadal najciemniejszą klatką, pikseli
+  dokładnie czarnych jest nadal 0,0000 % w każdej fazie, a klatki totalności są tym samym obrazem.
+- **Dwie kopie tych samych dwóch linijek w dwóch shaderach, które muszą się zgadzać co do bitu.**
+  Warstwa Słońca wycina fotosferę przez `1.0 - moonMask`, a warstwa Księżyca rysuje sylwetkę przez
+  `moonMask`; rozjazd o jeden znak to obwódka fotosfery za Księżycem albo obwódka Księżyca bez
+  Słońca pod spodem, i nic w repozytorium by tego nie złapało. Teraz jest jeden fragment.
+  Przy okazji: brzeg tarczy jest **szeroki na piksel wszędzie, gdzie jest rysowany** (`fwidth`), a
+  nie 0,003 jednostki billboardu — co było ćwiartką piksela przy tym kadrze i inną liczbą pikseli
+  przy każdym innym. Tor Księżyca jest **prostą cięciwą**, a nie sinusem separacji, który zawracał
+  przy |separacji| 0,654.
+- **Dzwonienie Catmull-Roma w resolwerze czasowym rysowało ciemny łuk pod tarczą Księżyca.** Bufor
+  historii jest liniowy HDR: niebo obok zaćmionego Słońca ma rząd 100, a tarcza przed nim 0,9, więc
+  ujemne listki jądra schodziły sto pięćdziesiąt poziomów **pod** obiekt, który obrysowywały — i
+  przechodziły przez zabezpieczenie (`max(…, 0.0)` nigdy nie strzelało) oraz przez klips sąsiedztwa
+  (przy takiej krawędzi sigma jest ogromna). Ograniczenie **samego niedomiaru** do własnych próbek
+  usuwa to w całości (szczelina 150 → 12 poziomów, czyli tyle, ile ma własny antyaliasowany brzeg
+  tarczy) za **0,8 punktu ostrości**; ograniczenie obu stron kosztuje 2,4 punktu i daje ten sam
+  wynik, dlatego obustronna forma pozostaje odrzucona. Zmierzone tą samą sondą co zawsze, w tej
+  samej godzinie: bez klipsa −49,5 % drgania / −2,6 % ostrości, z jednostronnym −51,6 % / −3,4 %,
+  z obustronnym −52,1 % / −5,0 %.
+
 - **Wiatr wiał prosto wzdłuż osi patrzenia kamery, przy każdym ładowaniu.** Ziarno świata jest
   stałe, więc wylosowany azymut 242,6° wypadał 10,7° od osi widzenia kamery otwierającej —
   balon nie przecinał kadru, tylko się w nim oddalał i malał. Azymut bazowy jest teraz **autorską

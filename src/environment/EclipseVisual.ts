@@ -1,6 +1,10 @@
 import * as THREE from 'three';
 import type { QualityLevel } from '../performance/QualityManager';
 import { EclipseGroundEffects } from './EclipseGroundEffects';
+// The endpoint of the moon's traverse, imported rather than copied: the moon layer has to
+// fade the disc out exactly where the timeline parks it, and two 1.45s in two files is the
+// same defect written twice. Same direction `DayNightCycle` already reads the coverage law in.
+import { MOON_APPROACH_SEPARATION } from '../experience/EclipseTimeline';
 
 export interface EclipseRenderState {
   active: boolean;
@@ -379,9 +383,37 @@ export const glslFloat = (value: number): string => {
  * was emitting 2793x, and beyond 2.6 R_sun it emitted exactly nothing.
  *
  * The moon keeps `NormalBlending`, because the moon is the one thing here that genuinely
- * occludes. It does not need to occlude the sun -- `visibleSun = sunMask * (1 - moonMask)`
- * already cuts the photosphere out of its disc -- so the two layers want opposite blend
- * modes and now have them.
+ * occludes -- and it is the ONLY thing that occludes, which this comment used to get wrong.
+ *
+ * It said the moon "does not need to occlude the sun, because `visibleSun = sunMask *
+ * (1 - moonMask)` already cuts the photosphere out of its disc", and that is not how an
+ * alpha-blended layer works: its alpha attenuates everything already in the buffer, the
+ * cut-down photosphere included. With both in place the composite was
+ *
+ *     m * moon + (1 - m) * sky + (1 - m)^2 * photosphere
+ *
+ * -- the sky occluded once, which is right, and the photosphere occluded twice, which is
+ * not. It only shows where `m` is strictly between 0 and 1, i.e. on the single antialiased
+ * pixel at the bite's inner edge, and it is worst at m = 0.5, where a quarter of the
+ * photosphere goes missing. Isolated on the real pipeline with a fixed sky, the edge pixel
+ * at coverage 0.50 read 15.23 scene-linear where one occlusion gives 28.79; at coverage 0.90
+ * it is 4.00 against 8.06.
+ *
+ * HOW VISIBLE THAT IS, measured rather than assumed, because the arithmetic makes it sound
+ * larger than it is: in the shipped picture the difference sits AT the capture noise. Two
+ * runs of the same build over the same ladder differ by a mean |dLuma| of 0.386 with 61
+ * pixels over four levels at coverage 0.93; the same comparison across this change gives
+ * 0.407 and 100, and both maxima land on the moon's own limb, where the temporal pass jitters
+ * anyway. So this is a correctness fix and a simplification -- one occluder instead of two,
+ * and a comment that no longer describes a model the blend state cannot implement -- and it
+ * is not a visible change. Claiming otherwise would be the second kind of mistake this file
+ * is full of notes about.
+ *
+ * So the photosphere is emitted uncut and the moon's alpha does all of the occluding, once.
+ * That is safe for the selective bloom, which is the reason the cut looked necessary: the
+ * bloom masks the INPUT BUFFER by a depth pass of its selection, and this material writes no
+ * depth, so the disc is discarded from the bloom either way. See the `depthWrite` note on
+ * the constructor for the three measurements that would have to come first to change that.
  */
 /**
  * Angular radius of the drawn sun, as a fraction of the billboard's half-width.
@@ -405,6 +437,50 @@ export const glslFloat = (value: number): string => {
  */
 export const SUN_DISC_RADIUS = 0.24;
 export const MOON_DISC_RADIUS = SUN_DISC_RADIUS * 1.01875;
+
+/**
+ * The largest |separation| at which the whole moon still fits on the billboard.
+ *
+ * The moon's far edge sits at `|separation| * (SUN + MOON) + MOON` in billboard half-widths
+ * and the quad runs out at 1, so past this the disc is cut by a straight edge -- and a
+ * straight-edged moon is worse than no moon. Exported so the test can hold
+ * {@link MOON_APPROACH_SEPARATION} under it without either file restating the arithmetic.
+ */
+export const MOON_BILLBOARD_LIMIT =
+  (1 - MOON_DISC_RADIUS) / (SUN_DISC_RADIUS + MOON_DISC_RADIUS);
+
+/**
+ * The chord the moon crosses on: rise over run, so 0.025 is 1.43 degrees off horizontal.
+ *
+ * It replaces `0.018 * sin(uSeparation * 2.4)`, which was not a chord but a sine of the
+ * separation -- a path that turned back on itself at |separation| = 0.654 and, once the
+ * traverse was extended to 1.45 for the approach, would have had the moon rise, fall and
+ * rise again on its way in. A moon crosses a sun on a straight line; the only thing an
+ * author gets to choose is the angle.
+ *
+ * 0.025 is chosen to put the moon at the same height at first contact as the sine did there:
+ * 0.018 * sin(2.4) = 0.012159 against 0.4845 * 0.025 = 0.012113, four ten-thousandths of a
+ * billboard unit apart, which is a twentieth of a pixel at the framing this was measured on.
+ * The totality frames are therefore untouched -- both forms are exactly 0 at separation 0,
+ * and across the whole of totality (|separation| <= 0.0093) they differ by at most 0.0003
+ * billboard units, 0.025 px. Captured before and after, the totality frame is the same
+ * picture: the same corona, the same chromosphere rim, the same sky.
+ */
+const MOON_PATH_TILT = 0.025;
+
+/**
+ * Where the moon's centre is, in billboard units -- ONE definition, interpolated into both
+ * shaders, because both of them need it and they need to agree to the bit.
+ *
+ * They used to carry two copies of the same two lines. The moon layer draws its silhouette
+ * around this centre and the solar layer puts the beads on the moon's own limb around it, so
+ * a drift of one character between the copies is a ring of beads that is not on the moon,
+ * and nothing in this repository would have caught it.
+ */
+export const MOON_CENTER_CHUNK = /* glsl */ `
+    float moonOffset = uSeparation * (SUN_RADIUS + MOON_RADIUS);
+    vec2 moonCenter = vec2(moonOffset, moonOffset * ${glslFloat(MOON_PATH_TILT)});
+`;
 
 const SOLAR_FRAGMENT_SHADER = /* glsl */ `
   varying vec2 vUv;
@@ -443,13 +519,14 @@ const SOLAR_FRAGMENT_SHADER = /* glsl */ `
 
   void main() {
     vec2 p = (vUv - 0.5) * 2.0;
-    float moonOffset = uSeparation * (SUN_RADIUS + MOON_RADIUS);
-    vec2 moonCenter = vec2(moonOffset, 0.018 * sin(uSeparation * 2.4));
+${MOON_CENTER_CHUNK}
     float sunDistance = length(p);
     float moonDistance = length(p - moonCenter);
     float sunMask = 1.0 - smoothstep(SUN_RADIUS - 0.005, SUN_RADIUS + 0.005, sunDistance);
-    float moonMask = 1.0 - smoothstep(MOON_RADIUS - 0.003, MOON_RADIUS + 0.003, moonDistance);
-    float visibleSun = sunMask * (1.0 - moonMask);
+    // Uncut, and the moon's mask is not computed here at all any more. The moon layer's alpha
+    // attenuates whatever is in this buffer, so cutting here as well applied the moon's
+    // coverage to the photosphere twice. See the blend note above the disc radii.
+    float visibleSun = sunMask;
 
     float mu = sqrt(clamp(1.0 - pow(sunDistance / SUN_RADIUS, 2.0), 0.0, 1.0));
     float limbI = ${glslFloat(LIMB_DARKENING.a0)}
@@ -540,10 +617,73 @@ const SOLAR_FRAGMENT_SHADER = /* glsl */ `
   }
 `;
 
+/**
+ * How far out the moon has faded to nothing, and why the disc is drawn against the sky at all.
+ *
+ * PHYSICALLY THE MOON IS INVISIBLE HERE, and that is worth saying before the reasons. At new
+ * moon the earthward face carries only earthshine, and the airlight in the column in FRONT of
+ * the moon is the same forward-scattered sunlight that makes the sky beside the sun bright --
+ * it is atmosphere, and the moon is outside the atmosphere. A real partial eclipse shows the
+ * moon only as the absence of photosphere: the lune between two circular arcs, and nothing
+ * else. Drawing the silhouette against the sky is a deviation, deliberately taken, with the
+ * same standing as the corona being 1e5 too bright relative to the disc a few constants up.
+ *
+ * It is taken because the honest alternative does not exist at this exposure. The sky within
+ * 2.5 degrees of the sun presents at 254 of 255 at the staged hour, and the drawn photosphere
+ * is additive on top of it, so the sun and the sky beside it differ by ONE code -- measured,
+ * and recorded at {@link SUN_DISC_RADIUS}. There is therefore no bright disc on screen for a
+ * dark disc to cross. What the viewer saw instead, with the moon masked to the sun's own
+ * circle, was the intersection of two circles: a vesica standing on end, born in the middle
+ * of a white glare at coverage 0.14 and swelling. The owner's word for it was an egg.
+ *
+ * Making the sun legible instead was considered and is out of reach from this file: the sky
+ * is at the ACES clip point, so the only levers are the sky's radiance or the exposure, and
+ * both of them are the daylight look of the whole diorama, which is not what was asked for.
+ *
+ * The fade runs from first contact (|separation| = 1) out to {@link MOON_APPROACH_SEPARATION},
+ * where it is gone. So the moon condenses out of the glare as it arrives, is a solid disc for
+ * the whole of the eclipse proper, and dissolves back into the glare on the way out -- rather
+ * than switching on at a threshold, which is the one thing that would trade an egg for a pop.
+ */
+export const MOON_OPAQUE_SEPARATION = 1;
+
+/**
+ * HOW MUCH SKY THE DISC STILL LETS THROUGH AT FIRST CONTACT -- and why the fade is a power
+ * law and not a ramp.
+ *
+ * The first attempt faded the alpha linearly (a `smoothstep` across the approach) and it was
+ * a pop, measured on the built product at the moon's own centre pixel:
+ *
+ *     separation   -1.183  -1.134  -1.084  -1.033  -1.008  -0.982
+ *     centre luma     253     253     250      84       7       8
+ *
+ * Nothing for two thirds of the approach, then 253 to 7 in 1.3 seconds. The cause is the tone
+ * curve, not the ramp: under normal blending the disc presents `(1 - alpha) * sky`, and ACES
+ * maps a sky of 25 to code 254 and HALF that sky to code 252. Two codes for half the light.
+ * The presented picture only starts to move once `1 - alpha` is down around a hundredth, so a
+ * ramp that is linear in alpha spends 98 per cent of its travel invisible.
+ *
+ * So the fade is authored in the quantity that survives the curve. `1 - alpha` falls
+ * geometrically -- `pow(0.001, u)`, where u is 0 at the start of the approach and 1 at first
+ * contact -- which puts the presented disc at 254, 241, 179, 62, 17 across the four
+ * quarters of the approach. That is a ramp a viewer can see the whole of.
+ *
+ * 0.001 is set by the far end rather than the near one: the moon has to be BLACK by the time
+ * any of it lies over the photosphere, or the bite is grey. A thousandth of a sky of 25 is
+ * code 17 of 255 at first contact, and u keeps growing past 1 as the moon closes -- the
+ * expression is deliberately not clamped there -- so it is at 7.5 by separation 0.93, which
+ * is coverage 0.05 and the first moment the bite is a shape rather than a line, and on the
+ * MOON_MINIMUM_RADIANCE floor of 3.07 from separation 0.7 inward. The whole ramp, run
+ * through the same ACES fit and sRGB encode the final pass uses:
+ *
+ *   |separation|  1.45   1.35   1.30   1.25   1.20   1.15   1.10   1.05   1.00   0.93
+ *   presented    254.4  245.1  230.9  201.6  153.4   99.6   57.9   31.9   17.3    7.5
+ */
+export const MOON_ARRIVAL_SKY_FRACTION = 0.001;
+
 const MOON_FRAGMENT_SHADER = /* glsl */ `
   varying vec2 vUv;
   uniform float uSeparation;
-  uniform float uCoverage;
   uniform float uTotality;
   uniform float uTransmittance;
 
@@ -552,12 +692,29 @@ const MOON_FRAGMENT_SHADER = /* glsl */ `
 
   void main() {
     vec2 p = (vUv - 0.5) * 2.0;
-    float moonOffset = uSeparation * (SUN_RADIUS + MOON_RADIUS);
-    vec2 moonCenter = vec2(moonOffset, 0.018 * sin(uSeparation * 2.4));
+${MOON_CENTER_CHUNK}
     float d = length(p - moonCenter);
-    float moonMask = 1.0 - smoothstep(MOON_RADIUS - 0.003, MOON_RADIUS + 0.003, d);
-    float sunMask = 1.0 - smoothstep(SUN_RADIUS - 0.003, SUN_RADIUS + 0.003, length(p));
-    float mask = moonMask * max(sunMask, uTotality);
+    // The moon's limb, antialiased against the pixel grid rather than against a magic number.
+    // It was smoothstep(MOON_RADIUS - 0.003, MOON_RADIUS + 0.003, d): 0.003 billboard units
+    // is 0.26 px at the framing these measurements were taken on -- a half-pixel ramp, i.e. a
+    // hard edge with stair-steps on it -- and a different number of pixels on every other
+    // viewport and field of view, so no constant is right anywhere but here. fwidth(d) is how
+    // much d changes between neighbouring pixels, so a ramp of half of it either side is one
+    // pixel wide wherever it is drawn. This is the ONLY occluder in the billboard: the solar
+    // layer emits the photosphere uncut and this alpha takes it away, once.
+    float moonEdge = max(fwidth(d) * 0.5, 1e-5);
+    float moonMask = 1.0 - smoothstep(MOON_RADIUS - moonEdge, MOON_RADIUS + moonEdge, d);
+    // The disc is opaque everywhere from first contact inward. It used to be opaque only
+    // where it lay over the sun's own circle, which is why the moon had no outline of its
+    // own and the only shape on screen was the intersection of the two.
+    //
+    // closing is 0 where the traverse starts and 1 at first contact, and is deliberately
+    // NOT clamped above: past first contact it keeps growing, which drives the last thousandth
+    // of sky out of the disc without a second expression to join onto. See the constants.
+    float closing = max(0.0, (${glslFloat(MOON_APPROACH_SEPARATION)} - abs(uSeparation))
+      / ${glslFloat(MOON_APPROACH_SEPARATION - MOON_OPAQUE_SEPARATION)});
+    float arrival = 1.0 - pow(${glslFloat(MOON_ARRIVAL_SKY_FRACTION)}, closing);
+    float mask = moonMask * arrival;
     if (mask < 0.002) discard;
 
     float rim = smoothstep(MOON_RADIUS * 0.62, MOON_RADIUS, d);
@@ -565,12 +722,14 @@ const MOON_FRAGMENT_SHADER = /* glsl */ `
     // Against the photosphere the moon is BLACK; the old flat 0.5x grey painted earthshine
     // over the bite at every coverage, which is half of why there was no bite to see.
     // uTotality is 0 below coverage 0.985, and 1.3 is the 0.5 + 0.8 the old term reached.
-    float visibility = smoothstep(0.0, 0.055, uCoverage);
-    // ...and this is the floor under it. uTotality being exactly 0 through both partial
-    // phases wrote every interior pixel as literal 0.0 at alpha 1, which is a standing
-    // invariant of this project broken by design; with dithering on in the final pass those
-    // pixels round to rgb(0,0,0) about half the time. The max() is last so cloud cannot
-    // take the disc back under it. See MOON_MINIMUM_RADIANCE for where 0.012 comes from.
+    //
+    // The floor under it is the standing invariant: uTotality is exactly 0 through both
+    // partial phases and the disc is now opaque across its whole area, so without the max()
+    // every pixel of a moon that is on screen for the entire ninety seconds would be written
+    // as literal 0.0 -- and exactly-black pixels are held at 0.0000 per cent in every
+    // baseline frame here. With dithering on in the final pass they round to rgb(0,0,0)
+    // about half the time. The max() is last so cloud cannot take the disc back under it.
+    // See MOON_MINIMUM_RADIANCE for where 0.012 comes from.
     //
     // The alpha carries no cloud term. It used to be multiplied by mix(0.35, 1.0, uTransmittance), and
     // "clear" weather in this world is cloud cover 0.12, so the moon was 90 per cent opaque
@@ -582,7 +741,7 @@ const MOON_FRAGMENT_SHADER = /* glsl */ `
     vec3 interior = earthshine * uTotality * 1.3 * uTransmittance;
     gl_FragColor = vec4(
       max(interior, vec3(${glslFloat(MOON_MINIMUM_RADIANCE)})),
-      mask * visibility
+      mask
     );
   }
 `;
@@ -621,7 +780,8 @@ export class EclipseVisual {
     this.solarMaterial = new THREE.ShaderMaterial({
       uniforms: {
         uTime: { value: 0 },
-        uSeparation: { value: 1.25 },
+        // Parked off the sun, where the timeline leaves it between eclipses.
+        uSeparation: { value: MOON_APPROACH_SEPARATION },
         uCorona: { value: 0 },
         uBeads: { value: 0 },
         uTotality: { value: 0 },
@@ -652,8 +812,7 @@ export class EclipseVisual {
     });
     this.moonMaterial = new THREE.ShaderMaterial({
       uniforms: {
-        uSeparation: { value: 1.25 },
-        uCoverage: { value: 0 },
+        uSeparation: { value: MOON_APPROACH_SEPARATION },
         uTotality: { value: 0 },
         uTransmittance: { value: 1 },
       },
@@ -715,7 +874,9 @@ export class EclipseVisual {
     this.solarMaterial.uniforms.uProminences.value = phenomena.prominences;
     this.solarMaterial.uniforms.uProminenceDetail.value = phenomena.prominenceDetail;
     this.moonMaterial.uniforms.uSeparation.value = state.separation;
-    this.moonMaterial.uniforms.uCoverage.value = state.coverage;
+    // No uCoverage any more: it only ever fed `smoothstep(0.0, 0.055, uCoverage)`, an alpha
+    // ramp that made the moon invisible whenever it was not already over the sun -- which is
+    // exactly the approach and the departure this rework exists to show.
     this.moonMaterial.uniforms.uTotality.value = state.totality;
     const transmittance = THREE.MathUtils.clamp(1 - cloudCover * 0.82, 0.08, 1);
     this.solarMaterial.uniforms.uTransmittance.value = transmittance;
