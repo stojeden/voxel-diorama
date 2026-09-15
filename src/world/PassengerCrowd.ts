@@ -674,6 +674,12 @@ export class PassengerCrowd {
     applyPassengerEclipsePose(p, p.eclipsePose, this.eclipseReaction, gaze);
   }
 
+  /**
+   * Start a dwell that nothing will ever end: the falling edge comes from the real train, and
+   * there is no train here. The boarders therefore walk to the carriage, fade out and stay out,
+   * which looks exactly like the bug this crowd used to have. Use a real train visit to judge
+   * that; this entry point is for watching one walk, not for judging whether the platform refills.
+   */
   debugStartDwell(stationLabel: string): boolean {
     const crowd = this.crowds.find((candidate) => candidate.station.label === stationLabel);
     if (!crowd) return false;
@@ -693,6 +699,8 @@ export class PassengerCrowd {
     visible: boolean;
     /** What the figure is actually worth on screen, which `visible` alone cannot tell you. */
     opacity: number;
+    /** Switched off by the profile, as opposed to merely faded out. `visible` is false for both. */
+    culled: boolean;
   }> {
     return this.crowds.flatMap((crowd) =>
       crowd.passengers.map((passenger) => ({
@@ -703,6 +711,7 @@ export class PassengerCrowd {
         observingEclipse: this.eclipseReaction.attention > 0.5,
         visible: passenger.group.visible,
         opacity: passenger.currentOpacity,
+        culled: passenger.culled,
       }))
     );
   }

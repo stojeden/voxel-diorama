@@ -66,12 +66,15 @@ a wersjonowanie projektu docelowo stosuje [Semantic Versioning](https://semver.o
   przy 1/60 odpowiada na pytanie, którego produkt nie zadaje. Pierwsza wersja tych testów była
   napisana przy 1/60 i została przez to poprawiona.
   Zmierzone na zbudowanym produkcie, A/B, z jedyną różnicą w postaci samego raportera dołożonego do
-  starej wersji (pole `visible` w stanie debugowym, zero zmian w zachowaniu), profil średni
-  (`actorDensity` 0,72, czyli 4 rysowane z 6): **przed** — Stacja Zachodnia 5 → 3 → 2 → **0**
-  widocznych przez trzy pociągi i **0 przez pozostałe 35 s**, mimo kolejnego postoju; Przystanek
-  Wiadukt 5 → 2 i tam zostaje. **Po** — obie stacje trzymają **4 z 6** przez trzy wizyty pociągu,
-  z chwilowym spadkiem tylko na czas wymiany. Przed naprawą culling i przenikanie nadpisywały się
-  nawzajem, więc liczba widocznych figur była przypadkowa.
+  starej wersji (`visible` i `opacity` w stanie debugowym, zero zmian w zachowaniu), **z profilem
+  przypiętym na wysoki w obu próbach** — adaptacyjny menedżer wybiera profil z mierzonej
+  wydajności, więc dwa nieprzypięte biegi potrafią wylądować na różnych gęstościach i przestają
+  być porównywalne. Przy `actorDensity` 0,9 pełny peron to **5 z 6**, i tyle pokazują obie próby na
+  starcie. **Przed**: Stacja Zachodnia 5 → 3 po pierwszym pociągu → **0** po drugim (t = 58 s) i
+  zero przez pozostałe 50 s; Przystanek Wiadukt 5 → 4 → 3 → 1 → **0** (t = 106 s). Oba perony
+  pustoszeją i już się nie odbudowują. **Po**: obie stacje trzymają **5 z 6** przez cały bieg, z
+  chwilowym spadkiem tylko na czas wymiany pasażerów. Obecność liczona jako flaga rysowania wraz z
+  przezroczystością powyżej 0,5, żeby nie policzyć figury, której nikt nie dotknął.
   Naprawa rozdziela dwa znaczenia: `culled` jest osobnym polem ustawianym wyłącznie przez
   `setDensity`, pętla bramkuje się na nim, a `group.visible` zostaje czystą flagą rysowania
   liczoną z przezroczystości. Oszczędność draw calli z `328878a` jest zachowana — figura wyblakła
