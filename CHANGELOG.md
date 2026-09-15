@@ -39,6 +39,68 @@ a wersjonowanie projektu docelowo stosuje [Semantic Versioning](https://semver.o
 
 ### Fixed
 
+- **Peron pustoszał na zawsze po jednym pociągu, bo `group.visible` znaczyło dwie rzeczy naraz.**
+  Ta sama flaga niosła dwa niezależne fakty: **culling gęstością** (`cad8325`, profil jakości
+  wyłącza część figur) i, od `328878a` sprzed pięciu dni, **wynik przenikania** (`visible =
+  currentOpacity > 0.01`, oszczędność draw calli na figurach wyblakłych do zera). Pętla `update`
+  pomijała `updatePassenger` dla niewidocznych, a `updatePassenger` jest jedynym miejscem, które
+  zapisuje `material.opacity` **i** `group.visible`. Fałsz był więc stanem pochłaniającym: raz
+  zgaszona figura nie miała już żadnej drogi powrotu. Zbocze opadające postoju podnosi
+  `targetOpacity` do 0,92, a nowy postój ustawia `currentOpacity` na 0,92 — obie te wartości
+  odczytuje wyłącznie `updatePassenger`, który dla tej figury nigdy więcej nie biegł.
+  **Zaćmienie nie było tylko tłem — decyduje, która połowa tłumu ginie.** Przy normalnym tempie
+  pochłaniani są **wsiadający**: po dojściu do wagonu dostają zerową przezroczystość i gasną
+  poprawnie, ale już nie wracają. Postój na Stacji Zachodniej trwa 5 s, a najdłuższe przejście
+  kończy się około 3,9 s (3,4 s marszu, którego ostatnia ćwiartka jest już zanikaniem — 0,75 to
+  próg postępu, nie sekundy — plus pół sekundy ogona wygładzania), więc zdąży **każdy**: jeden
+  pociąg zabiera trzy z sześciu figur na stałe. Przy zaćmieniu `movementScale` spada do 0,04 i
+  ginie **druga połowa**: wysiadający startuje z przezroczystością 0, a jego cel w pierwszym kroku
+  to 0,0022–0,0028, co po wygładzeniu daje **3·10⁻⁵ przy progu 0,01**. Gaśnie, zanim ktokolwiek go
+  zobaczy — i to jest dokładnie zgłoszony podpis: ludzie wsiadają, peron pustoszeje, nikt nie
+  wysiada. Poza zaćmieniem wysiadający przeżywa pierwszy krok (0,014–0,031), więc tej połowy
+  objawu nie widać.
+  **Tempo ma znaczenie i łatwo je przeoczyć.** `main.ts` nie krokuje tłumu co klatkę, tylko z
+  akumulatora przy `optionalActorHz` (20, 20 i 24 w trzech profilach) i podaje **czas
+  zakumulowany**, więc najkrótszy krok, jaki ta klasa kiedykolwiek widzi, to 1/20 s — cztery razy
+  dłużej niż klatka przy 60 Hz. Próg 0,01 przecina się między 1/30 a 1/24, więc pomiar zrobiony
+  przy 1/60 odpowiada na pytanie, którego produkt nie zadaje. Pierwsza wersja tych testów była
+  napisana przy 1/60 i została przez to poprawiona.
+  Zmierzone na zbudowanym produkcie, A/B, z jedyną różnicą w postaci samego raportera dołożonego do
+  starej wersji (pole `visible` w stanie debugowym, zero zmian w zachowaniu), profil średni
+  (`actorDensity` 0,72, czyli 4 rysowane z 6): **przed** — Stacja Zachodnia 5 → 3 → 2 → **0**
+  widocznych przez trzy pociągi i **0 przez pozostałe 35 s**, mimo kolejnego postoju; Przystanek
+  Wiadukt 5 → 2 i tam zostaje. **Po** — obie stacje trzymają **4 z 6** przez trzy wizyty pociągu,
+  z chwilowym spadkiem tylko na czas wymiany. Przed naprawą culling i przenikanie nadpisywały się
+  nawzajem, więc liczba widocznych figur była przypadkowa.
+  Naprawa rozdziela dwa znaczenia: `culled` jest osobnym polem ustawianym wyłącznie przez
+  `setDensity`, pętla bramkuje się na nim, a `group.visible` zostaje czystą flagą rysowania
+  liczoną z przezroczystości. Oszczędność draw calli z `328878a` jest zachowana — figura wyblakła
+  do zera dalej się nie rysuje, tylko dalej *liczy*. Bramka budżetowa: **szczyt 1310 z 1400**
+  wobec 1290 wcześniej. Tych dwudziestu wywołań nie wolno czytać jako dwudziestu figur: przy
+  pięciu siatkach na figurę to około czterech, a stacji jest dwie po sześć osób, z czego bramka
+  (profil wysoki, `actorDensity` 0,9) rysuje najwyżej pięć na stację. Geometrie 423 bez zmian.
+  Klasa `PassengerCrowd` nie miała **ani jednego** testu na cykl postoju — stąd regresja przeszła.
+  Ma teraz cztery, pisane w tempie produktu (1/20 s) i liczące obecność jako flagę rysowania **wraz
+  z** przezroczystością pod nią, bo `THREE.Object3D.visible` startuje jako `true` i samo w sobie
+  nie odróżnia figury, która się pojawiła, od takiej, której nikt nigdy nie dotknął. Sprawdzone
+  sabotażem: stara bramka wywala te dwa testy, które opisują zgłoszony objaw (peron zostaje z
+  3 z 6; pod totalnością wysiadających nie widać ani jednego); zamrożona pętla wywala wszystkie
+  cztery; tłum zmniejszony do dwóch figur — trzy; wariant, w którym nikt nie wsiada — jeden.
+
+- **Autobus na nocnej przerwie zostawiał dwadzieścia figur w liście rysowania.**
+  `setAllPassengersAtStop` zeruje `currentOpacity` i `material.opacity`, ale nie dotykało
+  `group.visible`, a `updatePassenger` — jedyny inny zapisujący tę flagę — nie biegnie, bo pętla
+  tłumu ma nad sobą wcześniejszy `return` dla trybu `off`. Figura zostawała więc zaznaczona do
+  rysowania, całkowicie przezroczysta, aż do wznowienia kursów o 04:50: pięć siatek na figurę w
+  przebiegu koloru i normalnych, dokładnie ten koszt, przed którym komentarz w tym samym pliku
+  ostrzega. Wchodzi się w to zimnym startem w oknie nocnym albo skokiem czasu (synchronizacja z
+  zegarem systemowym po 2:00). Flaga rysowania podróżuje teraz razem z przezroczystością.
+  Przypisane przez cofnięcie samej tej jednej linii i powtórzenie pomiaru: **szczyt 1310 → 1110**
+  wywołań w oknie bramki (mediana 1290 → 1090), rasteryzator programowy **1234 → 1034** wywołań
+  i 619 457 → 617 057 trójkątów. Dwieście wywołań to dokładnie dwadzieścia figur po pięć siatek
+  w przebiegu koloru i w przebiegu normalnych. Cały ten commit schodzi więc z 1290 na 1090
+  mediany przy budżecie 1400 — budżet zostaje tam, gdzie był.
+
 - **Jasna kula przy wjeździe i wyjeździe to nie było Słońce — to był Księżyc, i nie istnieje na
   żadnym zdjęciu.** Przy zakryciu 0,09–0,31 na ekranie stało jedno koło o promieniu 21 px,
   przesunięte 27→19 px w dół i w prawo od środka Słońca, czyli dokładnie tam, gdzie stoi Księżyc.

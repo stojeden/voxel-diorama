@@ -7,6 +7,7 @@ import {
   eclipseBodyTurn,
   eclipsePassengerPoseFor,
   eclipseTurnOrigin,
+  PassengerCrowd,
   SHARED_PASSENGER_GEOMETRY,
   sunGazeFrom,
   type EclipsePassengerPose,
@@ -18,6 +19,7 @@ import { eclipseWorldReactionAt } from '../experience/EclipseWorldReaction';
 import { EclipseTimeline } from '../experience/EclipseTimeline';
 import { eclipseViewClock } from '../experience/EclipseView';
 import { JUNE_DECLINATION_DEG, sunDirectionAt } from '../environment/sky';
+import { STATION_STOPS } from './WorldLayout';
 import type { Radians } from '../units';
 import { radians } from '../units.testing';
 
@@ -638,4 +640,137 @@ describe('the turn is continuous across the whole schedule', () => {
       expect(worst.head, 'glowa nie kompensuje skoku tulowia').toBeLessThan(MAX_FRAME_YAW);
     }
   );
+});
+
+/**
+ * The dwell cycle, which had no test at all until the platforms emptied in front of the owner.
+ *
+ * Two things make a naive test here worthless, and both were caught by review after I wrote one:
+ *
+ * `THREE.Object3D.visible` defaults to TRUE, so counting visible figures cannot tell a crowd
+ * that faded in from a crowd that was never updated at all -- three earlier versions of these
+ * tests passed with the update loop replaced by a no-op. Presence is therefore counted as the
+ * draw flag AND the opacity behind it.
+ *
+ * The product never steps this class at a frame rate. `main.ts` drives it off an accumulator at
+ * `optionalActorHz` -- 20, 20 and 24 in the three profiles -- and hands it the accumulated time,
+ * so the smallest step it can ever see is 1/20 s, four times the length of a 60 Hz frame. The
+ * fade crosses its 0.01 gate between 1/30 and 1/24, so a test written at 1/60 asks a question
+ * the product never asks: at 1/60 a disembarker dies on its first frame, and at 1/20 it does not.
+ */
+describe('a station that a train has visited still has people on it', () => {
+  /** The slowest cadence the product can deliver, and the one that flatters the bug least. */
+  const STEP = 1 / 20;
+  const PER_STATION = 6;
+
+  const runFrames = (crowd: PassengerCrowd, seconds: number, dwelling: Set<string>): void => {
+    for (let i = 0; i < Math.round(seconds / STEP); i++) crowd.update(STEP, dwelling);
+  };
+
+  const at = (crowd: PassengerCrowd, label: string) =>
+    crowd.getPassengerDebugState().filter((p) => p.station === label);
+
+  /** Drawn, and worth drawing: the flag alone is true on a figure nobody has ever touched. */
+  const present = (crowd: PassengerCrowd, label: string): number =>
+    at(crowd, label).filter((p) => p.visible && p.opacity > 0.5).length;
+
+  test('the platform refills after the train has come and gone', () => {
+    const scene = new THREE.Scene();
+    const crowd = new PassengerCrowd(scene);
+    const label = STATION_STOPS[0].label;
+
+    runFrames(crowd, 3, new Set());
+    expect(present(crowd, label), 'the platform never filled in the first place').toBe(PER_STATION);
+
+    // The station's own dwell, not a made-up one. The boarding fade is the last quarter of the
+    // walk, not an extra stretch after it, so the slowest boarder is gone about 3.9 s in: a
+    // 3.4 s walk whose last 0.85 s is the ramp, plus the half-second tail of the 6/s lerp.
+    let boarded = false;
+    let boardingSeen = false;
+    const dwell = new Set([label]);
+    for (let i = 0; i < Math.round(STATION_STOPS[0].dwellSeconds / STEP); i++) {
+      crowd.update(STEP, dwell);
+      const state = at(crowd, label);
+      if (state.some((p) => p.activity === 'boarding')) boardingSeen = true;
+      if (state.some((p) => p.activity === 'boarding' && p.opacity < 0.05)) boarded = true;
+    }
+    expect(boardingSeen, 'nobody ever walked towards the train').toBe(true);
+    expect(boarded, 'the boarders reached the carriage and stood there instead of getting on').toBe(
+      true
+    );
+    expect(
+      present(crowd, label),
+      'the train took nobody: the platform is as full as it was'
+    ).toBeLessThan(PER_STATION);
+
+    runFrames(crowd, 6, new Set());
+    expect(
+      present(crowd, label),
+      'the platform is empty for the rest of the session after one train'
+    ).toBe(PER_STATION);
+  });
+
+  test('somebody gets off the train', () => {
+    const scene = new THREE.Scene();
+    const crowd = new PassengerCrowd(scene);
+    const label = STATION_STOPS[0].label;
+
+    runFrames(crowd, 3, new Set());
+    runFrames(crowd, 2, new Set([label]));
+
+    const arriving = at(crowd, label).filter(
+      (p) => p.activity === 'disembarking' && p.visible && p.opacity > 0.5
+    );
+    expect(arriving.length, 'everyone who got off the train is invisible').toBeGreaterThan(0);
+  });
+
+  test('the quality profile still switches figures off, and back on again', () => {
+    const scene = new THREE.Scene();
+    const crowd = new PassengerCrowd(scene);
+    const label = STATION_STOPS[0].label;
+
+    runFrames(crowd, 3, new Set());
+    expect(present(crowd, label)).toBe(PER_STATION);
+
+    // `setDensity` keeps a floor of two figures per station at any density.
+    crowd.setDensity(0);
+    runFrames(crowd, 1, new Set());
+    expect(present(crowd, label), 'the low profile draws the whole crowd').toBe(2);
+
+    crowd.setDensity(1);
+    runFrames(crowd, 1, new Set());
+    expect(present(crowd, label), 'the crowd never came back').toBe(PER_STATION);
+  });
+
+  test('a train that stops during totality leaves a station behind it, not a ghost town', () => {
+    const scene = new THREE.Scene();
+    const crowd = new PassengerCrowd(scene);
+    const label = STATION_STOPS[0].label;
+
+    runFrames(crowd, 3, new Set());
+    expect(present(crowd, label)).toBe(PER_STATION);
+
+    // Totality slows every figure to a twenty-fifth of its pace, which is what made the owner's
+    // report read the way it did: the dwell runs to its end while the walk barely advances, so
+    // the ones stepping off the train are still nearly transparent when the train leaves.
+    crowd.setEclipseReaction(eclipseWorldReactionAt(1, 1));
+    const dwell = new Set([label]);
+    let arrivingDrawn = false;
+    for (let i = 0; i < Math.round(STATION_STOPS[0].dwellSeconds / STEP); i++) {
+      crowd.update(STEP, dwell);
+      if (at(crowd, label).some((p) => p.activity === 'disembarking' && p.visible)) {
+        arrivingDrawn = true;
+      }
+    }
+    expect(
+      arrivingDrawn,
+      'under totality the figures stepping off the train were switched off instead of faded in'
+    ).toBe(true);
+
+    runFrames(crowd, 4, new Set());
+    crowd.setEclipseReaction(eclipseWorldReactionAt(0, 0));
+    runFrames(crowd, 6, new Set());
+
+    expect(present(crowd, label), 'the eclipse emptied the platform for good').toBe(PER_STATION);
+  });
 });

@@ -57,6 +57,11 @@ interface Passenger {
   eclipsePose: EclipsePassengerPose;
   /** Heading this figure began its sun turn from; null while the walk loop still owns the feet. */
   turnOrigin: number | null;
+  /**
+   * Switched off by the quality profile, not by the fade. The two used to share
+   * `group.visible` and the sharing was a one-way door: see `setDensity`.
+   */
+  culled: boolean;
 }
 
 interface StationCrowd {
@@ -492,6 +497,7 @@ export class PassengerCrowd {
           targetOpacity: 0.92,
           eclipsePose,
           turnOrigin: null,
+          culled: false,
         });
       }
 
@@ -499,12 +505,21 @@ export class PassengerCrowd {
     }
   }
 
+  /**
+   * Which figures the profile pays for. Culling is its own flag because `group.visible` is
+   * no longer free to mean it: the fade writes that flag every frame, so a figure faded to
+   * nothing would read as culled and a culled figure would be resurrected by the first fade.
+   */
   setDensity(density: number): void {
     this.density = THREE.MathUtils.clamp(density, 0, 1);
     for (const crowd of this.crowds) {
       const activeCount = Math.max(2, Math.round(crowd.passengers.length * this.density));
       for (let i = 0; i < crowd.passengers.length; i++) {
-        crowd.passengers[i].group.visible = i < activeCount;
+        const passenger = crowd.passengers[i];
+        passenger.culled = i >= activeCount;
+        // A figure the fade is about to draw again has to be told it is gone; one the fade
+        // owns gets its flag back on the next frame, from its own opacity.
+        if (passenger.culled) passenger.group.visible = false;
       }
     }
   }
@@ -547,7 +562,7 @@ export class PassengerCrowd {
       crowd.lastDwellSignal = isDwelling;
 
       for (const p of crowd.passengers) {
-        if (p.group.visible) this.updatePassenger(p, crowd.colliders, peopleDelta);
+        if (!p.culled) this.updatePassenger(p, crowd.colliders, peopleDelta);
       }
     }
   }
@@ -674,6 +689,10 @@ export class PassengerCrowd {
     colliding: boolean;
     position: [number, number, number];
     observingEclipse: boolean;
+    /** The draw flag: what the renderer will skip. */
+    visible: boolean;
+    /** What the figure is actually worth on screen, which `visible` alone cannot tell you. */
+    opacity: number;
   }> {
     return this.crowds.flatMap((crowd) =>
       crowd.passengers.map((passenger) => ({
@@ -682,6 +701,8 @@ export class PassengerCrowd {
         colliding: !isPointClear(passenger.group.position, crowd.colliders),
         position: passenger.group.position.toArray() as [number, number, number],
         observingEclipse: this.eclipseReaction.attention > 0.5,
+        visible: passenger.group.visible,
+        opacity: passenger.currentOpacity,
       }))
     );
   }

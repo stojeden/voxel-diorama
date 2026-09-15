@@ -511,6 +511,11 @@ export function createBus(scene: THREE.Scene, random = fallbackRandom('bus')): B
         p.targetOpacity = p.currentOpacity;
         p.build.group.position.copy(atStop ? p.waitPos : p.doorPos);
         for (const material of p.build.materials) material.opacity = p.currentOpacity;
+        // The draw flag travels with the opacity here too. Off service returns before the
+        // crowd loop, so `updatePassenger` -- the only other writer -- will not run again
+        // until 04:50, and twenty figures at five meshes each would spend the night in the
+        // draw list contributing nothing.
+        p.build.group.visible = p.currentOpacity > 0.01;
       }
     }
   }
