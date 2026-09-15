@@ -39,6 +39,45 @@ a wersjonowanie projektu docelowo stosuje [Semantic Versioning](https://semver.o
 
 ### Fixed
 
+- **Jasna kula przy wjeździe i wyjeździe to nie było Słońce — to był Księżyc, i nie istnieje na
+  żadnym zdjęciu.** Przy zakryciu 0,09–0,31 na ekranie stało jedno koło o promieniu 21 px,
+  przesunięte 27→19 px w dół i w prawo od środka Słońca, czyli dokładnie tam, gdzie stoi Księżyc.
+  Część nachodząca na Słońce była czarna (luma 8), reszta kremowa (~240), niebo 254. Samo Słońce,
+  o promieniu 20,6 px, leżało w środku i było **niewidoczne** — biel na bieli. Oko widziało więc
+  jedną kulę rozciętą na dwa tony wzdłuż linii, której nie ma czego dotyczyć, przesuniętą w bok od
+  poświaty: nie „Słońce jest zjadane", tylko **błąd cieniowania na kuli**.
+  Badanie zrobione pod tę zmianę dało twardą granicę: na zdjęciu z 2024-04-08 przy zakryciu 91,7 %,
+  gdzie niebo wokół Słońca jest jasne (~155/255), test parzystych powłok promieniowych po **51 857
+  parach pikseli** pokazał, że obszar za Księżycem różni się od lustrzanego nieba o **−0,19 poziomu
+  z 255** przy rozrzucie 4,26 — czyli 22 razy poniżej szumu. Księżyc poza tarczą Słońca nie jest na
+  zdjęciach słabo widoczny. Jest **nieobecny**, przy każdym zakryciu i każdej ekspozycji.
+  Rysowana jest teraz sama **soczewka** — przecięcie obu tarcz, jedyne, co zawiera fotografia — plus
+  **obrys samego Słońca**. Obrys jest świadomym wynalazkiem i jest nim dlatego, że arytmetyka nie
+  zostawia wyboru: sierp jest warstwą dodawaną na niebie stojącym w punkcie obcięcia ACES, więc jego
+  kontrast to 255 minus kod nieba, czyli **+0,8 / +1,4 / +4,3 / +13,5 / +47,8 kodu** przy zakryciu
+  0,05 / 0,20 / 0,50 / 0,75 / 0,90 — a w pełni kryjący ciemny znak daje w tych samych punktach
+  **251 / 250 / 248 / 242 / 204**. Poniżej trzech czwartych zakrycia jasna strona zaćmienia nie
+  istnieje w tej ekspozycji. Czytelne może być wyłącznie coś ciemnego, a sama soczewka bez okręgu
+  była już raz odrzucona jako „jajo" — i słusznie, bo jest to kształt osierocony w białym polu.
+  Obrys **wyrasta jako łuk z wygryzienia** i chowa się w nie z powrotem między zakryciem 0,62 a 0,80,
+  nigdy nie zmieniając ani krycia, ani szerokości: krycie pośrednie nad ciepłym niebem to jest ten
+  sam brąz, a szerokość poniżej piksela to pełzająca kreskowana linia. Wycofuje się, zanim zacznie
+  zjadać sierp — sierp ma 17,1 px grubości przy 0,50, 10,1 przy 0,70 i 5,1 przy 0,85, a linia leży
+  **na** limbie.
+  **Światło nietknięte**: totalność nadal najciemniejsza klatka, miasto 0,234 i niebo 0,085 tej samej
+  godziny bez zaćmienia, pikseli dokładnie czarnych 0,0000 % w każdej fazie, klatki totalności bez
+  zmian (najjaśniejszy piksel 246,1 jak w każdym wcześniejszym przebiegu).
+- **Miękkie pasmo nie jest słabą linią — jest brakiem linii, a TAA zjada cienkie znaki.** Dwie
+  pułapki, obie znalezione pomiarem, obie kosztowały po jednej kompilacji. Pierwsza: obrys napisany
+  jako `1.0 - smoothstep(0.0, halfWidth, |d − R|)` to pasmo, którego krycie sięga 1 tylko na osi —
+  a **ośmiopikselowe** pasmo narysowało się jako jedna blada pomarańczowa kreska, bo niebo jest za
+  punktem obcięcia: połowa z 33 to 16,5, wciąż powyżej 25,7, wciąż kod 253. Czyta się dopiero pełne
+  krycie, przy kodzie 3. Druga: nawet płaska linia o szerokości 2,5 px wychodziła brązowa, bo
+  `TemporalResolvePass` drga projekcją o 0,75 px i akumuluje, więc cienki rdzeń nigdy nie osiąga
+  krycia 1. Zmierzone na jednym promieniu przez limb przy zakryciu 0,208: linia 2,5 px z TAA — luma
+  **99…212**; ta sama linia przy `taa=0` — luma **8**; linia 4,0 px z TAA — luma **8** na 2,25 px.
+  Stąd cztery piksele, a nie jeden.
+
 - **Księżyc szedł przez Słońce w złą stronę — i prawie poziomo, gdy niebo każe pod 36°.** Kierunek
   ruchu Księżyca względem Słońca to **wschód niebieski** w miejscu, gdzie Słońce stoi: Księżyc
   okrąża Ziemię i wyprzedza Słońce o jakieś pół stopnia na godzinę. Wschód niebieski to kierunek

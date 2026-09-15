@@ -4,10 +4,13 @@ import {
   CORONA_K_F_CROSSOVER_RADII,
   EclipseVisual,
   MAX_SOLAR_RADIANCE,
+  LIMB_STROKE_CLOSED_ARC,
+  LIMB_STROKE_OPEN_COVERAGE,
+  LIMB_STROKE_PIXELS,
+  LIMB_STROKE_RETRACT_FROM,
+  LIMB_STROKE_RETRACT_TO,
   MOON_BILLBOARD_LIMIT,
   MOON_CENTER_CHUNK,
-  MOON_REVEAL_COVERAGE,
-  MOON_REVEAL_SKY_FRACTION,
   SOLAR_RADIANCE,
   coronaRadialProfile,
   glslFloat,
@@ -693,18 +696,18 @@ describe('the moon is drawn as a disc, and it travels', () => {
     expect(farEdge).toBeCloseTo(0.729, 3);
   });
 
-  test('the sun makes the moon opaque, it does not clip it', () => {
+  test('the moon is drawn ONLY where it lies on the sun', () => {
     const shader = moonShaderOf();
-    // The defect this replaces was `moonMask * max(sunMask, uTotality)`: uTotality is 0 below
-    // coverage 0.985, so through both partial phases the moon was CLIPPED to the sun's circle
-    // and the only shape on screen was the intersection of the two. `max` with a reveal that
-    // rises with coverage keeps the one true part of that -- full opacity over the photosphere
-    // -- and lets the rest of the disc appear as the sun is covered.
-    expect(shader).toContain('float mask = moonMask * max(sunMask, reveal);');
-    expect(shader).not.toContain('uTotality)');
-    // ...and the reveal is driven by coverage, not by where the moon happens to be.
-    expect(shader).toContain('uCoverage / ');
-    expect(shader).not.toContain('abs(uSeparation)');
+    // Research done for this change put a hard bound on the alternative: in a bright-sky frame
+    // at 91.7 per cent obscuration, a paired radial-shell test over 51,857 pixel pairs found
+    // the region behind the moon differs from mirrored sky by -0.19 levels of 255 against a
+    // scatter of 4.26. The moon outside the sun is not faint in photographs; it is absent.
+    expect(shader).toContain('float lune = moonMask * max(sunMask, uTotality);');
+    // Two silhouettes have been tried outside the sun and both are gone: a fully opaque disc
+    // (a ball crossing an empty sky) and a coverage-driven partial one (which presented as a
+    // cream-to-brown ball centred 24 px off the sun, since the disc is the MOON).
+    expect(shader).not.toContain('reveal');
+    expect(shader).not.toContain('MOON_REVEAL');
   });
 
   test('both layers get the moon POSITION from one definition, and only one draws its edge', () => {
@@ -717,12 +720,18 @@ describe('the moon is drawn as a disc, and it travels', () => {
     }
     // The edge is a pixel wide wherever it is drawn, rather than 0.003 billboard units --
     // which was 0.26 px at the framing this was measured on and a different number of pixels
-    // on every other viewport. It exists once, in the layer that occludes.
+    // on every other viewport.
     expect(moonShaderOf()).toContain(
       'float moonEdge = max(fwidth(d) * 0.5, 1e-5);\n' +
         '    float moonMask = 1.0 - smoothstep(MOON_RADIUS - moonEdge, MOON_RADIUS + moonEdge, d);'
     );
-    expect(solarShaderOf()).not.toContain('fwidth');
+    // BOTH arcs of the crescent, by the same rule. The crescent is bounded by the sun's limb
+    // and the moon's, and past coverage 0.95 it is under two pixels thick; two different ramps
+    // there is how a crescent becomes a dashed line.
+    for (const shader of [solarShaderOf(), moonShaderOf()]) {
+      expect(shader).toContain('float sunEdge = max(fwidth(sunDistance) * 0.5, 1e-5);');
+    }
+    expect(solarShaderOf()).not.toContain('SUN_RADIUS - 0.005');
   });
 
   test('the moon crosses on a straight chord, along a direction the SKY chooses', () => {
@@ -803,100 +812,74 @@ describe('the moon is drawn as a disc, and it travels', () => {
   });
 });
 
-describe('the sun reveals the moon, and it does so where the tone curve can show it', () => {
-  /** The shader's own reveal, restated. Pinned against the shipped GLSL by the test below. */
-  const revealAt = (coverage: number): number =>
-    1 - MOON_REVEAL_SKY_FRACTION ** (coverage / MOON_REVEAL_COVERAGE);
+describe('the sun is given an outline, because nothing else can be seen', () => {
+  /** What a mark of opacity `alpha` presents as, over the sky beside the sun at this hour. */
+  const markCode = (alpha: number, irradiance = 1): number =>
+    presentedCode(alpha * SOLAR_RADIANCE.moonFloor + (1 - alpha) * skyBesideDisc(irradiance));
 
-  /** What the silhouette presents as against the sky beside it, under normal blending. */
-  const discCode = (coverage: number, irradiance: number): number => {
-    const reveal = revealAt(coverage);
-    return presentedCode(
-      (1 - reveal) * skyBesideDisc(irradiance) + reveal * SOLAR_RADIANCE.moonFloor
-    );
-  };
+  test('ONLY a fully opaque mark reads: this is why the outline is a line and not a ramp', () => {
+    // THE DEFECT THIS PINS, and it cost two builds to find. The outline was first written as
+    // `1.0 - smoothstep(0.0, halfWidth, |d - R|)` -- a soft band whose alpha reaches 1 only on
+    // its centreline. An EIGHT PIXEL band drew as a single pale orange hairline, because the
+    // sky is past the ACES clip: halving a dst of 33 leaves 16.5, which is still over the clip
+    // point of 25.7 and still code 253. Measured on the built product, a line that the maths
+    // said was 98.5 per cent opaque presented at luma 99; the same line with taa=0, where it
+    // is genuinely opaque, presented at luma 8.
+    expect(markCode(0.5)).toBeGreaterThan(240);
+    expect(markCode(0.9)).toBeGreaterThan(150);
+    expect(markCode(0.985)).toBeGreaterThan(80);
+    expect(markCode(1)).toBeLessThan(5);
+    // ...so the line must have a core at full opacity, wide enough to survive the temporal
+    // pass's jitter, which is 0.75 px peak to peak (JITTER_AMPLITUDE) and erodes a thin mark.
+    expect(LIMB_STROKE_PIXELS).toBeGreaterThanOrEqual(3.5);
+  });
 
-  test('the SHIPPED GLSL is the expression these tests reason about', () => {
-    // Everything below runs against `revealAt`, a TypeScript restatement of the shader. That
-    // is the right instrument -- it is the only way to get at presented levels -- but on its
-    // own it pins nothing about the product: the shader could be edited to anything and the
-    // tests would still pass. So the shader text is built from the SAME two constants and
-    // checked here, exactly as the radiance ladder above is.
+  test('the outline is a flat-topped line, antialiased by a pixel either side', () => {
     const shader = moonShaderOf();
-    expect(shader).toContain(`float reveal = 1.0 - pow(`);
-    expect(shader).toContain(`      ${glslFloat(MOON_REVEAL_SKY_FRACTION)},`);
-    expect(shader).toContain(`      uCoverage / ${glslFloat(MOON_REVEAL_COVERAGE)});`);
-    // Not clamped: past the reveal the exponent keeps growing, which is what takes the last
-    // thousandth of sky out of the disc without a second expression joined onto the first.
-    expect(shader).not.toMatch(/clamp\([^)]*uCoverage/);
-    expect(shader).not.toMatch(/min\(1\.0, *uCoverage/);
-  });
-
-  test('there is no moon at all until the sun is being covered', () => {
-    // THE COMPLAINT THIS PINS. The first version of the silhouette faded on the moon's
-    // distance from the sun, so a complete black ball crossed an empty sky for nine seconds
-    // before anything happened to the sun. At coverage 0 the disc must be exactly the sky.
-    expect(revealAt(0)).toBe(0);
-    expect(discCode(0, 1)).toBeCloseTo(presentedCode(skyBesideDisc(1)), 12);
-  });
-
-  test('reveals itself gradually, and is opaque before the bite could look grey', () => {
-    const timeline = new EclipseTimeline();
-    // Presented levels against the sky beside the disc at the same moment, so the sky's own
-    // darkening is in the comparison rather than pretended away.
-    const rows = [0.02, 0.05, 0.1, 0.2, 0.3, MOON_REVEAL_COVERAGE, 0.5, 0.75, 0.9].map(
-      (coverage) => {
-        const state = stateAtCoverage(timeline, coverage);
-        return {
-          coverage,
-          disc: discCode(state.coverage, state.irradiance),
-          sky: presentedCode(skyBesideDisc(state.irradiance)),
-        };
-      }
+    expect(shader).toContain('float px = max(fwidth(sunDistance), 1e-6);');
+    expect(shader).toContain(`float halfWidth = px * ${glslFloat(LIMB_STROKE_PIXELS * 0.5)};`);
+    expect(shader).toContain(
+      'float onLimb = 1.0 - smoothstep(halfWidth - px * 0.5, halfWidth + px * 0.5,'
     );
-    // Monotone, and separated from the sky the whole way down.
-    for (let i = 1; i < rows.length; i += 1) {
-      expect(rows[i].disc).toBeLessThan(rows[i - 1].disc);
-    }
-    // Legible as a disc by a tenth of coverage -- 5.7 s into the ninety -- which is what stops
-    // the early partial phase reading as a lens with nothing around it.
-    const at10 = rows.find((r) => r.coverage === 0.1)!;
-    expect(at10.sky - at10.disc).toBeGreaterThan(15);
-    // Black by the time the reveal is done, or the bite would be grey against the photosphere.
-    const done = rows.find((r) => r.coverage === MOON_REVEAL_COVERAGE)!;
-    expect(done.disc).toBeLessThan(20);
-    // ...and on the MOON_MINIMUM_RADIANCE floor well before totality.
-    expect(rows[rows.length - 1].disc).toBeCloseTo(
-      presentedCode(SOLAR_RADIANCE.moonFloor),
-      0
-    );
+    // The rejected form, explicitly: a ramp from the centre of the line outward.
+    expect(shader).not.toContain('smoothstep(0.0, halfWidth');
   });
 
-  test('ramps in PRESENTED levels, which is the thing a linear opacity ramp cannot do', () => {
-    // THE DEFECT THIS PINS. The first fade here was linear in alpha, and it was a pop:
-    // measured at the moon's own centre pixel on the built product,
-    //
-    //     separation   -1.183  -1.134  -1.084  -1.033  -1.008  -0.982
-    //     centre luma     253     253     250      84       7       8
-    //
-    // Nothing for two thirds of the travel and then 253 to 7 in 1.3 seconds. ACES maps a sky
-    // of 25 to code 254 and HALF that sky to code 252 -- two codes for half the light -- so a
-    // ramp that is linear in opacity spends almost all of its travel invisible.
-    const timeline = new EclipseTimeline();
-    let previous = discCode(0, 1);
-    let largestStep = 0;
-    for (let step = 1; step <= 400; step += 1) {
-      const state = timeline.seek(step / 1000);
-      const code = discCode(state.coverage, state.irradiance);
-      expect(code).toBeLessThanOrEqual(previous + 1e-9);
-      largestStep = Math.max(largestStep, previous - code);
-      previous = code;
-    }
-    // A thousandth of the timeline is a tenth of a second at the shipped 90 s. Run through
-    // this same instrument a linear-in-opacity reveal steps about 25 levels in ONE of those;
-    // this one steps under eight.
-    expect(largestStep).toBeLessThan(8);
-    // And it really does travel the whole way down inside those first forty seconds.
-    expect(previous).toBeLessThan(12);
+  test('it grows as an ARC out of the bite, so nothing fades up over a warm sky', () => {
+    const shader = moonShaderOf();
+    expect(shader).toContain('float away = acos(');
+    expect(shader).toContain(`float reach = ${glslFloat(LIMB_STROKE_CLOSED_ARC)}`);
+    // Past pi, or the two ends of the arc never meet and the ring keeps a permanent gap on
+    // the side opposite the bite -- which is what the first build of this actually did.
+    expect(LIMB_STROKE_CLOSED_ARC).toBeGreaterThan(Math.PI);
+  });
+
+  test('nothing is drawn before first contact, and nothing at totality', () => {
+    // `reach` is the arc's half-width and it is multiplied by a smoothstep that is exactly 0
+    // at coverage 0, so before the discs touch the outline does not exist. Measured on the
+    // built product: the darkest pixel in a 140 px crop is 252.3 at coverage 0, and 8.0 by
+    // coverage 0.016.
+    const reachAt = (coverage: number): number =>
+      LIMB_STROKE_CLOSED_ARC *
+      smootherstepLike(coverage / LIMB_STROKE_OPEN_COVERAGE) *
+      (1 - smootherstepLike(
+        (coverage - LIMB_STROKE_RETRACT_FROM) /
+          (LIMB_STROKE_RETRACT_TO - LIMB_STROKE_RETRACT_FROM)
+      ));
+    expect(reachAt(0)).toBe(0);
+    expect(reachAt(0.02)).toBeGreaterThan(0);
+    expect(reachAt(LIMB_STROKE_OPEN_COVERAGE)).toBeCloseTo(LIMB_STROKE_CLOSED_ARC, 6);
+    // Retired before the crescent needs its outer pixels: the outline lies ON the limb, and
+    // the crescent measures 10.1 px thick at coverage 0.70 and 5.1 at 0.85.
+    expect(reachAt(LIMB_STROKE_RETRACT_TO)).toBe(0);
+    expect(reachAt(0.9)).toBe(0);
+    // ...and gated off a second time inside the approved window.
+    expect(moonShaderOf()).toContain('* (1.0 - uTotality);');
   });
 });
+
+/** GLSL smoothstep, clamped, for reasoning about the shader in TypeScript. */
+function smootherstepLike(t: number): number {
+  const x = Math.min(1, Math.max(0, t));
+  return x * x * (3 - 2 * x);
+}
