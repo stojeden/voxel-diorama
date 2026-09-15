@@ -4,11 +4,6 @@ import {
   CORONA_K_F_CROSSOVER_RADII,
   EclipseVisual,
   MAX_SOLAR_RADIANCE,
-  LIMB_STROKE_CLOSED_ARC,
-  LIMB_STROKE_OPEN_COVERAGE,
-  LIMB_STROKE_PIXELS,
-  LIMB_STROKE_RETRACT_FROM,
-  LIMB_STROKE_RETRACT_TO,
   MOON_BILLBOARD_LIMIT,
   MOON_CENTER_CHUNK,
   SOLAR_RADIANCE,
@@ -604,9 +599,9 @@ describe('uniforms across a swept progress', () => {
       expect(transmittance).toBeGreaterThanOrEqual(0.08);
       expect(transmittance).toBeLessThanOrEqual(1);
 
-      // The one that matters for the silhouette: earthshine is gated on uTotality, and it
-      // may never be non-zero while a crescent is still exposed.
-      expect(moon.uniforms.uCoverage.value).toBeCloseTo(state.coverage, 12);
+      // The one that matters for the silhouette: earthshine is gated on uTotality, and it may
+      // never be non-zero while a crescent is still exposed. `state.coverage` is read off the
+      // timeline because the moon layer carries no coverage uniform -- the lune is geometry.
       if (state.coverage < 0.985) expect(moon.uniforms.uTotality.value).toBe(0);
     }
 
@@ -812,92 +807,59 @@ describe('the moon is drawn as a disc, and it travels', () => {
   });
 });
 
-describe('the sun is given an outline, because nothing else can be seen', () => {
+describe('the partial phases draw the lune and nothing else', () => {
   /** What a mark of opacity `alpha` presents as, over the sky beside the sun at this hour. */
   const markCode = (alpha: number, irradiance = 1): number =>
     presentedCode(alpha * SOLAR_RADIANCE.moonFloor + (1 - alpha) * skyBesideDisc(irradiance));
 
-  test('ONLY a fully opaque mark reads: this is why the outline is a line and not a ramp', () => {
-    // THE DEFECT THIS PINS, and it cost two builds to find. The outline was first written as
-    // `1.0 - smoothstep(0.0, halfWidth, |d - R|)` -- a soft band whose alpha reaches 1 only on
-    // its centreline. An EIGHT PIXEL band drew as a single pale orange hairline, because the
-    // sky is at the ACES clip: halving a dst of 33 leaves 16.5 -- half the clip radiance -- and
-    // it still presents at code 253, two codes for a whole stop. Measured on the built product,
-    // a line that the maths
-    // said was 98.5 per cent opaque presented at luma 99; the same line with taa=0, where it
-    // is genuinely opaque, presented at luma 8.
+  test('the composite is the lune, with nothing added to it', () => {
+    const shader = moonShaderOf();
+    // THE ASSERTION THAT MATTERS, and the one whose absence a reviewer exploited: the previous
+    // suite pinned five pieces of an outline's construction and never that any of it reached
+    // the fragment's alpha, so deleting the outline from the picture passed every test. What
+    // is drawn is the alpha, so the alpha is what gets pinned.
+    expect(shader).toContain('float lune = moonMask * max(sunMask, uTotality);');
+    expect(shader).toContain('float mask = lune;');
+    // Three things have been drawn here and removed, each after being seen on screen. None of
+    // them may come back by accident.
+    expect(shader).not.toContain('reveal');   // a coverage-driven silhouette against the sky
+    expect(shader).not.toContain('stroke');   // an outline of the sun's own limb
+    expect(shader).not.toContain('onLimb');
+    expect(shader).not.toContain('acos');     // the arc that grew the outline out of the bite
+    // ...and the layer no longer needs to know the coverage at all: the lune is geometry.
+    expect(shader).not.toContain('uCoverage');
+    const moon = moonMaterial();
+    expect(moon.uniforms.uCoverage).toBeUndefined();
+  });
+
+  test('only a fully opaque dark mark can be seen here at all', () => {
+    // Kept after the outline was removed, because it is the constraint that explains why the
+    // partial phases look the way they do, and the next person WILL reach for the bright side.
+    // A partly transparent mark is not a faint mark, it is no mark: halving a destination of
+    // 33 leaves 16.5 -- half the clip radiance -- and still presents at code 253. Measured on
+    // the built product, a line the maths said was 98.5 per cent opaque read luma 99; the same
+    // line at taa=0, where it is genuinely opaque, read 8.
     expect(markCode(0.5)).toBeGreaterThan(240);
     expect(markCode(0.9)).toBeGreaterThan(150);
     expect(markCode(0.985)).toBeGreaterThan(80);
     expect(markCode(1)).toBeLessThan(5);
-    // ...so the line must have a core at full opacity, wide enough to survive the temporal
-    // pass's jitter, which is 0.75 px peak to peak (JITTER_AMPLITUDE) and erodes a thin mark.
-    expect(LIMB_STROKE_PIXELS).toBeGreaterThanOrEqual(3.5);
   });
 
-  test('the outline is a flat-topped line, antialiased by a pixel either side', () => {
-    const shader = moonShaderOf();
-    expect(shader).toContain('float px = max(fwidth(sunDistance), 1e-6);');
-    expect(shader).toContain(`float halfWidth = px * ${glslFloat(LIMB_STROKE_PIXELS * 0.5)};`);
-    expect(shader).toContain(
-      'float onLimb = 1.0 - smoothstep(halfWidth - px * 0.5, halfWidth + px * 0.5,'
-    );
-    // The rejected form, explicitly: a ramp from the centre of the line outward.
-    expect(shader).not.toContain('smoothstep(0.0, halfWidth');
-  });
-
-  test('it grows as an ARC out of the bite, so nothing fades up over a warm sky', () => {
-    const shader = moonShaderOf();
-    expect(shader).toContain('float away = acos(');
-    // THE HOLE THIS CLOSES. `reachAt` below restates the shader's expression in TypeScript, and
-    // a restatement on its own pins nothing: a reviewer replaced the four-line GLSL with
-    // `3.4 * smoothstep(-0.5, 0.0, uCoverage)` -- a complete opaque ring standing in an empty
-    // sky before first contact, and never retracting -- and all 36 tests still passed. The
-    // predecessor suite had exactly this guard for the expression it tested and this commit
-    // deleted it along with the expression. So all three constants are pinned INTO the GLSL.
-    expect(shader).toContain(`float reach = ${glslFloat(LIMB_STROKE_CLOSED_ARC)}`);
-    expect(shader).toContain(
-      `* smoothstep(0.0, ${glslFloat(LIMB_STROKE_OPEN_COVERAGE)}, uCoverage)`
-    );
-    expect(shader).toContain(`* (1.0 - smoothstep(${glslFloat(LIMB_STROKE_RETRACT_FROM)},`);
-    expect(shader).toContain(`${glslFloat(LIMB_STROKE_RETRACT_TO)}, uCoverage));`);
-    // Past pi, or the two ends of the arc never meet and the ring keeps a permanent gap on
-    // the side opposite the bite -- which is what the first build of this actually did.
-    expect(LIMB_STROKE_CLOSED_ARC).toBeGreaterThan(Math.PI);
-  });
-
-  test('nothing is drawn before first contact, and nothing at totality', () => {
-    // `reach` is the arc's half-width and it is multiplied by a smoothstep that is exactly 0
-    // at coverage 0, so before the discs touch the outline does not exist. Measured on the
-    // built product: the darkest pixel in a 140 px crop is 252.3 at coverage 0, and 8.0 by
-    // coverage 0.016.
-    const reachAt = (coverage: number): number =>
-      LIMB_STROKE_CLOSED_ARC *
-      smootherstepLike(coverage / LIMB_STROKE_OPEN_COVERAGE) *
-      (1 - smootherstepLike(
-        (coverage - LIMB_STROKE_RETRACT_FROM) /
-          (LIMB_STROKE_RETRACT_TO - LIMB_STROKE_RETRACT_FROM)
-      ));
-    expect(reachAt(0)).toBe(0);
-    expect(reachAt(0.02)).toBeGreaterThan(0);
-    expect(reachAt(LIMB_STROKE_OPEN_COVERAGE)).toBeCloseTo(LIMB_STROKE_CLOSED_ARC, 6);
-    // Retired before the crescent needs its outer pixels: the outline lies ON the limb, and
-    // the crescent measures 10.1 px thick at coverage 0.70 and 5.1 at 0.85.
-    expect(reachAt(LIMB_STROKE_RETRACT_TO)).toBe(0);
-    expect(reachAt(0.9)).toBe(0);
-    // ...and gated off a second time inside the approved window.
-    expect(moonShaderOf()).toContain('* (1.0 - uTotality);');
-    // AND IT REACHES THE ALPHA. Every assertion above pins a piece of the outline's
-    // construction; none of them noticed when a reviewer changed the composite to
-    // `float mask = lune;`, which deletes the outline from the shipped picture and puts the
-    // partial phases back to the vesica in a white field that was rejected as an egg. The
-    // whole suite passed. This is the line that connects the construction to what is drawn.
-    expect(moonShaderOf()).toContain('float mask = max(lune, stroke);');
+  test('the bright side of a partial eclipse does not exist below three quarters of coverage', () => {
+    // The other half of the same constraint, and the reason the entry is quiet by design. The
+    // crescent is additive on a sky at the ACES clip, so it presents at 255 whatever it is
+    // authored at, and its whole contrast budget is 255 minus the sky's code.
+    const timeline = new EclipseTimeline();
+    const ceilingAt = (coverage: number): number => {
+      const state = stateAtCoverage(timeline, coverage);
+      return 255 - presentedCode(skyBesideDisc(state.irradiance));
+    };
+    expect(ceilingAt(0.05)).toBeLessThan(2);
+    expect(ceilingAt(0.20)).toBeLessThan(2);
+    expect(ceilingAt(0.50)).toBeLessThan(6);
+    // ...and it only becomes a picture once the sky itself has come off the clip.
+    expect(ceilingAt(0.90)).toBeGreaterThan(40);
+    // An opaque dark mark, by contrast, is worth two hundred and fifty codes from the start.
+    expect(markCode(1, stateAtCoverage(timeline, 0.05).irradiance)).toBeLessThan(5);
   });
 });
-
-/** GLSL smoothstep, clamped, for reasoning about the shader in TypeScript. */
-function smootherstepLike(t: number): number {
-  const x = Math.min(1, Math.max(0, t));
-  return x * x * (3 - 2 * x);
-}

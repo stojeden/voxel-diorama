@@ -51,19 +51,22 @@ a wersjonowanie projektu docelowo stosuje [Semantic Versioning](https://semver.o
   parach pikseli** pokazał, że obszar za Księżycem różni się od lustrzanego nieba o **−0,19 poziomu
   z 255** przy rozrzucie 4,26 — czyli 22 razy poniżej szumu. Księżyc poza tarczą Słońca nie jest na
   zdjęciach słabo widoczny. Jest **nieobecny**, przy każdym zakryciu i każdej ekspozycji.
-  Rysowana jest teraz sama **soczewka** — przecięcie obu tarcz, jedyne, co zawiera fotografia — plus
-  **obrys samego Słońca**. Obrys jest świadomym wynalazkiem i jest nim dlatego, że arytmetyka nie
-  zostawia wyboru: sierp jest warstwą dodawaną na niebie stojącym w punkcie obcięcia ACES, więc jego
-  kontrast to 255 minus kod nieba, czyli **+0,8 / +1,4 / +4,3 / +13,5 / +47,8 kodu** przy zakryciu
-  0,05 / 0,20 / 0,50 / 0,75 / 0,90 — a w pełni kryjący ciemny znak daje w tych samych punktach
-  **251 / 250 / 248 / 238 / 204**. Poniżej trzech czwartych zakrycia jasna strona zaćmienia nie
-  istnieje w tej ekspozycji. Czytelne może być wyłącznie coś ciemnego, a sama soczewka bez okręgu
-  była już raz odrzucona jako „jajo" — i słusznie, bo jest to kształt osierocony w białym polu.
-  Obrys **wyrasta jako łuk z wygryzienia** i chowa się w nie z powrotem między zakryciem 0,62 a 0,80,
-  nigdy nie zmieniając ani krycia, ani szerokości: krycie pośrednie nad ciepłym niebem to jest ten
-  sam brąz, a szerokość poniżej piksela to pełzająca kreskowana linia. Wycofuje się, zanim zacznie
-  zjadać sierp — sierp ma 17,1 px grubości przy 0,50, 10,1 przy 0,70 i 5,1 przy 0,85, a linia leży
-  **na** limbie.
+  Rysowana jest teraz **sama soczewka** — przecięcie obu tarcz, jedyne, co zawiera fotografia — i nic
+  poza nią.
+  Arytmetyka, która czyni to trudnym, jest zapisana, bo następna osoba sięgnie po jasną stronę, a
+  jasnej strony nie ma: sierp jest warstwą dodawaną na niebie stojącym w punkcie obcięcia ACES, więc
+  jego kontrast to 255 minus kod nieba, czyli **+0,8 / +1,4 / +4,3 / +13,5 / +47,8 kodu** przy
+  zakryciu 0,05 / 0,20 / 0,50 / 0,75 / 0,90 — a w pełni kryjący ciemny znak daje w tych samych
+  punktach **251 / 250 / 248 / 238 / 204**. Poniżej trzech czwartych zakrycia jasna strona zaćmienia
+  w tej ekspozycji **nie istnieje**.
+  **Obrys Słońca był po drodze i został usunięty** — decyzją właściciela, po zobaczeniu go na ekranie.
+  Czteropikselowa kryjąca linia na limbie, wyrastająca jako łuk z wygryzienia, dawała soczewce okrąg,
+  z którego jest wygryzieniem, i była najczytelniejszym obiektem w kadrze przy zakryciu 0,20 — ale
+  była wynalazkiem: żadne zdjęcie nie ma czarnego pierścienia wokół Słońca. Zapisane, bo to
+  wiarygodny pomysł, którego ponowne odkrycie kosztuje kompilację.
+  Cena wierności jest nazwana wprost: poniżej trzech czwartych zakrycia widać bardzo niewiele, i tak
+  właśnie wygląda zaćmienie częściowe w szerokim kadrze. Do tego momentu widzowi mówi o nim światło,
+  półksiężyce pod drzewami i tłum sięgający po okulary — nie Słońce.
   **Światło nietknięte**: totalność nadal najciemniejsza klatka, miasto 0,234 i niebo 0,085 tej samej
   godziny bez zaćmienia, pikseli dokładnie czarnych 0,0000 % w każdej fazie, klatki totalności bez
   zmian (najjaśniejszy piksel 246,1 jak w każdym wcześniejszym przebiegu).

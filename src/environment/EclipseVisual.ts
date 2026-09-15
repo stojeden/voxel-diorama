@@ -630,109 +630,54 @@ ${MOON_CENTER_CHUNK}
 `;
 
 /**
- * WHY THE SUN GETS A DRAWN OUTLINE, and why nothing else here can be seen.
+ * WHAT THE PARTIAL PHASES DRAW, and the two things that were tried instead.
  *
- * The arithmetic first, because it is what decides this and it is not close. The crescent is an
- * ADDITIVE layer on a sky that sits at the ACES clip, so however bright it is authored it
- * presents at code 255, and its contrast against the sky is 255 minus the sky's code:
+ * The lune: the moon, only where it lies on the sun. That is exactly and only what a photograph
+ * of a partial eclipse contains. Research done for this feature put a hard bound on the
+ * alternative -- in a bright-sky frame at 91.7 per cent obscuration, a paired radial-shell test
+ * over 51,857 pixel pairs found the region behind the moon differs from mirrored sky by -0.19
+ * levels of 255 against a scatter of 4.26, i.e. nothing. The moon outside the sun is not faint
+ * in photographs at any exposure; it is absent.
+ *
+ * THE ARITHMETIC THAT MAKES THIS HARD, because the next person will reach for the bright side
+ * and it is not there. The crescent is an ADDITIVE layer on a sky that sits at the ACES clip,
+ * so however bright it is authored it presents at code 255, and its contrast against the sky is
+ * 255 minus the sky's code:
  *
  *   coverage    0.05   0.20   0.50   0.75   0.90   0.95
  *   sky code   254.2  253.6  250.7  241.5  207.2  156.0
- *   crescent      +0.8   +1.4   +4.3   +13.5  +47.8  +99.0   <- the whole bright budget
- *   opaque dark  251    250    248    238    204    153      <- sky code minus 3.07
+ *   crescent     +0.8   +1.4   +4.3  +13.5  +47.8  +99.0   <- the whole bright budget
+ *   opaque dark   251    250    248    238    204    153   <- sky code minus 3.07
  *
- * So below about three quarters of coverage the bright side of a partial eclipse cannot be
- * drawn AT ALL in this exposure -- one code, then one, then four -- while a dark mark outguns
- * it by roughly 180 to 1. No shader change moves that: the ceiling is the sky, and the sky is
- * the owner's and is not being touched. Whatever the partial phases show has to be dark.
+ * Below about three quarters of coverage the bright side of a partial eclipse cannot be drawn
+ * at all in this exposure. Only a dark mark can be seen, and only a fully opaque one: a partly
+ * transparent mark is not a faint mark but no mark, because halving a destination of 33 leaves
+ * 16.5 -- half the clip radiance -- and still presents at code 253.
  *
- * WHAT DARK MARK. The honest one is the lune -- the intersection of the two discs, which is
- * exactly and only what a photograph of a partial phase contains. Research done for this change
- * put a hard bound on it: in a bright-sky frame at 91.7 per cent obscuration, a paired
- * radial-shell test over 51,857 pixel pairs found the region behind the moon differs from
- * mirrored sky by -0.19 levels of 255 against a scatter of 4.26, i.e. nothing. The moon outside
- * the sun is not dimly visible in photographs; it is absent.
+ * TWO THINGS WERE TRIED AND BOTH ARE GONE, on the owner's judgement, after he saw each on
+ * screen. They are recorded because each is a plausible idea that costs a build to re-discover.
  *
- * But a lune ALONE was tried here and rejected by the owner, who called it an egg. He was
- * right, and the reason is worth stating precisely: a vesica floating in a white field has no
- * circle to be a bite out of, because the sun it is biting is invisible. The shape was correct
- * and orphaned.
+ *  - A silhouette of the moon against the SKY, at an opacity driven by coverage. It drew the
+ *    largest invented object in the frame and put it in the wrong place: the disc is the MOON,
+ *    so at coverage 0.15 it sat 24 px down-right of the sun, its leading third black and the
+ *    rest rgb(207,164,72) -- one ball split into two tones along a line corresponding to
+ *    nothing visible. Rejected as visually incoherent, and rightly.
+ *  - An OUTLINE of the sun's own limb, four pixels wide, opening as an arc out of the bite, so
+ *    that the lune had a circle to be a bite out of. It was legible -- at coverage 0.20 it is
+ *    the highest-contrast object in the frame -- and it was an invention: no photograph
+ *    contains a dark ring around the sun. Rejected by the owner after seeing it, in favour of
+ *    the lune alone.
  *
- * So the sun is given its own outline: a hairline at its limb, opaque, {@link LIMB_STROKE_PIXELS}
- * pixels wide wherever it is drawn. That is an invented object -- no photograph contains a dark
- * ring around the sun -- and it is the smallest invention that makes the correct shape legible.
- * It replaces a much larger one: a partial-opacity moon disc drawn over the whole sky, which
- * had no referent either AND put the brightest object in the frame in the wrong place, since
- * that disc is the MOON and it sits offset from the sun. Measured on the shipped build at
- * coverage 0.15, the drawn ball was centred 24 px down-right of the sun with its leading third
- * black and the rest at rgb(207,164,72) -- a two-tone sphere split along a line corresponding
- * to nothing the viewer can see. That is the incoherence being fixed.
+ * So what is drawn during the partial phases is the lune and nothing else, which is faithful
+ * and, below three quarters of coverage, close to invisible. That is what a partial eclipse is
+ * in a wide shot: until the sun is most of the way covered, what tells the viewer is the light
+ * going strange, the pinhole crescents under the trees and the crowd reaching for its glasses
+ * -- not the sun.
  */
-
-/**
- * How wide the outline is, in DISPLAY PIXELS at any viewport and field of view -- `fwidth`
- * carries it -- and why it is four and not one.
- *
- * A LINE, NOT A GRADIENT. The first version of this ramped from the line's centre outward,
- * `1.0 - smoothstep(0.0, halfWidth, |d - R|)`, which is a soft band whose alpha reaches 1 only
- * on its centreline. An EIGHT PIXEL band of it drew as a single pale orange hairline, because
- * a partially opaque dark mark on a sky at the ACES clip is not a faint mark, it is no mark:
- * halving a destination of 33 leaves 16.5 -- HALF the clip radiance, not above it -- and it
- * still presents at code 253, because the curve spends about two codes on that first stop.
- * Only full opacity reads, at code 3. So the line is flat-topped, with a pixel of antialiasing
- * on each side and everything between them at alpha exactly 1.
- *
- * THEN THE TEMPORAL PASS TAKES ITS SHARE. `TemporalResolvePass` jitters the projection along a
- * Halton sequence with an amplitude of 0.75 px and accumulates, so a mark whose solid core is
- * thin never stays fully covered across the jitter set and never reaches alpha 1 in the
- * resolved image. Measured on the built product at coverage 0.208, on a ray through the limb:
- *
- *   2.5 px line, taa on    luma  99 ... 212   (brown, the thing this change exists to remove)
- *   2.5 px line, taa=0     luma   8            (black -- so the shader was right and TAA ate it)
- *   4.0 px line, taa on    luma   8 over 2.25 px
- *
- * Four pixels is what leaves a core the jitter cannot erode. On the 41 px drawn sun -- 2 *
- * SUN_DISC_RADIUS at the 85.9 px per billboard unit this framing gives -- that is a
- * proportionate hairline, and at 1:1 it reads as a small ring rather than as a cartoon.
- */
-export const LIMB_STROKE_PIXELS = 4.0;
-
-/**
- * The outline is drawn as an ARC that opens out of the bite and later retracts into it, never
- * as a ring that fades up and down.
- *
- * Both alternatives were rejected on measurement rather than taste. Fading a ring's ALPHA puts
- * it at intermediate opacity over a warm sky, which is the brown this whole change exists to
- * remove -- at alpha 0.5 a 1.5 px line presents rgb(215,176,80), a spread of 135 between red
- * and blue. Fading its WIDTH takes it below a pixel, where `fwidth` antialiasing turns a line
- * into a crawling dashed one. Growing an arc costs one `acos`, never leaves full opacity and
- * never goes under a pixel, and it reads as the bite drawing the sun's edge out of itself.
- *
- * It opens by coverage 0.08 -- 4.9 s of the ninety -- and retracts between 0.62 and 0.80,
- * which is set by the crescent's own thickness rather than by preference: the outline lies ON
- * the sun's limb, so it eats the outer 1.5 px of the crescent, and the crescent measures 17.1
- * px thick at coverage 0.50, 10.1 at 0.70, 5.1 at 0.85 and 1.8 at 0.95. Past 0.8 the line
- * would be taking a third of the crescent and then all of it. By then it is not needed: the
- * sky has fallen far enough that the crescent clears it by 13.5 codes at 0.75 and 47.8 at 0.90,
- * and carries the picture on its own.
- */
-export const LIMB_STROKE_OPEN_COVERAGE = 0.08;
-export const LIMB_STROKE_RETRACT_FROM = 0.62;
-export const LIMB_STROKE_RETRACT_TO = 0.8;
-/**
- * Half the arc, in radians about the sun's centre, once the outline has closed. Past pi on
- * purpose: at exactly pi the two ends of the arc meet with the soft join between them still
- * open, and the ring keeps a visible gap on the side opposite the bite for ever.
- *
- * It starts at ZERO, so before first contact -- coverage exactly 0 -- there is no outline at
- * all, which is what there should be: nothing has happened yet.
- */
-export const LIMB_STROKE_CLOSED_ARC = 3.4;
 
 const MOON_FRAGMENT_SHADER = /* glsl */ `
   varying vec2 vUv;
   uniform float uSeparation;
-  uniform float uCoverage;
   uniform float uTotality;
   uniform float uTransmittance;
   uniform vec2 uMoonPath;
@@ -767,22 +712,7 @@ ${MOON_CENTER_CHUNK}
     // there was the largest invented object in the frame.
     float lune = moonMask * max(sunMask, uTotality);
 
-    // ...and the sun's own limb, so the lune has a circle to be a bite out of. The arc opens
-    // out of the bite and retracts into it; see the constants for why not alpha and not width.
-    vec2 moonDir = normalize(moonCenter + uMoonPath * 1e-4);
-    float away = acos(clamp(dot(normalize(p + vec2(1e-6)), moonDir), -1.0, 1.0));
-    float reach = ${glslFloat(LIMB_STROKE_CLOSED_ARC)}
-      * smoothstep(0.0, ${glslFloat(LIMB_STROKE_OPEN_COVERAGE)}, uCoverage)
-      * (1.0 - smoothstep(${glslFloat(LIMB_STROKE_RETRACT_FROM)},
-                          ${glslFloat(LIMB_STROKE_RETRACT_TO)}, uCoverage));
-    float px = max(fwidth(sunDistance), 1e-6);
-    float halfWidth = px * ${glslFloat(LIMB_STROKE_PIXELS * 0.5)};
-    float onLimb = 1.0 - smoothstep(halfWidth - px * 0.5, halfWidth + px * 0.5,
-      abs(sunDistance - SUN_RADIUS));
-    float stroke = onLimb * (1.0 - smoothstep(reach - 0.18, reach, away))
-      * (1.0 - uTotality);
-
-    float mask = max(lune, stroke);
+    float mask = lune;
     if (mask < 0.002) discard;
 
     float rim = smoothstep(MOON_RADIUS * 0.62, MOON_RADIUS, d);
@@ -885,7 +815,6 @@ export class EclipseVisual {
     this.moonMaterial = new THREE.ShaderMaterial({
       uniforms: {
         uSeparation: { value: 1 },
-        uCoverage: { value: 0 },
         uTotality: { value: 0 },
         uTransmittance: { value: 1 },
         uMoonPath: { value: new THREE.Vector2(1, 0) },
@@ -949,10 +878,8 @@ export class EclipseVisual {
     this.solarMaterial.uniforms.uProminences.value = phenomena.prominences;
     this.solarMaterial.uniforms.uProminenceDetail.value = phenomena.prominenceDetail;
     this.moonMaterial.uniforms.uSeparation.value = state.separation;
-    // uCoverage is back, and doing a different job. It used to feed
-    // `smoothstep(0.0, 0.055, uCoverage)`, an alpha ramp complete by five per cent of coverage
-    // that therefore said nothing about anything; it now carries the whole reveal.
-    this.moonMaterial.uniforms.uCoverage.value = state.coverage;
+    // No uCoverage on this layer. It has been added and removed twice, for two terms that are
+    // both gone -- an opacity ramp and an outline's arc -- and the lune needs only geometry.
     this.moonMaterial.uniforms.uTotality.value = state.totality;
     const transmittance = THREE.MathUtils.clamp(1 - cloudCover * 0.82, 0.08, 1);
     this.solarMaterial.uniforms.uTransmittance.value = transmittance;
