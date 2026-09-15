@@ -639,7 +639,7 @@ ${MOON_CENTER_CHUNK}
  *   coverage    0.05   0.20   0.50   0.75   0.90   0.95
  *   sky code   254.2  253.6  250.7  241.5  207.2  156.0
  *   crescent      +0.8   +1.4   +4.3   +13.5  +47.8  +99.0   <- the whole bright budget
- *   opaque dark  251    250    248    242    204    153      <- an opaque mark at 0.012
+ *   opaque dark  251    250    248    238    204    153      <- sky code minus 3.07
  *
  * So below about three quarters of coverage the bright side of a partial eclipse cannot be
  * drawn AT ALL in this exposure -- one code, then one, then four -- while a dark mark outguns
@@ -676,10 +676,11 @@ ${MOON_CENTER_CHUNK}
  * A LINE, NOT A GRADIENT. The first version of this ramped from the line's centre outward,
  * `1.0 - smoothstep(0.0, halfWidth, |d - R|)`, which is a soft band whose alpha reaches 1 only
  * on its centreline. An EIGHT PIXEL band of it drew as a single pale orange hairline, because
- * a partially opaque dark mark on a sky past the ACES clip is not a faint mark, it is no mark:
- * halving a destination of 33 leaves 16.5, still above the clip point of 25.7, still code 253.
+ * a partially opaque dark mark on a sky at the ACES clip is not a faint mark, it is no mark:
+ * halving a destination of 33 leaves 16.5 -- HALF the clip radiance, not above it -- and it
+ * still presents at code 253, because the curve spends about two codes on that first stop.
  * Only full opacity reads, at code 3. So the line is flat-topped, with a pixel of antialiasing
- * on each side and everything between it at alpha exactly 1.
+ * on each side and everything between them at alpha exactly 1.
  *
  * THEN THE TEMPORAL PASS TAKES ITS SHARE. `TemporalResolvePass` jitters the projection along a
  * Halton sequence with an amplitude of 0.75 px and accumulates, so a mark whose solid core is
@@ -690,7 +691,8 @@ ${MOON_CENTER_CHUNK}
  *   2.5 px line, taa=0     luma   8            (black -- so the shader was right and TAA ate it)
  *   4.0 px line, taa on    luma   8 over 2.25 px
  *
- * Four pixels is what leaves a core the jitter cannot erode. On the 47 px drawn sun that is a
+ * Four pixels is what leaves a core the jitter cannot erode. On the 41 px drawn sun -- 2 *
+ * SUN_DISC_RADIUS at the 85.9 px per billboard unit this framing gives -- that is a
  * proportionate hairline, and at 1:1 it reads as a small ring rather than as a cartoon.
  */
 export const LIMB_STROKE_PIXELS = 4.0;
@@ -706,7 +708,7 @@ export const LIMB_STROKE_PIXELS = 4.0;
  * into a crawling dashed one. Growing an arc costs one `acos`, never leaves full opacity and
  * never goes under a pixel, and it reads as the bite drawing the sun's edge out of itself.
  *
- * It opens by coverage 0.08 -- 5.7 s of the ninety -- and retracts between 0.62 and 0.80,
+ * It opens by coverage 0.08 -- 4.9 s of the ninety -- and retracts between 0.62 and 0.80,
  * which is set by the crescent's own thickness rather than by preference: the outline lies ON
  * the sun's limb, so it eats the outer 1.5 px of the crescent, and the crescent measures 17.1
  * px thick at coverage 0.50, 10.1 at 0.70, 5.1 at 0.85 and 1.8 at 0.95. Past 0.8 the line

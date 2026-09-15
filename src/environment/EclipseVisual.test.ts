@@ -821,8 +821,9 @@ describe('the sun is given an outline, because nothing else can be seen', () => 
     // THE DEFECT THIS PINS, and it cost two builds to find. The outline was first written as
     // `1.0 - smoothstep(0.0, halfWidth, |d - R|)` -- a soft band whose alpha reaches 1 only on
     // its centreline. An EIGHT PIXEL band drew as a single pale orange hairline, because the
-    // sky is past the ACES clip: halving a dst of 33 leaves 16.5, which is still over the clip
-    // point of 25.7 and still code 253. Measured on the built product, a line that the maths
+    // sky is at the ACES clip: halving a dst of 33 leaves 16.5 -- half the clip radiance -- and
+    // it still presents at code 253, two codes for a whole stop. Measured on the built product,
+    // a line that the maths
     // said was 98.5 per cent opaque presented at luma 99; the same line with taa=0, where it
     // is genuinely opaque, presented at luma 8.
     expect(markCode(0.5)).toBeGreaterThan(240);
@@ -848,7 +849,18 @@ describe('the sun is given an outline, because nothing else can be seen', () => 
   test('it grows as an ARC out of the bite, so nothing fades up over a warm sky', () => {
     const shader = moonShaderOf();
     expect(shader).toContain('float away = acos(');
+    // THE HOLE THIS CLOSES. `reachAt` below restates the shader's expression in TypeScript, and
+    // a restatement on its own pins nothing: a reviewer replaced the four-line GLSL with
+    // `3.4 * smoothstep(-0.5, 0.0, uCoverage)` -- a complete opaque ring standing in an empty
+    // sky before first contact, and never retracting -- and all 36 tests still passed. The
+    // predecessor suite had exactly this guard for the expression it tested and this commit
+    // deleted it along with the expression. So all three constants are pinned INTO the GLSL.
     expect(shader).toContain(`float reach = ${glslFloat(LIMB_STROKE_CLOSED_ARC)}`);
+    expect(shader).toContain(
+      `* smoothstep(0.0, ${glslFloat(LIMB_STROKE_OPEN_COVERAGE)}, uCoverage)`
+    );
+    expect(shader).toContain(`* (1.0 - smoothstep(${glslFloat(LIMB_STROKE_RETRACT_FROM)},`);
+    expect(shader).toContain(`${glslFloat(LIMB_STROKE_RETRACT_TO)}, uCoverage));`);
     // Past pi, or the two ends of the arc never meet and the ring keeps a permanent gap on
     // the side opposite the bite -- which is what the first build of this actually did.
     expect(LIMB_STROKE_CLOSED_ARC).toBeGreaterThan(Math.PI);
@@ -875,6 +887,12 @@ describe('the sun is given an outline, because nothing else can be seen', () => 
     expect(reachAt(0.9)).toBe(0);
     // ...and gated off a second time inside the approved window.
     expect(moonShaderOf()).toContain('* (1.0 - uTotality);');
+    // AND IT REACHES THE ALPHA. Every assertion above pins a piece of the outline's
+    // construction; none of them noticed when a reviewer changed the composite to
+    // `float mask = lune;`, which deletes the outline from the shipped picture and puts the
+    // partial phases back to the vesica in a white field that was rejected as an egg. The
+    // whole suite passed. This is the line that connects the construction to what is drawn.
+    expect(moonShaderOf()).toContain('float mask = max(lune, stroke);');
   });
 });
 

@@ -56,7 +56,7 @@ a wersjonowanie projektu docelowo stosuje [Semantic Versioning](https://semver.o
   zostawia wyboru: sierp jest warstwą dodawaną na niebie stojącym w punkcie obcięcia ACES, więc jego
   kontrast to 255 minus kod nieba, czyli **+0,8 / +1,4 / +4,3 / +13,5 / +47,8 kodu** przy zakryciu
   0,05 / 0,20 / 0,50 / 0,75 / 0,90 — a w pełni kryjący ciemny znak daje w tych samych punktach
-  **251 / 250 / 248 / 242 / 204**. Poniżej trzech czwartych zakrycia jasna strona zaćmienia nie
+  **251 / 250 / 248 / 238 / 204**. Poniżej trzech czwartych zakrycia jasna strona zaćmienia nie
   istnieje w tej ekspozycji. Czytelne może być wyłącznie coś ciemnego, a sama soczewka bez okręgu
   była już raz odrzucona jako „jajo" — i słusznie, bo jest to kształt osierocony w białym polu.
   Obrys **wyrasta jako łuk z wygryzienia** i chowa się w nie z powrotem między zakryciem 0,62 a 0,80,
@@ -70,8 +70,9 @@ a wersjonowanie projektu docelowo stosuje [Semantic Versioning](https://semver.o
 - **Miękkie pasmo nie jest słabą linią — jest brakiem linii, a TAA zjada cienkie znaki.** Dwie
   pułapki, obie znalezione pomiarem, obie kosztowały po jednej kompilacji. Pierwsza: obrys napisany
   jako `1.0 - smoothstep(0.0, halfWidth, |d − R|)` to pasmo, którego krycie sięga 1 tylko na osi —
-  a **ośmiopikselowe** pasmo narysowało się jako jedna blada pomarańczowa kreska, bo niebo jest za
-  punktem obcięcia: połowa z 33 to 16,5, wciąż powyżej 25,7, wciąż kod 253. Czyta się dopiero pełne
+  a **ośmiopikselowe** pasmo narysowało się jako jedna blada pomarańczowa kreska, bo niebo stoi
+    w punkcie obcięcia: połowa z 33 to 16,5 — połowa radiancji obcięcia, nie powyżej niej — i wciąż daje
+  kod 253, bo krzywa wydaje na ten pierwszy stop około dwóch kodów. Czyta się dopiero pełne
   krycie, przy kodzie 3. Druga: nawet płaska linia o szerokości 2,5 px wychodziła brązowa, bo
   `TemporalResolvePass` drga projekcją o 0,75 px i akumuluje, więc cienki rdzeń nigdy nie osiąga
   krycia 1. Zmierzone na jednym promieniu przez limb przy zakryciu 0,208: linia 2,5 px z TAA — luma
