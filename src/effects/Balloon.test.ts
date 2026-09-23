@@ -169,3 +169,48 @@ describe('the balloon travels with the air and does not point into it', () => {
     balloon.dispose();
   });
 });
+
+describe('the jet flies nose first', () => {
+  /** Fly until a crossing ends, then until the next one is well under way. */
+  const flyOne = (balloon: Balloon, scene: THREE.Scene, start: number): number => {
+    let elapsed = start;
+    const craft = scene.getObjectByName('balloon-flight')!;
+    let wasFlying = craft.visible;
+    for (let i = 0; i < 20_000; i++) {
+      elapsed += 0.1;
+      balloon.update(0.1, elapsed, 0, 0, 0.5, 0.6, 0.8);
+      if (wasFlying && !craft.visible) return elapsed;
+      wasFlying = craft.visible;
+    }
+    throw new Error('no crossing ended');
+  };
+
+  test('after a balloon flight the jet still points where it is going', () => {
+    const scene = new THREE.Scene();
+    const balloon = new Balloon(scene, () => 0.5);
+    const craft = scene.getObjectByName('balloon-flight')!;
+
+    // One balloon flight, long enough for the free spin to leave the group turned.
+    const end = flyOne(balloon, scene, 0);
+    expect(Math.abs(craft.rotation.y), 'the balloon never turned, so this proves nothing').toBeGreaterThan(0.3);
+
+    balloon.setCyberMode(true);
+    let elapsed = end;
+    const before = new THREE.Vector3();
+    const nose = new THREE.Vector3();
+    for (let i = 0; i < 2_000 && !craft.visible; i++) {
+      elapsed += 0.1;
+      balloon.update(0.1, elapsed, 0, 0, 0.5, 0.6, 0.8);
+    }
+    expect(craft.visible, 'the jet never launched').toBe(true);
+    before.copy(craft.position);
+    for (let i = 0; i < 20; i++) {
+      elapsed += 0.1;
+      balloon.update(0.1, elapsed, 0, 0, 0.5, 0.6, 0.8);
+    }
+    const travel = craft.position.clone().sub(before).setY(0).normalize();
+    craft.updateMatrixWorld(true);
+    nose.set(1, 0, 0).transformDirection(craft.matrixWorld).setY(0).normalize();
+    expect(nose.dot(travel), 'the jet is flying sideways or tail-first').toBeGreaterThan(0.95);
+  });
+});

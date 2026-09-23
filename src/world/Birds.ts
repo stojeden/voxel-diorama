@@ -64,6 +64,19 @@ export function eclipseRoostRequested(
   return wasRequested;
 }
 
+/**
+ * Which way the eclipse is going, as the roost latch needs to hear it.
+ *
+ * An eclipse that is not running is on its way out, whatever its progress reads. Reading the
+ * direction off progress alone kept the latch shut after a rewind: starting the tour in the
+ * middle of totality seeks the timeline to zero, coverage 0 at progress 0 reads as the
+ * *incoming* phase, and every gull stayed on its eclipse roof through the night, the dawn and
+ * the days after, until some later eclipse happened to release it.
+ */
+export function eclipseDirectionFor(active: boolean, progress: number): EclipseCoverageDirection {
+  return active && progress < 0.5 ? 'increasing' : 'decreasing';
+}
+
 const GULL_GEOMETRIES = {
   body: new THREE.SphereGeometry(0.34, 8, 6),
   belly: new THREE.SphereGeometry(0.24, 8, 6),

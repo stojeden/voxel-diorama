@@ -817,14 +817,20 @@ function buildBusShelterDetails(group: THREE.Group): {
 
     const fixture = new THREE.Mesh(boxGeometry, fixtureMaterial);
     fixture.name = `bus-stop-ceiling-light-${index}`;
-    fixture.position.copy(shelterPoint(stop, 0, 0.45, GROUND_SURFACE_Y + BUS_SHELTER_ROOF_Y - 0.1));
+    // Flush with the roof's underside, which is the top of the posts.
+    fixture.position.copy(shelterPoint(stop, 0, 0.45, GROUND_SURFACE_Y + BUS_SHELTER_ROOF_Y - 0.05));
     fixture.scale.set(stop.axis === 'x' ? 1.6 : 0.28, 0.1, stop.axis === 'x' ? 0.28 : 1.6);
     fixture.castShadow = false;
     group.add(fixture);
 
     const light = new THREE.PointLight(0xffe5b8, 0, 8, 2);
     light.name = `bus-stop-safety-light-${index}`;
-    light.position.copy(shelterPoint(stop, 0, 0.45, 2.24));
+    // Under the roof, just below the fixture. It sat at an absolute 2.24 m, which was under
+    // the roof until 686a6a7 lowered the roof to 1.78-1.96 m and left the light 0.28 m above
+    // it: a clipped hot disc on every shelter roof at night and a dark ceiling underneath.
+    // DayNightCycle scales the intensity so the pavement under the shelter keeps the light it
+    // had from 2.74 m above it.
+    light.position.copy(shelterPoint(stop, 0, 0.45, GROUND_SURFACE_Y + BUS_SHELTER_ROOF_Y - 0.2));
     light.castShadow = false;
     light.visible = false;
     group.add(light);

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import * as THREE from 'three';
-import { BUS_ROUTE_CURVE, BUS_STOPS, busShelterCenter } from './WorldLayout';
+import { BUS_ROUTE_CURVE, BUS_STOPS, busShelterCenter, GROUND_SURFACE_Y } from './WorldLayout';
 import {
   busShelterColliders,
   BUS_DOOR_APPROACH_DISTANCE,
@@ -11,6 +11,18 @@ import {
 } from './BusStopNavigation';
 
 describe('bus-stop pedestrian navigation', () => {
+  test('every point of the walk to the bus door is on the road', () => {
+    // The door point was +0.5, the old ground, so each figure climbed a metre over the last
+    // leg beside the bus. Checked on the path the runtime samples, not on the constant.
+    for (const stop of BUS_STOPS) {
+      for (const placement of busStopWaitingPlacements(stop)) {
+        for (const point of busStopWalkingPath(stop, placement.waitPos, placement.doorPos)) {
+          expect(point.y, `${stop.label}: a waypoint is off the road`).toBe(GROUND_SURFACE_Y);
+        }
+      }
+    }
+  });
+
   test('keeps every waiting passenger outside solid shelter geometry', () => {
     for (const stop of BUS_STOPS) {
       const colliders = busShelterColliders(stop);

@@ -6,10 +6,27 @@ import {
   ECLIPSE_TAKE_OFF_COVERAGE,
   Birds,
   ROOST_DIHEDRAL,
+  eclipseDirectionFor,
   eclipseRoostRequested,
   nearestEclipseRoost,
 } from './Birds';
 import { FOLDED_SPAN_SCALE, FOLDED_SWEEP_DEG, UNFOLD_SECONDS } from './WingFold';
+
+describe('a rewound eclipse lets the gulls go', () => {
+  test('rewinding mid-totality releases the roost instead of holding it for days', () => {
+    // Totality: roosted, and the latch holds through it.
+    let roosting = eclipseRoostRequested(false, 1, eclipseDirectionFor(true, 0.4));
+    expect(roosting).toBe(true);
+    // The tour starts: the timeline is seeked to zero and is no longer running.
+    roosting = eclipseRoostRequested(roosting, 0, eclipseDirectionFor(false, 0));
+    expect(roosting, 'coverage 0 at progress 0 read as the incoming phase').toBe(false);
+  });
+
+  test('a running eclipse still commits on the way in and holds through totality', () => {
+    expect(eclipseDirectionFor(true, 0.2)).toBe('increasing');
+    expect(eclipseDirectionFor(true, 0.7)).toBe('decreasing');
+  });
+});
 
 describe('eclipse gull roost hysteresis', () => {
   test('commits only during the incoming phase at 85% coverage', () => {

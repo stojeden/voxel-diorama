@@ -223,6 +223,27 @@ const AUTO_WARMUP_SECONDS = 5;
 const DOWNGRADE_COOLDOWN_SECONDS = 8;
 const UPGRADE_COOLDOWN_SECONDS = 16;
 
+/**
+ * Recovery on a display that cannot show headroom.
+ *
+ * The upgrade thresholds below read headroom as a frame SHORTER than 16.2 ms, and a 60 Hz
+ * display never delivers one: rAF cannot outrun vsync, so the average sits at 16.67 however
+ * idle the GPU is. Auto mode could therefore only ever step down, and one slow stretch -- a
+ * night, which is the heaviest frame this city draws -- cost the viewer that quality for the
+ * rest of the session.
+ *
+ * So a level that was DEMOTED below what the hardware was recommended for may climb back one
+ * step after a minute of running at the display's full rate (an average of at most 17.5 ms,
+ * about 57 fps, which is fewer than one frame in twenty dropped). Never above the
+ * recommendation: that is still the fast-display rule's job. And if the promoted level fails
+ * again within 45 s, the minute doubles, up to eight -- a day and a night that disagree about
+ * the level settle instead of trading it back and forth every four minutes.
+ */
+const RECOVERY_FRAME_MS = 17.5;
+const RECOVERY_WINDOWS = 15;
+const RECOVERY_WINDOWS_MAX = 120;
+const RECOVERY_FAILED_WITHIN_SECONDS = 45;
+
 function capabilitiesFromBrowser(): DeviceCapabilities {
   if (typeof navigator === 'undefined' || typeof window === 'undefined') return {};
   return {
@@ -313,6 +334,9 @@ export class QualityManager {
   private evaluationFrames = 0;
   private cooldown = AUTO_WARMUP_SECONDS;
   private averageFrameMs = 16.67;
+  private calmWindows = 0;
+  private recoveryWindows = RECOVERY_WINDOWS;
+  private lastRecoveryAt = -Infinity;
 
   constructor(capabilities = capabilitiesFromBrowser(), initialMode = storedMode()) {
     this.recommended = recommendedLevel(capabilities);
@@ -338,6 +362,9 @@ export class QualityManager {
     if (typeof localStorage !== 'undefined') localStorage.setItem(STORAGE_KEY, mode);
     this.setLevel(mode === 'auto' ? this.recommended : mode);
     this.cooldown = AUTO_WARMUP_SECONDS;
+    this.calmWindows = 0;
+    this.recoveryWindows = RECOVERY_WINDOWS;
+    this.lastRecoveryAt = -Infinity;
     this.resetEvaluation();
     this.emit();
   }
@@ -372,10 +399,27 @@ export class QualityManager {
     const next = this.nextAutomaticLevel(this.averageFrameMs);
     if (next !== this.level) {
       const isUpgrade = this.rank(next) > this.rank(this.level);
+      if (!isUpgrade && this.elapsed - this.lastRecoveryAt < RECOVERY_FAILED_WITHIN_SECONDS) {
+        this.recoveryWindows = Math.min(this.recoveryWindows * 2, RECOVERY_WINDOWS_MAX);
+      }
+      this.calmWindows = 0;
       this.setLevel(next);
       this.cooldown = isUpgrade ? UPGRADE_COOLDOWN_SECONDS : DOWNGRADE_COOLDOWN_SECONDS;
       this.emit();
+      return;
     }
+
+    if (this.rank(this.level) >= this.rank(this.recommended)) {
+      this.calmWindows = 0;
+      return;
+    }
+    this.calmWindows = this.averageFrameMs <= RECOVERY_FRAME_MS ? this.calmWindows + 1 : 0;
+    if (this.calmWindows < this.recoveryWindows) return;
+    this.calmWindows = 0;
+    this.lastRecoveryAt = this.elapsed;
+    this.setLevel(this.level === 'low' ? 'medium' : 'high');
+    this.cooldown = UPGRADE_COOLDOWN_SECONDS;
+    this.emit();
   }
 
   private nextAutomaticLevel(frameMs: number): QualityLevel {

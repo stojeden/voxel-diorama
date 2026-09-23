@@ -22,6 +22,9 @@ import type { Cluster, Layer, MaterialClass } from './surface';
 import type { HybridStrategyName } from './spikeFlag';
 import type { Clock01, WallClock01 } from '../../units';
 
+/** `building-24` -> 24: the cluster id carries the block index the awnings are keyed by. */
+const BUILDING_BLOCK = /^building-(\d+)$/;
+
 export { getSpikeCheckpoint, SPIKE_CHECKPOINTS, STREET_EYE_SHOT } from './spikeCheckpoints';
 
 export interface HybridSpikeOptions {
@@ -256,6 +259,9 @@ export function attachHybridSpike(options: HybridSpikeOptions): HybridHandle {
       if (!isReplacedByCyber(lodGroup.cluster.id)) continue;
       const on = cyberRise > (handovers.get(lodGroup.cluster.id) ?? 0.5);
       if (lodGroup.cluster.id.includes('chimney')) chimneyOn = on;
+      // An awning leaves with the tenement it hangs on, on the same threshold.
+      const block = BUILDING_BLOCK.exec(lodGroup.cluster.id);
+      if (block) awnings.setBlockHidden(Number(block[1]), on);
       if (lodGroup.suppressed === on) continue;
       lodGroup.suppressed = on;
       lodGroup.apply(lodGroup.selector.level);
@@ -349,6 +355,13 @@ export function attachHybridSpike(options: HybridSpikeOptions): HybridHandle {
       totals.meshes += meshes.size;
     }
   };
+  /**
+   * Shop awnings: their own objects, because static geometry cannot open at ten. They
+   * take the shared opaque material, so the palette, theme, snow, wetness and night tint
+   * reach them exactly as they reach the wall they hang on. Built before the first swap,
+   * which hides the ones whose tenement the Cyberpunk city has replaced.
+   */
+  const awnings = new Awnings(options.scene, model.buildings, materials.opaque);
   buildAll();
   // After the first build, never before it: the swap reads `lodGroups`, and `buildAll` is
   // what fills them. Calling it earlier threw a temporal-dead-zone error inside the
@@ -375,12 +388,6 @@ export function attachHybridSpike(options: HybridSpikeOptions): HybridHandle {
   /** Last LOD input per cluster: gate 3 has to see the measure, not just the outcome. */
   const lodPixelsPerMetre: Record<string, number> = {};
 
-  /**
-   * Shop awnings: their own objects, because static geometry cannot open at ten. They
-   * take the shared opaque material, so the palette, theme, snow, wetness and night tint
-   * reach them exactly as they reach the wall they hang on.
-   */
-  const awnings = new Awnings(options.scene, model.buildings, materials.opaque);
 
   return {
     update({

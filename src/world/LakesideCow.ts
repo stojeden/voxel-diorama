@@ -58,7 +58,14 @@ export type UfoEvent = 'abduct' | 'return' | 'kioskRaid';
 
 // ── Farmer ──
 // Door of the building right next to the meadow (block at x:-14, z:56).
-const FARMER_DOOR = new THREE.Vector3(-15.4, 0.5, 58.5);
+const FARMER_DOOR = new THREE.Vector3(-15.4, GROUND_SURFACE_Y, 58.5);
+/** Half the goods crate's 1 m side: its centre stands this far above whatever it stands on. */
+const CRATE_HALF = 0.5;
+/**
+ * Where a lifted load disappears into the saucer. Absolute, like `HOVER_Y` itself; the lift
+ * used to add it to a ground of +0.5, which started every load a metre above the grass.
+ */
+const BEAM_TOP_Y = HOVER_Y - BEAM_TOP_OFFSET;
 
 type FarmerAct = 'walk' | 'look' | 'scratch' | 'fist' | 'pat';
 
@@ -315,7 +322,7 @@ export class LakesideCow {
     this.disposables.push(crateMat, crateGeo);
     this.crate = new THREE.Mesh(crateGeo, crateMat);
     this.crate.castShadow = true;
-    this.crate.position.set(KIOSK_RAID.x, 0.5, KIOSK_RAID.z);
+    this.crate.position.set(KIOSK_RAID.x, GROUND_SURFACE_Y + CRATE_HALF, KIOSK_RAID.z);
     scene.add(this.crate);
 
   }
@@ -404,7 +411,7 @@ export class LakesideCow {
       if (this.kioskClosed) {
         this.kioskClosed = false;
         this.crate.visible = true;
-        this.crate.position.set(KIOSK_RAID.x, 0.5, KIOSK_RAID.z);
+        this.crate.position.set(KIOSK_RAID.x, GROUND_SURFACE_Y + CRATE_HALF, KIOSK_RAID.z);
       }
     } else if (night < 0.4 && this.nightArmed) {
       this.nightArmed = false;
@@ -478,7 +485,8 @@ export class LakesideCow {
         if (this.pendingEvent === 'kioskRaid') {
           // The goods crate floats up into the saucer.
           this.liftProgress = t;
-          const y = 0.5 + (HOVER_Y - BEAM_TOP_OFFSET) * easeInOut(t);
+          const base = GROUND_SURFACE_Y + CRATE_HALF;
+          const y = base + (BEAM_TOP_Y - base) * easeInOut(t);
           this.crate.position.set(this.ufoHover.x, y, this.ufoHover.z);
           this.crate.rotation.y = elapsed * 1.6;
           if (t >= 1) {
@@ -545,11 +553,15 @@ export class LakesideCow {
 
     if (this.cowMode === 'lifted') {
       // Suspended in the tractor beam, slowly spinning.
-      const y = 0.5 + (HOVER_Y - BEAM_TOP_OFFSET) * easeInOut(this.liftProgress);
+      const lift = easeInOut(this.liftProgress);
+      const y = GROUND_SURFACE_Y + (BEAM_TOP_Y - GROUND_SURFACE_Y) * lift;
+      // From where the cow actually stood onto the beam axis over the first third of the
+      // lift, instead of snapping up to 2.6 m sideways on the frame the beam takes it.
+      const pull = THREE.MathUtils.smoothstep(this.liftProgress, 0, 0.35);
       g.group.position.set(
-        MEADOW.x + Math.sin(elapsed * 1.3) * 0.25,
+        this.cowPos.x + (MEADOW.x - this.cowPos.x) * pull + Math.sin(elapsed * 1.3) * 0.25 * pull,
         y,
-        MEADOW.z + Math.cos(elapsed * 1.1) * 0.25
+        this.cowPos.z + (MEADOW.z - this.cowPos.z) * pull + Math.cos(elapsed * 1.1) * 0.25 * pull
       );
       g.group.rotation.y = elapsed * 1.2;
       g.group.rotation.z = Math.sin(elapsed * 0.9) * 0.12;
@@ -573,7 +585,9 @@ export class LakesideCow {
       for (const leg of g.legs) leg.scale.y = 0.25;
       const breathe = 1 + Math.sin(elapsed * 1.4) * 0.015;
       g.group.scale.set(1, breathe, 1);
-      g.group.position.set(this.cowPos.x, GROUND_SURFACE_Y + 0.12, this.cowPos.z);
+      // 0.38 m below the standing pose, as authored against the old +0.5 ground (0.12 against
+      // 0.5). The conversion to GROUND_SURFACE_Y kept the 0.12 and floated her 0.36 m all night.
+      g.group.position.set(this.cowPos.x, GROUND_SURFACE_Y - 0.38, this.cowPos.z);
       g.headGroup.rotation.x = 0.35;
       g.tail.rotation.x = 0;
       return;
@@ -593,7 +607,7 @@ export class LakesideCow {
         // Pick a new grazing spot in the meadow (never in the water).
         const angle = this.random() * Math.PI * 2;
         const r = this.random() * MEADOW.wanderRadius;
-        this.walkTarget.set(MEADOW.x + Math.cos(angle) * r, 0.5, MEADOW.z + Math.sin(angle) * r);
+        this.walkTarget.set(MEADOW.x + Math.cos(angle) * r, GROUND_SURFACE_Y, MEADOW.z + Math.sin(angle) * r);
         clampOutsideLake(this.walkTarget);
         this.cowMode = 'walk';
       }
@@ -645,7 +659,7 @@ export class LakesideCow {
   private startFarmerTask(task: 'search' | 'celebrate'): void {
     // Every waypoint is clamped onto dry land — the farmer never wades in.
     const v = (x: number, z: number) => {
-      const p = new THREE.Vector3(x, 0.5, z);
+      const p = new THREE.Vector3(x, GROUND_SURFACE_Y, z);
       clampOutsideLake(p);
       return p;
     };
@@ -707,7 +721,7 @@ export class LakesideCow {
       this.farmerPos.x += (dx / dist) * stepLen;
       this.farmerPos.z += (dz / dist) * stepLen;
       f.group.position.copy(this.farmerPos);
-      f.group.position.y = 0.5 + Math.abs(Math.sin(elapsed * 7)) * 0.05;
+      f.group.position.y = GROUND_SURFACE_Y + Math.abs(Math.sin(elapsed * 7)) * 0.05;
       f.group.rotation.y = this.farmerHeading;
       f.legs.rotation.x = Math.sin(elapsed * 7) * 0.3;
       f.leftArm.rotation.x = Math.sin(elapsed * 7) * 0.55;
@@ -738,7 +752,7 @@ export class LakesideCow {
         // Glaring up at the sky, shaking a fist at the aliens.
         f.head.rotation.x = -0.55;
         f.rightArm.rotation.x = -2.95 + Math.sin(elapsed * 17) * 0.28;
-        f.group.position.y = 0.5 + Math.abs(Math.sin(elapsed * 9)) * 0.045;
+        f.group.position.y = GROUND_SURFACE_Y + Math.abs(Math.sin(elapsed * 9)) * 0.045;
         f.group.rotation.y = this.farmerHeading;
         break;
       case 'pat': {
@@ -747,7 +761,7 @@ export class LakesideCow {
         const toCowZ = this.cowPos.z - this.farmerPos.z;
         f.group.rotation.y = Math.atan2(toCowX, toCowZ);
         f.rightArm.rotation.x = -1.15 + Math.abs(Math.sin(elapsed * 7)) * 0.5;
-        f.group.position.y = 0.5 + Math.abs(Math.sin(elapsed * 5)) * easeInOut(Math.min(1, t * 2)) * 0.12;
+        f.group.position.y = GROUND_SURFACE_Y + Math.abs(Math.sin(elapsed * 5)) * easeInOut(Math.min(1, t * 2)) * 0.12;
         break;
       }
     }

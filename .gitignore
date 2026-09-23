@@ -37,3 +37,7 @@ coverage/
 # directory is excluded).
 docs/superpowers/spike/frames/*
 !docs/superpowers/spike/frames/evidence/
+
+# Local TLS for AR device testing. The key is a secret and the CA is machine-scoped;
+# `scripts/arDevCert.mjs` regenerates both in seconds.
+.certs/

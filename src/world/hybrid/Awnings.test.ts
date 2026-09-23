@@ -250,3 +250,35 @@ describe('shop awnings', () => {
     awnings.dispose();
   });
 });
+
+describe('the awnings leave with the tenement they hang on', () => {
+  test('a Cyberpunk city does not keep the old shopfronts hanging in front of it', async () => {
+    const { attachHybridSpike } = await import('./HybridSpike');
+    const { QUALITY_PROFILES } = await import('../../performance/QualityManager');
+    const { THEMES } = await import('../../experience/Themes');
+    const scene = new THREE.Scene();
+    const hybrid = attachHybridSpike({
+      scene,
+      strategy: 'direct',
+      quality: QUALITY_PROFILES.high,
+      themePalette: THEMES[0].palette,
+    });
+    const shops = scene.getObjectByName('shop-awnings')!.children;
+    const drawn = () => shops.filter((shop) => shop.visible).length;
+
+    expect(shops.length, 'no awnings were built, so nothing below means anything').toBeGreaterThan(0);
+    expect(drawn(), 'the ordinary city hides its own awnings').toBe(shops.length);
+
+    hybrid.setCyberRise(1);
+    expect(drawn(), 'awnings hang in mid-air in front of the megablock').toBe(0);
+
+    hybrid.setCyberRise(0);
+    expect(drawn(), 'the awnings did not come back with the tenements').toBe(shops.length);
+
+    // A quality flip across Low rebuilds the city and replays the swap: it must not undo this.
+    hybrid.setCyberRise(1);
+    hybrid.setQuality(QUALITY_PROFILES.low);
+    expect(drawn(), 'the rebuild put the awnings back in front of the megablock').toBe(0);
+    hybrid.dispose();
+  }, 60_000);
+});

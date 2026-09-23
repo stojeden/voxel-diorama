@@ -145,12 +145,14 @@ export function busStopWaitingPlacements(stop: BusStop): WaitingPlacement[] {
     .setY(0)
     .normalize();
   const doorBase = lanePoint.clone().addScaledVector(towardShelter, BUS_DOOR_APPROACH_DISTANCE);
-  doorBase.y = 0.5;
+  // On the road, like every other point of the walk. This was +0.5, the old ground, so each
+  // figure climbed a metre over the last leg beside the bus and hung there while it faded.
+  doorBase.y = GROUND_SURFACE_Y;
   return busStopWaitingPositions(stop).map((waitPos, index) => {
     const doorPos = doorBase
       .clone()
       .addScaledVector(tangent, index % 2 === 0 ? -DOOR_QUEUE_OFFSET : DOOR_QUEUE_OFFSET);
-    doorPos.y = 0.5;
+    doorPos.y = GROUND_SURFACE_Y;
     return {
       index,
       waitPos,

@@ -6,7 +6,7 @@ import type { TourFrame } from './CinematicTour';
 import { createWorld, type WindUniforms } from './world/WorldGenerator';
 import { createTrain } from './world/Train';
 import { createBus } from './world/Bus';
-import { Birds } from './world/Birds';
+import { Birds, eclipseDirectionFor } from './world/Birds';
 import { PassengerCrowd, sunGazeFrom } from './world/PassengerCrowd';
 import { LakeLife } from './world/LakeLife';
 import { LakesideCow, type UfoEvent } from './world/LakesideCow';
@@ -216,6 +216,10 @@ const unsubscribeQuality = quality.subscribe((profile, snapshot) => {
   rainbow.setQuality(profile.level);
   world.setQuality(profile);
   hybrid?.setQuality(profile);
+  // A switch into or out of Low rebuilds the hybrid's window and glow meshes, and the bloom
+  // selection still holds the ones it replaced: postprocessing tags an object's layer only
+  // when it is added, so the new meshes never bloomed again after the first trip through Low.
+  if (hybrid) env.setBloomSelection([...bloomTargets, ...hybrid.getBloomObjects()]);
   birds.setDensity(profile.actorDensity);
   passengerCrowd.setDensity(profile.actorDensity);
   eclipseCrowdProps.setQuality(profile.level);
@@ -504,6 +508,11 @@ function applyThemeBlend(): void {
 }
 
 function applyTheme(id: string, immediate = false): void {
+  // The theme already showing, or already being faded to: nothing to change. Going through
+  // with it made the new "previous" theme the same as the current one, which threw away a
+  // fade in progress -- a double-click cut the picture -- and faded the theme's own colour
+  // grade out to nothing on a settled re-click, where it stayed until another theme was picked.
+  if (id === currentTheme.id && !(immediate && themeBlend < 1)) return;
   // A theme change repaints everything, so accumulated history describes a city that no
   // longer exists. Still true of a fade: its first frame is already a different city.
   env.resetTemporal();
@@ -1150,10 +1159,7 @@ function stepWorld(frame: FrameContext, carrier: WorldFrame): void {
   optionalActorAccumulator += delta;
   const actorInterval = 1 / quality.getProfile().optionalActorHz;
   const stationState = train.getStationState();
-  birds.setEclipseState(
-    eclipseState.coverage,
-    eclipseState.progress < 0.5 ? 'increasing' : 'decreasing'
-  );
+  birds.setEclipseState(eclipseState.coverage, eclipseDirectionFor(eclipseActive, eclipseState.progress));
   if (optionalActorAccumulator >= actorInterval) {
     const actorDelta = optionalActorAccumulator;
     optionalActorAccumulator = 0;

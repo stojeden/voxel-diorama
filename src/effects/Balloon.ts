@@ -159,6 +159,8 @@ export class Balloon {
   constructor(scene: THREE.Scene, random = fallbackRandom('balloon')) {
     this.scene = scene;
     this.random = random;
+    this.group.name = 'balloon-flight';
+    this.group.rotation.order = 'YXZ';
 
     // ── Balloon model ──
     this.envelopeMaterial = new THREE.MeshStandardMaterial({ color: 0xd23a3a, roughness: 0.6 });
@@ -325,6 +327,10 @@ export class Balloon {
         this.entryZ = crossing.entryZ;
         this.crossLength = crossing.length;
         this.travelled = 0;
+        // Every flight starts from a clean attitude. The balloon's free spin used to carry
+        // into the next jet pass, which never set a heading, so after one balloon flight the
+        // jet crossed the city sideways or tail-first at whatever angle the spin had reached.
+        this.group.rotation.set(0, this.cyber ? Math.atan2(-this.dirZ, this.dirX) : 0, 0);
         this.group.position.set(
           this.entryX,
           this.cyber ? CRUISE_Y - 6 : ENTRY_Y,
@@ -358,7 +364,9 @@ export class Balloon {
       const sway = Math.sin(elapsed * 0.5 + this.bobPhase) * 8;
       this.group.position.x += acrossX * sway;
       this.group.position.z += acrossZ * sway;
-      this.group.rotation.z = Math.sin(elapsed * 0.5 + this.bobPhase) * 0.12;
+      // Nose along +x, so a bank is a roll about x. The order is YXZ (set at construction),
+      // which rolls about the craft's own axis whatever heading it launched on.
+      this.group.rotation.x = Math.sin(elapsed * 0.5 + this.bobPhase) * 0.12;
       this.engineMaterial.emissiveIntensity = 2 + Math.sin(elapsed * 26) * 0.7;
     } else {
       // Graceful profile: climb in, cruise, descend out.

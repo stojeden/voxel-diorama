@@ -39,6 +39,41 @@ a wersjonowanie projektu docelowo stosuje [Semantic Versioning](https://semver.o
 
 ### Fixed
 
+- **Przegląd całości: dziewięć błędów widocznych w działaniu, każdy przypięty testem, który bez
+  poprawki pada.** Z recenzji całego repozytorium wzięte tylko rzeczy, które widać na ekranie:
+  - **Bloom miasta hybrydowego ginął po przejściu jakości przez Low.** Przebudowa robi nowe
+    siatki okien i świateł, a selekcja bloomu trzymała stare — `postprocessing` znakuje warstwę
+    obiektu tylko przy dodaniu. Selekcja jest teraz odświeżana po każdej zmianie profilu.
+  - **Markizy sklepów wisiały w powietrzu przed megablokiem Cyberpunka** (0,7–0,9 m przed
+    ścianą, o każdej porze, bo złożona obudowa też się rysuje). Znikają teraz razem z kamienicą,
+    na tym samym progu przekazania, i wracają z nią.
+  - **Odrzutowiec w Cyberpunku leciał bokiem albo tyłem**, bo dziedziczył swobodny obrót balonu
+    (stary kod: 97° od kierunku lotu). Każdy lot startuje z czystej orientacji, a przechył jest
+    przechyłem — obrotem wokół osi kadłuba.
+  - **Rolnik chodził metr nad łąką, skrzynka wisiała pół metra, śpiąca krowa unosiła się 0,36 m
+    przez całą noc.** Wysokości pisane pod dawny grunt +0,5; konwersja na `GROUND_SURFACE_Y`
+    zostawiła część z nich. Krowę porwaną przez UFO promień przeciąga teraz na oś płynnie,
+    zamiast skoku o 2,6 m w bok.
+  - **Pasażerowie autobusu wznosili się prawie metr nad jezdnią przy drzwiach** — punkt drzwi był
+    na +0,5.
+  - **Lampa przystanku świeciła na dach, nie pod dach.** Po obniżeniu dachu (`686a6a7`) została
+    na 2,24 m, 0,28 m nad nim: przepalona plama na każdym dachu wiaty w nocy i ciemny sufit.
+    Wisi teraz pod dachem, a moc spadła z 48 na 27,7, bo 48 × (2,08 / 2,74)² trzyma chodnik pod
+    wiatą dokładnie tak jasnym, jak był.
+  - **Mewy zostawały na dachach przez kilka dni**, jeśli zaćmienie przewinięto w trakcie (start
+    trasy w totalności): postęp 0 czytał się jak faza nadchodząca i zatrzask się nie zwalniał.
+  - **Ujęcie „TOTALNOŚĆ" w trasie i dwóch punktach kontrolnych gubiło zaćmione Słońce** — literał
+    sprzed pór roku; przy czerwcowej deklinacji tarcza lądowała na x = 1,03 w kadrze 16:9 i poza
+    nim przy 16:10 i 4:3. Ujęcie liczy się teraz z tej samej funkcji co przycisk „Zaćmienie".
+  - **Ponowny wybór aktywnego motywu wygaszał jego filtr barwny na stałe**, a podwójne kliknięcie
+    w trakcie przejścia cięło obraz. Wybór motywu, który już jest, niczego nie zmienia.
+- **Automatyczna jakość na ekranie 60 Hz umiała tylko schodzić w dół.** Próg podwyższenia to
+  klatka krótsza niż 16,2 ms, a rAF nie wyprzedzi vsync — średnia stoi na 16,67 ms niezależnie od
+  zapasu GPU. Jeden wolny odcinek, na przykład noc, kosztował jakość do końca sesji. Poziom
+  obniżony poniżej rekomendacji sprzętu wraca teraz o jeden stopień po minucie pracy w pełnym
+  tempie ekranu (średnio ≤ 17,5 ms), nigdy powyżej rekomendacji; jeśli nie utrzyma się 45 s,
+  czas oczekiwania się podwaja, do ośmiu minut, żeby dzień i noc nie przełączały jakości w kółko.
+
 - **Peron pustoszał na zawsze po jednym pociągu, bo `group.visible` znaczyło dwie rzeczy naraz.**
   Ta sama flaga niosła dwa niezależne fakty: **culling gęstością** (`cad8325`, profil jakości
   wyłącza część figur) i, od `328878a` sprzed pięciu dni, **wynik przenikania** (`visible =

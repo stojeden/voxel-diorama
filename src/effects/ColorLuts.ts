@@ -71,9 +71,16 @@ export class ColorLutPipeline {
     const mix = Math.min(Math.max(t, 0), 1);
     const strength = (id: ThemeLutId) => (id === 'classic' ? 0 : 0.32);
 
-    // `classic` has no table of its own, so a change to or from it -- and the constructor's
-    // classic-to-classic -- is a plain one-way fade with no dip.
-    if (from === to || from === 'classic' || to === 'classic') {
+    // One theme on both sides is not a change: hold its grade. This branch used to fade the
+    // grade out, which is right for classic-to-classic and wrong for every other theme.
+    if (from === to) {
+      this.themeEffect.lut = this.themeLuts[from];
+      this.themeEffect.blendMode.opacity.value = strength(from);
+      return;
+    }
+    // `classic` has no table of its own, so a change to or from it is a plain one-way fade
+    // with no dip.
+    if (from === 'classic' || to === 'classic') {
       const active = from === 'classic' ? to : from;
       this.themeEffect.lut = this.themeLuts[active];
       const target = from === 'classic' ? mix : 1 - mix;

@@ -1915,7 +1915,10 @@ export class DayNightCycle {
     for (let i = 0; i < this.hooks.busStopLights.length; i++) {
       const light = this.hooks.busStopLights[i];
       light.visible = this.localLightsEnabled && night > physicalLightThreshold && i < busStopLightBudget;
-      light.intensity = light.visible ? night * 48 : 0;
+      // 48 was authored for a light 2.74 m above the pavement. It now hangs under the lowered
+      // roof, 2.08 m up, and 48 x (2.08 / 2.74)^2 = 27.7 keeps the pavement under the shelter
+      // exactly as bright as it was.
+      light.intensity = light.visible ? night * 27.7 : 0;
     }
     for (const material of this.hooks.busStopGlowMaterials) {
       material.emissiveIntensity = 0.08 + night * 1.05;

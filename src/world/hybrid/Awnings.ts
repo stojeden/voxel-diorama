@@ -111,6 +111,8 @@ const ARM_ROOT_Z = 0.05;
 const ARM_INSET = 0.35;
 
 interface Awning {
+  /** The tenement it hangs on, so it can leave with that tenement. */
+  block: number;
   group: THREE.Group;
   fabric: THREE.Mesh;
   valance: THREE.Mesh;
@@ -172,7 +174,7 @@ export class Awnings {
       for (const part of [fabric, valance, ...arms]) group.add(part);
 
       this.group.add(group);
-      this.items.push({ group, fabric, valance, arms, width });
+      this.items.push({ block: front.block, group, fabric, valance, arms, width });
     }
 
     scene.add(this.group);
@@ -181,6 +183,24 @@ export class Awnings {
   /** How many shops actually have one, for tests and for the report. */
   get count(): number {
     return this.items.length;
+  }
+
+  /**
+   * Take one block's awnings away, or bring them back.
+   *
+   * The Cyberpunk swap suppresses the tenement they hang on at that plot's own handover
+   * threshold, and an awning left behind hangs in mid-air 0.7-0.9 m in front of the megablock
+   * -- folded housings included, so at every hour, not just while the shop is open.
+   */
+  setBlockHidden(block: number, hidden: boolean): void {
+    for (const item of this.items) {
+      if (item.block === block) item.group.visible = !hidden;
+    }
+  }
+
+  /** How many awnings are drawn now, for tests and for the report. */
+  get visibleCount(): number {
+    return this.items.filter((item) => item.group.visible).length;
   }
 
   /** Where the movement is, 0 folded to 1 out. The checkpoint story reads this. */

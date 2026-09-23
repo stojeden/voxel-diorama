@@ -2,7 +2,14 @@ import { describe, expect, test } from 'vitest';
 import * as THREE from 'three';
 import { QUALITY_PROFILES } from '../performance/QualityManager';
 import { createWorld } from './WorldGenerator';
-import { BLOCK_CONFIGS, BUS_STOPS, LAMP_SPECS, STATION_STOPS } from './WorldLayout';
+import {
+  BLOCK_CONFIGS,
+  BUS_SHELTER_ROOF_Y,
+  BUS_STOPS,
+  GROUND_SURFACE_Y,
+  LAMP_SPECS,
+  STATION_STOPS,
+} from './WorldLayout';
 
 describe('world rendering budget', () => {
   test('keeps dynamic lamp lighting cheap enough for laptop GPUs', () => {
@@ -38,5 +45,25 @@ describe('world rendering budget', () => {
     expect(world.stationGlowMaterials.length).toBeGreaterThan(0);
     expect(world.stationGlowMesh.count).toBe(STATION_STOPS.length);
     world.dispose();
+  });
+});
+
+describe('the bus-stop safety light hangs under the shelter roof', () => {
+  test('below the roof, not on top of it', () => {
+    const scene = new THREE.Scene();
+    const world = createWorld(scene, {
+      uTime: { value: 0 },
+      uWind: { value: 0 },
+      uWindDir: { value: new THREE.Vector2(1, 0) },
+    });
+    scene.updateMatrixWorld(true);
+    // The roof's underside is the top of the posts; the light must be under it, and high
+    // enough to clear a standing figure's head.
+    const underside = GROUND_SURFACE_Y + BUS_SHELTER_ROOF_Y;
+    for (const light of world.busStopLights) {
+      const y = light.getWorldPosition(new THREE.Vector3()).y;
+      expect(y, `${light.name} sits on or above the roof`).toBeLessThan(underside);
+      expect(y - GROUND_SURFACE_Y, `${light.name} is below head height`).toBeGreaterThan(1.9);
+    }
   });
 });

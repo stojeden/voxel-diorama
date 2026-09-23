@@ -85,6 +85,49 @@ describe('QualityManager', () => {
     expect(manager.getSnapshot().level).toBe('high');
   });
 
+  /** A 60 Hz display: every frame at the refresh interval, give or take the compositor. */
+  function sixtyHertz(manager: QualityManager, seconds: number): void {
+    let jitter = 0;
+    for (let elapsed = 0; elapsed < seconds; ) {
+      jitter = (jitter + 0.37) % 1;
+      const delta = (16.67 + (jitter - 0.5) * 0.8) / 1000;
+      manager.sampleFrame(delta);
+      elapsed += delta;
+    }
+  }
+
+  it('climbs back after a slow stretch on a 60 Hz display', () => {
+    // The display cannot deliver a frame shorter than 16.67 ms, so the fast-display
+    // upgrade thresholds are out of reach and the drop used to be permanent.
+    const manager = new QualityManager({ hardwareConcurrency: 10 }, 'auto');
+    sample(manager, 40, 10);
+    expect(manager.getSnapshot().level).toBe('medium');
+    sixtyHertz(manager, 30);
+    expect(manager.getSnapshot().level, 'recovered before a minute of calm').toBe('medium');
+    sixtyHertz(manager, 60);
+    expect(manager.getSnapshot().level, 'one slow stretch cost the rest of the session').toBe('high');
+  });
+
+  it('does not climb past the level the hardware was recommended for', () => {
+    const manager = new QualityManager({ hardwareConcurrency: 4 }, 'auto');
+    sixtyHertz(manager, 300);
+    expect(manager.getSnapshot().level).toBe('low');
+  });
+
+  it('waits twice as long after a recovery that did not hold', () => {
+    const manager = new QualityManager({ hardwareConcurrency: 10 }, 'auto');
+    sample(manager, 40, 10);
+    sixtyHertz(manager, 90);
+    expect(manager.getSnapshot().level).toBe('high');
+    // The promoted level fails straight away: back down, and the next try needs two minutes.
+    sample(manager, 40, 8);
+    expect(manager.getSnapshot().level).toBe('medium');
+    sixtyHertz(manager, 90);
+    expect(manager.getSnapshot().level, 'retried on the original minute').toBe('medium');
+    sixtyHertz(manager, 60);
+    expect(manager.getSnapshot().level).toBe('high');
+  });
+
   it('ignores background-tab stalls', () => {
     const manager = new QualityManager({ hardwareConcurrency: 10 }, 'auto');
     for (let i = 0; i < 100; i++) manager.sampleFrame(1);
