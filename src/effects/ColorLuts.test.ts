@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+import { THEMES } from '../experience/Themes';
 import { ColorLutPipeline } from './ColorLuts';
 
 /**
@@ -9,7 +10,7 @@ import { ColorLutPipeline } from './ColorLuts';
  * faded its grade out and left it off until another theme was chosen.
  */
 describe('a theme blended with itself holds its grade', () => {
-  test.each(['retro', 'autumn', 'toy'])('%s', (id) => {
+  test.each(['retro', 'autumn', 'toy', 'cyberpunk'])('%s', (id) => {
     const luts = new ColorLutPipeline();
     luts.setThemeBlend('classic', id, 1);
     const settled = luts.themeEffect.blendMode.opacity.value;
@@ -28,3 +29,15 @@ describe('a theme blended with itself holds its grade', () => {
     luts.dispose();
   });
 });
+
+describe('every theme reaches its own grade', () => {
+  test.each(THEMES.map((theme) => theme.id).filter((id) => id !== 'classic'))('%s', (id) => {
+    // The Cyberpunk table was keyed 'cyber' against the theme id 'cyberpunk' and fell through
+    // to classic, strength zero, since the day it was written.
+    const luts = new ColorLutPipeline();
+    luts.setThemeBlend('classic', id, 1);
+    expect(luts.themeEffect.blendMode.opacity.value, `${id} has no grade`).toBeGreaterThan(0);
+    luts.dispose();
+  });
+});
+

@@ -17,7 +17,7 @@ import {
 } from './PassengerCrowd';
 import { eclipseWorldReactionAt } from '../experience/EclipseWorldReaction';
 import { EclipseTimeline } from '../experience/EclipseTimeline';
-import { eclipseViewClock } from '../experience/EclipseView';
+import { eclipseClockAt, eclipseViewClock } from '../experience/EclipseView';
 import { JUNE_DECLINATION_DEG, sunDirectionAt } from '../environment/sky';
 import { STATION_STOPS } from './WorldLayout';
 import type { Radians } from '../units';
@@ -640,6 +640,64 @@ describe('the turn is continuous across the whole schedule', () => {
       expect(worst.head, 'glowa nie kompensuje skoku tulowia').toBeLessThan(MAX_FRAME_YAW);
     }
   );
+});
+
+describe('the turn stays continuous now that the sun moves during the eclipse', () => {
+  /**
+   * The clock used to stand still for the eclipse, and the pose code leans on that: `toSun` is
+   * wrapped on its own because it "does not sweep". The clock now runs an hour through the
+   * eclipse and the sun moves with it, about eleven degrees of azimuth, so the bearing does
+   * sweep. This runs the real timeline against the moving sun, at every five degrees of stop
+   * facing, so a facing whose bearing crosses the wrap during a hold transition cannot hide.
+   */
+  const FRAME_SECONDS = 1 / 60;
+  const MAX_FRAME_YAW = 0.26;
+
+  test.each(['projection', 'glasses', 'watch'] as const)('a %s figure never jumps within a frame', (pose) => {
+    const timeline = new EclipseTimeline();
+    const sun = new THREE.Vector3();
+    let worst = 0;
+    let where = '';
+    for (let degrees = -180; degrees < 180; degrees += 5) {
+      const baseFacing = THREE.MathUtils.degToRad(degrees);
+      const build = buildPassenger(() => 0.5);
+      build.group.rotation.y = baseFacing;
+      let previousYaw: number | null = null;
+      // Captured the way the crowd and the bus capture it: on the frame the body turn begins.
+      let sunOrigin: number | null = null;
+      timeline.seek(0, true);
+      for (let frame = 0; frame * FRAME_SECONDS <= timeline.durationSeconds; frame++) {
+        const state = timeline.update(frame === 0 ? 0 : FRAME_SECONDS);
+        const reaction = eclipseWorldReactionAt(state.coverage, state.totality);
+        sunDirectionAt(eclipseClockAt(STAGED_DECLINATION, state.progress), STAGED_DECLINATION, sun);
+        const sunGaze = sunGazeFrom(sun);
+        const bodyTurn = eclipseBodyTurn(reaction.movementScale);
+        sunOrigin = eclipseTurnOrigin(sunOrigin, bodyTurn, sunGaze.yaw);
+        const gaze: PassengerSunGaze = {
+          ...sunGaze,
+          baseFacing,
+          bodyTurn,
+          sunYawOrigin: sunOrigin,
+        };
+        applyPassengerEclipsePose(
+          build,
+          pose,
+          { attention: reaction.attention, eyeProtection: reaction.eyeProtection, projection: reaction.projection },
+          gaze
+        );
+        if (previousYaw !== null) {
+          const raw = Math.abs(build.group.rotation.y - previousYaw) % (2 * Math.PI);
+          const step = Math.min(raw, 2 * Math.PI - raw);
+          if (step > worst) {
+            worst = step;
+            where = `ustawienie ${degrees} st., postep ${state.progress.toFixed(4)}`;
+          }
+        }
+        previousYaw = build.group.rotation.y;
+      }
+    }
+    expect(worst, `skok tulowia ${((worst * 180) / Math.PI).toFixed(2)} st. (${where})`).toBeLessThan(MAX_FRAME_YAW);
+  });
 });
 
 /**

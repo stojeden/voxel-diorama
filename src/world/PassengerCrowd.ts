@@ -57,6 +57,8 @@ interface Passenger {
   eclipsePose: EclipsePassengerPose;
   /** Heading this figure began its sun turn from; null while the walk loop still owns the feet. */
   turnOrigin: number | null;
+  /** The sun's yaw on that same frame, so a moving sun cannot flip the side of the turn. */
+  sunOrigin: number | null;
   /**
    * Switched off by the quality profile, not by the fade. The two used to share
    * `group.visible` and the sharing was a one-way door: see `setDensity`.
@@ -134,6 +136,16 @@ export interface PassengerSunGaze extends SunGaze {
   baseFacing: number;
   /** 0 while the crowd still walks, exactly 1 once it has frozen. Gates the body turn only. */
   bodyTurn: number;
+  /**
+   * The sun's yaw on the frame this figure's turn began, captured like `baseFacing`.
+   *
+   * The clock runs through the eclipse now and the sun moves about eleven degrees with it.
+   * Wrapping the live bearing every frame let it cross +/-PI or 0 mid-turn, and the side of
+   * the half turn flipped with it: 138-166 degrees of torso in one frame for a figure standing
+   * square to the sun. The bearing at the start fixes the side; the drift since is added on.
+   * Optional: without it the live yaw is its own origin, which is exact for a sun that stands.
+   */
+  sunYawOrigin?: number | null;
 }
 
 /**
@@ -250,16 +262,19 @@ function applySunGaze(
   // the sun the figure stands: half a turn with the card up, none at all without it. Two
   // branches writing one rotation is how the projection cohort drifted away from its prop.
   //
-  // The wrap is taken on `toSun` alone, which does not sweep -- the clock is locked for the
-  // ninety seconds and `baseFacing` is captured when the turn begins -- and the half turn is
-  // added outside it. Written the other way round, as `wrapPi(yaw + PI * hold - baseFacing)`,
+  // The wrap is taken once, on the bearing at the start of the turn -- `baseFacing` and the
+  // sun's yaw are both captured on that frame -- and the sun's drift since is added unwrapped,
+  // because the clock now runs through the eclipse and the sun sweeps about eleven degrees.
+  // The half turn is added outside the wrap. Written the other way round, as `wrapPi(yaw + PI * hold - baseFacing)`,
   // the argument itself swept half a turn as the card left, crossed +/-PI, and `wrapPi` threw
   // it 2PI the other way: `headYaw` flipped sign, and the torso moved 86.56 degrees in a
   // single 16 ms frame for four of the seven stop facings in the fleet -- on the frame of the
   // diamond ring. The endpoint tests never saw it because they sample two static states and
   // assert the face-to-sun angle, which body and head cancel out of.
-  const toSun = wrapPi(gaze.yaw - gaze.baseFacing);
-  const halfTurn = toSun > 0 ? -Math.PI : Math.PI;
+  const origin = gaze.sunYawOrigin ?? gaze.yaw;
+  const toSunAtStart = wrapPi(origin - gaze.baseFacing);
+  const toSun = toSunAtStart + wrapPi(gaze.yaw - origin);
+  const halfTurn = toSunAtStart > 0 ? -Math.PI : Math.PI;
   const delta = toSun + halfTurn * hold;
   // The neck takes what it comfortably can and the feet carry the rest, so the two sum to
   // the sun's own bearing once both terms are full -- not to something near it. A figure
@@ -497,6 +512,7 @@ export class PassengerCrowd {
           targetOpacity: 0.92,
           eclipsePose,
           turnOrigin: null,
+          sunOrigin: null,
           culled: false,
         });
       }
@@ -663,6 +679,8 @@ export class PassengerCrowd {
     if (this.sunGaze) {
       const bodyTurn = eclipseBodyTurn(this.eclipseReaction.movementScale);
       p.turnOrigin = eclipseTurnOrigin(p.turnOrigin, bodyTurn, p.group.rotation.y);
+      p.sunOrigin = eclipseTurnOrigin(p.sunOrigin, bodyTurn, this.sunGaze.yaw);
+      this.gaze.sunYawOrigin = p.sunOrigin;
       this.gaze.yaw = this.sunGaze.yaw;
       this.gaze.elevation = this.sunGaze.elevation;
       // The figure's own heading, not the platform's: `facingTrack` is where it rests, and a

@@ -1,7 +1,9 @@
 import * as THREE from 'three';
 import { BlendFunction, LUT3DEffect, LookupTexture } from 'postprocessing';
 
-export type ThemeLutId = 'classic' | 'retro' | 'autumn' | 'toy' | 'cyber';
+/** Keyed by theme id, exactly. The Cyberpunk table sat under 'cyber' while the theme is
+ * 'cyberpunk', so the lookup fell through to classic and that grade was never applied once. */
+export type ThemeLutId = 'classic' | 'retro' | 'autumn' | 'toy' | 'cyberpunk';
 
 type RgbTransform = (r: number, g: number, b: number) => [number, number, number];
 
@@ -39,7 +41,7 @@ export class ColorLutPipeline {
     retro: makeLut((r, g, b) => [r * 1.03 + g * 0.025, g * 0.95 + r * 0.018, b * 0.82]),
     autumn: makeLut((r, g, b) => [r * 1.06 + 0.01, g * 0.97, b * 0.84]),
     toy: makeLut((r, g, b) => saturation(r, g, b, 1.14)),
-    cyber: makeLut((r, g, b) => [r * 0.9 + b * 0.04, g * 1.02, b * 1.09 + 0.01]),
+    cyberpunk: makeLut((r, g, b) => [r * 0.9 + b * 0.04, g * 1.02, b * 1.09 + 0.01]),
   };
 
   constructor() {
@@ -64,8 +66,12 @@ export class ColorLutPipeline {
    * theme change: see `resolvePaletteBlend` in `world/hybrid/palette.ts` for the measurement.
    */
   setThemeBlend(fromId: string, toId: string, t: number): void {
-    const safe = (id: string): ThemeLutId =>
-      id in this.themeLuts ? (id as ThemeLutId) : 'classic';
+    const safe = (id: string): ThemeLutId => {
+      if (id in this.themeLuts) return id as ThemeLutId;
+      // Loud in development: a silent fallback to classic is how one theme lost its grade.
+      if (import.meta.env?.DEV) console.warn(`ColorLuts: no grade for theme "${id}"`);
+      return 'classic';
+    };
     const from = safe(fromId);
     const to = safe(toId);
     const mix = Math.min(Math.max(t, 0), 1);

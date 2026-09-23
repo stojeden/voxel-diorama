@@ -37,6 +37,38 @@ a wersjonowanie projektu docelowo stosuje [Semantic Versioning](https://semver.o
   skrócenie rozpiętości do połowy; koniuszek ląduje 0,079 za ogonem, jak lotki prawdziwej mewy.
   Zmierzone na produkcie: 7 z 11 mew ma `scale.x = 0.500` w nocy, pozostałe cztery jeszcze lecą.
 
+### Changed
+
+- **Zegar chodzi przez całe zaćmienie, a naturalne zaćmienie dojeżdża do swojej godziny
+  płynnie.** Dotąd zegar stawał na 96 sekund, a przy zaćmieniu naturalnym jeszcze przeskakiwał
+  w jednej klatce z godziny, którą wylosował harmonogram, na godzinę zaćmienia — w czerwcu do
+  dwunastu godzin naraz, ze Słońcem przeskakującym niebo razem z każdym cieniem. Teraz:
+  - **zegar jedzie** do początku zaćmienia krótszą drogą po tarczy, z łagodnym startem i
+    hamowaniem, w 1,5–5 s zależnie od odległości; Księżyc czeka, aż dojedzie, więc nie wchodzi na
+    Słońce, które jeszcze sunie po niebie;
+  - **przez zaćmienie zegar chodzi**, godzina zegara na całe zjawisko: 18:37 → totalność
+    **dokładnie 19:07** → 19:37 w czerwcu (Słońce 13,0° → 8,8° → 4,8°), 15:57 → 16:27 → 16:57
+    jesienią (na końcu wciąż 2,0° nad horyzontem); potem idzie dalej zwykłym tempem, bez skoku.
+    Zwykłego tempa nie da się utrzymać: doba ma 240 s, więc 96 s zaćmienia to 9,6 godziny i
+    Słońce zaszłoby w połowie drogi do totalności. Totalność leży dokładnie tam, gdzie było
+    strojone jej światło.
+  Zmierzone na zbudowanym produkcie, zaćmienie naturalne wywołane o 8:30: zegar dojeżdża w
+  około 7 s do 18:36, zaćmienie trwa 96 s z zegarem chodzącym od 18:36 do 19:36 (totalność przy
+  19:06), po końcu 19:36 → 19:54 w 3 s. Najgorszy pojedynczy krok zegara to 12,9 min, na klatce z
+  przestojem — wcześniej 12 godzin.
+  **Ruchome Słońce wypuściło stary błąd w pozach tłumu.** Kod obrotu sylwetek zawijał kierunek do
+  Słońca na nowo w każdej klatce i z jego znaku wybierał stronę półobrotu; przy stojącym Słońcu
+  nie miało to znaczenia. Z ruchomym sylwetka stojąca niemal przodem albo tyłem do Słońca
+  obracała tułów o 138–166° w jednej klatce. Dotychczasowy test sprawdzał 7 ustawień i
+  nieruchome Słońce; nowy sprawdza co 5° z ruchomym i pada bez poprawki. Kierunek do Słońca jest
+  teraz zapamiętywany w chwili, gdy zaczyna się obrót — tak jak wyjściowe ustawienie sylwetki —
+  a ruch Słońca od tej chwili dodawany bez zawijania. Kamera przycisku „Zaćmienie" trzyma
+  Słońce w kadrze od pierwszego do ostatniego kontaktu, w obu porach roku i trzech proporcjach.
+- **Filtr barwny Cyberpunka działa.** Tablica była pod kluczem `'cyber'`, motyw ma id
+  `'cyberpunk'`, więc od pierwszego dnia wpadała w klasyczny brak filtra. W tej samej klatce
+  punktu kontrolnego średni niebieski rośnie o 5,5 %, czerwony spada o 2,7 % — chłodne
+  przesunięcie zgodne ze wzorem tablicy. Nieznany motyw ostrzega teraz w trybie deweloperskim.
+
 ### Fixed
 
 - **Przegląd całości: dziewięć błędów widocznych w działaniu, każdy przypięty testem, który bez

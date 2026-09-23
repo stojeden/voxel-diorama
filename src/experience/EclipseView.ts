@@ -44,3 +44,57 @@ export function eclipseViewCameraPosition(
   out.y = ECLIPSE_VIEW_HEIGHT;
   return out;
 }
+
+/**
+ * How much clock the whole compressed eclipse spans: one hour, centred on totality.
+ *
+ * The clock used to stop for the eclipse's 96 seconds. It cannot simply keep its normal pace:
+ * a day is 240 seconds, so 96 seconds is 9.6 hours of clock and the sun would set halfway to
+ * totality. One hour keeps it moving where a viewer can see it -- the minutes tick every couple
+ * of seconds and the sun sinks from about 13 to about 5 degrees under the June declination --
+ * while totality still falls exactly on the hour the eclipse's light was authored at.
+ */
+export const ECLIPSE_CLOCK_SPAN = 1 / 24;
+
+/**
+ * The clock at a given point of the eclipse timeline: {@link eclipseViewClock} at totality
+ * (progress 0.5), half an hour either side at first and last contact.
+ */
+export function eclipseClockAt(declination: Radians, progress: number): Clock01 {
+  const t = eclipseViewClock(declination) + (THREE.MathUtils.clamp(progress, 0, 1) - 0.5) * ECLIPSE_CLOCK_SPAN;
+  return (t - Math.floor(t)) as Clock01;
+}
+
+/** The longest and shortest a natural eclipse spends carrying the clock to its hour. */
+const APPROACH_MAX_SECONDS = 5;
+const APPROACH_MIN_SECONDS = 1.5;
+
+/**
+ * Carry the clock to where the eclipse begins instead of cutting to it.
+ *
+ * A natural eclipse fires at whatever hour its day's schedule picked, and the eclipse is only
+ * authored -- light, sky, totality -- at {@link eclipseViewClock}. The clock used to be pinned
+ * there on the next frame: up to twelve hours in one frame, the sun jumping across the sky and
+ * every shadow with it. Now it travels, the short way round the dial, eased in and out, in a
+ * time that grows with the distance: five seconds for half a day, a second and a half for a
+ * nudge. The caller holds the eclipse itself at its first frame until `done`.
+ *
+ * `elapsed` is simulation seconds since the eclipse started; `target` is re-read every frame so
+ * a theme fading to a new season moves the destination rather than being overshot.
+ */
+export function eclipseClockApproach(
+  from: Clock01,
+  target: Clock01,
+  elapsed: number
+): { t01: Clock01; done: boolean } {
+  let distance = target - from;
+  distance -= Math.round(distance);
+  const duration =
+    APPROACH_MIN_SECONDS +
+    (APPROACH_MAX_SECONDS - APPROACH_MIN_SECONDS) * Math.min(1, Math.abs(distance) / 0.5);
+  const k = THREE.MathUtils.clamp(elapsed / duration, 0, 1);
+  if (k >= 1) return { t01: target, done: true };
+  const eased = k * k * (3 - 2 * k);
+  const t = from + distance * eased;
+  return { t01: (t - Math.floor(t)) as Clock01, done: false };
+}

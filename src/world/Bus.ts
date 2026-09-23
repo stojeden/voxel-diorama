@@ -337,6 +337,8 @@ interface BusPassenger {
   eclipsePose: EclipsePassengerPose;
   /** Heading this figure began its sun turn from; null while the walk loop still owns the feet. */
   turnOrigin: number | null;
+  /** The sun's yaw on the frame the turn began; see `PassengerSunGaze.sunYawOrigin`. */
+  sunOrigin: number | null;
 }
 
 interface StopCrowd {
@@ -386,6 +388,7 @@ function buildStopCrowd(scene: THREE.Scene, stop: BusStop, random: RandomSource)
       atStop: true,
       eclipsePose,
       turnOrigin: null,
+      sunOrigin: null,
     });
   }
 
@@ -697,6 +700,8 @@ export function createBus(scene: THREE.Scene, random = fallbackRandom('bus')): B
     if (sunGaze) {
       const bodyTurn = eclipseBodyTurn(eclipseReaction.movementScale);
       p.turnOrigin = eclipseTurnOrigin(p.turnOrigin, bodyTurn, p.build.group.rotation.y);
+      p.sunOrigin = eclipseTurnOrigin(p.sunOrigin, bodyTurn, sunGaze.yaw);
+      passengerGaze.sunYawOrigin = p.sunOrigin;
       passengerGaze.yaw = sunGaze.yaw;
       passengerGaze.elevation = sunGaze.elevation;
       // The figure's own heading, not the shelter's: `facing` is where it waits, and a figure

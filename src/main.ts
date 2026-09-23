@@ -50,7 +50,12 @@ import {
   type CheckpointDefinition,
   type CheckpointId,
 } from './experience/Checkpoints';
-import { eclipseViewCameraPosition, eclipseViewClock } from './experience/EclipseView';
+import {
+  eclipseClockApproach,
+  eclipseClockAt,
+  eclipseViewCameraPosition,
+  eclipseViewClock,
+} from './experience/EclipseView';
 import {
   clockFromSolarPhase,
   solarPhaseAt,
@@ -689,8 +694,16 @@ function focusEclipseView(): void {
 
 type EclipseStartSource = 'manual' | 'automatic';
 
+/**
+ * A natural eclipse on its way to the staged hour: where the clock started, and for how long it
+ * has been travelling. Null when there is nothing to carry -- a manual start sets the hour
+ * outright, because it cuts the camera to the eclipse view in the same frame anyway.
+ */
+let eclipseClockTrip: { from: Clock01; elapsed: number } | null = null;
+
 function startEclipse(source: EclipseStartSource = 'manual'): void {
   const manual = source === 'manual';
+  eclipseClockTrip = manual ? null : { from: experience.getState().t01, elapsed: 0 };
   // End the tour before the timeline starts: `endTourOverrides` rewinds the
   // eclipse, so running it afterwards would cancel the eclipse being requested.
   if (manual && experience.isTourActive()) endTourOverrides();
@@ -699,7 +712,9 @@ function startEclipse(source: EclipseStartSource = 'manual'): void {
     weather.setExternal(null, NO_EXTERNAL_WIND_FLOOR);
     ui.setRealTime(false);
   }
-  if (manual) experience.setTime(eclipseViewClock(sunDeclination()));
+  // The eclipse drives the clock from here on: it runs through the eclipse, an hour of it
+  // centred on totality, and hands over at last contact to the ordinary pace, where it is.
+  if (manual) experience.setTime(eclipseClockAt(sunDeclination(), 0));
   experience.setClockLocked(true);
   eclipseState = eclipseTimeline.start();
   eclipseSchedule.recordOccurrence();
@@ -792,7 +807,8 @@ if (import.meta.env.DEV && !requestedCheckpoint) {
   };
   const checkpoint = eclipseCheckpoint ? checkpoints[eclipseCheckpoint] : undefined;
   if (checkpoint !== undefined) {
-    experience.setTime(eclipseViewClock(sunDeclination()));
+    // The hour a running eclipse would be at by this point, not the totality hour.
+    experience.setTime(eclipseClockAt(sunDeclination(), checkpoint));
     eclipseState = eclipseTimeline.seek(checkpoint, false);
     eclipseCheckpointLocked = true;
     focusEclipseView();
@@ -955,8 +971,21 @@ function stepWorld(frame: FrameContext, carrier: WorldFrame): void {
     frame,
     realTime?.isActive() ? realTime.getCycleT() : null
   );
+  if (!eclipseState.running) eclipseClockTrip = null;
   if (eclipseState.running) {
-    experience.setTime(eclipseViewClock(declination));
+    if (eclipseClockTrip) {
+      eclipseClockTrip.elapsed += delta;
+      const step = eclipseClockApproach(
+        eclipseClockTrip.from,
+        eclipseClockAt(declination, 0),
+        eclipseClockTrip.elapsed
+      );
+      experience.setTime(step.t01);
+      if (step.done) eclipseClockTrip = null;
+    } else {
+      // The clock keeps running through the eclipse, on the eclipse's own timeline.
+      experience.setTime(eclipseClockAt(declination, eclipseState.progress));
+    }
     experienceState = experience.getState();
   }
   const t01 = experienceState.t01;
@@ -1006,7 +1035,9 @@ function stepWorld(frame: FrameContext, carrier: WorldFrame): void {
   // ── Eclipse 2.0: deterministic, compressed event with explicit phases ──
   // A natural eclipse may start from the deterministic day schedule above, but
   // never moves the camera. Manual activation still frames it deliberately.
-  eclipseState = eclipseTimeline.update(eclipseState.running ? delta : 0);
+  // Held at its first frame while the clock is still on its way: the moon does not start across
+  // a sun that is still moving over the sky.
+  eclipseState = eclipseTimeline.update(eclipseState.running && !eclipseClockTrip ? delta : 0);
   if (eclipseState.phase === 'complete' && !activeCheckpoint) {
     experience.setClockLocked(false);
   }
@@ -1559,11 +1590,13 @@ const debugHandle: DioramaDebugHandle = {
   eclipseCrowdProps: () => eclipseCrowdProps.getDebugState(),
   postmanState: () => postman.getDebugState(),
   applyTheme,
-  startEclipse: () => {
-    startEclipse();
+  /** 'automatic' runs the path a scheduled eclipse takes: no camera cut, the clock carried. */
+  startEclipse: (source: EclipseStartSource = 'manual') => {
+    startEclipse(source);
   },
   setEclipseProgress: (progress: number, running = false) => {
-    experience.setTime(eclipseViewClock(sunDeclination()));
+    eclipseClockTrip = null;
+    experience.setTime(eclipseClockAt(sunDeclination(), progress));
     experience.setClockLocked(true);
     eclipseDebugStrength = null;
     eclipseState = eclipseTimeline.seek(progress, running);
