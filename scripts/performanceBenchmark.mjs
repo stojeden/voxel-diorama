@@ -762,9 +762,21 @@ try {
       else {
         await page.evaluate(() => window.__diorama.controls.setLookAt(70, 48, 80, 0, 6, 0, false));
       }
+      if (scenario.name === 'eclipse-totality-overview') {
+        // Releasing a checkpoint now rewinds its staged eclipse, as it always should have: this
+        // scenario used to measure the defect -- totality left parked under a clock running
+        // again, a state no eclipse produces. So it runs a real one instead, seen from the
+        // overview, from p = 0.45: the ~8 s of waiting and measuring below end near 0.54, all
+        // inside totality (0.42-0.58). Its numbers are not comparable with runs before this.
+        await page.evaluate(() => window.__diorama.setEclipseProgress(0.45, true));
+      }
     }
     await page.waitForTimeout(2_000);
     const measuredState = await readMeasuredState(page);
+    if (scenario.name === 'eclipse-totality-overview') {
+      assert.ok(measuredState.eclipse.running, 'the eclipse scenario is not measuring a running eclipse');
+      assert.ok(measuredState.eclipse.coverage > 0.99, 'the eclipse scenario is not at totality');
+    }
     if (scenario.name === 'post-rain-clear-lake') {
       assert.equal(measuredState.rainbow.visible, false, 'OFF checkpoint rendered a rainbow');
     } else if (scenario.name === 'post-rain-rainbow-lake') {
@@ -792,6 +804,9 @@ try {
     };
     const gpu = await measureGpuFrame(page);
     const finalState = await readMeasuredState(page);
+    if (scenario.name === 'eclipse-totality-overview') {
+      assert.ok(finalState.eclipse.coverage > 0.99, 'the eclipse left totality before the measurement ended');
+    }
     if (scenario.camera === 'checkpoint') {
       assert.deepEqual(
         finalState,

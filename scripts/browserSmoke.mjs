@@ -1854,6 +1854,25 @@ try {
   const checkpointB = await loadCheckpointState();
   assert.deepEqual(checkpointB, checkpointA, 'same seed+checkpoint must reproduce the same scene fingerprint');
 
+  // Releasing it -- the first drag does, as do the keys and the theme buttons -- must end the
+  // staged eclipse. It used to stay parked at totality while the clock ran on.
+  const releasedAt = await page.evaluate(() => {
+    window.__diorama.releaseCheckpoint();
+    return window.__diorama.getState().frameIndex;
+  });
+  await page.waitForFunction((from) => window.__diorama.getState().frameIndex > from + 2, releasedAt, {
+    timeout: READY_TIMEOUT_MS,
+  });
+  const released = await page.evaluate(() => {
+    const state = window.__diorama.getState();
+    return { progress: state.eclipse.progress, coverage: state.eclipse.coverage, running: state.eclipse.running };
+  });
+  assert.deepEqual(
+    released,
+    { progress: 0, coverage: 0, running: false },
+    'a released totality checkpoint left the city in eclipse'
+  );
+
   // The Cyberpunk checkpoint sets the morph while booting, before the lazy hybrid city exists.
   // The city used to attach at rise 0 and never be told otherwise: the ordinary blocks under the
   // Cyberpunk grade. The city's own rise has to match the morph the theme set.

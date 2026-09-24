@@ -39,6 +39,20 @@ a wersjonowanie projektu docelowo stosuje [Semantic Versioning](https://semver.o
 
 ### Fixed
 
+- **Puszczony punkt kontrolny totalności nie zostawia miasta w zaćmieniu.** `?checkpoint=totality`
+  i `eclipse-totality-overview` ustawiają oś zaćmienia na totalność, nie uruchamiając go. Puszczenie
+  punktu — pierwsze przeciągnięcie, klawisz, przycisk motywu — zwalniało zegar, ale nie cofało osi,
+  więc zegar znów chodził, a miasto stało w pełnej totalności: tłum zamrożony, mewy na dachach,
+  napis o zaćmieniu, aż do następnego naturalnego zaćmienia albo klawisza E. Puszczenie cofa teraz
+  wystawione zaćmienie, tak jak robi to przerwanie trasy. Na zbudowanym produkcie, przeciągnięcie
+  myszą: produkcja — zegar 19:06 → 19:31, zakrycie 1,00 → 1,00; po poprawce — ten sam zegar,
+  zakrycie 1,00 → 0,00. Bramka przeglądarkowa puszcza teraz ten punkt i sprawdza, że zaćmienie się
+  skończyło. **Scenariusz benchmarku `eclipse-totality-overview` mierzył właśnie ten błąd** —
+  totalność pod znów chodzącym zegarem, stan, którego żadne zaćmienie nie daje. Po poprawce po cichu
+  mierzyłby zwykły przegląd, więc uruchamia teraz prawdziwe biegnące zaćmienie od p = 0,45 widziane
+  z kamery przeglądowej i sprawdza, że cały pomiar leży w totalności. Jego wyniki nie są porównywalne
+  z pomiarami sprzed tej zmiany.
+
 - **Punkt kontrolny Cyberpunk podnosi miasto.** `?checkpoint=cyberpunk` ustawiał morf Cyberpunka
   na 1 podczas startu, zanim leniwie ładowane miasto hybrydowe w ogóle istniało. Miasto
   podpinało się potem przy wzniesieniu 0 i nikt go już nie pytał, bo pętla klatek dociąga morf
