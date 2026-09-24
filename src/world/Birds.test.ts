@@ -7,8 +7,10 @@ import {
   Birds,
   ROOST_DIHEDRAL,
   eclipseDirectionFor,
+  GULL_SEAT,
   eclipseRoostRequested,
   nearestEclipseRoost,
+  voxelRoofs,
 } from './Birds';
 import { FOLDED_SPAN_SCALE, FOLDED_SWEEP_DEG, UNFOLD_SECONDS } from './WingFold';
 
@@ -55,24 +57,27 @@ describe('eclipse roof selection', () => {
     { x: -20, z: -20, w: 8, d: 5, h: 10, accent: 0 },
     { x: 12, z: 8, w: 9, d: 6, h: 14, accent: 0 },
   ];
+  const roofs = voxelRoofs(blocks);
 
   test('selects a deterministic point inside the nearest roof', () => {
     const position = { x: 14, z: 10 };
-    const first = nearestEclipseRoost(position, 3, blocks);
-    const repeated = nearestEclipseRoost(position, 3, blocks);
+    const first = nearestEclipseRoost(position, 3, roofs);
+    const repeated = nearestEclipseRoost(position, 3, roofs);
 
     expect(first.equals(repeated)).toBe(true);
     expect(first.x).toBeGreaterThan(12);
     expect(first.x).toBeLessThan(20);
     expect(first.z).toBeGreaterThan(8);
     expect(first.z).toBeLessThan(13);
-    expect(first.y).toBe(14.55);
+    // Sitting on the roof, as height over it: the top voxel layer of an h = 14 block is at 13.5,
+    // and the gull's origin is its own seat above that. This pinned 14.55 once -- a metre up.
+    expect(first.y - 13.5).toBeCloseTo(GULL_SEAT, 9);
   });
 
   test('spreads gulls across a selected roof without random calls', () => {
     const position = { x: 14, z: 10 };
-    const first = nearestEclipseRoost(position, 1, blocks);
-    const second = nearestEclipseRoost(position, 2, blocks);
+    const first = nearestEclipseRoost(position, 1, roofs);
+    const second = nearestEclipseRoost(position, 2, roofs);
     expect(first.distanceToSquared(second)).toBeGreaterThan(0.01);
   });
 });
@@ -86,7 +91,10 @@ describe('eclipse flight lifecycle', () => {
     try {
       birds.update(0, 0, 0, 0);
       const starts = scene.children.map((gull) => gull.position.clone());
-      const roosts = starts.map((position, index) => nearestEclipseRoost(position, index));
+      // Each gull sits on its own belly, and its scale sets how high that is.
+      const roosts = starts.map((position, index) =>
+        nearestEclipseRoost(position, index, undefined, GULL_SEAT * scene.children[index].scale.y)
+      );
       let previous = starts.map((position) => position.clone());
       let largestFrameStep = 0;
 
@@ -168,7 +176,9 @@ describe('a gull flies its final approach with its wings out', () => {
 
     try {
       birds.update(0, 0, 0, 0);
-      const roosts = scene.children.map((gull, index) => nearestEclipseRoost(gull.position, index));
+      const roosts = scene.children.map((gull, index) =>
+        nearestEclipseRoost(gull.position, index, undefined, GULL_SEAT * gull.scale.y)
+      );
       birds.setEclipseState(ECLIPSE_ROOST_COVERAGE, 'increasing');
 
       // The worst violation, kept rather than the first, so the failure says how bad it is.

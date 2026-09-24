@@ -8,7 +8,7 @@ import {
   TRAIN_ROUTE_CURVE,
   nearestCurveT,
 } from './WorldLayout';
-import { clock01 } from '../units.testing';
+import { clock01, wallClock01 } from '../units.testing';
 
 /**
  * The bus yields to the train at the level crossing.
@@ -76,7 +76,7 @@ function bodyClearance(bus: ReturnType<typeof createBus>): number {
 function approach(bus: ReturnType<typeof createBus>, metresShort: number): void {
   const routeLength = BUS_ROUTE_CURVE.getLength();
   bus.seekRouteProgress(((CROSSING_T - metresShort / routeLength) % 1 + 1) % 1);
-  bus.update(FRAME, 0, false, clock01(0.5));
+  bus.update(FRAME, 0, false, wallClock01(0.5));
 }
 
 /** Run frames, and report what happened to the body and to the throttle. */
@@ -99,7 +99,7 @@ function drive(
   let secondsOnCrossing = 0;
   for (let i = 0; i < frames; i++) {
     const isBlocked = blocked(i);
-    bus.update(FRAME, 0, isBlocked, clock01(0.5));
+    bus.update(FRAME, 0, isBlocked, wallClock01(0.5));
     closest = Math.min(closest, bodyClearance(bus));
     const state = bus.getCrossingState();
     if (isBlocked && state.onCrossing) {

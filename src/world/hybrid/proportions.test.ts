@@ -12,7 +12,7 @@ import { emitProp, emitStreetscape } from './streetscape';
 import { geometryFor } from './strategies/DirectSurfaceStrategy';
 import { P, PALETTE } from './palette';
 import { Emitter, type SurfacePrimitive } from './surface';
-import { solarPhase01, clock01 } from '../../units.testing';
+import { solarPhase01, clock01, wallClock01 } from '../../units.testing';
 
 /**
  * One metric system for the whole world. Every number here is measured off the
@@ -545,7 +545,7 @@ describe('one metric system', () => {
     // with its shadow detached from its wheels.
     const scene = new THREE.Scene();
     const bus = createBus(scene);
-    bus.update(1 / 60, 0, false, clock01(12 / 24)); // midday, running service
+    bus.update(1 / 60, 0, false, wallClock01(12 / 24)); // midday, running service
     const group = scene.children.find((child) => child.type === 'Group')!;
     const bounds = trueBounds(group, (mesh) => mesh.geometry.type !== 'ConeGeometry');
     const gap = bounds.min.y - GROUND_SURFACE_Y;

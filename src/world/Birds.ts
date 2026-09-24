@@ -19,6 +19,104 @@ import type { Radians } from '../units';
  */
 
 const GULL_COUNT = 11;
+
+/**
+ * A roof a gull can stand on and must fly over, whatever city drew it.
+ *
+ * Gulls read their roofs from `BLOCK_CONFIGS`, the voxel world's blocks -- while the city that
+ * ships is the hybrid one, with other buildings on the same plots: roosting gulls hung up to
+ * 3.3 m over walkup and slab roofs, one sat half a metre inside a slab, and the three point
+ * towers (27.5 m with a 2.8 m machine room) stood where the gulls' flight floor was 18 m.
+ * The city that is drawn hands its roofs over with `Birds.setRoofs`; the voxel blocks are only
+ * the default until it does.
+ */
+export interface GullRoof {
+  /** Footprint, world metres. */
+  minX: number;
+  maxX: number;
+  minZ: number;
+  maxZ: number;
+  /** Height of the surface a gull stands on at a point of the footprint: slope, ridge, deck. */
+  surfaceAt(x: number, z: number): number;
+  /** The highest solid point, for flight clearance -- a ridge, a machine room. */
+  peak: number;
+  /** What stands on the roof and must not have a gull inside it: stair houses, machine rooms. */
+  obstacles?: readonly { minX: number; maxX: number; minZ: number; maxZ: number }[];
+}
+
+/** Clear of every obstacle on the roof, with room for a gull's body round the point. */
+function perchIsClear(roof: GullRoof, x: number, z: number): boolean {
+  const margin = 0.45;
+  for (const box of roof.obstacles ?? []) {
+    if (x > box.minX - margin && x < box.maxX + margin && z > box.minZ - margin && z < box.maxZ + margin) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * A perch on this roof: the preferred point if it is clear, otherwise one of the roof's clear
+ * points picked by the seed -- deterministic, so a gull goes back to the same spot.
+ *
+ * A grid rather than a run of random tries: a point tower's deck is mostly machine room and
+ * stair house, and twelve tries still left one gull in fifty inside a wall.
+ */
+function perchOn(roof: GullRoof, x: number, z: number, seed: number, out: THREE.Vector3): THREE.Vector3 {
+  if (perchIsClear(roof, x, z)) return out.set(x, 0, z);
+  const inset = 0.6;
+  const cells = 9;
+  let clear = 0;
+  const pick = (index: number | null): boolean => {
+    let n = 0;
+    for (let i = 0; i < cells; i++) {
+      for (let j = 0; j < cells; j++) {
+        const px = THREE.MathUtils.lerp(roof.minX + inset, roof.maxX - inset, i / (cells - 1));
+        const pz = THREE.MathUtils.lerp(roof.minZ + inset, roof.maxZ - inset, j / (cells - 1));
+        if (!perchIsClear(roof, px, pz)) continue;
+        if (index === n) {
+          out.set(px, 0, pz);
+          return true;
+        }
+        n += 1;
+      }
+    }
+    clear = n;
+    return false;
+  };
+  pick(null);
+  if (clear === 0) return out.set(x, 0, z);
+  pick(Math.floor(deterministicUnit(seed) * clear));
+  return out;
+}
+
+/** The voxel world's blocks as roofs: flat, the top of the highest voxel layer. */
+export function voxelRoofs(blocks: readonly BlockConfig[] = BLOCK_CONFIGS): GullRoof[] {
+  return blocks.map((block) => {
+    // Layers 0..h-1 are centred on whole metres, so the top face is at h - 0.5.
+    const top = block.h - 0.5;
+    return {
+      minX: block.x,
+      maxX: block.x + block.w - 1,
+      minZ: block.z,
+      maxZ: block.z + block.d - 1,
+      surfaceAt: () => top,
+      peak: top,
+    };
+  });
+}
+
+const VOXEL_ROOFS = voxelRoofs();
+
+/** The gull body: a sphere of this radius, squashed vertically by this much. */
+const GULL_BODY_RADIUS = 0.34;
+const GULL_BODY_SCALE_Y = 0.78;
+/**
+ * How far above the roof a sitting gull's origin is, at unit scale: the underside of its body.
+ * It sat at a fixed 0.55 over the top, which was the height a voxel block's `h` put the roof
+ * at rather than where the roof is -- a metre in the air over the voxel city.
+ */
+export const GULL_SEAT = GULL_BODY_RADIUS * GULL_BODY_SCALE_Y;
 const MIN_ALTITUDE = 13;
 const MAX_ALTITUDE = 27;
 const BUILDING_AVOIDANCE_BUFFER = 3;
@@ -78,7 +176,7 @@ export function eclipseDirectionFor(active: boolean, progress: number): EclipseC
 }
 
 const GULL_GEOMETRIES = {
-  body: new THREE.SphereGeometry(0.34, 8, 6),
+  body: new THREE.SphereGeometry(GULL_BODY_RADIUS, 8, 6),
   belly: new THREE.SphereGeometry(0.24, 8, 6),
   beak: new THREE.ConeGeometry(0.08, 0.24, 4),
   wing: new THREE.BoxGeometry(0.62, 0.08, 0.2),
@@ -108,6 +206,8 @@ interface Gull {
   roostReason: RoostReason;
   nightRoost: THREE.Vector3;
   activeRoost: THREE.Vector3;
+  /** This bird's own `GULL_SEAT`: its scale varies, and so does how high its belly is. */
+  seat: number;
   takeOffClearanceY: number;
   /** 0 spread, 1 folded against the flank. Continuous: see `WingFold.ts`. */
   foldedness: number;
@@ -159,16 +259,64 @@ function beginTakeOff(gull: Gull): void {
   );
 }
 
-function maxBuildingHeightNear(x: number, z: number, radius: number): number {
+/** A cruising gull predicts its own track 3 m at a time, this many steps: 48 m ahead. */
+const LOOKAHEAD_STEP = 3;
+const LOOKAHEAD_STEPS = 16;
+
+/**
+ * The height a gull must already be at NOW to clear what lies on its way, in time.
+ *
+ * The floor used to be read only within 6 m of where the gull was, and it climbs at
+ * 2.2 m/s: a gull cruising at 20 m towards a 27.5 m point tower learned about it a second
+ * and a half before impact and flew in -- about a hundred gull-seconds inside buildings every
+ * twenty minutes. A straight line along the heading was not enough either: most of what was
+ * left were gulls TURNING onto a tower, which a line pointing the old way never saw.
+ *
+ * So the track is predicted the way the gull will actually fly it -- turning towards its
+ * target at its own turn rate, drifting with the wind -- and at each point the requirement is
+ * the roof's clearance less the climb it can still make before getting there. It starts
+ * climbing exactly as early as its wings need, and no earlier.
+ */
+function clearanceAhead(
+  gull: Pick<Gull, 'position' | 'heading' | 'target'>,
+  cruise: number,
+  drift: number,
+  climbRate: number,
+  roofs: readonly GullRoof[]
+): number {
+  if (cruise < 1e-6) return 0;
+  let x = gull.position.x;
+  let z = gull.position.z;
+  let heading = gull.heading;
+  const dt = LOOKAHEAD_STEP / cruise;
+  let need = 0;
+  for (let step = 1; step <= LOOKAHEAD_STEPS; step++) {
+    let error = Math.atan2(gull.target.x - x, gull.target.z - z) - heading;
+    while (error > Math.PI) error -= Math.PI * 2;
+    while (error < -Math.PI) error += Math.PI * 2;
+    heading += THREE.MathUtils.clamp(error, -MAX_TURN_RATE * dt, MAX_TURN_RATE * dt);
+    x += (Math.sin(heading) * cruise + drift) * dt;
+    z += Math.cos(heading) * cruise * dt;
+    const climbable = climbRate * dt * step;
+    for (const roof of roofs) {
+      if (x < roof.minX - 2 || x > roof.maxX + 2 || z < roof.minZ - 2 || z > roof.maxZ + 2) continue;
+      need = Math.max(need, roof.peak + BUILDING_AVOIDANCE_BUFFER - climbable);
+    }
+  }
+  return need;
+}
+
+function maxBuildingHeightNear(
+  x: number,
+  z: number,
+  radius: number,
+  roofs: readonly GullRoof[]
+): number {
   let maxH = 0;
-  for (const block of BLOCK_CONFIGS) {
-    const minX = block.x;
-    const maxX = block.x + block.w - 1;
-    const minZ = block.z;
-    const maxZ = block.z + block.d - 1;
-    const dx = Math.max(minX - x, 0, x - maxX);
-    const dz = Math.max(minZ - z, 0, z - maxZ);
-    if (Math.hypot(dx, dz) < radius && block.h > maxH) maxH = block.h;
+  for (const roof of roofs) {
+    const dx = Math.max(roof.minX - x, 0, x - roof.maxX);
+    const dz = Math.max(roof.minZ - z, 0, z - roof.maxZ);
+    if (Math.hypot(dx, dz) < radius && roof.peak > maxH) maxH = roof.peak;
   }
   return maxH;
 }
@@ -190,7 +338,7 @@ export function createWing(side: -1 | 1): THREE.Group {
 function createGullMesh(): { group: THREE.Group; leftWing: THREE.Group; rightWing: THREE.Group } {
   const group = new THREE.Group();
   const body = new THREE.Mesh(GULL_GEOMETRIES.body, GULL_MATERIALS.body);
-  body.scale.set(0.95, 0.78, 1.08);
+  body.scale.set(0.95, GULL_BODY_SCALE_Y, 1.08);
   group.add(body);
 
   const belly = new THREE.Mesh(GULL_GEOMETRIES.belly, GULL_MATERIALS.belly);
@@ -235,7 +383,7 @@ function pickTarget(out: THREE.Vector3, random: RandomSource): void {
   }
 }
 
-function roostSpotFor(index: number): THREE.Vector3 {
+function roostSpotFor(index: number, roofs: readonly GullRoof[], seat: number): THREE.Vector3 {
   // Most gulls sleep on rooftops, a couple at the lake shore.
   if (index % 4 === 3) {
     const angle = (index / GULL_COUNT) * Math.PI * 2;
@@ -245,12 +393,16 @@ function roostSpotFor(index: number): THREE.Vector3 {
       LAKE.z + Math.sin(angle) * (LAKE.radiusZ + 2)
     );
   }
-  const block = BLOCK_CONFIGS[(index * 7) % BLOCK_CONFIGS.length];
-  return new THREE.Vector3(
-    block.x + block.w / 2 + (index % 3) - 1,
-    block.h + 0.55,
-    block.z + block.d / 2
+  const roof = roofs[(index * 7) % roofs.length];
+  const spot = perchOn(
+    roof,
+    THREE.MathUtils.clamp((roof.minX + roof.maxX) / 2 + (index % 3) - 1, roof.minX, roof.maxX),
+    (roof.minZ + roof.maxZ) / 2,
+    (index + 1) * 2654435761,
+    new THREE.Vector3()
   );
+  spot.y = roof.surfaceAt(spot.x, spot.z) + seat;
+  return spot;
 }
 
 function deterministicUnit(seed: number): number {
@@ -261,41 +413,46 @@ function deterministicUnit(seed: number): number {
   return (value >>> 0) / 4294967296;
 }
 
-function roofCoordinate(origin: number, size: number, seed: number): number {
-  const extent = Math.max(0, size - 1);
+function roofCoordinate(min: number, max: number, seed: number): number {
+  const extent = Math.max(0, max - min);
   const margin = Math.min(1.25, extent * 0.3);
-  return origin + margin + deterministicUnit(seed) * Math.max(0, extent - margin * 2);
+  return min + margin + deterministicUnit(seed) * Math.max(0, extent - margin * 2);
 }
 
 /** Selects a stable, spread-out point on the nearest roof for this gull. */
 export function nearestEclipseRoost(
   position: Pick<THREE.Vector3, 'x' | 'z'>,
   gullIndex: number,
-  blocks: readonly BlockConfig[] = BLOCK_CONFIGS
+  roofs: readonly GullRoof[] = VOXEL_ROOFS,
+  seat: number = GULL_SEAT
 ): THREE.Vector3 {
-  if (blocks.length === 0) throw new Error('Cannot select an eclipse roost without buildings');
+  if (roofs.length === 0) throw new Error('Cannot select an eclipse roost without buildings');
 
-  let nearest = blocks[0];
+  let nearest = roofs[0];
   let nearestIndex = 0;
   let nearestDistance = Number.POSITIVE_INFINITY;
-  for (let blockIndex = 0; blockIndex < blocks.length; blockIndex++) {
-    const block = blocks[blockIndex];
-    const closestX = THREE.MathUtils.clamp(position.x, block.x, block.x + block.w - 1);
-    const closestZ = THREE.MathUtils.clamp(position.z, block.z, block.z + block.d - 1);
+  for (let roofIndex = 0; roofIndex < roofs.length; roofIndex++) {
+    const roof = roofs[roofIndex];
+    const closestX = THREE.MathUtils.clamp(position.x, roof.minX, roof.maxX);
+    const closestZ = THREE.MathUtils.clamp(position.z, roof.minZ, roof.maxZ);
     const distance = (closestX - position.x) ** 2 + (closestZ - position.z) ** 2;
     if (distance < nearestDistance) {
-      nearest = block;
-      nearestIndex = blockIndex;
+      nearest = roof;
+      nearestIndex = roofIndex;
       nearestDistance = distance;
     }
   }
 
   const seed = (gullIndex + 1) * 73856093 ^ (nearestIndex + 1) * 19349663;
-  return new THREE.Vector3(
-    roofCoordinate(nearest.x, nearest.w, seed),
-    nearest.h + 0.55,
-    roofCoordinate(nearest.z, nearest.d, seed ^ 0x9e3779b9)
+  const spot = perchOn(
+    nearest,
+    roofCoordinate(nearest.minX, nearest.maxX, seed),
+    roofCoordinate(nearest.minZ, nearest.maxZ, seed ^ 0x9e3779b9),
+    seed,
+    new THREE.Vector3()
   );
+  spot.y = nearest.surfaceAt(spot.x, spot.z) + seat;
+  return spot;
 }
 
 export class Birds {
@@ -303,6 +460,8 @@ export class Birds {
   private gulls: Gull[] = [];
   private readonly scene: THREE.Scene;
   private hidden = false;
+  /** Voxel blocks until the drawn city hands over its own: see `GullRoof`. */
+  private roofs: readonly GullRoof[] = VOXEL_ROOFS;
   private activeCount = GULL_COUNT;
   private eclipseRoostActive = false;
 
@@ -322,6 +481,27 @@ export class Birds {
   }
 
   /** Cyberpunk: no gulls over the megacity. */
+  /**
+   * The roofs of the city that is actually drawn. Called once the hybrid city has built.
+   *
+   * Every night roost is re-derived; a gull already on its way to one, or sitting on one,
+   * flies to the new spot rather than being put there, because this lands a moment after
+   * boot, when the viewer may already be looking.
+   */
+  setRoofs(roofs: readonly GullRoof[]): void {
+    if (roofs.length === 0) return;
+    this.roofs = roofs;
+    this.gulls.forEach((gull, index) => {
+      gull.nightRoost.copy(roostSpotFor(index, roofs, gull.seat));
+      if (gull.roostReason === 'night') gull.activeRoost.copy(gull.nightRoost);
+      else if (gull.roostReason === 'eclipse') {
+        gull.activeRoost.copy(nearestEclipseRoost(gull.position, index, roofs, gull.seat));
+      } else return;
+      if (gull.lifeMode === 'roost') gull.lifeMode = 'toRoost';
+      gull.target.set(gull.activeRoost.x, 0, gull.activeRoost.z);
+    });
+  }
+
   setHidden(hidden: boolean): void {
     if (hidden === this.hidden) return;
     this.hidden = hidden;
@@ -347,11 +527,12 @@ export class Birds {
       const mesh = createGullMesh();
       mesh.group.scale.setScalar(0.85 + random() * 0.35);
       scene.add(mesh.group);
+      const seat = GULL_SEAT * mesh.group.scale.y;
 
       const target = new THREE.Vector3();
       pickTarget(target, random);
 
-      const nightRoost = roostSpotFor(i);
+      const nightRoost = roostSpotFor(i, this.roofs, seat);
       this.gulls.push({
         group: mesh.group,
         leftWing: mesh.leftWing,
@@ -373,6 +554,7 @@ export class Birds {
         roostReason: null,
         nightRoost,
         activeRoost: nightRoost.clone(),
+        seat,
         takeOffClearanceY: MIN_ALTITUDE,
         foldedness: 0,
       });
@@ -385,7 +567,7 @@ export class Birds {
       const gull = this.gulls[gullIndex];
       // Explicit eclipse state takes precedence over eclipse-darkened lighting.
       if (this.eclipseRoostActive && gull.roostReason !== 'eclipse') {
-        gull.activeRoost.copy(nearestEclipseRoost(gull.position, gullIndex));
+        gull.activeRoost.copy(nearestEclipseRoost(gull.position, gullIndex, this.roofs, gull.seat));
         gull.roostReason = 'eclipse';
         gull.lifeMode = 'toRoost';
         gull.target.set(gull.activeRoost.x, 0, gull.activeRoost.z);
@@ -461,15 +643,29 @@ export class Birds {
 
       // ── Altitude: stay above the buildings beneath, ease toward target ──
       const localCeiling =
-        maxBuildingHeightNear(gull.position.x, gull.position.z, 6) + BUILDING_AVOIDANCE_BUFFER;
+        maxBuildingHeightNear(gull.position.x, gull.position.z, 6, this.roofs) +
+        BUILDING_AVOIDANCE_BUFFER;
       const landingDistance =
         gull.lifeMode === 'toRoost'
           ? Math.hypot(gull.activeRoost.x - gull.position.x, gull.activeRoost.z - gull.position.z)
           : Number.POSITIVE_INFINITY;
-      const avoidanceFloor =
-        landingDistance < LANDING_APPROACH_DISTANCE ? gull.activeRoost.y : localCeiling;
-      const wantY = Math.max(gull.altitudeTarget, avoidanceFloor);
       const climbRate = CLIMB_RATE * openness;
+      // Cruising only: a gull gliding in to a roost is meant to come down onto a roof.
+      const ahead =
+        gull.lifeMode === 'fly'
+          ? clearanceAhead(
+              gull,
+              gull.speed * (1 + wind * 0.15) * openness,
+              wind * 1.6 * openness,
+              climbRate,
+              this.roofs
+            )
+          : 0;
+      const avoidanceFloor =
+        landingDistance < LANDING_APPROACH_DISTANCE
+          ? gull.activeRoost.y
+          : Math.max(localCeiling, ahead);
+      const wantY = Math.max(gull.altitudeTarget, avoidanceFloor);
       const dy = THREE.MathUtils.clamp(wantY - gull.position.y, -climbRate * delta, climbRate * delta);
       gull.position.y += dy;
 

@@ -990,11 +990,11 @@ function stepWorld(frame: FrameContext, carrier: WorldFrame): void {
   }
   const t01 = experienceState.t01;
   /**
-   * The hour of day, which is not the lighting phase.
+   * The hour of day, which is not the lighting clock.
    *
-   * In simulation they are the same number -- the HUD prints `t01 * 24`. In real time
-   * `t01` is warped onto the viewer's real sunrise and sunset, so 0.75 is *sunset*, not
-   * six in the evening; anything that means an hour has to ask the wall clock instead.
+   * In simulation they are the same number -- the HUD prints `t01 * 24`. In real time `t01`
+   * is the viewer's solar time, half an hour off their hour in a Warsaw summer, so anything
+   * that means an hour -- the timetable, the shops, the windows -- asks the wall clock instead.
    */
   const clockT: WallClock01 = realTime?.isActive()
     ? realTime.getDayFraction()
@@ -1083,7 +1083,8 @@ function stepWorld(frame: FrameContext, carrier: WorldFrame): void {
     skyCloud,
     declination,
     themeMix(previousTheme.nightFloor, currentTheme.nightFloor, themeBlend),
-    weather.getCloudCover()
+    weather.getCloudCover(),
+    clockT
   );
   sunDirectionAt(t01, declination, eclipseReflectionSun);
   // The crowd looks along the same vector the lake reflects and the disc is drawn on. It was
@@ -1120,7 +1121,7 @@ function stepWorld(frame: FrameContext, carrier: WorldFrame): void {
     delta,
     light.night,
     train.isGroundPointOccupied(LEVEL_CROSSING.x, LEVEL_CROSSING.z, 5),
-    t01
+    clockT
   );
   const activeCameraRig = experienceState.tour?.chapter.cameraRig;
   const cameraAutomation = cameraDirector.getAutomation();
@@ -1692,6 +1693,8 @@ const hybridReady: Promise<void> = hybridStrategy || wantsSpikeFrame
           themePalette: currentTheme.palette,
         });
         env.setBloomSelection([...bloomTargets, ...hybrid.getBloomObjects()]);
+        // The gulls sit on and fly over the city that is drawn, not the voxel blocks.
+        birds.setRoofs(hybrid.getGullRoofs());
       }
       // The spike frames are the same cameras for the voxel baseline, so the
       // benchmark can compare like with like.

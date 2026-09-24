@@ -1549,7 +1549,14 @@ export class DayNightCycle {
      * numbers that both mean "cloud" is the shape of mistake this file has already paid for
      * twice.
      */
-    weatherCloud: number
+    weatherCloud: number,
+    /**
+     * The hour, for what runs on a timetable -- the residential windows. The lighting clock
+     * `t` is the sun; in real time it is the viewer's solar time, which is not their hour
+     * (solar noon is 12:29 in a Warsaw summer). Defaults to `t` for callers with no separate
+     * hour to give, such as the renderer warm-up, where the two are one number anyway.
+     */
+    hourOfDay: WallClock01 = t as number as WallClock01
   ): DayLightState {
     this.elapsed += dtReal;
     const eclipseState = this.eclipseState;
@@ -1936,16 +1943,8 @@ export class DayNightCycle {
     const stationGlow = clamp01((night - 0.015) / 0.72);
     this.hooks.stationGlowMesh.visible = stationGlow > 0.01;
     this.hooks.stationGlowMaterial.uniforms.uNight.value = stationGlow;
-    /**
-     * The one crossing in this file, named rather than hidden.
-     *
-     * `CityRhythm` schedules an HOUR -- its constants are wall-clock minutes -- and this
-     * system only ever holds the lighting clock. The two are the same number today, because
-     * the real-time warp was removed when the sun became seasonal, so this re-labels rather
-     * than converts. It is an explicit cast for the same reason `RealTime.getCycleT` is one:
-     * the day a warp comes back, the compiler asks here instead of accepting the relabel.
-     */
-    const hourOfDay = t as number as WallClock01;
+    // `CityRhythm` schedules an HOUR -- its constants are wall-clock minutes -- so it reads
+    // the hour the caller passed, not the lighting clock.
     const residentialActivity = residentialWindowAverageAt(hourOfDay);
     for (let i = 0; i < this.hooks.windowLights.length; i++) {
       const light = this.hooks.windowLights[i];

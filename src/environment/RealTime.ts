@@ -5,8 +5,9 @@ import type { Clock01, Radians, WallClock01 } from '../units';
 
 /**
  * REAL TIME mode — synchronises the diorama with the viewer's world:
- *  - time of day / sun position from the browser's geolocation + SunCalc
- *    (real sunrise maps to t=0.25, solar noon to 0.5, sunset to 0.75),
+ *  - the sun from the viewer's SOLAR time: their real solar noon (SunCalc, from geolocation
+ *    or Warsaw) lands on t = 0.5, and today's declination sets the season;
+ *  - the hour from their wall clock, for everything that runs on a timetable,
  *  - live weather from the Open-Meteo public API (no key required),
  *  - real moon phase.
  * Falls back to Warsaw when geolocation is denied or unavailable.
@@ -28,6 +29,18 @@ function weatherCodeToKind(code: number, cloudCover: number): WeatherKind {
   if ((code >= 71 && code <= 77) || code === 85 || code === 86) return 'snow';
   if (code >= 2 || cloudCover > 65) return 'cloudy';
   return 'clear';
+}
+
+/**
+ * Solar time at a place, as a fraction of a day with real solar noon at 0.5.
+ *
+ * Exported for the test, which checks it against SunCalc's own solar noon rather than
+ * against a constant that could be wrong in the same way.
+ */
+export function solarClockAt(now: Date, lat: number, lon: number): Clock01 {
+  const noon = SunCalc.getTimes(now, lat, lon).solarNoon.getTime();
+  const t = 0.5 + (now.getTime() - noon) / 86_400_000;
+  return (t - Math.floor(t)) as Clock01;
 }
 
 export class RealTimeSync {
@@ -89,23 +102,24 @@ export class RealTimeSync {
   }
 
   /**
-   * Simulated-day parameter (0..1) matching the viewer's local sun: their actual clock.
+   * The lighting clock for the viewer's sun: their solar time, with real solar noon at 0.5.
    *
-   * This used to warp the day so that the measured sunrise landed on t=0.25, because the
-   * sun was a fixed sinusoid that rose there and nowhere else. The sun now comes from
-   * latitude and declination, so it reaches the horizon by itself, at the hour the season
-   * puts it -- and warping the clock underneath it would place the viewer's real sunrise
-   * against a sun already eighteen degrees up.
+   * This returned their wall-clock hour, relabelled, on the reasoning that with a seasonal sun
+   * the hour IS the lighting clock. It is not: civil time is a time zone's, not a longitude's,
+   * and summer adds an hour. In Warsaw solar noon falls at 12:29 CEST in September -- 60 min of
+   * summer time, less 24 for standing 6 degrees east of the zone's 15 E meridian, less the
+   * equation of time -- so the diorama's sun ran half an hour early all day, every day, and
+   * set forty minutes before the one outside the window.
+   *
+   * SunCalc's solar noon carries the longitude, the equation of time and the zone at once.
+   * What this model still does not have is refraction and the disc's own size, which put the
+   * real sunset some minutes after geometric; `sky.ts` documents that as unmodelled.
    *
    * The season that goes with this clock is {@link getDeclination}; a caller that takes one
-   * without the other gets today's hours under some other month's sun.
+   * without the other gets today's sun under some other month's path.
    */
   getCycleT(now: Date = new Date()): Clock01 {
-    // The one deliberate crossing between the two clock axes, and the whole reason the warp
-    // was removed: with a seasonal sun the viewer's own hour IS the lighting clock, so this
-    // re-labels rather than converts. It is an explicit cast so that the day the warp comes
-    // back, the compiler asks for a conversion here rather than accepting the relabel.
-    return this.getDayFraction(now) as number as Clock01;
+    return solarClockAt(now, this.lat, this.lon);
   }
 
   /**
@@ -124,11 +138,9 @@ export class RealTimeSync {
   /**
    * The viewer's local hour, as a fraction of a 24-hour day.
    *
-   * Deliberately NOT `getCycleT`. That one warps the day so the real sunrise lands on
-   * t=0.25 and the real sunset on t=0.75, which is right for the sun and wrong for a
-   * clock: at 0.75 the sky is correct and the hour is anything from half past three in
-   * December to nine in June. Anything that means an *hour* -- a shop opening, a shop
-   * closing -- has to read this instead, and it is the same hour the HUD prints.
+   * Deliberately NOT `getCycleT`, which is the sun: half an hour apart in a Warsaw summer.
+   * Anything that means an *hour* -- the bus timetable, shop hours, the windows lighting up
+   * in the evening -- reads this, and it is the same hour the HUD prints.
    */
   getDayFraction(now: Date = new Date()): WallClock01 {
     return ((now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds()) /

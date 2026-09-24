@@ -35,29 +35,26 @@ declare const DEGREES: unique symbol;
  * This is the axis the solar model takes. The simulation advances it linearly, so when a
  * season shortens the night the night is genuinely shorter to sit and watch.
  *
- * TODAY IT IS THE SAME NUMBER AS {@link WallClock01}, and the brand is worth having anyway.
- * Real-time mode used to warp this axis so the viewer's own sunrise landed on 0.25; that warp
- * was deleted when the sun became seasonal, because with a real declination the viewer's hour
- * IS the lighting clock (`RealTimeSync.getCycleT` says so at its one deliberate crossing). So
- * the two coincide, which is the WORST failure shape available: a swap changes nothing, every
- * test passes, and it breaks only if the warp ever returns. That is precisely what a type is
- * for -- the compiler remembers a distinction the runtime has temporarily stopped enforcing.
+ * In simulation it is the same number as {@link WallClock01}. In real time it is not: it is
+ * the viewer's solar time (`RealTimeSync.getCycleT`), half an hour off their hour in a Warsaw
+ * summer. For a while the two coincided there too, because real time handed the hour over as
+ * the sun -- which is the worst failure shape available, a swap that changes nothing in any
+ * test -- and the sun ran half an hour early. The brand is what let the fix find every place
+ * that read one axis as the other: the bus timetable, the residential windows.
  */
 export type Clock01 = number & { readonly [CLOCK_01]: 'Clock01' };
 
 /**
  * The **wall clock**: hour of day as a fraction of a real 24 h, which the HUD prints.
  *
- * A third brand rather than a reuse of {@link Clock01}, even though the two hold the same
- * number today. They mean different things: one is where the sun is, the other is what the
- * clock on the wall says. They separated once -- while real-time mode warped the lighting
- * axis onto the viewer's own sunrise, 0.75 was *sunset*, not six in the evening, and a shop
- * reading it would have opened at sunrise in December and at four in the morning in June --
- * and they would separate again the moment anything reintroduces a warp.
+ * A third brand rather than a reuse of {@link Clock01}: one is where the sun is, the other is
+ * what the clock on the wall says. In simulation they hold the same number; in real time they
+ * are the viewer's solar time and their hour, half an hour apart in a Warsaw summer.
  *
  * Anything about *light* is a `Clock01`; anything about an *hour* is a `WallClock01`. Where
  * one is genuinely handed to the other the cast is written `as number as`, so the crossings
- * are greppable: there are three, in `RealTimeSync.getCycleT`, `DayNightCycle` and `Bus`.
+ * are greppable. There are two, both simulation-only relabels where the axes are one number:
+ * `clockT` in `main.ts`, and `DayNightCycle.update`'s default hour for callers with none.
  */
 export type WallClock01 = number & { readonly [WALL_CLOCK_01]: 'WallClock01' };
 

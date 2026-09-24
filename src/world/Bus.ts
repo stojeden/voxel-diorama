@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { WallClock01, Clock01 } from '../units';
+import type { WallClock01 } from '../units';
 import {
   BUS_ROUTE_CURVE,
   BUS_STOPS,
@@ -110,6 +110,20 @@ function forwardDelta(from: number, to: number): number {
   while (d < 0) d += 1;
   while (d >= 1) d -= 1;
   return d;
+}
+
+/**
+ * The shortest signed step between two readings of the dial, -0.5..0.5 of a day.
+ *
+ * Route progress stays forward-only above -- a bus does not reverse -- but the clock can. The
+ * timetable used that forward-only delta too, so every small step BACK read as nearly a whole
+ * day forward and tripped the time-jump reset: a clock easing backwards -- a natural eclipse
+ * carrying the clock a few minutes back to its hour in autumn, real time settling onto the
+ * viewer's sun -- reset every bus-stop crowd on every frame of the slide.
+ */
+function shortestDelta(from: number, to: number): number {
+  const d = to - from;
+  return d - Math.round(d);
 }
 
 function buildBusMesh(): {
@@ -396,7 +410,8 @@ function buildStopCrowd(scene: THREE.Scene, stop: BusStop, random: RandomSource)
 }
 
 export interface BusHandle {
-  update: (delta: number, nightFactor: number, crossingBlocked: boolean, t01: Clock01) => void;
+  /** `clockT` is the hour, not the sun: a timetable runs on the wall clock. */
+  update: (delta: number, nightFactor: number, crossingBlocked: boolean, clockT: WallClock01) => void;
   getPosition: (target?: THREE.Vector3) => THREE.Vector3;
   getDirection: (target?: THREE.Vector3) => THREE.Vector3;
   getRouteProgress: () => number;
@@ -468,7 +483,7 @@ export function createBus(scene: THREE.Scene, random = fallbackRandom('bus')): B
   let serviceMode: BusServiceMode = 'normal';
   let headlightsEnabled = true;
   let serviceInitialized = false;
-  let previousT01: Clock01 = 0 as Clock01;
+  let previousClock: WallClock01 = 0 as WallClock01;
   let previousServiceWindow: BusServiceWindow = 'day';
   let eclipseReaction: EclipseWorldReactionState = {
     attention: 0,
@@ -562,23 +577,22 @@ export function createBus(scene: THREE.Scene, random = fallbackRandom('bus')): B
     if (restorePassengers) setAllPassengersAtStop(true);
   }
 
-  function syncServiceSchedule(t01: Clock01): void {
-    // A timetable is an hour, and this function only holds the lighting clock. Same crossing
-    // as `DayNightCycle`'s, named for the same reason: identical today, and the cast is where
-    // the compiler will ask for a conversion if the two axes ever separate again.
-    const serviceWindow = busServiceWindowAt(t01 as number as WallClock01);
+  function syncServiceSchedule(clockT: WallClock01): void {
+    // A timetable is an hour. It used to be handed the lighting clock and relabel it, which
+    // was harmless while the two were one number; in real time they are not.
+    const serviceWindow = busServiceWindowAt(clockT);
     if (!serviceInitialized) {
       if (serviceWindow === 'off') enterOffService();
       else if (serviceWindow === 'final-loop') beginFinalLoop();
       else enterNormalService(true);
       serviceInitialized = true;
-      previousT01 = t01;
+      previousClock = clockT;
       previousServiceWindow = serviceWindow;
       return;
     }
 
-    const forwardMinutes = forwardDelta(previousT01, t01) * MINUTES_PER_DAY;
-    const timeJumped = forwardMinutes > 30;
+    const stepMinutes = Math.abs(shortestDelta(previousClock, clockT)) * MINUTES_PER_DAY;
+    const timeJumped = stepMinutes > 30;
     if (timeJumped) {
       if (serviceWindow === 'off') enterOffService();
       else if (serviceWindow === 'final-loop') beginFinalLoop();
@@ -590,7 +604,7 @@ export function createBus(scene: THREE.Scene, random = fallbackRandom('bus')): B
       else if (serviceWindow === 'off' && serviceMode !== 'final-loop') enterOffService();
     }
 
-    previousT01 = t01;
+    previousClock = clockT;
     previousServiceWindow = serviceWindow;
   }
 
@@ -714,12 +728,12 @@ export function createBus(scene: THREE.Scene, random = fallbackRandom('bus')): B
   }
 
   return {
-    update(delta, nightFactor, crossingBlocked, t01) {
+    update(delta, nightFactor, crossingBlocked, clockT) {
       clock += delta;
       // Driven from here because this is where the night factor already arrives, every
       // frame, so the mark on the road can never be a frame behind the sky.
       underGlow.set(cyberFactor, nightFactor, roadWetness);
-      syncServiceSchedule(t01);
+      syncServiceSchedule(clockT);
 
       if (serviceMode === 'off') return;
 

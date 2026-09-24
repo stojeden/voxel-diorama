@@ -37,6 +37,35 @@ a wersjonowanie projektu docelowo stosuje [Semantic Versioning](https://semver.o
   skrócenie rozpiętości do połowy; koniuszek ląduje 0,079 za ogonem, jak lotki prawdziwej mewy.
   Zmierzone na produkcie: 7 z 11 mew ma `scale.x = 0.500` w nocy, pozostałe cztery jeszcze lecą.
 
+### Fixed
+
+- **Tryb czasu rzeczywistego pokazuje Słońce widza, nie jego strefy czasowej.** Zegar słońca
+  dostawał godzinę z zegarka, więc południe słoneczne wypadało o 12:00, a w Warszawie w
+  czerwcu jest o 12:38, we wrześniu o 12:29 (godzina czasu letniego, minus 24 min za 6° na
+  wschód od południka strefy, minus równanie czasu). Słońce szło pół godziny za wcześnie przez
+  cały dzień i zachodziło 40–45 minut przed prawdziwym. Teraz zegar słońca to czas słoneczny
+  widza z SunCalc (południe słoneczne = 0,5), a wszystko, co znaczy godzinę — HUD, rozkład
+  autobusów, sklepy, okna mieszkań wieczorem — czyta zegarek. Zachód w dioramie wobec
+  prawdziwego nad Warszawą: 21.06 — 20:55 wobec 21:02, 23.09 — 18:25 wobec 18:35, 21.12 —
+  15:19 wobec 15:26. Resztka 6–10 minut to refrakcja i rozmiar tarczy, których model słońca nie
+  ma, plus przybliżenie deklinacji. Test idzie przez `getCycleT` minuta po minucie i na starym
+  kodzie pada z odstępem 45 minut. Przy okazji: rozkład autobusu liczył każdy krok zegara
+  wstecz jako skok o prawie dobę i resetował tłum na przystankach w każdej klatce cofania.
+- **Mewy siedzą na dachach i latają nad miastem, które jest narysowane.** Brały dachy z bloków
+  świata wokselowego, podczas gdy domyślne miasto jest hybrydowe: śpiące mewy wisiały od
+  −1,09 do +2,61 m nad dachami, a trzy wieże punktowe (27,5 m z maszynownią) stały tam, gdzie
+  mewy miały sufit lotu na 18 m. Miasto hybrydowe podaje teraz mewom swoje dachy liczone z tej
+  samej geometrii, która je rysuje: połacie dwu- i czterospadowe, płyty dachów płaskich, a
+  nadbudówki i maszynownie jako przeszkody, bo LOD chowa je z daleka i mewa na nich wisiałaby
+  w powietrzu. Brzuch śpiącej mewy jest na dachu z dokładnością ±2 cm; próba promieniem w dół
+  na zbudowanym mieście potwierdza wysokości dachów. Druga połowa: sufit lotu był liczony tylko
+  w promieniu 6 m, a mewa wznosi się 2,2 m/s, więc o wieży dowiadywała się półtorej sekundy
+  przed zderzeniem. Mewa przewiduje teraz swój tor na 48 m, ze skrętem ku celowi i znoszeniem
+  przez wiatr, i zaczyna się wznosić dokładnie tak wcześnie, jak musi. Mewo-sekundy wewnątrz
+  budynków na 20 minut: 133 na starych dachach, 100 na poprawionych bez patrzenia przed siebie,
+  4,8–8,1 teraz (trzy losowania). Resztka to głównie płytkie muśnięcia (mediana 1,17 m) po
+  wylosowaniu nowego celu tuż przy wieży; usunięcie jej wymagałoby omijania w poziomie.
+
 ### Changed
 
 - **Zegar chodzi przez całe zaćmienie, a naturalne zaćmienie dojeżdża do swojej godziny
