@@ -44,6 +44,21 @@ export interface GullRoof {
   obstacles?: readonly { minX: number; maxX: number; minZ: number; maxZ: number }[];
 }
 
+/**
+ * Something too tall to climb over, that a gull must fly round: the chimney, the RTV tower.
+ *
+ * Not a roof. A stack or a mast is no roost, and a clearance floor round one at a 2.2 m/s climb
+ * would be a lurch that still hits it -- so these never raise the flight floor. They only close
+ * a course, and the gull picks another.
+ */
+export interface GullMast {
+  x: number;
+  z: number;
+  /** The widest it gets at the heights gulls fly, metres. */
+  radius: number;
+  top: number;
+}
+
 /** Clear of every obstacle on the roof, with room for a gull's body round the point. */
 function perchIsClear(roof: GullRoof, x: number, z: number): boolean {
   const margin = 0.45;
@@ -107,6 +122,8 @@ export function voxelRoofs(blocks: readonly BlockConfig[] = BLOCK_CONFIGS): Gull
 }
 
 const VOXEL_ROOFS = voxelRoofs();
+/** Scratch for `Birds.retarget`, so a new target allocates nothing. */
+const retargetScratch = new THREE.Vector3();
 
 /** The gull body: a sphere of this radius, squashed vertically by this much. */
 const GULL_BODY_RADIUS = 0.34;
@@ -208,6 +225,10 @@ interface Gull {
   activeRoost: THREE.Vector3;
   /** This bird's own `GULL_SEAT`: its scale varies, and so does how high its belly is. */
   seat: number;
+  /** A detour being held: the heading, and when to ask the direct course again. */
+  steer: { heading: number; until: number } | null;
+  /** The side it last went round an obstacle, +1 or -1: tried first next time. */
+  avoidSide: number;
   takeOffClearanceY: number;
   /** 0 spread, 1 folded against the flank. Continuous: see `WingFold.ts`. */
   foldedness: number;
@@ -259,39 +280,78 @@ function beginTakeOff(gull: Gull): void {
   );
 }
 
-/** A cruising gull predicts its own track 3 m at a time, this many steps: 48 m ahead. */
-const LOOKAHEAD_STEP = 3;
-const LOOKAHEAD_STEPS = 16;
+/**
+ * A cruising gull predicts its own track 1.5 m at a time, this many steps: 48 m ahead. Steps of
+ * 3 m integrated the turn in half-second pieces and put the predicted track a metre or two off
+ * the flown one on a bend -- enough to cut the corner of a tower it had just flown round.
+ */
+const LOOKAHEAD_STEP = 1.5;
+const LOOKAHEAD_STEPS = 32;
+/** How far outside a footprint a predicted point still counts as over it, metres. */
+const FOOTPRINT_MARGIN = 2.5;
+/** How much a course may still be short of its clearance and count as flyable, metres. */
+const COURSE_SLACK = 0.3;
+/**
+ * How short a detour already being flown may fall before it is given up, metres. Looser than
+ * choosing one: re-predicted from half a second further on, a detour that cleared by a margin
+ * read as grazing it, was dropped for another, and the bird swapped detours until it had no
+ * room left to make any of them.
+ */
+const HOLD_SLACK = 1.5;
+/** Alternative courses are tried in steps of this, out to six steps each side. */
+const AVOID_STEP = THREE.MathUtils.degToRad(20);
+const AVOID_STEPS = 6;
+/** A chosen detour is held this long before the direct course is asked again, seconds. */
+const AVOID_HOLD = 1.5;
+/** Room kept between a gull and a mast, metres, on top of the mast's own radius. */
+const MAST_MARGIN = 2.5;
+/**
+ * Inside this distance of its roost a gull glides straight at it; further out it flies a
+ * course like any cruising gull, round what it cannot climb over. The straight glide from any
+ * distance flew through a point tower on the way to the shore and through the chimney once.
+ */
+const ROOST_GLIDE_DISTANCE = 20;
+
+interface CoursePlan {
+  /** The height the gull must be at NOW to clear every roof on this course in time. */
+  need: number;
+  /** How far short of that it is, or of a mast's top: zero when the course is flyable. */
+  shortfall: number;
+}
 
 /**
- * The height a gull must already be at NOW to clear what lies on its way, in time.
+ * Fly a course ahead of time: towards the target, or towards a fixed heading.
  *
- * The floor used to be read only within 6 m of where the gull was, and it climbs at
- * 2.2 m/s: a gull cruising at 20 m towards a 27.5 m point tower learned about it a second
- * and a half before impact and flew in -- about a hundred gull-seconds inside buildings every
- * twenty minutes. A straight line along the heading was not enough either: most of what was
- * left were gulls TURNING onto a tower, which a line pointing the old way never saw.
- *
- * So the track is predicted the way the gull will actually fly it -- turning towards its
- * target at its own turn rate, drifting with the wind -- and at each point the requirement is
- * the roof's clearance less the climb it can still make before getting there. It starts
- * climbing exactly as early as its wings need, and no earlier.
+ * The flight floor used to be read only within 6 m of the gull, which climbs at 2.2 m/s, so it
+ * learned about a point tower a second and a half before impact. So the track is predicted the
+ * way the gull will fly it -- turning at its own rate, drifting with the wind -- and at each
+ * point the requirement is the roof's clearance less the climb it can still make before it
+ * gets there. When even a full climb cannot make it, or a mast stands on the course, the course
+ * has a shortfall and the gull looks for another (`chooseCourse`).
  */
-function clearanceAhead(
+function planTrack(
   gull: Pick<Gull, 'position' | 'heading' | 'target'>,
+  steerHeading: number | null,
   cruise: number,
   drift: number,
   climbRate: number,
-  roofs: readonly GullRoof[]
-): number {
-  if (cruise < 1e-6) return 0;
+  roofs: readonly GullRoof[],
+  masts: readonly GullMast[],
+  /** The roof being landed on, which is a destination and not an obstacle. */
+  landing: GullRoof | null = null,
+  /** How far to look, metres: a glide in to a roost stops at the roost. */
+  reach = LOOKAHEAD_STEP * LOOKAHEAD_STEPS
+): CoursePlan {
+  if (cruise < 1e-6) return { need: 0, shortfall: 0 };
   let x = gull.position.x;
   let z = gull.position.z;
   let heading = gull.heading;
   const dt = LOOKAHEAD_STEP / cruise;
   let need = 0;
-  for (let step = 1; step <= LOOKAHEAD_STEPS; step++) {
-    let error = Math.atan2(gull.target.x - x, gull.target.z - z) - heading;
+  let mastShort = 0;
+  for (let step = 1; step * LOOKAHEAD_STEP <= reach; step++) {
+    const desired = steerHeading ?? Math.atan2(gull.target.x - x, gull.target.z - z);
+    let error = desired - heading;
     while (error > Math.PI) error -= Math.PI * 2;
     while (error < -Math.PI) error += Math.PI * 2;
     heading += THREE.MathUtils.clamp(error, -MAX_TURN_RATE * dt, MAX_TURN_RATE * dt);
@@ -299,11 +359,79 @@ function clearanceAhead(
     z += Math.cos(heading) * cruise * dt;
     const climbable = climbRate * dt * step;
     for (const roof of roofs) {
-      if (x < roof.minX - 2 || x > roof.maxX + 2 || z < roof.minZ - 2 || z > roof.maxZ + 2) continue;
+      if (roof === landing) continue;
+      if (
+        x < roof.minX - FOOTPRINT_MARGIN ||
+        x > roof.maxX + FOOTPRINT_MARGIN ||
+        z < roof.minZ - FOOTPRINT_MARGIN ||
+        z > roof.maxZ + FOOTPRINT_MARGIN
+      ) {
+        continue;
+      }
       need = Math.max(need, roof.peak + BUILDING_AVOIDANCE_BUFFER - climbable);
     }
+    for (const mast of masts) {
+      if (Math.hypot(x - mast.x, z - mast.z) > mast.radius + MAST_MARGIN) continue;
+      mastShort = Math.max(mastShort, mast.top + BUILDING_AVOIDANCE_BUFFER - (gull.position.y + climbable));
+    }
   }
-  return need;
+  return { need, shortfall: Math.max(0, need - gull.position.y, mastShort) };
+}
+
+/**
+ * Where a cruising gull actually steers: its target, or the nearest detour that clears.
+ *
+ * Climbing handles everything a gull has time to climb over. What it cannot -- a point tower a
+ * new target has put a few metres ahead, the chimney, the RTV tower -- it now flies round: the
+ * courses either side of the target are tried in 20-degree steps out to 120, nearest first and
+ * on the side it last went round, and the first that clears is held for a second and a half so
+ * the bird commits to it rather than dithering at the edge. Returns the heading to steer by
+ * (null: straight at the target) and the clearance that course needs.
+ */
+function chooseCourse(
+  gull: Gull,
+  elapsed: number,
+  cruise: number,
+  drift: number,
+  climbRate: number,
+  roofs: readonly GullRoof[],
+  masts: readonly GullMast[],
+  landing: GullRoof | null = null
+): { heading: number | null; need: number } {
+  if (gull.steer && elapsed < gull.steer.until) {
+    const held = planTrack(gull, gull.steer.heading, cruise, drift, climbRate, roofs, masts, landing);
+    if (held.shortfall <= HOLD_SLACK) return { heading: gull.steer.heading, need: held.need };
+  }
+  gull.steer = null;
+  const direct = planTrack(gull, null, cruise, drift, climbRate, roofs, masts, landing);
+  if (direct.shortfall <= COURSE_SLACK) return { heading: null, need: direct.need };
+
+  const toTarget = Math.atan2(gull.target.x - gull.position.x, gull.target.z - gull.position.z);
+  let best = direct;
+  let bestHeading: number | null = null;
+  for (let k = 1; k <= AVOID_STEPS; k++) {
+    for (const side of [gull.avoidSide, -gull.avoidSide]) {
+      const heading = toTarget + side * k * AVOID_STEP;
+      const plan = planTrack(gull, heading, cruise, drift, climbRate, roofs, masts, landing);
+      if (plan.shortfall <= COURSE_SLACK) {
+        // One step wider if that clears too: the berth is the margin against prediction error.
+        const wider = heading + side * AVOID_STEP;
+        const widerPlan =
+          k < AVOID_STEPS ? planTrack(gull, wider, cruise, drift, climbRate, roofs, masts, landing) : null;
+        const pick = widerPlan && widerPlan.shortfall <= COURSE_SLACK ? { heading: wider, plan: widerPlan } : { heading, plan };
+        gull.steer = { heading: pick.heading, until: elapsed + AVOID_HOLD };
+        gull.avoidSide = side;
+        return { heading: pick.heading, need: pick.plan.need };
+      }
+      if (plan.shortfall < best.shortfall) {
+        best = plan;
+        bestHeading = heading;
+      }
+    }
+  }
+  // Nothing clears: the least bad, briefly, and ask again soon.
+  if (bestHeading !== null) gull.steer = { heading: bestHeading, until: elapsed + AVOID_HOLD / 3 };
+  return { heading: bestHeading, need: best.need };
 }
 
 function maxBuildingHeightNear(
@@ -364,6 +492,26 @@ function createGullMesh(): { group: THREE.Group; leftWing: THREE.Group; rightWin
   mergeStaticMeshes(group);
 
   return { group, leftWing, rightWing };
+}
+
+/**
+ * A target inside a mast's keep-out cannot be reached: the gull must come within 10 m of it
+ * and may not come within the mast's radius plus margin, and at a 9 m turning circle it
+ * circled the ring between them -- 69 s between targets once. Such a target is moved out,
+ * radially, to where it can be reached.
+ */
+function clearOfMasts(target: THREE.Vector3, masts: readonly GullMast[]): THREE.Vector3 {
+  for (const mast of masts) {
+    const reach = mast.radius + MAST_MARGIN + 8;
+    const dx = target.x - mast.x;
+    const dz = target.z - mast.z;
+    const distance = Math.hypot(dx, dz);
+    if (distance >= reach) continue;
+    const scale = distance > 1e-6 ? reach / distance : 0;
+    target.x = mast.x + (distance > 1e-6 ? dx * scale : reach);
+    target.z = mast.z + (distance > 1e-6 ? dz * scale : 0);
+  }
+  return target;
 }
 
 function pickTarget(out: THREE.Vector3, random: RandomSource): void {
@@ -462,6 +610,8 @@ export class Birds {
   private hidden = false;
   /** Voxel blocks until the drawn city hands over its own: see `GullRoof`. */
   private roofs: readonly GullRoof[] = VOXEL_ROOFS;
+  /** What is flown round rather than over. The voxel world has none. */
+  private masts: readonly GullMast[] = [];
   private activeCount = GULL_COUNT;
   private eclipseRoostActive = false;
 
@@ -488,9 +638,18 @@ export class Birds {
    * flies to the new spot rather than being put there, because this lands a moment after
    * boot, when the viewer may already be looking.
    */
-  setRoofs(roofs: readonly GullRoof[]): void {
+  setRoofs(roofs: readonly GullRoof[], masts: readonly GullMast[] = []): void {
     if (roofs.length === 0) return;
     this.roofs = roofs;
+    this.masts = masts;
+    for (const gull of this.gulls) {
+      clearOfMasts(gull.target, masts);
+      // A gull placed at random may have been placed inside a building of THIS city.
+      const under = maxBuildingHeightNear(gull.position.x, gull.position.z, 1, roofs);
+      if (gull.lifeMode === 'fly' && gull.position.y < under + BUILDING_AVOIDANCE_BUFFER) {
+        gull.position.y = under + BUILDING_AVOIDANCE_BUFFER;
+      }
+    }
     this.gulls.forEach((gull, index) => {
       gull.nightRoost.copy(roostSpotFor(index, roofs, gull.seat));
       if (gull.roostReason === 'night') gull.activeRoost.copy(gull.nightRoost);
@@ -500,6 +659,29 @@ export class Birds {
       if (gull.lifeMode === 'roost') gull.lifeMode = 'toRoost';
       gull.target.set(gull.activeRoost.x, 0, gull.activeRoost.z);
     });
+  }
+
+  /**
+   * A new wander target, preferably one the gull can fly straight at from where it is.
+   *
+   * Nearly all of what was left after the detours were gulls handed a target with a tower a few
+   * metres off the beak: no climb and no turn could make it any more. Up to six draws; if none
+   * is directly flyable the least-bad one is kept and the detours take it from there.
+   */
+  private retarget(gull: Gull, wind: number): void {
+    const cruise = gull.speed * (1 + wind * 0.15);
+    let bestShortfall = Number.POSITIVE_INFINITY;
+    for (let attempt = 0; attempt < 6; attempt++) {
+      pickTarget(gull.target, this.random);
+      clearOfMasts(gull.target, this.masts);
+      const { shortfall } = planTrack(gull, null, cruise, wind * 1.6, CLIMB_RATE, this.roofs, this.masts);
+      if (shortfall <= COURSE_SLACK) return;
+      if (shortfall < bestShortfall) {
+        bestShortfall = shortfall;
+        retargetScratch.copy(gull.target);
+      }
+    }
+    gull.target.copy(retargetScratch);
   }
 
   setHidden(hidden: boolean): void {
@@ -555,6 +737,8 @@ export class Birds {
         nightRoost,
         activeRoost: nightRoost.clone(),
         seat,
+        steer: null,
+        avoidSide: i % 2 === 0 ? 1 : -1,
         takeOffClearanceY: MIN_ALTITUDE,
         foldedness: 0,
       });
@@ -622,7 +806,7 @@ export class Birds {
         gull.altitudeTarget = gull.activeRoost.y + Math.min(horizontal * 0.4, 14);
       } else if (gull.lifeMode === 'takeOff' && gull.position.y >= gull.takeOffClearanceY - 0.1) {
         gull.lifeMode = 'fly';
-        pickTarget(gull.target, this.random);
+        this.retarget(gull, wind);
         gull.altitudeTarget = MIN_ALTITUDE + this.random() * (MAX_ALTITUDE - MIN_ALTITUDE);
       }
       // ── Steering: turn smoothly toward the current target ──
@@ -630,11 +814,26 @@ export class Birds {
       const toTargetZ = gull.target.z - gull.position.z;
       const distToTarget = Math.hypot(toTargetX, toTargetZ);
       if (distToTarget < 10 && gull.lifeMode === 'fly') {
-        pickTarget(gull.target, this.random);
+        this.retarget(gull, wind);
         gull.altitudeTarget = MIN_ALTITUDE + this.random() * (MAX_ALTITUDE - MIN_ALTITUDE);
       }
 
-      const desiredHeading = Math.atan2(toTargetX, toTargetZ);
+      const climbRate = CLIMB_RATE * openness;
+      const cruise = gull.speed * (1 + wind * 0.15) * openness;
+      // The last stretch in to a roost is a straight glide down onto it: nothing to plan.
+      const gliding = gull.lifeMode === 'toRoost' && distToTarget < ROOST_GLIDE_DISTANCE;
+      const landing =
+        gull.lifeMode === 'toRoost'
+          ? this.roofs.find(
+              (roof) =>
+                gull.activeRoost.x >= roof.minX && gull.activeRoost.x <= roof.maxX &&
+                gull.activeRoost.z >= roof.minZ && gull.activeRoost.z <= roof.maxZ
+            ) ?? null
+          : null;
+      const course = gliding
+        ? { heading: null, need: 0 }
+        : chooseCourse(gull, elapsed, cruise, wind * 1.6 * openness, climbRate, this.roofs, this.masts, landing);
+      const desiredHeading = course.heading ?? Math.atan2(toTargetX, toTargetZ);
       let headingError = desiredHeading - gull.heading;
       while (headingError > Math.PI) headingError -= Math.PI * 2;
       while (headingError < -Math.PI) headingError += Math.PI * 2;
@@ -649,18 +848,15 @@ export class Birds {
         gull.lifeMode === 'toRoost'
           ? Math.hypot(gull.activeRoost.x - gull.position.x, gull.activeRoost.z - gull.position.z)
           : Number.POSITIVE_INFINITY;
-      const climbRate = CLIMB_RATE * openness;
-      // Cruising only: a gull gliding in to a roost is meant to come down onto a roof.
+      // A take-off already climbs to its own clearance.
+      // The glide in to a roost clears what stands between the gull and it -- a point tower on
+      // the way to the shore was flown through at 17 m -- but not the roof it lands on.
       const ahead =
-        gull.lifeMode === 'fly'
-          ? clearanceAhead(
-              gull,
-              gull.speed * (1 + wind * 0.15) * openness,
-              wind * 1.6 * openness,
-              climbRate,
-              this.roofs
-            )
-          : 0;
+        gull.lifeMode === 'fly' || (gull.lifeMode === 'toRoost' && !gliding)
+          ? course.need
+          : gliding
+            ? planTrack(gull, null, cruise, 0, climbRate, this.roofs, [], landing, distToTarget).need
+            : 0;
       const avoidanceFloor =
         landingDistance < LANDING_APPROACH_DISTANCE
           ? gull.activeRoost.y
@@ -673,7 +869,7 @@ export class Birds {
       // Both scaled by `openness`, so a gull that is still opening up is still on its roof.
       // In level flight it is exactly 1 and these are the same numbers as before, bit for bit.
       const speed = gull.speed * (1 + wind * 0.15) * openness;
-      if (gull.lifeMode === 'toRoost') {
+      if (gliding) {
         const distance = Math.max(distToTarget, 1e-6);
         const landingSpeed = Math.min(speed, Math.max(0.7, distToTarget * 0.65));
         const step = Math.min(distance, landingSpeed * delta);

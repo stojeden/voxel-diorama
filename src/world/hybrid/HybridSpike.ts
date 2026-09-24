@@ -20,8 +20,8 @@ import { buildDirect } from './strategies/DirectSurfaceStrategy';
 import { parseKey, type GeometryStrategy } from './strategies/strategy';
 import type { Cluster, Layer, MaterialClass } from './surface';
 import type { HybridStrategyName } from './spikeFlag';
-import type { GullRoof } from '../Birds';
-import { gullRoofsOf } from './gullRoofs';
+import type { GullMast, GullRoof } from '../Birds';
+import { gullMastsOf, gullRoofsOf } from './gullRoofs';
 import type { Clock01, WallClock01 } from '../../units';
 
 /** `building-24` -> 24: the cluster id carries the block index the awnings are keyed by. */
@@ -137,6 +137,8 @@ export interface HybridHandle {
   getBloomObjects(): THREE.Object3D[];
   /** Every building's roof as the gulls need it: where to sit, how high to fly. */
   getGullRoofs(): GullRoof[];
+  /** The chimney and the RTV tower, which the gulls fly round. */
+  getGullMasts(): GullMast[];
   dispose(): void;
 }
 
@@ -515,6 +517,9 @@ export function attachHybridSpike(options: HybridSpikeOptions): HybridHandle {
     },
     getGullRoofs() {
       return gullRoofsOf(model.buildings);
+    },
+    getGullMasts() {
+      return gullMastsOf(model.dominants);
     },
     dispose() {
       cyber.dispose();

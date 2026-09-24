@@ -3,6 +3,7 @@ import { describe, expect, test } from 'vitest';
 import { QUALITY_PROFILES } from '../../performance/QualityManager';
 import { THEMES } from '../../experience/Themes';
 import { attachHybridSpike } from './HybridSpike';
+import { buildCityModel, GROUND } from './CityModel';
 import { Birds, GULL_SEAT, nearestEclipseRoost } from '../Birds';
 import { fallbackRandom } from '../../core/Random';
 
@@ -99,13 +100,25 @@ describe('gull roofs match the hybrid city', () => {
     const roofs = hybrid.getGullRoofs();
     const scene = new THREE.Scene();
     const birds = new Birds(scene, fallbackRandom('birds'));
-    birds.setRoofs(roofs);
+    birds.setRoofs(roofs, hybrid.getGullMasts());
+    // The dominants as drawn in dominants.ts: the radius at the height the gull is at.
+    const dominants = buildCityModel().dominants;
+    const dominantRadiusAt = (kind: string, y: number): number => {
+      const a = y - GROUND;
+      if (kind === 'chimney') return a > 46.6 ? 0 : a < 1.4 ? 2.6 : 1.55 - 0.6 * Math.min(1, a / 46);
+      if (a > 56) return 0;
+      if (a > 30.1 && a < 30.9) return 5.2;
+      if (a > 40) return 1.0 - 0.65 * ((a - 40) / 16);
+      return 2.95 - 1.1 * (a / 40);
+    };
+    let inDominant = 0;
     const roofUnder = (p: THREE.Vector3) =>
       roofs.find((r) => p.x >= r.minX && p.x <= r.maxX && p.z >= r.minZ && p.z <= r.maxZ);
 
     // Ten minutes of day at the actor cadence. On the voxel blocks the gulls spent about 65
-    // gull-seconds of every ten minutes inside the hybrid's buildings, and about 50 with the
-    // right roofs but no look ahead; what is left is the odd shallow clip after a new target.
+    // gull-seconds of every ten minutes inside the hybrid's buildings, about 50 with the right
+    // roofs but no look ahead, a few with the look ahead but no detours -- and they flew
+    // through the chimney and the RTV tower, which no climb can clear.
     const STEP = 1 / 20;
     let t = 0;
     let inside = 0;
@@ -115,9 +128,15 @@ describe('gull roofs match the hybrid city', () => {
       for (const gull of scene.children) {
         const roof = roofUnder(gull.position);
         if (roof && gull.position.y < roof.surfaceAt(gull.position.x, gull.position.z) - 0.1) inside += STEP;
+        for (const d of dominants) {
+          if (Math.hypot(gull.position.x - d.x, gull.position.z - d.z) < dominantRadiusAt(d.kind, gull.position.y)) {
+            inDominant += STEP;
+          }
+        }
       }
     }
-    expect(inside, 'gull-seconds inside buildings in ten minutes').toBeLessThan(8);
+    expect(inside, 'gull-seconds inside buildings in ten minutes').toBeLessThan(1);
+    expect(inDominant, 'gull-seconds inside the chimney or the RTV tower').toBe(0);
 
     // Night: every gull that settles on a building sits on it, belly to the roof.
     for (let i = 0; i < 180 * 20; i++) {

@@ -1694,7 +1694,7 @@ const hybridReady: Promise<void> = hybridStrategy || wantsSpikeFrame
         });
         env.setBloomSelection([...bloomTargets, ...hybrid.getBloomObjects()]);
         // The gulls sit on and fly over the city that is drawn, not the voxel blocks.
-        birds.setRoofs(hybrid.getGullRoofs());
+        birds.setRoofs(hybrid.getGullRoofs(), hybrid.getGullMasts());
       }
       // The spike frames are the same cameras for the voxel baseline, so the
       // benchmark can compare like with like.

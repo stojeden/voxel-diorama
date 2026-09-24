@@ -384,8 +384,10 @@ describe('gulls fold their wings to roost and spread them to fly', () => {
 
       let spreadFrame = -1;
       let spreadHeight = perch.y;
+      let highest = perch.y;
       for (let frame = 2; frame <= 60 * 6; frame++) {
         birds.update(delta, 90 + frame * delta, 0, 0);
+        highest = Math.max(highest, gull.position.y);
         if (spreadFrame < 0 && right.scale.x === 1) {
           spreadFrame = frame;
           spreadHeight = gull.position.y;
@@ -397,9 +399,11 @@ describe('gulls fold their wings to roost and spread them to fly', () => {
       expect(spreadFrame).toBeGreaterThan(0);
       expect(spreadFrame * delta).toBeCloseTo(UNFOLD_SECONDS, 1);
       expect(spreadHeight - perch.y).toBeGreaterThan(0);
-      expect((spreadHeight - perch.y) / (gull.position.y - perch.y)).toBeLessThan(0.15);
-      // And it does leave: a take-off that never climbs away is not a take-off either.
-      expect(gull.position.y).toBeGreaterThan(perch.y + 5);
+      expect((spreadHeight - perch.y) / (highest - perch.y)).toBeLessThan(0.15);
+      // And it does leave: a take-off that never climbs away is not a take-off either. The
+      // highest point, not the last frame's: having reached its take-off clearance the gull
+      // settles to whatever cruising height it drew, which may be lower.
+      expect(highest).toBeGreaterThan(perch.y + 5);
     } finally {
       birds.dispose();
       random.mockRestore();

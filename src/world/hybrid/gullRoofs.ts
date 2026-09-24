@@ -1,5 +1,5 @@
-import type { GullRoof } from '../Birds';
-import { GROUND, layoutHash01, type BuildingSpec } from './CityModel';
+import type { GullMast, GullRoof } from '../Birds';
+import { GROUND, layoutHash01, type BuildingSpec, type DominantSpec } from './CityModel';
 
 /**
  * The hybrid city's roofs, for the gulls: every building, from the geometry that draws it.
@@ -101,4 +101,19 @@ export function gullRoofsOf(buildings: readonly BuildingSpec[]): GullRoof[] {
       obstacles,
     };
   });
+}
+
+/**
+ * The dominants as masts: flown round, never over or onto.
+ *
+ * From `dominants.ts`: the chimney is 1.55 m in radius at its foot and narrows to 0.95 m at
+ * 46 m; the RTV tower's shaft is 2.6 m at the foot and carries a 5.2 m platform at 30.5 m,
+ * inside the heights gulls fly, so its widest point is the one kept clear of.
+ */
+export function gullMastsOf(dominants: readonly DominantSpec[]): GullMast[] {
+  return dominants.map((d) =>
+    d.kind === 'chimney'
+      ? { x: d.x, z: d.z, radius: 1.55, top: GROUND + d.height + 0.6 }
+      : { x: d.x, z: d.z, radius: 5.2, top: GROUND + d.height }
+  );
 }

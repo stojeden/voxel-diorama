@@ -51,6 +51,21 @@ a wersjonowanie projektu docelowo stosuje [Semantic Versioning](https://semver.o
   ma, plus przybliżenie deklinacji. Test idzie przez `getCycleT` minuta po minucie i na starym
   kodzie pada z odstępem 45 minut. Przy okazji: rozkład autobusu liczył każdy krok zegara
   wstecz jako skok o prawie dobę i resetował tłum na przystankach w każdej klatce cofania.
+- **Mewy omijają wieże w poziomie, także komin i wieżę RTV.** Wznosząc się 2,2 m/s, mewa nie
+  przeskoczy wieżowca, na który wylosowała cel kilka metrów przed dziobem, ani komina (46 m) czy
+  wieży RTV (56 m, platforma o promieniu 5,2 m na 30,5 m), przez które dotąd przelatywała na
+  wylot. Teraz sprawdza, czy przewidywany tor da się przelecieć; jeśli nie, próbuje kursów
+  odchylonych o 20°, 40°… do 120° w obie strony, bierze najbliższy przelotny (o krok szerszy,
+  jeśli też przelotny, dla zapasu) i trzyma go 1,5 s, żeby nie myszkować. Dominanty są tylko
+  omijane: nie podnoszą pułapu i nie są grzędami. Lot na grzędę jest planowany tak samo aż do
+  ostatnich 20 m, dopiero stamtąd mewa ślizga się prosto w dół na dach. Nowy cel wędrówki jest
+  losowany do sześciu razy, dopóki nie da się do niego lecieć wprost, a cel przy dominancie
+  odsuwany poza jej strefę — z 10-metrowym zasięgiem osiągnięcia celu i 9-metrowym promieniem
+  skrętu mewa potrafiła krążyć wokół niego ponad minutę. Mewo-sekundy wewnątrz budynków i
+  dominant na 20 minut dnia, pięć losowań: przed 3,7–5,6 s w budynkach i 2,9–7,4 s w dominantach,
+  teraz 0,0 we wszystkich; w cyklach wieczór–poranek jedno losowanie ma 1,1 s, reszta zero.
+  Koszt: 36 → 43 µs na wywołanie dla 11 mew. Test na zbudowanym mieście pada bez objazdów
+  zarówno na budynkach, jak i na dominantach.
 - **Mewy siedzą na dachach i latają nad miastem, które jest narysowane.** Brały dachy z bloków
   świata wokselowego, podczas gdy domyślne miasto jest hybrydowe: śpiące mewy wisiały od
   −1,09 do +2,61 m nad dachami, a trzy wieże punktowe (27,5 m z maszynownią) stały tam, gdzie
