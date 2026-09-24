@@ -1853,6 +1853,21 @@ try {
   const checkpointA = await loadCheckpointState();
   const checkpointB = await loadCheckpointState();
   assert.deepEqual(checkpointB, checkpointA, 'same seed+checkpoint must reproduce the same scene fingerprint');
+
+  // The Cyberpunk checkpoint sets the morph while booting, before the lazy hybrid city exists.
+  // The city used to attach at rise 0 and never be told otherwise: the ordinary blocks under the
+  // Cyberpunk grade. The city's own rise has to match the morph the theme set.
+  await page.goto(`${URL}/?seed=20260722&checkpoint=cyberpunk&quality=high`, { waitUntil: 'networkidle' });
+  await page.waitForFunction(() => window.__diorama?.ready === true, null, { timeout: READY_TIMEOUT_MS });
+  const cyberCheckpoint = await page.evaluate(() => ({
+    cyberFactor: window.__diorama.getState().cyberFactor,
+    cityRise: window.__diorama.getMetrics().hybrid?.cyber?.rise ?? null,
+    suppressed: window.__diorama.getMetrics().hybrid?.cyber?.suppressedClusters?.length ?? null,
+  }));
+  assert.equal(cyberCheckpoint.cyberFactor, 1, 'the Cyberpunk checkpoint must set the morph');
+  assert.equal(cyberCheckpoint.cityRise, 1, 'the Cyberpunk checkpoint left the drawn city unrisen');
+  assert.ok(cyberCheckpoint.suppressed > 0, 'the Cyberpunk checkpoint left the ordinary plots standing');
+
   assert.deepEqual(consoleErrors, [], `browser errors:\n${consoleErrors.join('\n')}`);
   await page.close();
 

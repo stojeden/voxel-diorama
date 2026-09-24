@@ -1691,6 +1691,7 @@ const hybridReady: Promise<void> = hybridStrategy || wantsSpikeFrame
           strategy: hybridStrategy,
           quality: quality.getProfile(),
           themePalette: currentTheme.palette,
+          cyberRise: cyberFactor,
         });
         env.setBloomSelection([...bloomTargets, ...hybrid.getBloomObjects()]);
         // The gulls sit on and fly over the city that is drawn, not the voxel blocks.

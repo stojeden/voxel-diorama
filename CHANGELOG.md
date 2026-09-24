@@ -39,6 +39,18 @@ a wersjonowanie projektu docelowo stosuje [Semantic Versioning](https://semver.o
 
 ### Fixed
 
+- **Punkt kontrolny Cyberpunk podnosi miasto.** `?checkpoint=cyberpunk` ustawiał morf Cyberpunka
+  na 1 podczas startu, zanim leniwie ładowane miasto hybrydowe w ogóle istniało. Miasto
+  podpinało się potem przy wzniesieniu 0 i nikt go już nie pytał, bo pętla klatek dociąga morf
+  tylko do celu, którego jeszcze nie osiągnął. W domyślnym świecie wychodziły zwykłe bloki pod
+  cyberpunkowym filtrem, z cyberpunkowym autobusem i pociągiem. Hybryda przyjmuje teraz przy
+  podpięciu stan morfu, w którym jest scena, i stosuje go przed pierwszą zamianą budynków, więc
+  nie rysuje zwykłego miasta nawet przez klatkę. Na zbudowanym produkcie: produkcja — motyw
+  Cyberpunk, wzniesienie miasta 0, zastąpionych działek 0; po poprawce — 1 i 36 (34 budynki i dwie
+  dominanty). Bramka przeglądarkowa uruchamia teraz ten punkt kontrolny i sprawdza jedno i drugie;
+  test jednostkowy pada bez poprawki. Typ `HybridMetrics` deklaruje wreszcie pole `cyber`, które
+  bramki od dawna czytały bez typu.
+
 - **Tryb czasu rzeczywistego pokazuje Słońce widza, nie jego strefy czasowej.** Zegar słońca
   dostawał godzinę z zegarka, więc południe słoneczne wypadało o 12:00, a w Warszawie w
   czerwcu jest o 12:38, we wrześniu o 12:29 (godzina czasu letniego, minus 24 min za 6° na

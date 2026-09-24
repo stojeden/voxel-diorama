@@ -34,6 +34,13 @@ export interface HybridSpikeOptions {
   strategy: HybridStrategyName;
   quality: QualityProfile;
   themePalette: Record<number, number>;
+  /**
+   * Where the Cyberpunk morph already stands, 0..1. The hybrid is a lazy chunk, so a boot
+   * checkpoint that sets the theme has set the morph before this city exists; without being
+   * told, it built the ordinary city at rise 0 under the Cyberpunk grade, and the frame loop
+   * never asked again because the morph was already at its target.
+   */
+  cyberRise?: number;
 }
 
 export interface HybridMetrics {
@@ -48,6 +55,14 @@ export interface HybridMetrics {
   /** Pixels per metre that produced those levels, per cluster. */
   lodPixelsPerMetre: Record<string, number>;
   low: boolean;
+  /** The Cyberpunk representation: how far it has risen, and what it has suppressed. */
+  cyber: {
+    rise: number;
+    instances: number;
+    meshes: number;
+    geometries: number;
+    suppressedClusters: string[];
+  };
   /**
    * What the grocery's display glass is emitting, and how far the awnings are out.
    *
@@ -234,7 +249,8 @@ export function attachHybridSpike(options: HybridSpikeOptions): HybridHandle {
   options.scene.add(cyber.group);
   const smoke = createChimneySmoke();
   options.scene.add(smoke.object);
-  let cyberRise = 0;
+  let cyberRise = THREE.MathUtils.clamp(options.cyberRise ?? 0, 0, 1);
+  cyber.setRise(cyberRise);
   /**
    * Apply the swap to whatever LOD groups currently exist.
    *
