@@ -763,10 +763,10 @@ try {
         await page.evaluate(() => window.__diorama.controls.setLookAt(70, 48, 80, 0, 6, 0, false));
       }
       if (scenario.name === 'eclipse-totality-overview') {
-        // Releasing a checkpoint now rewinds its staged eclipse, as it always should have: this
-        // scenario used to measure the defect -- totality left parked under a clock running
-        // again, a state no eclipse produces. So it runs a real one instead, seen from the
-        // overview, from p = 0.45: the ~8 s of waiting and measuring below end near 0.54, all
+        // This scenario used to measure a defect: releasing the checkpoint left totality parked
+        // under a clock running again, a state no eclipse produces. A released eclipse now runs
+        // on from where it stood -- from 0.5 it would leave totality mid-measurement -- so it is
+        // set running from p = 0.45: the ~8 s of waiting and measuring below end near 0.54, all
         // inside totality (0.42-0.58). Its numbers are not comparable with runs before this.
         await page.evaluate(() => window.__diorama.setEclipseProgress(0.45, true));
       }

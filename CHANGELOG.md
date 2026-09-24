@@ -43,13 +43,16 @@ a wersjonowanie projektu docelowo stosuje [Semantic Versioning](https://semver.o
   i `eclipse-totality-overview` ustawiają oś zaćmienia na totalność, nie uruchamiając go. Puszczenie
   punktu — pierwsze przeciągnięcie, klawisz, przycisk motywu — zwalniało zegar, ale nie cofało osi,
   więc zegar znów chodził, a miasto stało w pełnej totalności: tłum zamrożony, mewy na dachach,
-  napis o zaćmieniu, aż do następnego naturalnego zaćmienia albo klawisza E. Puszczenie cofa teraz
-  wystawione zaćmienie, tak jak robi to przerwanie trasy. Na zbudowanym produkcie, przeciągnięcie
-  myszą: produkcja — zegar 19:06 → 19:31, zakrycie 1,00 → 1,00; po poprawce — ten sam zegar,
-  zakrycie 1,00 → 0,00. Bramka przeglądarkowa puszcza teraz ten punkt i sprawdza, że zaćmienie się
-  skończyło. **Scenariusz benchmarku `eclipse-totality-overview` mierzył właśnie ten błąd** —
+  napis o zaćmieniu, aż do następnego naturalnego zaćmienia albo klawisza E. Po puszczeniu
+  zaćmienie toczy się teraz dalej od miejsca, w którym stało, i samo się kończy, a zegar prowadzi
+  przez nie jak przez każde zaćmienie. Na zbudowanym produkcie, przeciągnięcie myszą na totalności:
+  produkcja — zegar 19:06 → 19:31, zakrycie 1,00 → 1,00 na stałe; po poprawce — +10 s diamentowy
+  pierścień (19:12), +20 s zakrycie 0,93, +50 s 0,15, +58 s koniec o 19:37, dalej zwykły dzień.
+  Bramka przeglądarkowa puszcza teraz ten punkt i sprawdza, że zaćmienie biegnie i się przesuwa
+  (do końca 48 sekund symulacji to za długo na maszynę CI bez GPU). **Scenariusz benchmarku
+  `eclipse-totality-overview` mierzył właśnie ten błąd** —
   totalność pod znów chodzącym zegarem, stan, którego żadne zaćmienie nie daje. Po poprawce po cichu
-  mierzyłby zwykły przegląd, więc uruchamia teraz prawdziwe biegnące zaćmienie od p = 0,45 widziane
+  wychodziłby w trakcie pomiaru z totalności, więc uruchamia teraz prawdziwe biegnące zaćmienie od p = 0,45 widziane
   z kamery przeglądowej i sprawdza, że cały pomiar leży w totalności. Jego wyniki nie są porównywalne
   z pomiarami sprzed tej zmiany.
 

@@ -1854,8 +1854,11 @@ try {
   const checkpointB = await loadCheckpointState();
   assert.deepEqual(checkpointB, checkpointA, 'same seed+checkpoint must reproduce the same scene fingerprint');
 
-  // Releasing it -- the first drag does, as do the keys and the theme buttons -- must end the
-  // staged eclipse. It used to stay parked at totality while the clock ran on.
+  // Releasing it -- the first drag does, as do the keys and the theme buttons -- must let the
+  // staged eclipse run on and end by itself. It used to stay parked at totality while the clock
+  // ran on. Running to the end takes 48 simulated seconds, too long to wait for on a CPU-only
+  // runner, so this asserts it is running and has moved; the timeline's own tests end it.
+  const heldAt = await page.evaluate(() => window.__diorama.getState().eclipse.progress);
   const releasedAt = await page.evaluate(() => {
     window.__diorama.releaseCheckpoint();
     return window.__diorama.getState().frameIndex;
@@ -1863,15 +1866,9 @@ try {
   await page.waitForFunction((from) => window.__diorama.getState().frameIndex > from + 2, releasedAt, {
     timeout: READY_TIMEOUT_MS,
   });
-  const released = await page.evaluate(() => {
-    const state = window.__diorama.getState();
-    return { progress: state.eclipse.progress, coverage: state.eclipse.coverage, running: state.eclipse.running };
-  });
-  assert.deepEqual(
-    released,
-    { progress: 0, coverage: 0, running: false },
-    'a released totality checkpoint left the city in eclipse'
-  );
+  const released = await page.evaluate(() => window.__diorama.getState().eclipse);
+  assert.equal(released.running, true, 'a released totality checkpoint left its eclipse parked');
+  assert.ok(released.progress > heldAt, 'a released totality checkpoint did not move on');
 
   // The Cyberpunk checkpoint sets the morph while booting, before the lazy hybrid city exists.
   // The city used to attach at rise 0 and never be told otherwise: the ordinary blocks under the

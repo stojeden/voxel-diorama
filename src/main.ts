@@ -394,11 +394,11 @@ function endTourOverrides(): void {
 }
 
 function releaseCheckpointState(interruptCamera: boolean): void {
-  // A checkpoint's eclipse is a frozen frame of one, seeked rather than started. Released
-  // without a rewind it stayed parked at its progress -- totality -- while the clock ran again:
-  // the city in total eclipse with the crowd frozen and the HUD saying so, until the next
-  // natural eclipse or E. The first drag on a totality checkpoint was enough. `endTourOverrides`
-  // rewinds for the same reason.
+  // A checkpoint's eclipse is a frozen frame of one, seeked rather than started. Released as it
+  // was, it stayed parked at its progress -- totality -- while the clock ran again: the city in
+  // total eclipse with the crowd frozen and the HUD saying so, until the next natural eclipse or
+  // E. The first drag on a totality checkpoint was enough. Letting go now lets the eclipse go
+  // on from where it was frozen and end by itself, the clock carried through it as through any.
   const stagedEclipse = activeCheckpoint?.eclipseProgress != null && !eclipseState.running;
   activeCheckpoint = null;
   experience.releaseCheckpoint();
@@ -406,7 +406,11 @@ function releaseCheckpointState(interruptCamera: boolean): void {
   eclipseCheckpointLocked = false;
   weather.setExternal(null, NO_EXTERNAL_WIND_FLOOR);
   rainbow.releaseDebugSource();
-  if (stagedEclipse) eclipseState = eclipseTimeline.seek(0, false);
+  if (stagedEclipse) {
+    eclipseState = eclipseTimeline.seek(eclipseState.progress, true);
+    experience.setClockLocked(true);
+    eclipseSchedule.recordOccurrence();
+  }
   if (interruptCamera) cameraDirector.interrupt('explicit');
 }
 
