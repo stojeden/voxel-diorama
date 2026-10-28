@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { WINDOW_COHORT_COUNT, residentialWindowActivityAt } from '../../environment/CityRhythm';
 import type { QualityProfile } from '../../performance/QualityManager';
 import { BUS_STOPS, GROUND_SURFACE_Y } from '../WorldLayout';
-import { buildCityModel, GROUND } from './CityModel';
+import { buildCityModel, GROUND, type CityModel } from './CityModel';
 import { emitBuilding } from './architecture';
 import { Awnings } from './Awnings';
 import { emitStreetscape } from './streetscape';
@@ -18,6 +18,9 @@ import { LodSelector, pixelsPerMetre } from './ScreenSpaceLod';
 import { checkModel, checkProbes, type GroundContactReport, type ProbeInput } from './GroundContact';
 import { buildDirect } from './strategies/DirectSurfaceStrategy';
 import { parseKey, type GeometryStrategy } from './strategies/strategy';
+import { DetailStreamer, DETAIL_RESIDENT_LIMIT } from './DetailStreamer';
+import { unpackGeometry } from './GeometryTransfer';
+import { createFarDistricts, FAR_DISTRICT_ENTER, FAR_DISTRICT_EXIT } from './FarDistricts';
 import type { Cluster, Layer, MaterialClass } from './surface';
 import type { HybridStrategyName } from './spikeFlag';
 import type { GullMast, GullRoof } from '../Birds';
@@ -34,6 +37,10 @@ export interface HybridSpikeOptions {
   strategy: HybridStrategyName;
   quality: QualityProfile;
   themePalette: Record<number, number>;
+  /** Optional deterministic stress model; ordinary boot uses the canonical city. */
+  model?: CityModel;
+  /** The bloom owner must refresh its selection after streamed mesh changes. */
+  onResidencyChange?: () => void;
   /**
    * Where the Cyberpunk morph already stands, 0..1. The hybrid is a lazy chunk, so a boot
    * checkpoint that sets the theme has set the morph before this city exists; without being
@@ -55,6 +62,13 @@ export interface HybridMetrics {
   /** Pixels per metre that produced those levels, per cluster. */
   lodPixelsPerMetre: Record<string, number>;
   low: boolean;
+  streaming: {
+    mode: 'worker' | 'fallback'; workerFailed: boolean; revision: number;
+    resident: number; requested: number; pending: number; evicted: number;
+    residentLimit: number; farDistricts: number; savedTriangles: number;
+    foundationResident: number; proxyBuildings: number;
+    eligible: number; deferred: number; visibleDeferred: number;
+  };
   /** The Cyberpunk representation: how far it has risen, and what it has suppressed. */
   cyber: {
     rise: number;
@@ -160,6 +174,9 @@ export interface HybridHandle {
 class LodGroup {
   readonly selector = new LodSelector();
   readonly center: THREE.Vector3;
+  readonly preloadBounds: THREE.Sphere;
+  inView = true;
+  measure = 0;
   /**
    * This cluster has been replaced by another representation and must not draw.
    *
@@ -168,13 +185,15 @@ class LodGroup {
    * until the camera moved. A swap that a step backwards undoes is not a swap.
    */
   suppressed = false;
+  far = false;
   constructor(readonly cluster: Cluster, readonly meshes: Map<string, THREE.Mesh>, readonly radius: number) {
     this.center = new THREE.Vector3(...cluster.center);
+    this.preloadBounds = new THREE.Sphere(this.center, radius + 20);
     this.apply(0);
   }
   apply(level: Layer): void {
     for (const [key, mesh] of this.meshes) {
-      mesh.visible = !this.suppressed && parseKey(key).layer <= level;
+      mesh.visible = !this.suppressed && !this.far && parseKey(key).layer <= level;
     }
   }
 }
@@ -218,7 +237,7 @@ export function cyberHandoverTable(clusterIds: readonly string[]): Map<string, n
 }
 
 export function attachHybridSpike(options: HybridSpikeOptions): HybridHandle {
-  const model = buildCityModel();
+  const model = options.model ?? buildCityModel();
   const uniforms = createHybridUniforms();
   resolvePalette(options.themePalette, uniforms.uPalette.value);
   const materials: Record<MaterialClass, THREE.MeshStandardMaterial> = {
@@ -254,9 +273,8 @@ export function attachHybridSpike(options: HybridSpikeOptions): HybridHandle {
   /**
    * Apply the swap to whatever LOD groups currently exist.
    *
-   * Called again after every rebuild, because `setQuality` throws the groups away and
-   * makes new ones: without this, switching profile while Cyberpunk was up brought the
-   * ordinary city back underneath it.
+   * Called again after quality-sensitive grocery/dominant replacements. Residential
+   * foundations and streamed detail groups retain their identity across profile changes.
    */
   /**
    * Built on first use from the ids the swap applies to, then kept.
@@ -287,6 +305,9 @@ export function attachHybridSpike(options: HybridSpikeOptions): HybridHandle {
       if (lodGroup.suppressed === on) continue;
       lodGroup.suppressed = on;
       lodGroup.apply(lodGroup.selector.level);
+      const district = districtByBuilding.get(lodGroup.cluster.id);
+      district?.setBuildingVisible(lodGroup.cluster.id,
+        !on && (district.far || !foundations.has(lodGroup.cluster.id)));
     }
     // The ordinary stack vents just above its top segment; the Cyberpunk one is taller and
     // has a flared mouth. The plume is anchored to whichever is standing.
@@ -305,24 +326,84 @@ export function attachHybridSpike(options: HybridSpikeOptions): HybridHandle {
   /** Openings per window cohort, counted from the primitives that carry the assignment. */
   const cohortWindows = new Array<number>(WINDOW_COHORT_COUNT).fill(0);
   const lodGroups: LodGroup[] = [];
+  const lodById = new Map<string, LodGroup>();
   const bloom: THREE.Object3D[] = [];
   let streetGround: THREE.Mesh | null = null;
   const totals = { generationMs: 0, triangles: [0, 0, 0] as [number, number, number], vertices: 0, bytes: 0, meshes: 0 };
+  const details = new Map<string, Cluster>();
+  /** Cold source metadata survives GPU eviction; no second copy of primitive objects. */
+  const fullBuildings = new Map<string, Cluster>();
+  const foundations = new Set<string>();
+  const foundationTriangles = new Map<string, number>();
+  const resident = new Set<string>();
+  const wanted = new Set<string>();
+  const eligible: LodGroup[] = [];
+  const candidates: Cluster[] = [];
+  const residencyFrustum = new THREE.Frustum();
+  const residencyProjection = new THREE.Matrix4();
+  const byPriority = (a: LodGroup, b: LodGroup): number => Number(b.inView) - Number(a.inView) || b.measure - a.measure;
+  let revision = 0;
+  let evicted = 0;
+  let eligibleCount = 0;
+  let visibleEligibleCount = 0;
+  let disposed = false;
+  const changed = () => { revision++; options.onResidencyChange?.(); };
+  const removeMesh = (mesh: THREE.Mesh) => {
+    group.remove(mesh);
+    mesh.geometry.dispose();
+    const index = bloom.indexOf(mesh);
+    if (index >= 0) bloom.splice(index, 1);
+  };
+  const addMesh = (cluster: Cluster, key: string, geometry: THREE.BufferGeometry): THREE.Mesh => {
+    const { cls } = parseKey(key);
+    const mesh = new THREE.Mesh(geometry, materials[cls]);
+    mesh.name = `hybrid-${cluster.id}-${key}`;
+    mesh.castShadow = cls === 'opaque';
+    mesh.receiveShadow = cls !== 'glow';
+    mesh.renderOrder = cls === 'glassClear' ? 2 : 0;
+    group.add(mesh);
+    if (cls === 'glass' || cls === 'glow') bloom.push(mesh);
+    if (cluster.id === 'streetscape' && key === 'opaque:0') streetGround = mesh;
+    return mesh;
+  };
+  const streamer = new DetailStreamer((id, packed) => {
+    const lod = lodById.get(id);
+    if (!lod || !wanted.has(id)) return;
+    const previous = lod.meshes.get(packed.key);
+    if (previous) removeMesh(previous);
+    lod.meshes.set(packed.key, addMesh(lod.cluster, packed.key, unpackGeometry(packed)));
+    lod.apply(lod.selector.level);
+    changed();
+  }, (id) => {
+    resident.add(id);
+    if (foundations.has(id)) return;
+    // All material buffers are present before revealing any part of a cold foundation.
+    // Until this point the complete plot envelope remains visible, with no geometry holes.
+    foundations.add(id);
+    const lod = lodById.get(id)!;
+    lod.far = false;
+    lod.apply(lod.selector.level);
+    districtByBuilding.get(id)?.setBuildingVisible(id, false);
+    changed();
+  });
+  const farDistricts = createFarDistricts(model.buildings, materials.opaque);
+  const districtByBuilding = new Map(farDistricts.flatMap((district) =>
+    [...district.buildings].map((id) => [id, district] as const)));
+  for (const district of farDistricts) group.add(district.mesh);
 
   const disposeMeshes = () => {
     for (const lodGroup of lodGroups) {
       for (const mesh of lodGroup.meshes.values()) {
-        group.remove(mesh);
-        mesh.geometry.dispose();
+        removeMesh(mesh);
       }
     }
     lodGroups.length = 0;
+    lodById.clear();
     bloom.length = 0;
     streetGround = null;
   };
 
   const buildAll = () => {
-    disposeMeshes();
     totals.generationMs = 0;
     totals.triangles = [0, 0, 0];
     totals.vertices = 0;
@@ -344,38 +425,52 @@ export function attachHybridSpike(options: HybridSpikeOptions): HybridHandle {
           cohortWindows[primitive.cohort] += 1;
         }
       }
-      const result = strategy(cluster);
+      const isBuilding = BUILDING_BLOCK.test(cluster.id);
+      if (isBuilding) {
+        fullBuildings.set(cluster.id, cluster);
+        details.set(cluster.id, { ...cluster, primitives: cluster.primitives.filter((p) => p.layer > 0) });
+      }
+      const foundation = isBuilding ? { ...cluster, primitives: cluster.primitives.filter((p) => p.layer === 0) } : cluster;
+      const result = strategy(foundation);
+      if (isBuilding) {
+        foundations.add(cluster.id);
+        foundationTriangles.set(cluster.id, result.stats.triangles[0]);
+      }
       const meshes = new Map<string, THREE.Mesh>();
       for (const [key, geometry] of result.geometries) {
-        const { cls } = parseKey(key);
-        const mesh = new THREE.Mesh(geometry, materials[cls]);
-        mesh.name = `hybrid-${cluster.id}-${key}`;
-        // Glass does not cast, and that is measured rather than assumed.
-        //
-        // Every pane is a `sidePlane` sitting 0.015 m outside its own facade, so whatever it
-        // shadows is the wall directly behind it. Toggled inside one synchronous block, with
-        // a return-to-baseline control reading exactly zero: the opening overview does not
-        // change by one level, a close facade changes by 0.0002 on average with 0.003% of
-        // pixels moving more than three levels, and the RTV tower's free-standing pane --
-        // the one case where a shadow could have landed on something real -- also does not
-        // change at all. It buys 27 draw calls in a window that was reaching 1418 of 1400.
-        mesh.castShadow = cls === 'opaque';
-        mesh.receiveShadow = cls !== 'glow';
-        mesh.renderOrder = cls === 'glassClear' ? 2 : 0;
-        group.add(mesh);
+        const mesh = addMesh(cluster, key, geometry);
         meshes.set(key, mesh);
-        if (cls === 'glass' || cls === 'glow') bloom.push(mesh);
-        if (cluster.id === 'streetscape' && key === 'opaque:0') streetGround = mesh;
       }
-      const lodGroup = new LodGroup(cluster, meshes, cluster.radius);
+      // Keep semantic identity and bounds, not a second copy of all detail primitives.
+      const lodGroup = new LodGroup({ ...cluster, primitives: [] }, meshes, cluster.radius);
       lodGroup.selector.maxLevel = low ? 1 : 2;
       lodGroups.push(lodGroup);
+      lodById.set(cluster.id, lodGroup);
       totals.generationMs += result.stats.generationMs;
       for (let layer = 0; layer < 3; layer++) totals.triangles[layer] += result.stats.triangles[layer];
       totals.vertices += result.stats.vertices;
       totals.bytes += result.stats.bytes;
       totals.meshes += meshes.size;
     }
+  };
+  const rebuildQualityClusters = () => {
+    const replacements = [emitGroceries(low), ...model.dominants.map((d) => emitDominant(d, low))];
+    for (const cluster of replacements) {
+      const index = lodGroups.findIndex((lod) => lod.cluster.id === cluster.id);
+      if (index < 0) continue;
+      const previous = lodGroups[index];
+      const result = strategy(cluster);
+      const meshes = new Map<string, THREE.Mesh>();
+      for (const [key, geometry] of result.geometries) meshes.set(key, addMesh(cluster, key, geometry));
+      for (const mesh of previous.meshes.values()) removeMesh(mesh);
+      const next = new LodGroup({ ...cluster, primitives: [] }, meshes, cluster.radius);
+      next.selector.level = previous.selector.level;
+      next.suppressed = previous.suppressed;
+      next.apply(next.selector.level);
+      lodGroups[index] = next;
+      lodById.set(cluster.id, next);
+    }
+    changed();
   };
   /**
    * Shop awnings: their own objects, because static geometry cannot open at ten. They
@@ -438,14 +533,69 @@ export function attachHybridSpike(options: HybridSpikeOptions): HybridHandle {
         // harmless only while the two coincide.
         uniforms.uCohort.value[cohort] = residentialWindowActivityAt(clockT, cohort);
       }
+      camera.updateWorldMatrix(true, false);
+      residencyProjection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+      residencyFrustum.setFromProjectionMatrix(residencyProjection, camera.coordinateSystem);
       for (const lodGroup of lodGroups) {
         const distance = Math.max(0.5, camera.position.distanceTo(lodGroup.center) - lodGroup.radius);
         const measure = pixelsPerMetre(viewportHeightPx, camera.fov, distance);
         lodPixelsPerMetre[lodGroup.cluster.id] = measure;
+        lodGroup.measure = measure;
+        lodGroup.inView = residencyFrustum.intersectsSphere(lodGroup.preloadBounds);
         const previous = lodGroup.selector.level;
         const level = lodGroup.selector.update(measure, dt);
         if (level !== previous) lodGroup.apply(level);
       }
+      for (const district of farDistricts) {
+        const distance = Math.max(0, camera.position.distanceTo(district.center) - district.radius);
+        const far = cyberRise === 0 && distance > (district.far ? FAR_DISTRICT_EXIT : FAR_DISTRICT_ENTER);
+        if (far === district.far) continue;
+        district.far = far;
+        for (const id of district.buildings) {
+          const lod = lodById.get(id);
+          if (!lod) continue;
+          lod.far = far || !foundations.has(id);
+          lod.apply(lod.selector.level);
+          district.setBuildingVisible(id, !lod.suppressed && lod.far);
+        }
+      }
+      eligible.length = 0;
+      candidates.length = 0;
+      wanted.clear();
+      visibleEligibleCount = 0;
+      for (const lod of lodGroups) {
+        if (!details.has(lod.cluster.id) || districtByBuilding.get(lod.cluster.id)?.far || lod.suppressed) continue;
+        // A padded frustum preloads before an edge enters view. Very close plots get a
+        // small behind-camera reserve for turns, but cannot outrank visible plots.
+        if (!lod.inView && camera.position.distanceToSquared(lod.center) > (lod.radius + 25) ** 2) continue;
+        if (!foundations.has(lod.cluster.id) || lod.selector.level > 0 || (resident.has(lod.cluster.id) && lod.measure >= 5)) {
+          eligible.push(lod);
+          if (lod.inView) visibleEligibleCount++;
+        }
+      }
+      eligibleCount = eligible.length;
+      eligible.sort(byPriority);
+      if (eligible.length > DETAIL_RESIDENT_LIMIT) eligible.length = DETAIL_RESIDENT_LIMIT;
+      for (const lod of eligible) {
+        wanted.add(lod.cluster.id);
+        if (!resident.has(lod.cluster.id)) candidates.push(
+          (foundations.has(lod.cluster.id) ? details : fullBuildings).get(lod.cluster.id)!
+        );
+      }
+      let removed = false;
+      for (const lod of lodGroups) {
+        if (!details.has(lod.cluster.id) || wanted.has(lod.cluster.id)) continue;
+        let hadDetail = resident.delete(lod.cluster.id);
+        const evictFoundation = districtByBuilding.get(lod.cluster.id)?.far || !foundations.has(lod.cluster.id);
+        for (const [key, mesh] of lod.meshes) {
+          if (parseKey(key).layer === 0 && !evictFoundation) continue;
+          removeMesh(mesh); lod.meshes.delete(key); hadDetail = true;
+        }
+        if (evictFoundation) foundations.delete(lod.cluster.id);
+        if (hadDetail) { evicted++; removed = true; }
+      }
+      if (removed) changed();
+      streamer.tick(candidates, wanted);
     },
     setThemeBlend(from, to, t) {
       resolvePaletteBlend(from, to, t, uniforms.uPalette.value);
@@ -465,7 +615,7 @@ export function attachHybridSpike(options: HybridSpikeOptions): HybridHandle {
       const nextLow = profile.level === 'low';
       if (nextLow !== low) {
         low = nextLow;
-        buildAll();
+        rebuildQualityClusters();
         // The rebuild made new LOD groups, which start unsuppressed: put the swap back
         // before the next frame draws two cities on top of each other.
         applyCyberSwap();
@@ -490,13 +640,29 @@ export function attachHybridSpike(options: HybridSpikeOptions): HybridHandle {
     },
 
     getMetrics() {
+      // Residency changes the actual buffers. Measure only when diagnostics asks, not per frame.
+      const live = new Map<string, THREE.BufferGeometry>();
+      for (const lod of lodGroups) for (const [key, mesh] of lod.meshes) live.set(`${lod.cluster.id}/${key}`, mesh.geometry);
+      const liveTriangles: [number, number, number] = [0, 0, 0];
+      let liveVertices = 0;
+      let liveBytes = 0;
+      let savedTriangles = 0;
+      for (const lod of lodGroups) for (const [key, mesh] of lod.meshes) {
+        const count = mesh.geometry.getAttribute('position').count;
+        liveTriangles[parseKey(key).layer] += count / 3;
+        liveVertices += count;
+        for (const a of Object.values(mesh.geometry.attributes)) liveBytes += (a as THREE.BufferAttribute).array.byteLength;
+      }
+      for (const [id, count] of foundationTriangles) if (!foundations.has(id)) savedTriangles += count;
+      // Hidden slots are zero-scale but still part of the instanced draw's triangle count.
+      for (const d of farDistricts) if (d.mesh.visible) savedTriangles -= d.mesh.count * 12;
       return {
         strategy: options.strategy,
         generationMs: totals.generationMs,
-        triangles: [...totals.triangles] as [number, number, number],
-        vertices: totals.vertices,
-        bytes: totals.bytes,
-        meshes: totals.meshes,
+        triangles: liveTriangles,
+        vertices: liveVertices,
+        bytes: liveBytes,
+        meshes: live.size + farDistricts.length,
         clusters: lodGroups.length,
         shopGlow: uniforms.uEmissive.value[P.shopGlow],
         awningFold: awnings.progress,
@@ -509,6 +675,17 @@ export function attachHybridSpike(options: HybridSpikeOptions): HybridHandle {
         },
         lodPixelsPerMetre: { ...lodPixelsPerMetre },
         low,
+        streaming: {
+          mode: streamer.mode, workerFailed: streamer.workerFailed, revision,
+          resident: resident.size, requested: wanted.size, pending: streamer.pending, evicted,
+          residentLimit: DETAIL_RESIDENT_LIMIT, farDistricts: farDistricts.filter((d) => d.far).length,
+          savedTriangles: Math.max(0, savedTriangles),
+          foundationResident: foundations.size,
+          proxyBuildings: farDistricts.reduce((sum, district) => sum + district.visibleBuildings, 0),
+          eligible: eligibleCount,
+          deferred: Math.max(0, eligibleCount - DETAIL_RESIDENT_LIMIT),
+          visibleDeferred: Math.max(0, visibleEligibleCount - DETAIL_RESIDENT_LIMIT),
+        },
       };
     },
     checkGroundContact() {
@@ -529,7 +706,7 @@ export function attachHybridSpike(options: HybridSpikeOptions): HybridHandle {
       return report;
     },
     getBloomObjects() {
-      return [...bloom, ...cyber.emissiveObjects()];
+      return disposed ? [] : [...bloom, ...cyber.emissiveObjects()];
     },
     getGullRoofs() {
       return gullRoofsOf(model.buildings);
@@ -538,12 +715,17 @@ export function attachHybridSpike(options: HybridSpikeOptions): HybridHandle {
       return gullMastsOf(model.dominants);
     },
     dispose() {
+      if (disposed) return;
+      disposed = true;
+      streamer.dispose();
+      for (const d of farDistricts) { group.remove(d.mesh); d.mesh.geometry.dispose(); d.mesh.dispose(); }
       cyber.dispose();
       smoke.dispose();
       disposeMeshes();
       awnings.dispose();
       options.scene.remove(group);
       for (const material of Object.values(materials)) material.dispose();
+      changed();
     },
   };
 }

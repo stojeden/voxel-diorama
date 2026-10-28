@@ -23,6 +23,7 @@ interface RendererWarmupOptions {
 /** Compile representative shader variants without advancing temporal simulation state. */
 export async function warmRenderer(options: RendererWarmupOptions): Promise<void> {
   const { env, ui, dayNight, weather, focusTarget, eclipseViewTime } = options;
+  const restoreLighting = dayNight.beginRendererWarmup();
   const visibility = new Map<THREE.Object3D, boolean>();
   env.scene.traverse((object) => {
     if (object instanceof THREE.Light) return;
@@ -33,13 +34,13 @@ export async function warmRenderer(options: RendererWarmupOptions): Promise<void
   const themeDeclination = (): Radians =>
     THREE.MathUtils.degToRad(options.getTheme().sunDeclinationDeg) as Radians;
 
-  const compileAt = async (clock: Clock01, loading: number, label: string) => {
+  const compileAt = async (clock: Clock01, loading: number, label: string, draw = true) => {
     ui.setLoadingProgress(loading, label);
     // A cloudless warm-up on purpose: these passes exist to compile shader permutations,
     // and the sky the world opens on is the last call in the `finally` below.
     dayNight.update(clock, 0, 0, themeDeclination(), options.getTheme().nightFloor, 0);
     await env.renderer.compileAsync(env.scene, env.camera);
-    env.composer.render(0);
+    if (draw) env.composer.render(0);
   };
   /**
    * The three labelled moments below are solar PHASES; the opening one is already a clock.
@@ -52,18 +53,34 @@ export async function warmRenderer(options: RendererWarmupOptions): Promise<void
    * and sixth instance of this same mistake in this codebase; the axis is named at every
    * literal now precisely because naming it is what was missing each time.
    *
-   * `getDayProgress()` is the director's own clock and must NOT be converted -- it is also
-   * the call that seeds the smoothed lighting, so it has to seed it at the hour the world
-   * actually opens.
+   * `getDayProgress()` is the director's own clock and must NOT be converted. The explicit
+   * warm-up scope samples exact lighting rather than feeding these moments into the live
+   * smoothing filter, which is seeded only by the opening update in `finally`.
    */
-  const compileAtPhase = (phase: SolarPhase01, loading: number, label: string) =>
-    compileAt(clockFromSolarPhase(phase, themeDeclination()), loading, label);
+  const compileAtPhase = (phase: SolarPhase01, loading: number, label: string, draw = true) =>
+    compileAt(clockFromSolarPhase(phase, themeDeclination()), loading, label, draw);
 
   try {
     await compileAt(options.getDayProgress(), 24, 'KOMPILOWANIE PORANKA');
+    dayNight.setCameraMode('free');
+    dayNight.setCameraFocusDistance(80);
     await compileAtPhase(0.5 as SolarPhase01, 42, 'KOMPILOWANIE ŚWIATŁA DNIA');
     await compileAtPhase(0.28 as SolarPhase01, 56, 'KOMPILOWANIE ZŁOTEJ GODZINY');
-    await compileAtPhase(0.86 as SolarPhase01, 70, 'KOMPILOWANIE NOCY');
+    await compileAtPhase(0.86 as SolarPhase01, 64, 'KOMPILOWANIE NOCY');
+    // Three.js bakes light COUNTS into physical-material shaders. Free/train share one
+    // near-view budget; bus chase and overview use two distinct reduced budgets. Both
+    // golden hour (sun shadows) and night (no sun shadows) occur with those lights on.
+    dayNight.setCameraMode('bus');
+    // The geometry was already uploaded by the near-view passes. These only introduce
+    // light-count shader variants, so compile them without drawing the whole composer.
+    await compileAtPhase(0.28 as SolarPhase01, 68, 'KOMPILOWANIE ŚWIATEŁ POŚCIGU', false);
+    await compileAtPhase(0.86 as SolarPhase01, 72, 'KOMPILOWANIE NOCNEGO POŚCIGU', false);
+    dayNight.setCameraMode('free');
+    dayNight.setCameraFocusDistance(148);
+    // Closer to sunrise than the near-view sample: the overview turns its one physical
+    // light on only above night=0.28, while the low sun still casts a shadow.
+    await compileAtPhase(0.265 as SolarPhase01, 76, 'KOMPILOWANIE PANORAMY');
+    await compileAtPhase(0.86 as SolarPhase01, 80, 'KOMPILOWANIE NOCNEJ PANORAMY', false);
     ui.setLoadingProgress(84, 'KOMPILOWANIE ZAĆMIENIA');
     dayNight.setCameraFocusDistance(148);
     dayNight.setEclipseState({
@@ -83,6 +100,7 @@ export async function warmRenderer(options: RendererWarmupOptions): Promise<void
   } catch (error) {
     console.warn('[Preloader] shader warm-up fell back to first-frame compilation', error);
   } finally {
+    restoreLighting();
     for (const [object, visible] of visibility) object.visible = visible;
     const eclipse = options.getEclipseState();
     dayNight.setCameraFocusDistance(env.camera.position.distanceTo(focusTarget));
@@ -99,7 +117,7 @@ export async function warmRenderer(options: RendererWarmupOptions): Promise<void
     dayNight.update(
       options.getDayProgress(),
       0,
-      weather.getCloudCover(),
+      Math.min(1, weather.getCloudCover() + options.getTheme().turbidityAdd * 0.1),
       themeDeclination(),
       options.getTheme().nightFloor,
       weather.getCloudCover()

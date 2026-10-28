@@ -1110,6 +1110,8 @@ export class DayNightCycle {
   private shadowsEnabled = true;
   private shadowMapSize = 2048;
   private appliedShadowMapSize = 2048;
+  /** Near and overview PCF targets survive camera crossings; quality changes invalidate both. */
+  private readonly shadowMaps = new Map<number, THREE.RenderTarget>();
   private streetLightBudget = Number.POSITIVE_INFINITY;
   private busStopLightBudget = Number.POSITIVE_INFINITY;
   private stationLightBudget = Number.POSITIVE_INFINITY;
@@ -1148,6 +1150,7 @@ export class DayNightCycle {
     totality: 0,
   };
   private lightingInitialized = false;
+  private rendererWarmupActive = false;
   private smoothedNight = 1;
   private smoothedGolden = 0;
   private smoothedSunStrength = 0;
@@ -1484,12 +1487,59 @@ export class DayNightCycle {
     this.cameraMode = mode;
   }
 
+  /**
+   * Apply exact lighting samples during preload, without seeding or advancing the live
+   * lighting filter. The returned restorer must run in `finally`, before the opening update.
+   * A zero-delta ordinary update intentionally keeps its current smoothed lighting instead.
+   */
+  beginRendererWarmup(): () => void {
+    if (this.rendererWarmupActive) throw new Error('Renderer warm-up is already active');
+    const snapshot = {
+      initialized: this.lightingInitialized,
+      night: this.smoothedNight,
+      golden: this.smoothedGolden,
+      sun: this.smoothedSunStrength,
+      wideView: this.wideView,
+      cameraMode: this.cameraMode,
+      eclipse: this.eclipseState,
+    };
+    this.rendererWarmupActive = true;
+    let restored = false;
+    return () => {
+      if (restored) return;
+      restored = true;
+      this.rendererWarmupActive = false;
+      this.lightingInitialized = snapshot.initialized;
+      this.smoothedNight = snapshot.night;
+      this.smoothedGolden = snapshot.golden;
+      this.smoothedSunStrength = snapshot.sun;
+      this.wideView = snapshot.wideView;
+      this.cameraMode = snapshot.cameraMode;
+      this.eclipseState = snapshot.eclipse;
+      this.syncShadowMapResolution();
+    };
+  }
+
   private syncShadowMapResolution(force = false): void {
     const targetSize = this.wideView ? Math.min(512, this.shadowMapSize) : this.shadowMapSize;
     if (!force && targetSize === this.appliedShadowMapSize) return;
+    const shadow = this.sunLight.shadow;
+    if (force) {
+      this.disposeShadowMaps();
+    } else if (shadow.map) {
+      this.shadowMaps.set(this.appliedShadowMapSize, shadow.map);
+    }
     this.appliedShadowMapSize = targetSize;
-    this.sunLight.shadow.mapSize.set(targetSize, targetSize);
-    this.sunLight.shadow.map?.dispose();
+    shadow.mapSize.set(targetSize, targetSize);
+    shadow.map = this.shadowMaps.get(targetSize) ?? null;
+    shadow.needsUpdate = true;
+  }
+
+  private disposeShadowMaps(): void {
+    const maps = new Set(this.shadowMaps.values());
+    if (this.sunLight.shadow.map) maps.add(this.sunLight.shadow.map);
+    for (const map of maps) map.dispose();
+    this.shadowMaps.clear();
     this.sunLight.shadow.map = null;
   }
 
@@ -1558,6 +1608,8 @@ export class DayNightCycle {
      */
     hourOfDay: WallClock01 = t as number as WallClock01
   ): DayLightState {
+    // Never advance events, aurora, eclipse animation or environment transitions in preload.
+    if (this.rendererWarmupActive) dtReal = 0;
     this.elapsed += dtReal;
     const eclipseState = this.eclipseState;
     const eclipse = eclipseState.coverage;
@@ -1574,7 +1626,9 @@ export class DayNightCycle {
     );
     const targetGolden = goldenFactorAt(t, declination);
     const targetSunStrength = directSunFactorAt(t, declination);
-    const lightingBlend = this.lightingInitialized ? 1 - Math.exp(-Math.max(0, dtReal) * 3.2) : 1;
+    const lightingBlend = this.rendererWarmupActive || !this.lightingInitialized
+      ? 1
+      : 1 - Math.exp(-Math.max(0, dtReal) * 3.2);
     this.smoothedNight += (targetNight - this.smoothedNight) * lightingBlend;
     this.smoothedGolden += (targetGolden - this.smoothedGolden) * lightingBlend;
     this.smoothedSunStrength += (targetSunStrength - this.smoothedSunStrength) * lightingBlend;
@@ -1875,7 +1929,7 @@ export class DayNightCycle {
 
     // ── Street / window lights ──
     this.lightSelectionCooldown -= dtReal;
-    if (this.camera && this.lightSelectionCooldown <= 0) {
+    if (!this.rendererWarmupActive && this.camera && this.lightSelectionCooldown <= 0) {
       const eye = this.camera.position;
       this.hooks.streetLights.sort(
         (a, b) => a.position.distanceToSquared(eye) - b.position.distanceToSquared(eye)
@@ -2057,6 +2111,7 @@ export class DayNightCycle {
   }
 
   dispose(): void {
+    this.disposeShadowMaps();
     this.eclipseVisual.dispose();
     for (const item of this.disposables) item.dispose();
     this.envTarget?.dispose();

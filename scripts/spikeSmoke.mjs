@@ -171,6 +171,27 @@ async function settle(page, frames = 3) {
   for (let i = 0; i < frames; i++) {
     await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   }
+  // Renderer readiness is not geometry readiness: the worker can still be restoring
+  // clusters after a camera/profile change. Measure a complete, stable population,
+  // not whichever subset happened to arrive within a fixed number of frames.
+  await page.evaluate(async () => {
+    const deadline = performance.now() + 30_000;
+    let previous = '';
+    let stable = 0;
+    let last;
+    while (performance.now() < deadline) {
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      const hybrid = window.__diorama.getMetrics().hybrid;
+      if (!hybrid?.streaming) return;
+      last = hybrid.streaming;
+      const key = JSON.stringify([last.revision, last.requested, last.resident, hybrid.lodLevels]);
+      const complete = last.pending === 0 && last.resident === last.requested;
+      stable = complete && key === previous ? stable + 1 : 0;
+      previous = key;
+      if (stable >= 3) return;
+    }
+    throw new Error(`Geometry residency did not settle: ${JSON.stringify(last)}`);
+  });
   await page.waitForTimeout(120);
 }
 
@@ -422,7 +443,10 @@ async function runPostman(page, world) {
   // sits on it with its tyres touching.
   const POSE = { x: -29, y: -0.5, z: -45.8, yaw: Math.PI / 2, legs: -0.5, arms: -1.05 };
 
-  await page.goto(`${URL}/?seed=${SEED}&world=${world}&quality=${QUALITY}`, { waitUntil: 'load' });
+  // This compares with/without pixels against a geometric mask. Temporal history would
+  // blend the old camera and the removed object into subsequent frames, corrupting both
+  // the zero-delta control and the contrast numerator. The ordinary app still uses TAA.
+  await page.goto(`${URL}/?seed=${SEED}&world=${world}&quality=${QUALITY}&taa=0`, { waitUntil: 'load' });
   await page.waitForFunction(() => window.__diorama?.ready === true, null, { timeout: 90_000 });
   await settle(page, 4);
   /**
@@ -442,12 +466,19 @@ async function runPostman(page, world) {
    * denominator changes -- this only makes the stated condition, t = 0.47, actually hold.
    */
   const MORNING_T01 = 0.47;
+  await page.evaluate(() => window.__diorama.debugSetClockLocked(true));
   await page.evaluate((t01) => window.__diorama.setTime(t01), MORNING_T01);
   const found = await page.waitForFunction(() => {
     const bike = window.__diorama.scene.getObjectByName('postman-bike');
     return bike && bike.visible ? true : null;
   }, null, { timeout: 60_000, polling: 100 }).then(() => true);
   await page.evaluate((t01) => window.__diorama.setTime(t01), MORNING_T01);
+  // Clock and lighting have different settling rules. Six frames left dawn's smoothed
+  // night/golden values in this declared late-morning frame; wait for the actual light.
+  await page.waitForFunction(() => {
+    const light = window.__diorama.dayNight;
+    return light.smoothedNight < 0.001 && light.smoothedGolden < 0.001;
+  }, null, { timeout: 30_000 });
   await settle(page, 6);
 
   // Freeze, then place him. Nothing may move between the mask and the two frames.
@@ -1518,6 +1549,13 @@ async function runGate3(page, worlds) {
       ground: await regionMean(page, GROUND_BOX),
       state: await sceneState(page),
     });
+    const settledTheme = async () => {
+      await page.waitForFunction(() => {
+        const state = window.__diorama.getState();
+        return state.themeBlend === 1 && Math.abs(state.cyberFactor - (state.theme === 'cyberpunk' ? 1 : 0)) < 0.002;
+      }, null, { timeout: 30_000 });
+      await settle(page, 8);
+    };
     const reference = async () => {
       await page.evaluate(() => {
         window.__diorama.applyTheme('classic');
@@ -1526,11 +1564,14 @@ async function runGate3(page, worlds) {
         window.__diorama.setWeather('clear');
         window.__diorama.setTime(0.5);
       });
-      await settle(page, 30);
+      await settledTheme();
       return sample();
     };
 
-    await openHybrid(page, world, 'high', 'spike-street');
+    // A checkpoint freezes presentation time as well as the clock. Release presentation
+    // for actual palette/morph transitions, pinning only the comparison clock explicitly.
+    await openHybrid(page, world, 'high', 'spike-street', true);
+    await page.evaluate(() => window.__diorama.debugSetClockLocked(true));
     entry.semantics.reference = await reference();
     for (const t01 of [0.05, 0.2, 0.28, 0.35, 0.5, 0.78, 0.9]) {
       await page.evaluate((t) => window.__diorama.setTime(t), t01);
@@ -1540,7 +1581,7 @@ async function runGate3(page, worlds) {
     for (const theme of ['retro', 'cyberpunk']) {
       entry.semantics[`ref-theme-${theme}`] = await reference();
       await page.evaluate((id) => window.__diorama.applyTheme(id), theme);
-      await settle(page, 30);
+      await settledTheme();
       entry.semantics[`theme-${theme}`] = await sample();
       await page.screenshot({ path: `${FRAME_DIR}/${world}-gate3-theme-${theme}.jpg`, type: 'jpeg', quality: 84 });
     }
