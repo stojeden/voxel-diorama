@@ -32,6 +32,7 @@ import { themeById, type DioramaTheme } from './experience/Themes';
 import { DAY_SECONDS, LEVEL_CROSSING } from './world/WorldLayout';
 import { createWorldRandom } from './core/Random';
 import { createFrameContext } from './experience/FrameContext';
+import { ActorLocality } from './performance/ActorLocality';
 import type { FrameContext } from './experience/FrameContext';
 import { createWorldFrame } from './experience/WorldFrame';
 import type { WorldFrame } from './experience/WorldFrame';
@@ -79,6 +80,8 @@ import type { HybridFrame, HybridHandle } from './world/hybrid/HybridSpike';
 import type { Clock01, Degrees, Radians, SolarPhase01, WallClock01 } from './units';
 
 const query = new URLSearchParams(window.location.search);
+const scalabilityPreview = query.get('districts') === '4';
+const actorLocality = new ActorLocality();
 const requestedCheckpoint = getCheckpoint(query.get('checkpoint'));
 // Reversible hybrid spike: `?world=hybrid-direct` swaps one fragment.
 const worldMode = parseWorldMode(query.get('world'));
@@ -134,6 +137,8 @@ const world = createWorld(
     : {}
 );
 let hybrid: HybridHandle | null = null;
+let hybridBloomDirty = false;
+let disposeExpansionGround: (() => void) | null = null;
 /** One mutable frame object for the hybrid, like `FrameContext`: no per-frame allocation. */
 const hybridFrame: HybridFrame = {
   camera: env.camera,
@@ -948,9 +953,10 @@ function animate(timestamp?: number) {
   frame.elapsedSimulation += delta;
 
   env.controls.update(presentationDelta);
+  env.controls.getTarget(postFocusTarget);
+  actorLocality.beginFrame(env.camera, presentationDelta, postFocusTarget, quality.getProfile().optionalActorHz);
   shadowFocusAccumulator += presentationDelta;
   if (shadowFocusAccumulator >= 0.2) {
-    env.controls.getTarget(postFocusTarget);
     const shadowRadius = env.camera.position.distanceTo(postFocusTarget) * 0.72;
     dayNight.setShadowFocus(postFocusTarget, shadowRadius);
     shadowFocusAccumulator = 0;
@@ -1203,11 +1209,16 @@ function stepWorld(frame: FrameContext, carrier: WorldFrame): void {
   const actorInterval = 1 / quality.getProfile().optionalActorHz;
   const stationState = train.getStationState();
   birds.setEclipseState(eclipseState.coverage, eclipseDirectionFor(eclipseActive, eclipseState.progress));
+  // Routes/events and random streams run on the simulation clock, independently of how
+  // often a distant resident's limbs or a fish's current analytic pose are presented.
+  boardingStations.clear();
+  if (stationState.kind === 'dwelling') boardingStations.add(stationState.stationLabel);
+  passengerCrowd.update(delta, boardingStations, actorLocality);
+  lakeLife.update(delta, weather.getSnowCover() > 0.5, actorLocality);
   if (optionalActorAccumulator >= actorInterval) {
     const actorDelta = optionalActorAccumulator;
     optionalActorAccumulator = 0;
     birds.update(actorDelta, frame.elapsedSimulation, weather.getWind(), light.night);
-    lakeLife.update(actorDelta, weather.getSnowCover() > 0.5);
     lakesideCow.update(actorDelta, frame.elapsedSimulation, light.night);
     fisherman.update(actorDelta, frame.elapsedSimulation, light.night, weather.getSnowCover());
     // The round is authored from sunrise to noon, so it reads the phase, not the clock: the
@@ -1226,9 +1237,6 @@ function stepWorld(frame: FrameContext, carrier: WorldFrame): void {
       windVector.z
     );
 
-    boardingStations.clear();
-    if (stationState.kind === 'dwelling') boardingStations.add(stationState.stationLabel);
-    passengerCrowd.update(actorDelta, boardingStations);
   }
   eclipseCrowdProps.update(eclipseReaction, eclipseState.separation);
 
@@ -1351,6 +1359,10 @@ function presentWorld(frame: FrameContext, carrier: WorldFrame): void {
     ui.setAmbientEvent(ambientEvent);
   }
 
+  if (hybridBloomDirty && hybrid) {
+    env.setBloomSelection([...bloomTargets, ...hybrid.getBloomObjects()]);
+    hybridBloomDirty = false;
+  }
   env.renderer.info.reset();
   // Diagnostic only: time the frame the user actually sees. The previous probe
   // bracketed an extra `captureFrame`, which renders a second frame and then reads
@@ -1695,14 +1707,21 @@ window.__diorama = debugHandle;
 // The spike chunk loads on demand; the renderer warms up only once its meshes exist.
 const wantsSpikeFrame = !requestedCheckpoint && (query.get('checkpoint') ?? '').startsWith('spike-');
 const hybridReady: Promise<void> = hybridStrategy || wantsSpikeFrame
-  ? import('./world/hybrid/HybridSpike').then((spike) => {
+  ? import('./world/hybrid/HybridSpike').then(async (spike) => {
       if (hybridStrategy) {
+        const expansion = scalabilityPreview ? await import('./world/hybrid/CityExpansion') : null;
+        if (expansion) {
+          disposeExpansionGround = expansion.addExpansionGround(env.scene);
+          env.controls.maxDistance = 580;
+        }
         hybrid = spike.attachHybridSpike({
           scene: env.scene,
           strategy: hybridStrategy,
           quality: quality.getProfile(),
           themePalette: currentTheme.palette,
           cyberRise: cyberFactor,
+          onResidencyChange: () => { hybridBloomDirty = true; },
+          model: expansion?.fourDistrictModel(),
         });
         env.setBloomSelection([...bloomTargets, ...hybrid.getBloomObjects()]);
         // The gulls sit on and fly over the city that is drawn, not the voxel blocks.
@@ -1712,6 +1731,9 @@ const hybridReady: Promise<void> = hybridStrategy || wantsSpikeFrame
       // benchmark can compare like with like.
       const spikeCheckpoint = wantsSpikeFrame ? spike.getSpikeCheckpoint(query.get('checkpoint')) : null;
       if (spikeCheckpoint) applyBootCheckpoint(spikeCheckpoint);
+      if (scalabilityPreview && !query.get('checkpoint')) {
+        void env.controls.setLookAt(330, 230, 360, 80, 0, 80, false);
+      }
     })
   : Promise.resolve();
 void hybridReady
@@ -1747,6 +1769,7 @@ if (import.meta.hot) {
     cancelAnimationFrame(rafId);
     unsubscribeQuality();
     cameraDirector.dispose();
+    disposeExpansionGround?.();
     timer.dispose();
     devStats?.dispose();
     train.dispose();

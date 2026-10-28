@@ -9,6 +9,7 @@ import {
 import { stationColliders, stationPassengerRoutes } from './StationNavigation';
 import type { EclipseWorldReactionState } from '../experience/EclipseWorldReaction';
 import { fallbackRandom, type RandomSource } from '../core/Random';
+import { ActorLocalitySlot, type ActorLocality } from '../performance/ActorLocality';
 
 const JACKET_COLORS = [0x9c3838, 0x2b5f9a, 0x355d2a, 0xc4a35a, 0x6c4a8a, 0x444444, 0xb87333];
 const SKIN_COLORS = [0xe8c39a, 0xd4a173, 0xa57448, 0xfcd7b6];
@@ -72,6 +73,8 @@ interface StationCrowd {
   lastDwellSignal: boolean;
   visitCount: number;
   colliders: CollisionRect[];
+  locality: ActorLocalitySlot;
+  center: THREE.Vector3;
 }
 
 function makeMat(color: number, opts: Partial<THREE.MeshStandardMaterialParameters> = {}) {
@@ -517,7 +520,8 @@ export class PassengerCrowd {
         });
       }
 
-      this.crowds.push({ station, passengers, lastDwellSignal: false, visitCount: 0, colliders });
+      this.crowds.push({ station, passengers, lastDwellSignal: false, visitCount: 0, colliders,
+        locality: new ActorLocalitySlot(), center: platformCenter });
     }
   }
 
@@ -555,11 +559,12 @@ export class PassengerCrowd {
     this.sunGaze = gaze;
   }
 
-  update(delta: number, stationsBoarding: Set<string>): void {
+  update(delta: number, stationsBoarding: Set<string>, locality?: ActorLocality): void {
     const peopleDelta = delta * this.eclipseReaction.movementScale;
     this.clock += peopleDelta;
 
     for (const crowd of this.crowds) {
+      const present = !locality || locality.shouldPresent(crowd.locality, crowd.center, 18);
       const isDwelling = stationsBoarding.has(crowd.station.label);
 
       if (isDwelling && !crowd.lastDwellSignal) {
@@ -578,7 +583,8 @@ export class PassengerCrowd {
       crowd.lastDwellSignal = isDwelling;
 
       for (const p of crowd.passengers) {
-        if (!p.culled) this.updatePassenger(p, crowd.colliders, peopleDelta);
+        // Population quality and camera locality control presentation, never train semantics.
+        this.updatePassenger(p, crowd.colliders, peopleDelta, present && !p.culled);
       }
     }
   }
@@ -606,20 +612,22 @@ export class PassengerCrowd {
     }
   }
 
-  private updatePassenger(p: Passenger, colliders: readonly CollisionRect[], delta: number): void {
+  private updatePassenger(p: Passenger, colliders: readonly CollisionRect[], delta: number, present: boolean): void {
     if (p.activity === 'idle') {
       p.group.position.copy(p.platformPos);
       const sway = Math.sin(this.clock * 1.6 + p.phase) * 0.04;
       p.group.position.x += Math.cos(p.facingTrack) * sway * 0.4;
       p.group.position.z += Math.sin(p.facingTrack) * sway * 0.4;
       if (!isPointClear(p.group.position, colliders)) p.group.position.copy(p.platformPos);
-      p.body.position.y = 1.4 + Math.sin(this.clock * 1.3 + p.phase) * 0.015;
-      p.head.position.y = 2.18 + Math.sin(this.clock * 1.3 + p.phase) * 0.015;
-      p.head.rotation.y = Math.sin(this.clock * 0.4 + p.phase * 2) * 0.4;
-      p.leftArm.rotation.x = Math.sin(this.clock * 0.9 + p.phase) * 0.08;
-      p.rightArm.rotation.x = -Math.sin(this.clock * 0.9 + p.phase) * 0.08;
+      if (present) {
+        p.body.position.y = 1.4 + Math.sin(this.clock * 1.3 + p.phase) * 0.015;
+        p.head.position.y = 2.18 + Math.sin(this.clock * 1.3 + p.phase) * 0.015;
+        p.head.rotation.y = Math.sin(this.clock * 0.4 + p.phase * 2) * 0.4;
+        p.leftArm.rotation.x = Math.sin(this.clock * 0.9 + p.phase) * 0.08;
+        p.rightArm.rotation.x = -Math.sin(this.clock * 0.9 + p.phase) * 0.08;
+        p.legs.rotation.x = 0;
+      }
       p.group.rotation.y = p.facingTrack;
-      p.legs.rotation.x = 0;
 
       p.targetOpacity = 0.92;
     } else {
@@ -636,12 +644,14 @@ export class PassengerCrowd {
 
       const stepBob = Math.abs(Math.sin(p.progress * Math.PI * 4)) * 0.06;
       p.group.position.y = p.baseY + stepBob;
-      p.legs.rotation.x = Math.sin(p.progress * Math.PI * 4) * 0.25;
-      p.leftArm.rotation.x = Math.sin(p.progress * Math.PI * 4) * 0.6;
-      p.rightArm.rotation.x = -Math.sin(p.progress * Math.PI * 4) * 0.6;
-      p.body.position.y = 1.4;
-      p.head.position.y = 2.18;
-      p.head.rotation.y = 0;
+      if (present) {
+        p.legs.rotation.x = Math.sin(p.progress * Math.PI * 4) * 0.25;
+        p.leftArm.rotation.x = Math.sin(p.progress * Math.PI * 4) * 0.6;
+        p.rightArm.rotation.x = -Math.sin(p.progress * Math.PI * 4) * 0.6;
+        p.body.position.y = 1.4;
+        p.head.position.y = 2.18;
+        p.head.rotation.y = 0;
+      }
 
       const dirX = p.group.position.x - previousX;
       const dirZ = p.group.position.z - previousZ;
@@ -668,13 +678,13 @@ export class PassengerCrowd {
 
     const lerp = 1 - Math.exp(-6 * Math.max(delta, 0.0001));
     p.currentOpacity += (p.targetOpacity - p.currentOpacity) * lerp;
-    for (const mat of p.materials) mat.opacity = p.currentOpacity;
+    if (present) for (const mat of p.materials) mat.opacity = p.currentOpacity;
     // A figure faded to nothing is still drawn: the fade rides on `material.opacity`, and a
     // transparent mesh at zero opacity costs a colour draw and a normal-pass draw and
     // contributes not one photon. Five meshes per figure, and at a quiet moment most of the
     // twenty bus-stop figures are at zero -- measured at 24 draw calls in the opening
     // overview, against a 1400 budget that the owner's window reaches 1418 of.
-    p.group.visible = p.currentOpacity > 0.01;
+    p.group.visible = !p.culled && p.currentOpacity > 0.01;
     let gaze: PassengerSunGaze | null = null;
     if (this.sunGaze) {
       const bodyTurn = eclipseBodyTurn(this.eclipseReaction.movementScale);
@@ -689,7 +699,7 @@ export class PassengerCrowd {
       this.gaze.bodyTurn = bodyTurn;
       gaze = this.gaze;
     }
-    applyPassengerEclipsePose(p, p.eclipsePose, this.eclipseReaction, gaze);
+    if (present) applyPassengerEclipsePose(p, p.eclipsePose, this.eclipseReaction, gaze);
   }
 
   /**

@@ -6,6 +6,7 @@ import {
 import { LakeSurface } from '../environment/LakeSurface';
 import { buildPlayground } from './Playground';
 import type { QualityProfile } from '../performance/QualityManager';
+import { partitionSpatially } from '../performance/SpatialCells';
 import {
   BLOCK_CONFIGS,
   BENCH_DIMENSIONS,
@@ -1751,27 +1752,45 @@ export function createWorld(
       windowSchedule,
     });
 
-    const instancedMesh = new THREE.InstancedMesh(
-      geometry === 'surface' ? surfaceGeometry : boxGeometry,
-      material,
-      voxels.length
-    );
-    for (let i = 0; i < voxels.length; i++) {
-      dummy.position.copy(voxels[i].position);
-      dummy.scale.copy(voxels[i].scale ?? unitScale);
-      dummy.updateMatrix();
-      instancedMesh.setMatrixAt(i, dummy.matrix);
+    for (const [cell, instances] of partitionSpatially(voxels)) {
+      const instancedMesh = new THREE.InstancedMesh(
+        geometry === 'surface' ? surfaceGeometry : boxGeometry,
+        material,
+        instances.length
+      );
+      instancedMesh.name = `world-cell-${cell}`;
+      for (let i = 0; i < instances.length; i++) {
+        dummy.position.copy(instances[i].position);
+        dummy.scale.copy(instances[i].scale ?? unitScale);
+        dummy.updateMatrix();
+        instancedMesh.setMatrixAt(i, dummy.matrix);
+      }
+      instancedMesh.computeBoundingBox();
+      instancedMesh.computeBoundingSphere();
+      instancedMesh.castShadow = castShadow;
+      instancedMesh.receiveShadow = true;
+      group.add(instancedMesh);
     }
     dummy.scale.copy(unitScale);
-    instancedMesh.castShadow = castShadow;
-    instancedMesh.receiveShadow = true;
-    group.add(instancedMesh);
   }
 
   // ── Wind-swaying tree foliage ──
-  const foliageBuild = buildFoliageMesh(foliage, boxGeometry, windUniforms);
-  group.add(foliageBuild.mesh);
-  materials.push(foliageBuild.material);
+  const foliageBuilds = [...partitionSpatially(foliage)].map(([cell, instances]) => {
+    const build = buildFoliageMesh(instances, boxGeometry, windUniforms);
+    build.mesh.name = `foliage-cell-${cell}`;
+    build.mesh.computeBoundingBox();
+    // The shader bends crowns outside their static box. Keep that motion inside culling.
+    build.mesh.computeBoundingSphere();
+    if (build.mesh.boundingSphere) build.mesh.boundingSphere.radius += 2;
+    return { ...build, instances };
+  });
+  const foliageMaterial = foliageBuilds[0]?.material;
+  if (foliageMaterial) materials.push(foliageMaterial);
+  for (const build of foliageBuilds) {
+    if (build.material !== foliageMaterial) build.material.dispose();
+    build.mesh.material = foliageMaterial!;
+    group.add(build.mesh);
+  }
 
   // ── Continuous rails + sleepers + ballast ──
   const trackDisposables: Array<{ dispose: () => void }> = [];
@@ -1849,8 +1868,10 @@ export function createWorld(
     }
 
     // Frost the wind-blown foliage via emissive (its colours are per-instance).
-    foliageBuild.material.emissive.setHex(0x9fb4c2);
-    foliageBuild.material.emissiveIntensity = look.snow * 0.55;
+    if (foliageMaterial) {
+      foliageMaterial.emissive.setHex(0x9fb4c2);
+      foliageMaterial.emissiveIntensity = look.snow * 0.55;
+    }
 
     snowCaps.visible = look.snow > 0.03;
     if (snowCaps.visible) {
@@ -1933,10 +1954,12 @@ export function createWorld(
     blendFrom.setHex(foliageFrom?.treeLight ?? COLORS.treeLight);
     blendTo.setHex(foliageTo?.treeLight ?? COLORS.treeLight);
     treeLightMix.copy(blendFrom).lerp(blendTo, mix);
-    for (let i = 0; i < foliage.length; i++) {
-      foliageBuild.mesh.setColorAt(i, foliage[i].variant === 1 ? treeLightMix : treeMix);
+    for (const build of foliageBuilds) {
+      for (let i = 0; i < build.instances.length; i++) {
+        build.mesh.setColorAt(i, build.instances[i].variant === 1 ? treeLightMix : treeMix);
+      }
+      if (build.mesh.instanceColor) build.mesh.instanceColor.needsUpdate = true;
     }
-    if (foliageBuild.mesh.instanceColor) foliageBuild.mesh.instanceColor.needsUpdate = true;
     applyLook();
   };
 

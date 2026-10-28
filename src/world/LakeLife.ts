@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { LAKE } from './WorldLayout';
 import { fallbackRandom, type RandomSource } from '../core/Random';
+import { ActorLocalitySlot, type ActorLocality } from '../performance/ActorLocality';
 
 /**
  * Little voxel fish that periodically jump out of the lake. Each jump
@@ -78,6 +79,7 @@ function randomLakePoint(out: THREE.Vector3, random: RandomSource): void {
 }
 
 export class LakeLife {
+  private readonly locality = new ActorLocalitySlot();
   private readonly random: RandomSource;
   private readonly fishes: Fish[] = [];
   private readonly scene: THREE.Scene;
@@ -110,8 +112,9 @@ export class LakeLife {
     }
   }
 
-  update(delta: number, frozen = false): void {
+  update(delta: number, frozen = false, locality?: ActorLocality): void {
     this.clock += delta;
+    const present = !locality || locality.shouldPresent(this.locality, LAKE_CENTER, Math.max(LAKE.radiusX, LAKE.radiusZ));
     for (const fish of this.fishes) {
       if (fish.state === 'waiting') {
         // No fish jump through the winter ice.
@@ -119,7 +122,7 @@ export class LakeLife {
           this.startJump(fish);
         }
       } else {
-        this.advanceJump(fish);
+        this.advanceJump(fish, present);
       }
     }
   }
@@ -142,7 +145,7 @@ export class LakeLife {
     fish.splashMesh.scale.set(0.6, 0.6, 0.6);
   }
 
-  private advanceJump(fish: Fish): void {
+  private advanceJump(fish: Fish, present: boolean): void {
     const t = (this.clock - fish.jumpStart) / fish.jumpDuration;
     if (t >= 1) {
       fish.group.visible = false;
@@ -154,6 +157,9 @@ export class LakeLife {
       fish.splashMesh.scale.set(0.5, 0.5, 0.5);
       return;
     }
+    // Jump timing, landing and random draws above run even when the camera is elsewhere.
+    // The current arc below is analytic in clock time: returning needs no integration.
+    if (!present) return;
 
     // Parabolic arc — height peaks at t=0.5.
     const lerp = t;

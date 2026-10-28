@@ -90,6 +90,7 @@ async function assertBundleBudgets() {
   const experienceSignals = assetNames.find((name) => /^experience-signals-.*\.js$/.test(name));
   const atmospherePhysics = assetNames.find((name) => /^atmosphere-physics-.*\.js$/.test(name));
   const worldLayout = assetNames.find((name) => /^world-layout-.*\.js$/.test(name));
+  const runtimeScheduling = assetNames.find((name) => /^runtime-scheduling-.*\.js$/.test(name));
   assert.ok(entry, 'application entry chunk is missing');
   assert.ok(bootstrap, 'application bootstrap chunk is missing');
   assert.ok(three, 'Three.js vendor chunk is missing');
@@ -98,6 +99,8 @@ async function assertBundleBudgets() {
   assert.ok(experienceSignals, 'experience signals chunk is missing');
   assert.ok(atmospherePhysics, 'atmosphere physics chunk is missing');
   assert.ok(worldLayout, 'world layout chunk is missing');
+  assert.ok(runtimeScheduling, 'runtime scheduling chunk is missing');
+  assert.ok((await stat(`dist/assets/${runtimeScheduling}`)).size <= 12_000, 'runtime scheduling chunk budget exceeded');
   const entryBytes = (await stat(`dist/assets/${entry}`)).size;
   const atmospherePhysicsBytes = (await stat(`dist/assets/${atmospherePhysics}`)).size;
   const worldLayoutBytes = (await stat(`dist/assets/${worldLayout}`)).size;

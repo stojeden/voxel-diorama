@@ -65,6 +65,14 @@ export default defineConfig({
               includeDependenciesRecursively: false,
             },
             {
+              // Shared scheduling/preparation code is cached independently of the entry.
+              // This is still eager first-load weight; the worker is separately on-demand.
+              name: 'runtime-scheduling',
+              test: /src[\\/](?:experience[\\/]RendererWarmup|performance[\\/](?:ActorLocality|SpatialCells|QualityManager))\.ts$/,
+              priority: 15,
+              includeDependenciesRecursively: false,
+            },
+            {
               // Reversible hybrid spike: loaded only behind `?world=hybrid-*`, so the
               // experiment never spends the entry-chunk budget. `spikeFlag.ts` stays
               // with its importer (main) on purpose.
