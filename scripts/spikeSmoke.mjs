@@ -445,12 +445,19 @@ async function runPostman(page, world) {
    * denominator changes -- this only makes the stated condition, t = 0.47, actually hold.
    */
   const MORNING_T01 = 0.47;
+  await page.evaluate(() => window.__diorama.debugSetClockLocked(true));
   await page.evaluate((t01) => window.__diorama.setTime(t01), MORNING_T01);
   const found = await page.waitForFunction(() => {
     const bike = window.__diorama.scene.getObjectByName('postman-bike');
     return bike && bike.visible ? true : null;
   }, null, { timeout: 60_000, polling: 100 }).then(() => true);
   await page.evaluate((t01) => window.__diorama.setTime(t01), MORNING_T01);
+  // Clock and lighting have different settling rules. Six frames left dawn's smoothed
+  // night/golden values in this declared late-morning frame; wait for the actual light.
+  await page.waitForFunction(() => {
+    const light = window.__diorama.dayNight;
+    return light.smoothedNight < 0.001 && light.smoothedGolden < 0.001;
+  }, null, { timeout: 30_000 });
   await settle(page, 6);
 
   // Freeze, then place him. Nothing may move between the mask and the two frames.
