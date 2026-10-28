@@ -422,7 +422,10 @@ async function runPostman(page, world) {
   // sits on it with its tyres touching.
   const POSE = { x: -29, y: -0.5, z: -45.8, yaw: Math.PI / 2, legs: -0.5, arms: -1.05 };
 
-  await page.goto(`${URL}/?seed=${SEED}&world=${world}&quality=${QUALITY}`, { waitUntil: 'load' });
+  // This compares with/without pixels against a geometric mask. Temporal history would
+  // blend the old camera and the removed object into subsequent frames, corrupting both
+  // the zero-delta control and the contrast numerator. The ordinary app still uses TAA.
+  await page.goto(`${URL}/?seed=${SEED}&world=${world}&quality=${QUALITY}&taa=0`, { waitUntil: 'load' });
   await page.waitForFunction(() => window.__diorama?.ready === true, null, { timeout: 90_000 });
   await settle(page, 4);
   /**
@@ -1518,6 +1521,13 @@ async function runGate3(page, worlds) {
       ground: await regionMean(page, GROUND_BOX),
       state: await sceneState(page),
     });
+    const settledTheme = async () => {
+      await page.waitForFunction(() => {
+        const state = window.__diorama.getState();
+        return state.themeBlend === 1 && Math.abs(state.cyberFactor - (state.theme === 'cyberpunk' ? 1 : 0)) < 0.002;
+      }, null, { timeout: 30_000 });
+      await settle(page, 8);
+    };
     const reference = async () => {
       await page.evaluate(() => {
         window.__diorama.applyTheme('classic');
@@ -1526,11 +1536,14 @@ async function runGate3(page, worlds) {
         window.__diorama.setWeather('clear');
         window.__diorama.setTime(0.5);
       });
-      await settle(page, 30);
+      await settledTheme();
       return sample();
     };
 
-    await openHybrid(page, world, 'high', 'spike-street');
+    // A checkpoint freezes presentation time as well as the clock. Release presentation
+    // for actual palette/morph transitions, pinning only the comparison clock explicitly.
+    await openHybrid(page, world, 'high', 'spike-street', true);
+    await page.evaluate(() => window.__diorama.debugSetClockLocked(true));
     entry.semantics.reference = await reference();
     for (const t01 of [0.05, 0.2, 0.28, 0.35, 0.5, 0.78, 0.9]) {
       await page.evaluate((t) => window.__diorama.setTime(t), t01);
@@ -1540,7 +1553,7 @@ async function runGate3(page, worlds) {
     for (const theme of ['retro', 'cyberpunk']) {
       entry.semantics[`ref-theme-${theme}`] = await reference();
       await page.evaluate((id) => window.__diorama.applyTheme(id), theme);
-      await settle(page, 30);
+      await settledTheme();
       entry.semantics[`theme-${theme}`] = await sample();
       await page.screenshot({ path: `${FRAME_DIR}/${world}-gate3-theme-${theme}.jpg`, type: 'jpeg', quality: 84 });
     }

@@ -251,6 +251,33 @@ src/
 
 Zasada projektu: **cała geometria świata mieszka w `WorldLayout.ts`**, a testy w `WorldLayout.test.ts` pilnują, by nic na nic nie nachodziło (trasy na asfalcie, aktorzy poza wodą/torami/budynkami, skrajnia tunelu większa od obwiedni pociągu, krzywizna trasy poniżej progu „łamania").
 
+## Skalowanie świata
+
+Statyczne instancje gruntu, elementów miasta i koron drzew są dzielone przestrzennie
+(komórki 80 m), zachowując wspólne materiały. Hybrydowe budynki mają dokładną warstwę
+podstawową i doładowywany detal. Geometrię przygotowuje jeden worker; główny wątek
+przyjmuje najwyżej cztery bufory i docelowo 2 MiB na klatkę. Pojedynczy większy bufor
+jest niepodzielny i może przekroczyć ten cel. Bez obsługi workera działa stopniowy
+wariant na głównym wątku.
+
+Rezydentnych jest najwyżej 48 zestawów detalu; priorytet mają widoczne i bliskie
+budynki. Dalekie regiony (wejście 260 m, powrót 220 m od granicy regionu) używają
+uproszczonych brył, zwalniając właściwą geometrię GPU. Przy powrocie bryła pozostaje
+do pełnego odtworzenia budynku. Deterministyczny model i zimne dane źródłowe zostają
+w pamięci CPU — nie jest to jeszcze sieciowy streaming dowolnego terenu.
+
+`?districts=4` uruchamia podgląd obciążenia z czterokrotną liczbą działek. Dodatkowe
+dzielnice mają kontekst terenu i zabudowę; transport oraz wydarzenia nadal należą do
+pierwotnego osiedla. To próba renderera, a nie cztery kompletne nowe dzielnice gry.
+
+Pasażerowie i życie jeziora zachowują pełny przebieg logiki oraz strumieni losowych,
+ale odległe pozy są odświeżane rzadziej. Przygotowanie renderera obejmuje rzeczywiste
+warianty nocnych lamp; mapy cieni bliskiego i dalekiego widoku są ponownie używane.
+
+Test kontrastu roweru używa jawnie `taa=0`, ponieważ historia obrazu zanieczyszcza
+porównanie pikseli z obiektem i bez niego. Zwykły widok nadal ma TAA. Testy przejścia
+stylu czekają na zakończenie palety i morfu przy działającym czasie prezentacji.
+
 ## 🛠️ Stack
 
 [Three.js](https://threejs.org/) · TypeScript · Vite · Vitest · Playwright · [pmndrs/postprocessing](https://github.com/pmndrs/postprocessing) · [camera-controls](https://github.com/yomotsu/camera-controls) · [stats-gl](https://github.com/RenaudRohlinger/stats-gl) · [SunCalc](https://github.com/mourner/suncalc) · [Open-Meteo](https://open-meteo.com/) (pogoda na żywo, bez klucza API)

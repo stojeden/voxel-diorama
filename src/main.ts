@@ -1433,6 +1433,7 @@ const debugHandle: DioramaDebugHandle = {
     ambientProjection: ambientEvents.getDebugState(),
     ambientWorld,
     theme: currentTheme.id,
+    themeBlend,
     cyberFactor,
     weather: weather.getKind(),
     cloud: weather.getCloudCover(),
@@ -1614,6 +1615,7 @@ const debugHandle: DioramaDebugHandle = {
   eclipseCrowdProps: () => eclipseCrowdProps.getDebugState(),
   postmanState: () => postman.getDebugState(),
   applyTheme,
+  debugSetClockLocked: (locked: boolean) => experience.setClockLocked(locked),
   /** 'automatic' runs the path a scheduled eclipse takes: no camera cut, the clock carried. */
   startEclipse: (source: EclipseStartSource = 'manual') => {
     startEclipse(source);
@@ -1732,7 +1734,8 @@ const hybridReady: Promise<void> = hybridStrategy || wantsSpikeFrame
       const spikeCheckpoint = wantsSpikeFrame ? spike.getSpikeCheckpoint(query.get('checkpoint')) : null;
       if (spikeCheckpoint) applyBootCheckpoint(spikeCheckpoint);
       if (scalabilityPreview && !query.get('checkpoint')) {
-        void env.controls.setLookAt(330, 230, 360, 80, 0, 80, false);
+        experience.setTime(clockFromSolarPhase(0.5 as SolarPhase01, sunDeclination()));
+        void env.controls.setLookAt(270, 180, 290, 80, 0, 80, false);
       }
     })
   : Promise.resolve();
