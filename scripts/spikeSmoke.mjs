@@ -171,6 +171,27 @@ async function settle(page, frames = 3) {
   for (let i = 0; i < frames; i++) {
     await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   }
+  // Renderer readiness is not geometry readiness: the worker can still be restoring
+  // clusters after a camera/profile change. Measure a complete, stable population,
+  // not whichever subset happened to arrive within a fixed number of frames.
+  await page.evaluate(async () => {
+    const deadline = performance.now() + 30_000;
+    let previous = '';
+    let stable = 0;
+    let last;
+    while (performance.now() < deadline) {
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      const hybrid = window.__diorama.getMetrics().hybrid;
+      if (!hybrid?.streaming) return;
+      last = hybrid.streaming;
+      const key = JSON.stringify([last.revision, last.requested, last.resident, hybrid.lodLevels]);
+      const complete = last.pending === 0 && last.resident === last.requested;
+      stable = complete && key === previous ? stable + 1 : 0;
+      previous = key;
+      if (stable >= 3) return;
+    }
+    throw new Error(`Geometry residency did not settle: ${JSON.stringify(last)}`);
+  });
   await page.waitForTimeout(120);
 }
 
